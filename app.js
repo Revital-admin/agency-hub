@@ -6,6 +6,17 @@
 // ── Global Variables ──
 let clientsDb = {};
 let activeClientName = "";
+let iframeNeedsReload = {
+  "tab-uxui": true,
+  "tab-seo": true,
+  "tab-strategy": true,
+  "tab-strategybuilder": true,
+  "tab-socialaudit": true,
+  "tab-webcomp": true,
+  "tab-socialcomp": true,
+  "tab-report": true,
+  "tab-copywriting": true
+};
 
 // ── Initial State Blueprint ──
 function createClientBlankState(name) {
@@ -18,31 +29,49 @@ function createClientBlankState(name) {
     items: cat.items.map(item => ({
       id: item.id,
       label: item.label,
-      checked: false
+      checked: false,
+      notes: "" // local note for this task
     }))
   }));
 
   // Clone SEO audit steps
   const seoAudit = {
     checked: {},
+    notes: {},
     targetUrl: ""
   };
 
   // Clone UXUI audit
   const uxuiAudit = {
     checked: {},
+    notes: {},
     targetUrl: ""
   };
 
   // Clone Content Strategy steps
   const contentStrategy = {
     checked: {},
+    notes: {},
     targetUrl: ""
+  };
+
+  // Initialize Content Strategy Builder
+  const strategyBuilder = {
+    targetUrl: "",
+    data: {
+      platforms: [
+        { id: 'instagram', name: 'Instagram', purpose: '', contentTypes: [], frequency: '' },
+        { id: 'tiktok', name: 'TikTok', purpose: '', contentTypes: [], frequency: '' },
+        { id: 'youtube', name: 'YouTube', purpose: '', contentTypes: [], frequency: '' },
+        { id: 'linkedin', name: 'LinkedIn', purpose: '', contentTypes: [], frequency: '' }
+      ]
+    }
   };
 
   // Clone Social Media Audit steps
   const socialAudit = {
     checked: {},
+    notes: {},
     targetUrl: ""
   };
 
@@ -67,6 +96,7 @@ function createClientBlankState(name) {
     uxuiAudit: uxuiAudit,
     seoAudit: seoAudit,
     contentStrategy: contentStrategy,
+    strategyBuilder: strategyBuilder,
     socialAudit: socialAudit,
     webComp: {
       market: "",
@@ -93,6 +123,12 @@ function createClientBlankState(name) {
       wins: "",
       platforms: DEFAULT_REPORT_PLATFORMS.map(p => ({ ...p })),
       cellData: {} // metricKey -> array of platform values
+    },
+    copywriting: {
+      activeFramework: "aida",
+      notes: "",
+      inputs: { product: "", audience: "", benefit: "", cta: "", tone: "persuasive" },
+      targetUrl: ""
     }
   };
 }
@@ -135,14 +171,29 @@ function loadDatabase() {
       }
     });
 
+    // Ensure notes exist on onboarding checklist items
+    if (client.onboardingChecklist && Array.isArray(client.onboardingChecklist)) {
+      client.onboardingChecklist.forEach(cat => {
+        if (cat.items && Array.isArray(cat.items)) {
+          cat.items.forEach(item => {
+            if (item.notes === undefined) {
+              item.notes = "";
+            }
+          });
+        }
+      });
+    }
+
     // Migrate or verify uxuiAudit object structure
     if (!client.uxuiAudit || Array.isArray(client.uxuiAudit) || typeof client.uxuiAudit !== 'object') {
       client.uxuiAudit = {
         checked: {},
+        notes: {},
         targetUrl: ""
       };
     } else {
       if (!client.uxuiAudit.checked) client.uxuiAudit.checked = {};
+      if (!client.uxuiAudit.notes) client.uxuiAudit.notes = {};
       if (client.uxuiAudit.targetUrl === undefined) client.uxuiAudit.targetUrl = "";
     }
 
@@ -150,10 +201,12 @@ function loadDatabase() {
     if (!client.seoAudit || Array.isArray(client.seoAudit) || typeof client.seoAudit !== 'object') {
       client.seoAudit = {
         checked: {},
+        notes: {},
         targetUrl: ""
       };
     } else {
       if (!client.seoAudit.checked) client.seoAudit.checked = {};
+      if (!client.seoAudit.notes) client.seoAudit.notes = {};
       if (client.seoAudit.targetUrl === undefined) client.seoAudit.targetUrl = "";
     }
 
@@ -161,21 +214,109 @@ function loadDatabase() {
     if (!client.contentStrategy || Array.isArray(client.contentStrategy) || typeof client.contentStrategy !== 'object') {
       client.contentStrategy = {
         checked: {},
+        notes: {},
         targetUrl: ""
       };
     } else {
       if (!client.contentStrategy.checked) client.contentStrategy.checked = {};
+      if (!client.contentStrategy.notes) client.contentStrategy.notes = {};
       if (client.contentStrategy.targetUrl === undefined) client.contentStrategy.targetUrl = "";
+    }
+
+    // Migrate or verify strategyBuilder object structure
+    if (!client.strategyBuilder || Array.isArray(client.strategyBuilder) || typeof client.strategyBuilder !== 'object') {
+      client.strategyBuilder = {
+        targetUrl: "",
+        data: {
+          platforms: [
+            { id: 'instagram', name: 'Instagram', purpose: '', contentTypes: [], frequency: '' },
+            { id: 'tiktok', name: 'TikTok', purpose: '', contentTypes: [], frequency: '' },
+            { id: 'youtube', name: 'YouTube', purpose: '', contentTypes: [], frequency: '' },
+            { id: 'linkedin', name: 'LinkedIn', purpose: '', contentTypes: [], frequency: '' }
+          ]
+        }
+      };
+    } else {
+      if (!client.strategyBuilder.data) {
+        client.strategyBuilder.data = {};
+      }
+      if (client.strategyBuilder.targetUrl === undefined) {
+        client.strategyBuilder.targetUrl = "";
+      }
+      if (!client.strategyBuilder.data.platforms || !Array.isArray(client.strategyBuilder.data.platforms)) {
+        const d = client.strategyBuilder.data;
+        const legacyPlatforms = [];
+        
+        if (d.igPurpose !== undefined || d.igFrequency !== undefined || d.igContentTypes !== undefined) {
+          legacyPlatforms.push({
+            id: 'instagram',
+            name: 'Instagram',
+            purpose: d.igPurpose || '',
+            contentTypes: Array.isArray(d.igContentTypes) ? d.igContentTypes : [],
+            frequency: d.igFrequency || ''
+          });
+        } else {
+          legacyPlatforms.push({ id: 'instagram', name: 'Instagram', purpose: '', contentTypes: [], frequency: '' });
+        }
+
+        if (d.ttPurpose !== undefined || d.ttFrequency !== undefined || d.ttContentTypes !== undefined) {
+          legacyPlatforms.push({
+            id: 'tiktok',
+            name: 'TikTok',
+            purpose: d.ttPurpose || '',
+            contentTypes: Array.isArray(d.ttContentTypes) ? d.ttContentTypes : [],
+            frequency: d.ttFrequency || ''
+          });
+        } else {
+          legacyPlatforms.push({ id: 'tiktok', name: 'TikTok', purpose: '', contentTypes: [], frequency: '' });
+        }
+
+        if (d.ytPurpose !== undefined || d.ytFrequency !== undefined || d.ytContentTypes !== undefined) {
+          legacyPlatforms.push({
+            id: 'youtube',
+            name: 'YouTube',
+            purpose: d.ytPurpose || '',
+            contentTypes: Array.isArray(d.ytContentTypes) ? d.ytContentTypes : [],
+            frequency: d.ytFrequency || ''
+          });
+        } else {
+          legacyPlatforms.push({ id: 'youtube', name: 'YouTube', purpose: '', contentTypes: [], frequency: '' });
+        }
+
+        if (d.liPurpose !== undefined || d.liFrequency !== undefined || d.liContentTypes !== undefined) {
+          legacyPlatforms.push({
+            id: 'linkedin',
+            name: 'LinkedIn',
+            purpose: d.liPurpose || '',
+            contentTypes: Array.isArray(d.liContentTypes) ? d.liContentTypes : [],
+            frequency: d.liFrequency || ''
+          });
+        } else {
+          legacyPlatforms.push({ id: 'linkedin', name: 'LinkedIn', purpose: '', contentTypes: [], frequency: '' });
+        }
+
+        client.strategyBuilder.data.platforms = legacyPlatforms;
+
+        const oldKeys = [
+          'igPurpose', 'igFrequency', 'igContentTypes',
+          'ttPurpose', 'ttFrequency', 'ttContentTypes',
+          'ytPurpose', 'ytFrequency', 'ytContentTypes',
+          'liPurpose', 'liFrequency', 'liContentTypes'
+        ];
+        oldKeys.forEach(k => { delete d[k]; });
+      }
     }
 
     // Migrate or verify socialAudit object structure
     if (!client.socialAudit || Array.isArray(client.socialAudit) || typeof client.socialAudit !== 'object') {
       client.socialAudit = {
         checked: {},
+        notes: {},
         targetUrl: ""
       };
     } else {
       if (!client.socialAudit.checked) client.socialAudit.checked = {};
+      if (!client.socialAudit.notes) client.socialAudit.notes = {};
       if (client.socialAudit.targetUrl === undefined) client.socialAudit.targetUrl = "";
     }
 
@@ -204,6 +345,23 @@ function loadDatabase() {
           client.report[k] = blank.report[k];
         }
       });
+    }
+
+    // Migrate or verify copywriting object structure
+    if (!client.copywriting || Array.isArray(client.copywriting) || typeof client.copywriting !== 'object') {
+      client.copywriting = {
+        activeFramework: "aida",
+        notes: "",
+        inputs: { product: "", audience: "", benefit: "", cta: "", tone: "persuasive" },
+        targetUrl: ""
+      };
+    } else {
+      if (!client.copywriting.inputs) {
+        client.copywriting.inputs = { product: "", audience: "", benefit: "", cta: "", tone: "persuasive" };
+      }
+      if (client.copywriting.activeFramework === undefined) client.copywriting.activeFramework = "aida";
+      if (client.copywriting.notes === undefined) client.copywriting.notes = "";
+      if (client.copywriting.targetUrl === undefined) client.copywriting.targetUrl = "";
     }
   });
   saveDatabase();
@@ -306,6 +464,40 @@ function buildClientDropdown() {
   });
 }
 
+// ── Helper to reload iframe if needed ──
+function refreshIframeTab(tabId) {
+  switch (tabId) {
+    case "tab-uxui":
+      renderUxuiAudit();
+      break;
+    case "tab-seo":
+      renderSeoAudit();
+      break;
+    case "tab-strategy":
+      renderContentStrategy();
+      break;
+    case "tab-strategybuilder":
+      renderStrategyBuilder();
+      break;
+    case "tab-socialaudit":
+      renderSocialAudit();
+      break;
+    case "tab-webcomp":
+      renderWebCompetitors();
+      break;
+    case "tab-socialcomp":
+      renderSocialCompetitors();
+      break;
+    case "tab-report":
+      renderReportForm();
+      break;
+    case "tab-copywriting":
+      renderCopywriting();
+      break;
+  }
+  iframeNeedsReload[tabId] = false;
+}
+
 // ── Tab Navigation routing ──
 function initTabNavigation() {
   const navButtons = document.querySelectorAll(".nav-item-btn");
@@ -324,6 +516,11 @@ function initTabNavigation() {
           sec.classList.add("active");
         }
       });
+
+      // Lazy-load iframe if needed
+      if (iframeNeedsReload[targetTab] === true) {
+        refreshIframeTab(targetTab);
+      }
 
       // Quick visual updates when entering tabs
       if (targetTab === "tab-report") {
@@ -360,14 +557,20 @@ function refreshAllViews() {
   buildClientDropdown();
   renderDashboard();
   renderOnboardingChecklist();
-  renderUxuiAudit();
-  renderSeoAudit();
-  renderContentStrategy();
-  renderSocialAudit();
-  renderWebCompetitors();
-  renderSocialCompetitors();
-  renderReportForm();
-  updateReportPreview();
+
+  // Mark all iframes as needing reload
+  Object.keys(iframeNeedsReload).forEach(key => {
+    iframeNeedsReload[key] = true;
+  });
+
+  // Get currently active tab
+  const activeTabBtn = document.querySelector(".nav-item-btn.active");
+  const activeTab = activeTabBtn ? activeTabBtn.getAttribute("data-tab") : "tab-dashboard";
+
+  // Reload only if the active tab is an iframe-based tab
+  if (iframeNeedsReload[activeTab] !== undefined) {
+    refreshIframeTab(activeTab);
+  }
 }
 
 // ── Dashboard Overview Renderer ──
@@ -435,6 +638,60 @@ function renderDashboard() {
   const strategyPct = Math.round((checkedStrategy / totalStrategy) * 100);
   document.getElementById("dashStrategyVal").textContent = `${strategyPct}%`;
 
+  // Calculate Strategy Builder progress (56 + 3 * N fields total)
+  let strategyBuilderPct = 0;
+  if (client.strategyBuilder && client.strategyBuilder.data) {
+    const data = client.strategyBuilder.data;
+    const platforms = Array.isArray(data.platforms) ? data.platforms : [];
+    let totalFields = 56 + (platforms.length * 3);
+    let filledFields = 0;
+
+    const textKeys = [
+      'businessName', 'industry', 'primaryServices', 'brandMission', 'brandVision', 'coreValues', 'usp',
+      'goalsShortTerm', 'goalsLongTerm', 'marketingChallenges',
+      'audienceAge', 'audienceLocation', 'audienceIndustry', 'audienceIncome', 'audiencePainPoints', 'audienceDesires', 'audienceBuyingBehavior',
+      'brandVoice', 'brandColors', 'brandVisuals',
+      'mainCompetitors', 'competitorStrengths', 'competitorDifferentiate', 'brandsAdmire',
+      'pillar1Name', 'pillar1Topics', 'pillar2Name', 'pillar2Topics', 'pillar3Name', 'pillar3Topics', 'pillar4Name', 'pillar4Topics',
+      'ideasEducational', 'ideasPromotional', 'ideasSocialProof', 'ideasViral', 'ideasBehindScenes',
+      'kpisBenchmarks', 'commContact', 'commRevisions', 'commTimeline',
+      'finalFocus', 'notesSection'
+    ];
+    const checkboxKeys = [
+      'primaryGoals', 'brandPersonality', 'existingAssets', 'primaryContentGoals',
+      'workflowPre', 'workflowProd', 'workflowPost', 'workflowPub',
+      'kpisMetrics', 'kpisFrequency', 'commMethods', 'nextSteps'
+    ];
+
+    textKeys.forEach(key => {
+      const val = data[key];
+      if (val && typeof val === 'string' && val.trim() !== '') filledFields++;
+    });
+
+    checkboxKeys.forEach(key => {
+      const arr = data[key];
+      if (arr && Array.isArray(arr) && arr.length > 0) filledFields++;
+    });
+
+    const a1 = data['action1'] || '';
+    const a2 = data['action2'] || '';
+    const a3 = data['action3'] || '';
+    const a4 = data['action4'] || '';
+    if (a1.trim() !== '' || a2.trim() !== '' || a3.trim() !== '' || a4.trim() !== '') {
+      filledFields++;
+    }
+
+    // Dynamic platforms check (3 fields per platform)
+    platforms.forEach(p => {
+      if (p.purpose && p.purpose.trim() !== '') filledFields++;
+      if (p.frequency && p.frequency.trim() !== '') filledFields++;
+      if (p.contentTypes && Array.isArray(p.contentTypes) && p.contentTypes.length > 0) filledFields++;
+    });
+
+    strategyBuilderPct = totalFields > 0 ? Math.round((filledFields / totalFields) * 100) : 0;
+  }
+  document.getElementById("dashStrategyBuilderVal").textContent = `${strategyBuilderPct}%`;
+
   // Calculate Social Media Audit checklist progress (40 items total)
   let totalSocialAudit = 40;
   let checkedSocialAudit = 0;
@@ -448,21 +705,31 @@ function renderDashboard() {
   const socialAuditPct = Math.round((checkedSocialAudit / totalSocialAudit) * 100);
   document.getElementById("dashSocialAuditVal").textContent = `${socialAuditPct}%`;
 
-  // Logged Competitors count
-  let loggedComps = 0;
-  // Check Web Competitors names
+  // Logged Website Competitors count
+  let loggedWebComps = 0;
   client.webComp.names.forEach(name => {
     if (name && name !== "Competitor A" && name !== "Competitor B" && name !== "Competitor C" && name.trim() !== "") {
-      loggedComps++;
+      loggedWebComps++;
     }
   });
-  // Check Social Competitors names
+  document.getElementById("dashWebCompetitorVal").textContent = `${loggedWebComps} / 3`;
+
+  // Logged Social Competitors count
+  let loggedSocialComps = 0;
   client.socialComp.names.forEach(name => {
     if (name && name !== "Competitor A" && name !== "Competitor B" && name !== "Competitor C" && name.trim() !== "") {
-      loggedComps++;
+      loggedSocialComps++;
     }
   });
-  document.getElementById("dashCompetitorVal").textContent = `${loggedComps} / 6`;
+  document.getElementById("dashSocialCompetitorVal").textContent = `${loggedSocialComps} / 3`;
+
+  // Calculate Copywriting Assistant stats
+  let copyWords = 0;
+  if (client.copywriting && client.copywriting.notes) {
+    const text = client.copywriting.notes.trim();
+    copyWords = text === "" ? 0 : text.split(/\s+/).length;
+  }
+  document.getElementById("dashCopywritingVal").textContent = `${copyWords} words`;
 }
 
 // Helper to determine letter grade
@@ -575,6 +842,8 @@ function renderOnboardingChecklist() {
         renderDashboard();
       });
 
+
+
       stack.appendChild(card);
     });
 
@@ -607,118 +876,48 @@ function renderOnboardingChecklist() {
   document.getElementById("onboardingProgressPct").textContent = `${obPct}%`;
 }
 
-// Onboarding inputs sync
-document.getElementById("obTargetUrl").addEventListener("input", (e) => {
-  const client = getActiveClient();
-  client.targetUrl = e.target.value;
-  saveDatabase();
-  // Keep dashboard hero in sync
-  document.getElementById("dashHeroTargetUrl").textContent = e.target.value || "No website logged yet";
-});
+// Onboarding listeners moved to initParentEventListeners
 
-document.getElementById("obTargetDate").addEventListener("input", (e) => {
-  const client = getActiveClient();
-  client.onboardingDate = e.target.value;
-  saveDatabase();
-});
-
-// Add custom onboarding item
-document.getElementById("addCustomObBtn").addEventListener("click", () => {
-  const client = getActiveClient();
-  const labelInput = document.getElementById("customObLabel");
-  const categorySelect = document.getElementById("customObCategory");
-
-  if (!labelInput || !categorySelect) return;
-  const label = labelInput.value.trim();
-  if (label === "") return;
-
-  const targetCategory = categorySelect.value;
-  const categoryObj = client.onboardingChecklist.find(cat => cat.category === targetCategory);
-
-  if (categoryObj) {
-    const newId = `ob_custom_${Date.now()}`;
-    categoryObj.items.push({
-      id: newId,
-      label: label,
-      checked: false
-    });
-    saveDatabase();
-    labelInput.value = "";
-    renderOnboardingChecklist();
-    renderDashboard();
-    showBanner("success", "Added custom onboarding checklist item!");
+function setIframeAbsoluteSrc(iframeSelector, relativeFallbackPath) {
+  const iframe = document.querySelector(iframeSelector);
+  if (iframe) {
+    const rawSrc = iframe.getAttribute('src') || relativeFallbackPath;
+    iframe.src = new URL(rawSrc, window.location.href).href;
   }
-});
-
-// Reset Onboarding Checklist
-document.getElementById("resetOnboardingBtn").addEventListener("click", () => {
-  const confirmReset = confirm("Reset all onboarding items back to blank templates? Custom added tasks will be deleted.");
-  if (!confirmReset) return;
-
-  const client = getActiveClient();
-  const blueprints = DEFAULT_ONBOARDING_CHECKLIST.map(cat => ({
-    category: cat.category,
-    items: cat.items.map(item => ({
-      id: item.id,
-      label: item.label,
-      checked: false
-    }))
-  }));
-
-  client.onboardingChecklist = blueprints;
-  saveDatabase();
-  renderOnboardingChecklist();
-  renderDashboard();
-  showBanner("success", "Onboarding checklist reset to template.");
-});
+}
 
 // ── UX/UI Audit Suite Controller ──
 function renderUxuiAudit() {
-  const iframe = document.querySelector('#tab-uxui iframe');
-  if (iframe && iframe.contentWindow) {
-    iframe.contentWindow.location.reload();
-  }
+  setIframeAbsoluteSrc('#tab-uxui iframe', "ux-ui-audit-checklist/index.html");
 }
 
 // ── SEO Audit Suite Controller ──
 function renderSeoAudit() {
-  const iframe = document.querySelector('#tab-seo iframe');
-  if (iframe && iframe.contentWindow) {
-    iframe.contentWindow.location.reload();
-  }
+  setIframeAbsoluteSrc('#tab-seo iframe', "seo-audit-checklist/index.html");
 }
 
 // ── Content Strategy Guide Controller ──
 function renderContentStrategy() {
-  const iframe = document.querySelector('#tab-strategy iframe');
-  if (iframe && iframe.contentWindow) {
-    iframe.contentWindow.location.reload();
-  }
+  setIframeAbsoluteSrc('#tab-strategy iframe', "content-strategy-guide/index.html");
+}
+
+// ── Content Strategy Builder Controller ──
+function renderStrategyBuilder() {
+  setIframeAbsoluteSrc('#tab-strategybuilder iframe', "content-strategy-builder/index.html");
 }
 
 // ── Social Media Audit Controller ──
 function renderSocialAudit() {
-  const iframe = document.querySelector('#tab-socialaudit iframe');
-  if (iframe && iframe.contentWindow) {
-    iframe.contentWindow.location.reload();
-  }
+  setIframeAbsoluteSrc('#tab-socialaudit iframe', "social-media-audit/index.html");
 }
 
 // ── Competitor Analysis Matricies (Website & Social) ──
 function renderWebCompetitors() {
-  const iframe = document.querySelector('#tab-webcomp iframe');
-  if (iframe && iframe.contentWindow) {
-    // Reload the iframe to force it to load the new active client's workspace data
-    iframe.contentWindow.location.reload();
-  }
+  setIframeAbsoluteSrc('#tab-webcomp iframe', "competitor-analysis/Website Competitor Analysis Form.html");
 }
 
 function renderSocialCompetitors() {
-  const iframe = document.querySelector('#tab-socialcomp iframe');
-  if (iframe && iframe.contentWindow) {
-    // Reload the iframe to force it to load the new active client's workspace data
-    iframe.contentWindow.location.reload();
-  }
+  setIframeAbsoluteSrc('#tab-socialcomp iframe', "competitor-analysis/Competiteor Analysis Form.html");
 }
 
 // SWOT grid rendering helper with interactive prompt buttons
@@ -790,79 +989,18 @@ function renderSwotGrid(prefix, swotState, promptsDefs) {
 
 // ── Monthly Report Form & Live Preview Controller ──
 function renderReportForm() {
-  const iframe = document.querySelector('#tab-report iframe');
-  if (iframe && iframe.contentWindow) {
-    iframe.contentWindow.location.reload();
-  }
+  setIframeAbsoluteSrc('#tab-report iframe', "competitor-analysis/revital-monthly-report-styled.html");
+}
+
+function renderCopywriting() {
+  setIframeAbsoluteSrc('#tab-copywriting iframe', "copywriting-assistant/index.html");
 }
 
 function updateReportPreview() {
   // Preview is now handled inside the iframe
 }
 
-// ── Print Buttons ──
-document.getElementById("printOnboardingBtn").addEventListener("click", () => window.print());
-
-// ── Sidebar Utilities: Export / Import JSON ──
-document.getElementById("exportDataBtn").addEventListener("click", () => {
-  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(clientsDb, null, 2));
-  const downloadAnchor = document.createElement("a");
-  downloadAnchor.setAttribute("href", dataStr);
-  downloadAnchor.setAttribute("download", `Revital_Productions_Hub_${activeClientName.replace(/\s+/g, "_")}.json`);
-  document.body.appendChild(downloadAnchor);
-  downloadAnchor.click();
-  downloadAnchor.remove();
-  showBanner("success", "Client workspaces exported successfully!");
-});
-
-document.getElementById("importDataBtn").addEventListener("click", () => {
-  document.getElementById("importFileInput").click();
-});
-
-document.getElementById("importFileInput").addEventListener("change", (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = function(evt) {
-    try {
-      const imported = JSON.parse(evt.target.result);
-      
-      // Simple structural check
-      if (typeof imported !== 'object' || Array.isArray(imported)) {
-        throw new Error("Invalid file structure. Must be a JSON object.");
-      }
-
-      // Merge and save
-      clientsDb = { ...clientsDb, ...imported };
-      saveDatabase();
-      
-      // Switch active client to first imported client
-      activeClientName = Object.keys(imported)[0];
-      localStorage.setItem("REVITAL_HUB_ACTIVE_CLIENT", activeClientName);
-      
-      buildClientDropdown();
-      refreshAllViews();
-      showBanner("success", "Backups merged and imported successfully!");
-    } catch (err) {
-      showBanner("error", "Failed to parse backup JSON. Verify file format.");
-    }
-  };
-  reader.readAsText(file);
-  // Clear file input value to allow uploading same file again
-  e.target.value = "";
-});
-
-// Delete Client Button
-document.getElementById("deleteClientBtn").addEventListener("click", deleteActiveClient);
-
-// Add Client button dropdown
-document.getElementById("addClientBtn").addEventListener("click", createNewClient);
-
-// Dropdown change listener
-document.getElementById("clientSelect").addEventListener("change", (e) => {
-  switchClient(e.target.value);
-});
+// Print, export/import, and client dropdown/button listeners moved to initParentEventListeners
 
 // ── Notification Banner Alerts ──
 function showBanner(type, message) {
@@ -883,10 +1021,210 @@ function showBanner(type, message) {
   }, 4000);
 }
 
-// ── Application Boostrapper ──
+// ── Mobile Drawer Navigation ──
+function initMobileNavigation() {
+  const mobileMenuBtn = document.getElementById("mobileMenuBtn");
+  const mobileCloseBtn = document.getElementById("mobileCloseBtn");
+  const sidebarOverlay = document.getElementById("sidebarOverlay");
+  const sidebar = document.getElementById("sidebar");
+
+  function closeSidebar() {
+    if (sidebar) sidebar.classList.remove("open");
+    if (sidebarOverlay) sidebarOverlay.classList.remove("active");
+  }
+
+  function openSidebar() {
+    if (sidebar) sidebar.classList.add("open");
+    if (sidebarOverlay) sidebarOverlay.classList.add("active");
+  }
+
+  if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener("click", openSidebar);
+  }
+  if (mobileCloseBtn) {
+    mobileCloseBtn.addEventListener("click", closeSidebar);
+  }
+  if (sidebarOverlay) {
+    sidebarOverlay.addEventListener("click", closeSidebar);
+  }
+
+  // Close sidebar on navigation selection (mobile only)
+  const navButtons = document.querySelectorAll(".nav-item-btn");
+  navButtons.forEach(btn => {
+    btn.addEventListener("click", closeSidebar);
+  });
+}
+
+// ── Parent Event Listeners Initialization ──
+function initParentEventListeners() {
+  // Onboarding inputs sync
+  const obTargetUrl = document.getElementById("obTargetUrl");
+  if (obTargetUrl) {
+    obTargetUrl.addEventListener("input", (e) => {
+      const client = getActiveClient();
+      client.targetUrl = e.target.value;
+      saveDatabase();
+      // Keep dashboard hero in sync
+      const heroUrl = document.getElementById("dashHeroTargetUrl");
+      if (heroUrl) heroUrl.textContent = e.target.value || "No website logged yet";
+    });
+  }
+
+  const obTargetDate = document.getElementById("obTargetDate");
+  if (obTargetDate) {
+    obTargetDate.addEventListener("input", (e) => {
+      const client = getActiveClient();
+      client.onboardingDate = e.target.value;
+      saveDatabase();
+    });
+  }
+
+  // Add custom onboarding item
+  const addCustomObBtn = document.getElementById("addCustomObBtn");
+  if (addCustomObBtn) {
+    addCustomObBtn.addEventListener("click", () => {
+      const client = getActiveClient();
+      const labelInput = document.getElementById("customObLabel");
+      const categorySelect = document.getElementById("customObCategory");
+
+      if (!labelInput || !categorySelect) return;
+      const label = labelInput.value.trim();
+      if (label === "") return;
+
+      const targetCategory = categorySelect.value;
+      const categoryObj = client.onboardingChecklist.find(cat => cat.category === targetCategory);
+
+      if (categoryObj) {
+        const newId = `ob_custom_${Date.now()}`;
+        categoryObj.items.push({
+          id: newId,
+          label: label,
+          checked: false,
+          notes: ""
+        });
+        saveDatabase();
+        labelInput.value = "";
+        renderOnboardingChecklist();
+        renderDashboard();
+        showBanner("success", "Added custom onboarding checklist item!");
+      }
+    });
+  }
+
+  // Reset Onboarding Checklist
+  const resetOnboardingBtn = document.getElementById("resetOnboardingBtn");
+  if (resetOnboardingBtn) {
+    resetOnboardingBtn.addEventListener("click", () => {
+      const confirmReset = confirm("Reset all onboarding items back to blank templates? Custom added tasks will be deleted.");
+      if (!confirmReset) return;
+
+      const client = getActiveClient();
+      const blueprints = DEFAULT_ONBOARDING_CHECKLIST.map(cat => ({
+        category: cat.category,
+        items: cat.items.map(item => ({
+          id: item.id,
+          label: item.label,
+          checked: false,
+          notes: ""
+        }))
+      }));
+
+      client.onboardingChecklist = blueprints;
+      saveDatabase();
+      renderOnboardingChecklist();
+      renderDashboard();
+      showBanner("success", "Onboarding checklist reset to template.");
+    });
+  }
+
+  // Print Buttons
+  const printOnboardingBtn = document.getElementById("printOnboardingBtn");
+  if (printOnboardingBtn) {
+    printOnboardingBtn.addEventListener("click", () => window.print());
+  }
+
+  // Sidebar Utilities: Export / Import JSON
+  const exportDataBtn = document.getElementById("exportDataBtn");
+  if (exportDataBtn) {
+    exportDataBtn.addEventListener("click", () => {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(clientsDb, null, 2));
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `Revital_Productions_Hub_${activeClientName.replace(/\s+/g, "_")}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      showBanner("success", "Client workspaces exported successfully!");
+    });
+  }
+
+  const importDataBtn = document.getElementById("importDataBtn");
+  if (importDataBtn) {
+    importDataBtn.addEventListener("click", () => {
+      const fileInput = document.getElementById("importFileInput");
+      if (fileInput) fileInput.click();
+    });
+  }
+
+  const importFileInput = document.getElementById("importFileInput");
+  if (importFileInput) {
+    importFileInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        try {
+          const imported = JSON.parse(evt.target.result);
+          
+          if (typeof imported !== 'object' || Array.isArray(imported)) {
+            throw new Error("Invalid file structure. Must be a JSON object.");
+          }
+
+          clientsDb = { ...clientsDb, ...imported };
+          saveDatabase();
+          
+          activeClientName = Object.keys(imported)[0];
+          localStorage.setItem("REVITAL_HUB_ACTIVE_CLIENT", activeClientName);
+          
+          buildClientDropdown();
+          refreshAllViews();
+          showBanner("success", "Backups merged and imported successfully!");
+        } catch (err) {
+          showBanner("error", "Failed to parse backup JSON. Verify file format.");
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = "";
+    });
+  }
+
+  // Delete Client Button
+  const deleteClientBtn = document.getElementById("deleteClientBtn");
+  if (deleteClientBtn) {
+    deleteClientBtn.addEventListener("click", deleteActiveClient);
+  }
+
+  // Add Client button dropdown
+  const addClientBtn = document.getElementById("addClientBtn");
+  if (addClientBtn) {
+    addClientBtn.addEventListener("click", createNewClient);
+  }
+
+  // Dropdown change listener
+  const clientSelect = document.getElementById("clientSelect");
+  if (clientSelect) {
+    clientSelect.addEventListener("change", (e) => {
+      switchClient(e.target.value);
+    });
+  }
+}
+
+// ── Application Bootstrapper ──
 document.addEventListener("DOMContentLoaded", () => {
-  loadDatabase();
   initTabNavigation();
+  initMobileNavigation();
+  initParentEventListeners();
   refreshAllViews();
 
   // Reset Sandbox Button listener
@@ -902,3 +1240,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
+
+// Run database load immediately to populate state before child iframes execute their scripts
+loadDatabase();

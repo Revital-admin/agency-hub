@@ -10,10 +10,12 @@ let webComp = null;
 
 if (isEmbedded) {
   parentClient = window.parent.getActiveClient();
-  webComp = parentClient.webComp;
-  // Initialize stars key in schema if it doesn't exist
-  if (!webComp.stars) {
-    webComp.stars = [0, 0, 0];
+  if (parentClient) {
+    webComp = parentClient.webComp;
+    // Initialize stars key in schema if it doesn't exist
+    if (!webComp.stars) {
+      webComp.stars = [0, 0, 0];
+    }
   }
 }
 
@@ -24,7 +26,7 @@ if (isEmbedded) {
   const nicheEl = document.getElementById('niche');
   const preparedbyEl = document.getElementById('preparedby');
 
-  if (isEmbedded) {
+  if (isEmbedded && parentClient && webComp) {
     if (companyEl) companyEl.value = parentClient.name || '';
     if (dateEl) dateEl.value = webComp.date || '';
     if (nicheEl) nicheEl.value = webComp.market || '';

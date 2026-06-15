@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Client Onboarding & Audit Hub</title>
   <link rel="stylesheet" href="style.css">
+  <!-- Central references and Application State Controller -->
+  <script src="data-store.js"></script>
+  <script src="app.js"></script>
 </head>
 <body>
 
@@ -12,15 +15,42 @@
   <div class="bg-grid"></div>
   <div class="bg-glow"></div>
 
+  <!-- Mobile Header -->
+  <header class="mobile-header">
+    <button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Open Navigation">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="12" x2="21" y2="12"></line>
+        <line x1="3" y1="6" x2="21" y2="6"></line>
+        <line x1="3" y1="18" x2="21" y2="18"></line>
+      </svg>
+    </button>
+    <div class="mobile-brand">
+      <svg class="brand-logo-svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+      </svg>
+      <span class="brand-name">REVITAL HUB</span>
+    </div>
+    <div style="width: 24px;"></div> <!-- Spacer to balance layout -->
+  </header>
+
+  <!-- Sidebar Overlay -->
+  <div id="sidebarOverlay" class="sidebar-overlay"></div>
+
   <div class="app-container">
     
     <!-- ── Sidebar Workspace ── -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <div class="brand-section">
         <svg class="brand-logo-svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          <path d="M12 2L2 7l10 5 10-5-10-5"/>
         </svg>
         <span class="brand-name">REVITAL HUB</span>
+        <button id="mobileCloseBtn" class="mobile-close-btn" aria-label="Close Navigation">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </div>
 
       <!-- Client Workspace Selector -->
@@ -54,6 +84,12 @@
           </button>
         </li>
         <li>
+          <button class="nav-item-btn sub-nav" data-tab="tab-report">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            <span>Monthly Report</span>
+          </button>
+        </li>
+        <li>
           <button class="nav-item-btn" data-tab="tab-uxui">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             <span>UX/UI Audit</span>
@@ -62,13 +98,19 @@
         <li>
           <button class="nav-item-btn" data-tab="tab-seo">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            <span>SEO Audit Checklist</span>
+            <span>SEO Audit</span>
           </button>
         </li>
         <li>
           <button class="nav-item-btn" data-tab="tab-strategy">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
             <span>Social & Digital Strategy</span>
+          </button>
+        </li>
+        <li>
+          <button class="nav-item-btn" data-tab="tab-strategybuilder">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+            <span>Content Strategy Builder</span>
           </button>
         </li>
         <li>
@@ -79,7 +121,7 @@
         </li>
         <li>
           <button class="nav-item-btn" data-tab="tab-webcomp">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2vp"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
             <span>Website Competitor List</span>
           </button>
         </li>
@@ -89,10 +131,11 @@
             <span>Social Competitor List</span>
           </button>
         </li>
+
         <li>
-          <button class="nav-item-btn" data-tab="tab-report">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-            <span>Monthly Report</span>
+          <button class="nav-item-btn" data-tab="tab-copywriting">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"></path></svg>
+            <span>Copywriting Assistant</span>
           </button>
         </li>
       </nav>
@@ -192,7 +235,7 @@
           <!-- SEO Audit score -->
           <div class="tool-progress-card">
             <div class="tool-card-header">
-              <span class="tool-card-title">SEO Audit Checklist</span>
+              <span class="tool-card-title">SEO Audit</span>
               <div class="tool-card-icon-wrap icon-teal">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
               </div>
@@ -223,6 +266,23 @@
             </div>
           </div>
 
+          <!-- Content Strategy Builder -->
+          <div class="tool-progress-card">
+            <div class="tool-card-header">
+              <span class="tool-card-title">Content Strategy Builder</span>
+              <div class="tool-card-icon-wrap icon-amber">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+              </div>
+            </div>
+            <div class="tool-card-stat">
+              <div id="dashStrategyBuilderVal" class="tool-stat-value">0%</div>
+              <div class="tool-stat-desc">Strategy profile fields filled</div>
+            </div>
+            <div class="tool-card-actions">
+              <button class="btn-card-go" data-go="tab-strategybuilder">Go to Strategy Builder &rarr;</button>
+            </div>
+          </div>
+
           <!-- Social Media Audit -->
           <div class="tool-progress-card">
             <div class="tool-card-header">
@@ -240,20 +300,54 @@
             </div>
           </div>
 
-          <!-- Competitor Analysis Status -->
+          <!-- Copywriting Assistant -->
           <div class="tool-progress-card">
             <div class="tool-card-header">
-              <span class="tool-card-title">Competitors Logged</span>
-              <div class="tool-card-icon-wrap icon-pink">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2vp"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+              <span class="tool-card-title">Copywriting Assistant</span>
+              <div class="tool-card-icon-wrap icon-blue">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"></path></svg>
               </div>
             </div>
             <div class="tool-card-stat">
-              <div id="dashCompetitorVal" class="tool-stat-value">0 / 6</div>
-              <div class="tool-stat-desc">Competitor columns detailed</div>
+              <div id="dashCopywritingVal" class="tool-stat-value">0 words</div>
+              <div class="tool-stat-desc">Copy drafted in workspace notes</div>
+            </div>
+            <div class="tool-card-actions">
+              <button class="btn-card-go" data-go="tab-copywriting">Go to Copywriting &rarr;</button>
+            </div>
+          </div>
+
+          <!-- Website Competitors Card -->
+          <div class="tool-progress-card">
+            <div class="tool-card-header">
+              <span class="tool-card-title">Website Competitors</span>
+              <div class="tool-card-icon-wrap icon-pink">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+              </div>
+            </div>
+            <div class="tool-card-stat">
+              <div id="dashWebCompetitorVal" class="tool-stat-value">0 / 3</div>
+              <div class="tool-stat-desc">Website competitors detailed</div>
             </div>
             <div class="tool-card-actions">
               <button class="btn-card-go" data-go="tab-webcomp">View Competitors &rarr;</button>
+            </div>
+          </div>
+
+          <!-- Social Competitors Card -->
+          <div class="tool-progress-card">
+            <div class="tool-card-header">
+              <span class="tool-card-title">Social Competitors</span>
+              <div class="tool-card-icon-wrap icon-pink">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+              </div>
+            </div>
+            <div class="tool-card-stat">
+              <div id="dashSocialCompetitorVal" class="tool-stat-value">0 / 3</div>
+              <div class="tool-stat-desc">Social competitors detailed</div>
+            </div>
+            <div class="tool-card-actions">
+              <button class="btn-card-go" data-go="tab-socialcomp">View Competitors &rarr;</button>
             </div>
           </div>
         </div>
@@ -357,37 +451,47 @@
 
       <!-- ── SECTION 3: UX/UI AUDIT ── -->
       <section id="tab-uxui" class="tab-section" style="width: 100%;">
-        <iframe src="ux-ui-audit-checklist/index.html" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
+        <iframe src="ux-ui-audit-checklist/index.html?v=1.5" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
       </section>
 
-      <!-- ── SECTION 4: SEO AUDIT CHECKLIST ── -->
+      <!-- ── SECTION 4: SEO AUDIT ── -->
       <section id="tab-seo" class="tab-section" style="width: 100%;">
-        <iframe src="seo-audit-checklist/index.html" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
+        <iframe src="seo-audit-checklist/index.html?v=1.5" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
       </section>
 
       <!-- ── SECTION 4.5: CONTENT STRATEGY GUIDE ── -->
       <section id="tab-strategy" class="tab-section" style="width: 100%;">
-        <iframe src="content-strategy-guide/index.html" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
+        <iframe src="content-strategy-guide/index.html?v=1.5" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
+      </section>
+
+      <!-- ── SECTION 4.6: CONTENT STRATEGY BUILDER ── -->
+      <section id="tab-strategybuilder" class="tab-section" style="width: 100%;">
+        <iframe src="content-strategy-builder/index.html?v=1.5" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
       </section>
 
       <!-- ── SECTION 4.7: SOCIAL MEDIA AUDIT CHECKLIST ── -->
       <section id="tab-socialaudit" class="tab-section" style="width: 100%;">
-        <iframe src="social-media-audit/index.html" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
+        <iframe src="social-media-audit/index.html?v=1.5" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
       </section>
 
       <!-- ── SECTION 5: WEBSITE COMPETITOR LIST ── -->
       <section id="tab-webcomp" class="tab-section" style="width: 100%;">
-        <iframe src="competitor-analysis/Website%20Competitor%20Analysis%20Form.html" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
+        <iframe src="competitor-analysis/Website%20Competitor%20Analysis%20Form.html?v=1.5" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
       </section>
 
       <!-- ── SECTION 6: SOCIAL COMPETITOR LIST ── -->
       <section id="tab-socialcomp" class="tab-section" style="width: 100%;">
-        <iframe src="competitor-analysis/Competiteor%20Analysis%20Form.html" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
+        <iframe src="competitor-analysis/Competiteor%20Analysis%20Form.html?v=1.5" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
       </section>
 
       <!-- ── SECTION 7: MONTHLY REPORT GENERATOR ── -->
       <section id="tab-report" class="tab-section" style="width: 100%;">
-        <iframe src="competitor-analysis/revital-monthly-report-styled.html" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
+        <iframe src="competitor-analysis/revital-monthly-report-styled.html?v=1.5" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
+      </section>
+
+      <!-- ── SECTION 8: COPYWRITING ASSISTANT ── -->
+      <section id="tab-copywriting" class="tab-section" style="width: 100%;">
+        <iframe src="copywriting-assistant/index.html?v=1.5" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
       </section>
 
     </main>
@@ -404,8 +508,5 @@
     <span id="errorBannerMsg" class="banner-msg">An error occurred!</span>
   </div>
 
-  <!-- Load Scripts -->
-  <script src="data-store.js"></script>
-  <script src="app.js"></script>
 </body>
 </html>

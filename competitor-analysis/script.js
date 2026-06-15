@@ -39,11 +39,13 @@ let reportState = null;
 
 if (isEmbedded) {
   parentClient = window.parent.getActiveClient();
-  reportState = parentClient.report;
+  if (parentClient) {
+    reportState = parentClient.report;
+  }
 }
 
 function loadFromParent() {
-  if (isEmbedded) {
+  if (isEmbedded && parentClient && reportState) {
     // Sync metadata inputs
     const clientInput = document.getElementById('client');
     const dateInput = document.getElementById('rdate');

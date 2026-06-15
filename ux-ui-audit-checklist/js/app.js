@@ -16,6 +16,7 @@ if (isEmbedded) {
 
 const state = {
   checked: {}, // { taskId: boolean }
+  notes: {},   // { taskId: string }
   filter: 'all', // 'all' | 'incomplete' | 'complete'
   labelIndices: { steps: 0, tasks: 0, remaining: 0, score: 0 },
   targetUrl: '', // Website or client being audited
@@ -26,15 +27,19 @@ function initState() {
   STEPS.forEach(step => {
     step.subs.forEach(sub => {
       state.checked[sub.id] = false;
+      state.notes[sub.id] = "";
     });
   });
 
-  if (isEmbedded) {
+  if (isEmbedded && parentClient) {
     if (!parentClient.uxuiAudit) {
-      parentClient.uxuiAudit = { checked: {}, targetUrl: "" };
+      parentClient.uxuiAudit = { checked: {}, notes: {}, targetUrl: "" };
     }
     if (!parentClient.uxuiAudit.checked) {
       parentClient.uxuiAudit.checked = {};
+    }
+    if (!parentClient.uxuiAudit.notes) {
+      parentClient.uxuiAudit.notes = {};
     }
     // Bind child state object reference directly to the parent object
     Object.keys(parentClient.uxuiAudit.checked).forEach(k => {
@@ -50,6 +55,13 @@ function initState() {
         state.checked[k] = parentClient.uxuiAudit.checked[k];
       }
     });
+    // Sync notes
+    Object.keys(state.notes).forEach(k => {
+      if (parentClient.uxuiAudit.notes[k] === undefined) {
+        parentClient.uxuiAudit.notes[k] = "";
+      }
+      state.notes[k] = parentClient.uxuiAudit.notes[k];
+    });
     state.targetUrl = parentClient.uxuiAudit.targetUrl || "";
   } else {
     try {
@@ -58,6 +70,13 @@ function initState() {
         const parsed = JSON.parse(saved);
         Object.keys(parsed).forEach(k => {
           if (k in state.checked) state.checked[k] = parsed[k];
+        });
+      }
+      const savedNotes = localStorage.getItem('uxui-checklist-notes');
+      if (savedNotes) {
+        const parsedNotes = JSON.parse(savedNotes);
+        Object.keys(parsedNotes).forEach(k => {
+          if (k in state.notes) state.notes[k] = parsedNotes[k];
         });
       }
       const savedUrl = localStorage.getItem('uxui-checklist-target-url');
@@ -71,14 +90,16 @@ function initState() {
 }
 
 function saveState() {
-  if (isEmbedded) {
+  if (isEmbedded && parentClient) {
     parentClient.uxuiAudit.checked = state.checked;
+    parentClient.uxuiAudit.notes = state.notes;
     parentClient.uxuiAudit.targetUrl = state.targetUrl;
     window.parent.saveDatabase();
     window.parent.renderDashboard();
   } else {
     try {
       localStorage.setItem('uxui-checklist-state', JSON.stringify(state.checked));
+      localStorage.setItem('uxui-checklist-notes', JSON.stringify(state.notes));
     } catch (e) {}
   }
 }
@@ -214,6 +235,9 @@ function renderSteps() {
           <div class="sub-content">
             <div class="sub-label">${escHtml(sub.label)}</div>
             <div class="sub-desc">${escHtml(sub.desc)}</div>
+            <div class="sub-notes-wrapper">
+              <textarea class="sub-notes-input" placeholder="Add notes..." rows="1">${escHtml(state.notes[sub.id] || "")}</textarea>
+            </div>
           </div>
         </div>`;
     }).join('');
@@ -259,6 +283,10 @@ function attachEvents() {
 
   // Toggle step open/close
   list.addEventListener('click', e => {
+    if (e.target.closest('.sub-notes-input')) {
+      return; // Ignore clicks inside the notes textarea
+    }
+
     const header = e.target.closest('.step-header');
     const subItem = e.target.closest('.sub-item');
     const checkbox = e.target.closest('.sub-checkbox');
@@ -287,6 +315,19 @@ function attachEvents() {
     if (header) {
       const stepId = header.dataset.stepId;
       toggleStepBody(stepId);
+    }
+  });
+
+  // Handle note typing auto-saves
+  list.addEventListener('input', e => {
+    const notesInput = e.target.closest('.sub-notes-input');
+    if (notesInput) {
+      const subItem = notesInput.closest('.sub-item');
+      if (subItem) {
+        const subId = subItem.dataset.subId;
+        state.notes[subId] = notesInput.value;
+        saveState();
+      }
     }
   });
 
@@ -326,7 +367,7 @@ function attachEvents() {
     targetInput.value = state.targetUrl || '';
     targetInput.addEventListener('input', e => {
       state.targetUrl = e.target.value.trim();
-      if (isEmbedded) {
+      if (isEmbedded && parentClient) {
         parentClient.uxuiAudit.targetUrl = state.targetUrl;
         window.parent.saveDatabase();
         window.parent.renderDashboard();
@@ -537,7 +578,16 @@ function downloadPdfReport() {
       item.subs.forEach(sub => {
         const labelLines = doc.splitTextToSize(sub.label, 480);
         const descLines = doc.splitTextToSize(sub.desc, 480);
-        const textHeight = (labelLines.length * 12) + (descLines.length * 10) + 6;
+        
+        const notesText = state.notes[sub.id] ? state.notes[sub.id].trim() : '';
+        let notesLines = [];
+        let noteBlockHeight = 0;
+        if (notesText) {
+          notesLines = doc.splitTextToSize(notesText, 465);
+          noteBlockHeight = (notesLines.length * 10) + 12;
+        }
+
+        const textHeight = (labelLines.length * 12) + (descLines.length * 10) + noteBlockHeight + 6;
 
         checkPageOverflow(textHeight + 10);
         drawCrossmark(doc, 40, y);
@@ -558,6 +608,23 @@ function downloadPdfReport() {
           doc.text(lineText, 56, currY);
           currY += 10;
         });
+
+        if (notesText) {
+          doc.setDrawColor(245, 115, 90);
+          doc.setLineWidth(1.5);
+          doc.line(56, currY + 2, 56, currY + 2 + noteBlockHeight - 8);
+          
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(8);
+          doc.setTextColor(110, 110, 105);
+          
+          let notesY = currY + 9;
+          notesLines.forEach(lineText => {
+            doc.text(lineText, 64, notesY);
+            notesY += 10;
+          });
+          currY = notesY + 4;
+        }
 
         y = currY + 6;
       });
@@ -595,7 +662,16 @@ function downloadPdfReport() {
       item.subs.forEach(sub => {
         const labelLines = doc.splitTextToSize(sub.label, 480);
         const descLines = doc.splitTextToSize(sub.desc, 480);
-        const textHeight = (labelLines.length * 12) + (descLines.length * 10) + 6;
+        
+        const notesText = state.notes[sub.id] ? state.notes[sub.id].trim() : '';
+        let notesLines = [];
+        let noteBlockHeight = 0;
+        if (notesText) {
+          notesLines = doc.splitTextToSize(notesText, 465);
+          noteBlockHeight = (notesLines.length * 10) + 12;
+        }
+
+        const textHeight = (labelLines.length * 12) + (descLines.length * 10) + noteBlockHeight + 6;
 
         checkPageOverflow(textHeight + 10);
         drawCheckmark(doc, 40, y);
@@ -616,6 +692,23 @@ function downloadPdfReport() {
           doc.text(lineText, 56, currY);
           currY += 10;
         });
+
+        if (notesText) {
+          doc.setDrawColor(43, 138, 93);
+          doc.setLineWidth(1.5);
+          doc.line(56, currY + 2, 56, currY + 2 + noteBlockHeight - 8);
+          
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(8);
+          doc.setTextColor(110, 110, 105);
+          
+          let notesY = currY + 9;
+          notesLines.forEach(lineText => {
+            doc.text(lineText, 64, notesY);
+            notesY += 10;
+          });
+          currY = notesY + 4;
+        }
 
         y = currY + 6;
       });
