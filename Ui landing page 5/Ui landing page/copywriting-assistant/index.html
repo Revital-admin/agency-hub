@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Copywriting Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <div class="bg-grid"></div>
+
+  <main class="container">
+
+    <!-- Brand Header -->
+    <div class="brand-bar">
+      <div class="brand-logo-container">
+        <img src="assets/logo.png" alt="Revital Productions Logo" class="brand-logo" />
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-secondary-outline btn-sm" id="copyBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          <span>Copy Copy</span>
+        </button>
+        <button class="btn btn-primary btn-sm" id="downloadTxtBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>Save TXT</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <header class="site-header">
+      <div class="header-eyebrow">
+        <span class="dot"></span>
+        <span>Marketing & Social Copy Builder</span>
+      </div>
+      <h1 class="site-title">Copywriting<br /><em>Assistant</em></h1>
+      <p class="site-subtitle">Compose high-converting copies using marketing frameworks. Input your product details, select a framework, customize the tone, and save your drafts directly to the client's workspace.</p>
+
+      <div class="audit-target-container">
+        <label for="targetUrlInput" class="audit-target-label">Target Website / Brand</label>
+        <input type="text" id="targetUrlInput" class="audit-target-input" placeholder="e.g. yourwebsite.com" />
+      </div>
+    </header>
+
+    <!-- Score Cards -->
+    <section class="score-section" aria-label="Copywriting summary">
+      <div class="score-grid">
+        <div class="score-card" id="card-framework">
+          <div class="score-label">Active Framework</div>
+          <div class="score-value" id="val-framework" style="color: var(--color-accent);">AIDA</div>
+        </div>
+        <div class="score-card" id="card-inputs">
+          <div class="score-label">Inputs Filled</div>
+          <div class="score-value" id="val-inputs">0/4</div>
+        </div>
+        <div class="score-card" id="card-words">
+          <div class="score-label">Words Drafted</div>
+          <div class="score-value" id="val-words">0</div>
+        </div>
+        <div class="score-card accent" id="card-status">
+          <div class="score-label">Workspace Sync</div>
+          <div class="score-value" id="val-status" style="color: var(--color-success); font-size: 16px; letter-spacing: 0.05em; margin-top: 6px;">ACTIVE</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Controls -->
+    <div class="controls-row">
+      <div></div>
+      <button class="reset-btn" id="resetInputsBtn" aria-label="Reset all inputs and notes">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 .49-3.51"></path></svg>
+        <span>Reset all</span>
+      </button>
+    </div>
+
+    <!-- Main Workspace Layout -->
+    <div class="workspace-grid">
+      
+      <!-- Left Column: Inputs Form -->
+      <section class="panel glass-panel" aria-label="Copy input details">
+        <div class="panel-header">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"></path></svg>
+          <span>Brand & Copy Details</span>
+        </div>
+
+        <div class="input-group">
+          <label for="inputProduct">Product or Service Name</label>
+          <input type="text" id="inputProduct" class="custom-input" placeholder="e.g. Revital Digital Hub" />
+        </div>
+
+        <div class="input-group">
+          <label for="inputAudience">Target Audience</label>
+          <input type="text" id="inputAudience" class="custom-input" placeholder="e.g. Marketing Directors" />
+        </div>
+
+        <div class="input-group">
+          <label for="inputBenefit">Core Benefit or Solution</label>
+          <input type="text" id="inputBenefit" class="custom-input" placeholder="e.g. double conversions with zero stress" />
+        </div>
+
+        <div class="input-group">
+          <label for="inputCta">Call to Action (CTA)</label>
+          <input type="text" id="inputCta" class="custom-input" placeholder="e.g. start your free 14-day trial" />
+        </div>
+
+        <div class="input-group">
+          <label for="selectTone">Tone of Voice</label>
+          <select id="selectTone" class="custom-select">
+            <option value="persuasive">Persuasive & Convincing</option>
+            <option value="professional">Professional & Informative</option>
+            <option value="casual">Casual & Conversational</option>
+            <option value="witty">Witty & Playful</option>
+            <option value="bold">Bold & Direct</option>
+          </select>
+        </div>
+      </section>
+
+      <!-- Right Column: Outputs and Scratchpad -->
+      <section class="panel glass-panel" aria-label="Generated copy and editor">
+        
+        <!-- Framework Tabs -->
+        <div class="framework-tabs" role="tablist">
+          <button class="tab-btn active" data-framework="aida" role="tab" aria-selected="true">AIDA</button>
+          <button class="tab-btn" data-framework="pas" role="tab" aria-selected="false">PAS</button>
+          <button class="tab-btn" data-framework="bab" role="tab" aria-selected="false">BAB</button>
+        </div>
+
+        <div class="output-container">
+          <div class="editor-header">
+            <span class="editor-title" id="activeFrameworkTitle">AIDA Framework</span>
+            <div class="counters">
+              <span id="charCount">Chars: 0</span>
+              <span id="wordCount">Words: 0</span>
+            </div>
+          </div>
+          <textarea id="outputCopy" class="editor-textarea" placeholder="Your generated copy will appear here..."></textarea>
+        </div>
+
+        <!-- Notes / Scratchpad -->
+        <div class="output-container" style="margin-top: 20px;">
+          <div class="editor-header">
+            <span class="editor-title">Client Workspace Scratchpad / Saved Notes</span>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Saves to client profile</span>
+          </div>
+          <textarea id="workspaceNotes" class="editor-textarea notes-textarea" placeholder="Use this scratchpad to merge and edit your copies. Updates are automatically synced to the active client workspace."></textarea>
+        </div>
+
+      </section>
+
+    </div>
+
+    <footer class="site-footer">
+      <p>Built for fast, structured copywriting loops. Progress is synced automatically to your client workspace.</p>
+    </footer>
+
+  </main>
+
+  <script src="js/templates.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
