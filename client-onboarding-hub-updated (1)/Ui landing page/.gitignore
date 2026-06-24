@@ -1,0 +1,16 @@
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Archives and build artifacts
+*.zip
+*.tar.gz
+*.dmg
+
+# Temporary folders
+node_modules/
+.tmp/
+.temp/
+
+# Log files
+*.log
