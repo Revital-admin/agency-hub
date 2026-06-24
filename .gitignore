@@ -14,3 +14,10 @@ node_modules/
 
 # Log files
 *.log
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
