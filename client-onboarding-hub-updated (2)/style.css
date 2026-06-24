@@ -1633,8 +1633,13 @@ textarea {
 
 /* ── Responsive Styling ── */
 @media (max-width: 900px) {
+  body {
+    flex-direction: column;
+  }
+
   .app-container {
     display: block;
+    width: 100%;
   }
   
   .mobile-header {
