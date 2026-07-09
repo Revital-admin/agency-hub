@@ -123,21 +123,8 @@ window.removeAdminEmail = function(email) {
 }
 
 // ── Theme & User Profile ──
-function toggleTheme() {
-  const isLight = document.body.classList.toggle('light-theme');
-  localStorage.setItem('revital-theme', isLight ? 'light' : 'dark');
-  document.getElementById('themeIcon').textContent = isLight ? '🌙' : '☀️';
-}
 
-function initTheme() {
-  const saved = localStorage.getItem('revital-theme');
-  if (saved === 'light') {
-    document.body.classList.add('light-theme');
-    const ti = document.getElementById('themeIcon');
-    if(ti) ti.textContent = '🌙';
-  }
-}
-initTheme();
+
 
 function updateUserProfile() {
   const avatarEl = document.getElementById('userAvatar');
@@ -1856,7 +1843,9 @@ function initParentEventListeners() {
 
 // ── Application Bootstrapper ──
 window.onerror = function(msg, url, line) {
-  document.getElementById("dashHeroClientName").textContent = "Global Error: " + msg + " at line " + line;
+  if (msg === "Script error.") return false;
+  const el = document.getElementById("dashHeroClientName");
+  if (el) el.textContent = "Global Error: " + msg + " at line " + line;
 };
 
 document.addEventListener("DOMContentLoaded", () => {

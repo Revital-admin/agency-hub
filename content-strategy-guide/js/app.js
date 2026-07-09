@@ -401,7 +401,7 @@ function attachEvents() {
           
           let statusHtml = isChecked 
             ? '<span style="color:#10b981; font-weight:bold;">[PASS]</span>' 
-            : '<span style="color:#ef4444; font-weight:bold;">[ACTION REQUIRED]</span>';
+            : '<span style="color:#f68d5f; font-weight:bold;">[ACTION REQUIRED]</span>';
             
           let noteHtml = note ? `<div style="background:#f1f5f9; padding:10px; margin-top:5px; border-left:3px solid #3b82f6; font-size:12px; color:#475569;"><strong>Notes:</strong> ${note}</div>` : '';
 
@@ -540,3 +540,10 @@ function drawCrossmark(doc, x, y) {
   doc.line(x + 8, y + 3, x + 2, y + 9);
 }
 
+// Auto-injected Module Bootloader
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof initState === 'function') initState();
+  if (typeof renderSteps === 'function') renderSteps();
+  if (typeof updateScoreCards === 'function') updateScoreCards();
+  if (typeof renderPreview === 'function') renderPreview();
+});

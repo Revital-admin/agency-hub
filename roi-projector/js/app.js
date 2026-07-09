@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
     outFee.innerText = `-${formatCurrency(fee)}`;
     
     outNetROI.innerText = roi > 0 ? `+${formatNumber(roi)}%` : `${formatNumber(roi)}%`;
-    outNetROI.style.color = roi >= 0 ? '#10b981' : '#ef4444'; // Green if positive, Red if negative
+    outNetROI.style.color = roi >= 0 ? '#10b981' : '#f68d5f'; // Green if positive, Red if negative
   }
 
   // Add event listeners

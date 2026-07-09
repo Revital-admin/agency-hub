@@ -4,30 +4,33 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Email Signature Generator</title>
+  <link rel="stylesheet" href="../style.css">
   <link rel="stylesheet" href="css/style.css">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
 </head>
 <body>
-  <div class="app-container">
-    <header class="top-bar">
-      <div class="top-bar-left">
-        <div class="logo">REVITAL HUB</div>
-        <h1>Email Signature Generator</h1>
+  <div class="bg-grid"></div>
+
+  <main class="container">
+    <div class="brand-bar">
+      <div class="brand-logo-container"></div>
+      <button class="download-pdf-btn" id="copyBtn" aria-label="Copy Signature">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+        <span>Copy Signature</span>
+      </button>
+    </div>
+
+    <header class="site-header">
+      <div class="header-eyebrow">
+        <span class="dot"></span>
+        <span>Brand Identity</span>
       </div>
-      <div class="top-bar-right">
-        <button id="copyBtn" class="btn-primary">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-          Copy Signature
-        </button>
-      </div>
+      <h1 class="site-title">Email Signature<br /><em>Generator</em></h1>
+      <p class="site-subtitle">Fill out the form to instantly generate your official Revital Productions email signature.</p>
     </header>
 
-    <div class="main-content">
-      <div class="form-panel">
-        <div class="panel-header">
-          <h2>Your Details</h2>
-          <p>Fill out the form to instantly generate your official Revital Productions email signature.</p>
-        </div>
+    <div class="main-content split-layout-wide-right">
+      <div class="step-card">
         
         <div class="form-group">
           <label for="empName">Full Name</label>
@@ -68,19 +71,18 @@
         </div>
       </div>
       
-      <div class="preview-panel">
-        <div class="panel-header">
-          <h2>Live Preview</h2>
-        </div>
-        <div class="preview-scroll">
+      <div class="step-card" style="position: sticky; top: 24px;  overflow-x: auto;">
+        <h2 style="font-family: var(--font-heading); margin-bottom: 16px;">Live Preview</h2>
+        <div class="preview-scroll" style="max-height: 80vh; overflow-y: auto; overflow-x: auto;">
           <div class="signature-card" id="signatureContainer">
             <!-- Populated by JS -->
           </div>
         </div>
       </div>
     </div>
-  </div>
-
+  </main>
+  
+  <script src="js/logo.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

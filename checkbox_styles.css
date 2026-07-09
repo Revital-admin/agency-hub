@@ -1,0 +1,58 @@
+
+/* ── Custom Styled Checkbox ────────────────────────────── */
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.checkbox-item:hover {
+  color: var(--color-text-primary);
+}
+
+.custom-checkbox {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--color-border-md);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-2);
+  transition: all 0.2s ease;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.custom-checkbox input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
+}
+
+.custom-checkbox .check-icon {
+  width: 14px;
+  height: 14px;
+  color: white;
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Checked State */
+.custom-checkbox input[type="checkbox"]:checked + .check-icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.checkbox-item:has(input[type="checkbox"]:checked) .custom-checkbox {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}

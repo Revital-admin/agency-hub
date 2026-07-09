@@ -1,0 +1,171 @@
+
+.step-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  transition: border-color var(--transition), box-shadow var(--transition);
+  animation: fadeSlideIn 0.3s ease both;
+}
+
+.step-card:hover {
+  border-color: var(--color-border-md);
+}
+
+.step-card.done-card {
+  border-color: rgba(74,240,160,0.2);
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Step header — clickable */
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 1.1rem 1.4rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition);
+}
+
+.step-header:hover {
+  background: var(--color-surface-2);
+}
+
+/* Numbered badge */
+.step-num {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  flex-shrink: 0;
+  transition: background var(--transition), color var(--transition);
+}
+
+.step-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.step-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  margin-bottom: 5px;
+  transition: color var(--transition);
+}
+
+.step-title.is-done {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+}
+
+.step-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tool-tag {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 100px;
+  border: 1px solid var(--color-border-md);
+  color: var(--color-text-muted);
+  letter-spacing: 0.03em;
+}
+
+.step-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.step-progress-text {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.step-done-icon {
+  color: var(--color-success);
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.step-done-icon.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.chevron {
+  color: var(--color-text-muted);
+  transition: transform 0.25s ease;
+  flex-shrink: 0;
+}
+
+.chevron.open {
+  transform: rotate(180deg);
+}
+
+/* Step body */
+.step-body {
+  border-top: 1px solid var(--color-border);
+  display: none;
+}
+
+.step-body.open {
+  display: block;
+}
+
+/* Tip box */
+.tip-box {
+  display: flex;
+  gap: 10px;
+  margin: 1rem 1.4rem 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--color-accent-dim);
+  border-left: 2px solid var(--color-accent);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.55;
+}
+
+.tip-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--color-accent);
+}
+
+/* Sub-tasks */
+.sub-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 0.7rem 1.4rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-border);
+  transition: background var(--transition);
+}
+
+.sub-item:last-child { border-bottom: none; }
+
+.sub-item:hover { background: var(--color-surface-2); }
+
+
+
+.sub-content { flex: 1; min-width: 0; }
+

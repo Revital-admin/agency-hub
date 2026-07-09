@@ -93,21 +93,21 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="policy-grid">
           <div class="policy-card">
             <h3>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f68d5f" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
               Communication
             </h3>
             <p>All revision requests and feedback must be submitted through your secure Client Portal. This ensures nothing gets lost in email threads or text messages.</p>
           </div>
           <div class="policy-card">
             <h3>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f68d5f" stroke-width="2"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>
               Approvals
             </h3>
             <p>We require explicit written approval via the portal before any content is published or launched. Verbal approvals are not accepted.</p>
           </div>
           <div class="policy-card">
             <h3>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f68d5f" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
               Response Times
             </h3>
             <p>Our team works Monday through Friday. You can expect a response to all portal inquiries within 24 business hours.</p>

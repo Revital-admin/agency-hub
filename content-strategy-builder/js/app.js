@@ -909,3 +909,10 @@ function setupEventHandlers() {
 
 }
 
+// Auto-injected Module Bootloader
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof initState === 'function') initState();
+  if (typeof renderSteps === 'function') renderSteps();
+  if (typeof updateScoreCards === 'function') updateScoreCards();
+  if (typeof renderPreview === 'function') renderPreview();
+});

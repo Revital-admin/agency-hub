@@ -166,7 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
       textSpan.textContent = `${item.name} (+$${item.price.toLocaleString()} ${item.type === 'monthly' ? '/mo' : 'one-time'})`;
       const removeBtn = document.createElement('button');
       removeBtn.textContent = '✕';
-      removeBtn.style.cssText = 'background: none; border: none; color: #ef4444; cursor: pointer;';
+      removeBtn.style.cssText = 'background: none; border: none; color: #f68d5f; cursor: pointer;';
       removeBtn.onclick = () => {
         customItemsArray = customItemsArray.filter(i => i.id !== item.id);
         renderCustomItems();
@@ -328,7 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if(profitMarginPercent) {
           profitMarginPercent.textContent = marginPct + "%";
           if (marginPct < 40) {
-            profitMarginPercent.style.color = '#ef4444'; // Red if low margin
+            profitMarginPercent.style.color = '#f68d5f'; // Red if low margin
           } else {
             profitMarginPercent.style.color = 'var(--success)';
           }

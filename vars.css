@@ -1,0 +1,24 @@
+:root {
+  --color-surface:    #1a1a17;
+  --color-surface-2:  #222220;
+  --color-border:     rgba(255,255,255,0.07);
+  --color-border-md:  rgba(255,255,255,0.12);
+
+  --color-text-primary:   #f0ede6;
+  --color-text-secondary: #8a887f;
+  --color-text-muted:     #555450;
+
+  --color-accent:     #f68d5f; 
+  --color-accent-dim: rgba(239, 68, 68, 0.15);
+  
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  14px;
+  --radius-xl:  20px;
+
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body:    'DM Sans', system-ui, sans-serif;
+  --font-mono:    'DM Mono', 'Courier New', monospace;
+
+  --transition: 0.2s ease;
+}

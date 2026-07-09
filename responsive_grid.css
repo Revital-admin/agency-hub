@@ -1,0 +1,22 @@
+
+/* ── Split Layouts for New Modules ────────────────────────────── */
+.split-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  align-items: start;
+}
+
+.split-layout-wide-right {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 40px;
+  align-items: start;
+}
+
+@media (max-width: 992px) {
+  .split-layout, .split-layout-wide-right {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}

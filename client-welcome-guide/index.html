@@ -4,31 +4,34 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Client Welcome Guide Generator</title>
+  <link rel="stylesheet" href="../style.css">
   <link rel="stylesheet" href="css/style.css">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
-  <div class="app-container">
-    <header class="top-bar">
-      <div class="top-bar-left">
-        <div class="logo">REVITAL HUB</div>
-        <h1>Welcome Guide Generator</h1>
+  <div class="bg-grid"></div>
+
+  <main class="container">
+    <div class="brand-bar">
+      <div class="brand-logo-container"></div>
+      <button class="download-pdf-btn" id="generatePdfBtn" aria-label="Download PDF">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        <span>Download PDF</span>
+      </button>
+    </div>
+
+    <header class="site-header">
+      <div class="header-eyebrow">
+        <span class="dot"></span>
+        <span>Client Onboarding</span>
       </div>
-      <div class="top-bar-right">
-        <button id="generatePdfBtn" class="btn-primary">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          Download PDF
-        </button>
-      </div>
+      <h1 class="site-title">Welcome Guide<br /><em>Generator</em></h1>
+      <p class="site-subtitle">Generate a universal welcome PDF for a new client.</p>
     </header>
 
-    <div class="main-content">
-      <div class="form-panel">
-        <div class="panel-header">
-          <h2>Input Details</h2>
-          <p>Generate a universal welcome PDF for a new client.</p>
-        </div>
+    <div class="main-content split-layout-wide-right">
+      <div class="step-card">
         
         <div class="form-group">
           <label for="clientName">Client Name</label>
@@ -57,14 +60,43 @@
 
         <div class="form-group">
           <label>Included Services</label>
-          <div class="checkbox-grid">
-            <label><input type="checkbox" name="services" value="Content Strategy"> Content Strategy</label>
-            <label><input type="checkbox" name="services" value="Paid Ads Management"> Paid Ads</label>
-            <label><input type="checkbox" name="services" value="SEO Optimization"> SEO Optimization</label>
-            <label><input type="checkbox" name="services" value="Social Media Management"> Social Media</label>
-            <label><input type="checkbox" name="services" value="Email Marketing"> Email Marketing</label>
-            <label><input type="checkbox" name="services" value="Website Development"> Website Dev</label>
-          </div>
+          <div class="form-group checkbox-grid">
+          <label class="checkbox-item">
+            <div class="custom-checkbox">
+              <input type="checkbox" id="srvAds" value="Paid Advertising" checked>
+              <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </div>
+            <span>Paid Advertising</span>
+          </label>
+          <label class="checkbox-item">
+            <div class="custom-checkbox">
+              <input type="checkbox" id="srvSeo" value="SEO Optimization">
+              <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </div>
+            <span>SEO Optimization</span>
+          </label>
+          <label class="checkbox-item">
+            <div class="custom-checkbox">
+              <input type="checkbox" id="srvWeb" value="Website Development">
+              <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </div>
+            <span>Website Development</span>
+          </label>
+          <label class="checkbox-item">
+            <div class="custom-checkbox">
+              <input type="checkbox" id="srvSocial" value="Social Media Management">
+              <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </div>
+            <span>Social Media Management</span>
+          </label>
+          <label class="checkbox-item">
+            <div class="custom-checkbox">
+              <input type="checkbox" id="srvContent" value="Content Creation">
+              <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </div>
+            <span>Content Creation</span>
+          </label>
+        </div>
         </div>
         
         <div class="alert-box">
@@ -72,18 +104,19 @@
           <div>The 30-Day Roadmap, Communication Policies, and Approval Guidelines are automatically baked into the PDF.</div>
         </div>
       </div>
-      
-      <div class="preview-panel">
-        <div class="panel-header">
-          <h2>PDF Live Preview</h2>
-        </div>
-        <div class="preview-scroll" id="pdfContainer">
+
+      <div class="step-card" style="position: sticky; top: 24px;">
+        <h2 style="font-family: var(--font-heading); margin-bottom: 16px;">Live Preview</h2>
+        <div class="preview-scroll" style="max-height: 80vh; overflow-y: auto;">
+          <div class="document-preview" id="pdfContainer">
           <!-- Populated by JS -->
+          </div>
         </div>
       </div>
     </div>
-  </div>
-
+  </main>
+  
+  <script src="js/logo.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

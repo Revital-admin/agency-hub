@@ -1,0 +1,23 @@
+
+/* ── Prevent Grid/Flex Blowouts ────────────────────────────── */
+.step-card {
+  min-width: 0; /* Prevents flex/grid children from overflowing */
+}
+
+/* ── Global Preview Panel Styles ────────────────────────────── */
+.preview-panel {
+  max-width: 100%;
+  overflow-x: auto;
+  word-wrap: break-word;
+  white-space: pre-wrap; /* Ensures text wraps instead of extending infinitely */
+}
+
+/* For tables in previews */
+.preview-panel table {
+  width: 100%;
+  table-layout: fixed; /* Prevents tables from pushing container width */
+}
+.preview-panel th, .preview-panel td {
+  word-wrap: break-word;
+  overflow: hidden;
+}
