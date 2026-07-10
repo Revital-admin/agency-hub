@@ -79,7 +79,7 @@ function init() {
   const config = client.portalConfig;
 
   // Load Magic Link
-  const baseUrl = window.location.origin + "/portal";
+  const baseUrl = window.location.origin + "/portal/index.html";
   const token = config.magicToken;
   const clientNameRaw = window.parent.activeClientName || "Client";
   magicLinkInput.value = `${baseUrl}?c=${encodeURIComponent(clientNameRaw)}&t=${token}`;
