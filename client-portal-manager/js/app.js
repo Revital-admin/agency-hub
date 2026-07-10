@@ -1,10 +1,8 @@
 // Connect to parent Hub state safely
-let parentDb, parentSave, getActiveClient, activeClientName;
+let parentSave, getActiveClient;
 try {
-  parentDb = window.parent.clientsDb;
   parentSave = window.parent.saveDatabase;
   getActiveClient = window.parent.getActiveClient;
-  activeClientName = window.parent.activeClientName;
 } catch (e) {
   console.log("CORS blocked parent access");
 }
@@ -43,7 +41,7 @@ const inputs = {
 };
 
 function init() {
-  if (!parentDb || !getActiveClient) {
+  if (!getActiveClient) {
     console.error("Hub database not accessible.");
     return;
   }
@@ -81,7 +79,7 @@ function init() {
   // Load Magic Link
   const baseUrl = window.location.origin + "/portal/index.html";
   const token = config.magicToken;
-  const clientNameRaw = window.parent.activeClientName || "Client";
+  const clientNameRaw = client.id || client.name || "Client";
   magicLinkInput.value = `${baseUrl}?c=${encodeURIComponent(clientNameRaw)}&t=${token}`;
 
   // Load Color

@@ -1598,7 +1598,24 @@ window.onerror = function(msg, url, line) {
   if (el) el.textContent = "Global Error: " + msg + " at line " + line;
 };
 
+function fetchCloudflareProfile() {
+  fetch('/api/user')
+    .then(res => res.json())
+    .then(data => {
+      if (data && data.email && data.email !== 'Guest') {
+        const userEmailEl = document.getElementById('userEmail');
+        const userAvatarEl = document.getElementById('userAvatar');
+        if (userEmailEl) userEmailEl.textContent = data.email;
+        if (userAvatarEl) {
+          userAvatarEl.textContent = data.email.charAt(0).toUpperCase();
+        }
+      }
+    })
+    .catch(err => console.log('Running locally or no Cloudflare Access headers present.', err));
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  fetchCloudflareProfile();
   try { initTabNavigation(); } catch(e) { console.error("TabNav Error:", e); }
   try { initMobileNavigation(); } catch(e) { console.error("MobileNav Error:", e); }
   try { initParentEventListeners(); } catch(e) { console.error("ParentListeners Error:", e); }
@@ -2004,17 +2021,18 @@ function loadDatabase() {
     window.firebaseOnSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const cloudData = docSnap.data();
-        clientsDb = cloudData;
-        localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
         
-        if (!clientsDb[activeClientName]) {
-          activeClientName = Object.keys(clientsDb)[0] || "";
-        }
+        const cloudStr = JSON.stringify(cloudData);
+        const localStr = JSON.stringify(clientsDb);
         
-        // Prevent DOM tearing: only re-render if the write came from the cloud (teammate),
-        // or if this is the very first load. If we wrote it, skip re-rendering to prevent 
-        // interrupting the user's active inputs and checkbox states.
-        if (!docSnap.metadata.hasPendingWrites) {
+        if (cloudStr !== localStr) {
+          clientsDb = cloudData;
+          localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
+          
+          if (!clientsDb[activeClientName]) {
+            activeClientName = Object.keys(clientsDb)[0] || "";
+          }
+          
           populateClientDropdown();
           refreshAllViews();
           renderDashboard();
