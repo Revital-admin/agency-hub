@@ -1081,9 +1081,19 @@ function renderOnboardingChecklist() {
       const chk = card.querySelector("input");
       chk.addEventListener("change", () => {
         item.checked = chk.checked;
+        // Update local class visually without tearing the whole DOM down
+        if (item.checked) {
+          card.classList.add("completed");
+        } else {
+          card.classList.remove("completed");
+        }
         saveDatabase();
-        renderOnboardingChecklist();
-        renderDashboard();
+        
+        // Defer the full re-render so the native checkbox click finishes cleanly
+        setTimeout(() => {
+          renderOnboardingChecklist();
+          renderDashboard();
+        }, 50);
       });
 
 
@@ -1972,9 +1982,6 @@ function loadDatabase() {
     window.firebaseOnSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const cloudData = docSnap.data();
-        // Prevent local overwrites from triggering a full re-render loop if we just saved it
-        // However, if a teammate saves it, we DO want to pull their changes and re-render.
-        // For now, we'll sync the database and render if it's the initial load or if a change occurred.
         clientsDb = cloudData;
         localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
         
@@ -1982,10 +1989,14 @@ function loadDatabase() {
           activeClientName = Object.keys(clientsDb)[0] || "";
         }
         
-        // Refresh the UI to reflect new data from cloud
-        populateClientDropdown();
-        refreshAllViews();
-        renderDashboard();
+        // Prevent DOM tearing: only re-render if the write came from the cloud (teammate),
+        // or if this is the very first load. If we wrote it, skip re-rendering to prevent 
+        // interrupting the user's active inputs and checkbox states.
+        if (!docSnap.metadata.hasPendingWrites) {
+          populateClientDropdown();
+          refreshAllViews();
+          renderDashboard();
+        }
       } else {
         // Doc doesn't exist yet, we push our local DB to seed it
         saveDatabase();
@@ -2012,7 +2023,7 @@ document.addEventListener('DOMContentLoaded', () => {
     { id: 'tab-onboarding', title: 'Client Onboarding', icon: 'M22 11.08V12a10 10 0 1 1-5.93-9.14 M22 4L12 14.01l-3-3' },
     { id: 'tab-brandvault', title: 'Brand Vault', icon: 'M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z' },
     { id: 'tab-uxui', title: 'UX/UI Audit', icon: 'M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z' },
-    { id: 'tab-seo', title: 'SEO Audit', icon: 'M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z' },
+    { id: 'tab-seo', title: 'SEO Audit Checklist', icon: 'M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z' },
     { id: 'tab-paidads', title: 'Paid Ads Audit', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
     { id: 'tab-creativebrief', title: 'Creative Brief', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' },
     { id: 'tab-proposal', title: 'Proposal Calculator', icon: 'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6' },

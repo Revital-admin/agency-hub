@@ -15,9 +15,9 @@
   --color-text-secondary: #8a887f;
   --color-text-muted:     #555450;
 
-  --color-accent:     #a78bfa;
-  --color-accent-dim: rgba(167,139,250,0.15);
-  --color-accent-glow:rgba(167,139,250,0.06);
+  --color-accent:     #10b981;
+  --color-accent-dim: rgba(16,185,129,0.15);
+  --color-accent-glow:rgba(16,185,129,0.06);
 
   --color-warning:    #f0a84a;
   --color-success:    #4af0a0;
