@@ -157,6 +157,9 @@ function init() {
   Object.keys(inputs).forEach(key => {
     if (inputs[key]) {
       inputs[key].value = config[key] || "";
+      inputs[key].addEventListener("input", (e) => {
+        updateConfig(key, e.target.value);
+      });
     }
   });
 
