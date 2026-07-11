@@ -184,8 +184,8 @@ async function generateClientPDF() {
 }
 
 function saveAdminsToFirebase() {
-  if (db && db.collection) {
-    db.collection("hub").doc("settings").set({ admins: globalAdmins })
+  if (window.firebaseSetDoc && window.firebaseDb && window.firebaseDoc) {
+    window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb, "hub", "settings"), { admins: globalAdmins })
       .then(() => renderAdminList())
       .catch(err => console.error(err));
   }
@@ -631,19 +631,19 @@ function refreshAllViews() {
 
   try {
     buildClientDropdown();
-  } catch(e) { document.getElementById("dashHeroClientName").textContent = "Error in buildClientDropdown: " + e.message; }
+  } catch(e) { const hero = document.getElementById("dashHeroClientName"); if (hero) hero.textContent = "Error in buildClientDropdown: " + e.message; }
   
   try {
     renderDashboard();
-  } catch(e) { document.getElementById("dashHeroClientName").textContent = "Error in renderDashboard: " + e.message; }
+  } catch(e) { const hero = document.getElementById("dashHeroClientName"); if (hero) hero.textContent = "Error in renderDashboard: " + e.message; }
   
   try {
     renderOnboardingChecklist();
-  } catch(e) { document.getElementById("dashHeroClientName").textContent = "Error in renderOnboardingChecklist: " + e.message; }
+  } catch(e) { const hero = document.getElementById("dashHeroClientName"); if (hero) hero.textContent = "Error in renderOnboardingChecklist: " + e.message; }
   
   try {
     renderBrandVault();
-  } catch(e) { document.getElementById("dashHeroClientName").textContent = "Error in renderBrandVault: " + e.message; }
+  } catch(e) { const hero = document.getElementById("dashHeroClientName"); if (hero) hero.textContent = "Error in renderBrandVault: " + e.message; }
 
   // Mark all iframes as needing reload
   Object.keys(iframeNeedsReload).forEach(key => {
@@ -666,7 +666,7 @@ function renderDashboard() {
   if (!client) return;
 
   // Active client summary details
-  document.getElementById("dashHeroClientName").textContent = client.name;
+  const hero = document.getElementById("dashHeroClientName"); if (hero) hero.textContent = client.name;
   document.getElementById("dashHeroTargetUrl").textContent = client.targetUrl || "No website logged yet";
   document.getElementById("dashHeroCreatedDate").textContent = client.createdDate || "N/A";
 
@@ -685,12 +685,16 @@ function renderDashboard() {
   // Calculate Onboarding completion %
   let totalOb = 0;
   let checkedOb = 0;
-  client.onboardingChecklist.forEach(cat => {
-    cat.items.forEach(item => {
-      totalOb++;
-      if (item.checked) checkedOb++;
+  if (client.onboardingChecklist && Array.isArray(client.onboardingChecklist)) {
+    client.onboardingChecklist.forEach(cat => {
+      if (cat.items && Array.isArray(cat.items)) {
+        cat.items.forEach(item => {
+          totalOb++;
+          if (item.checked) checkedOb++;
+        });
+      }
     });
-  });
+  }
   const obPct = totalOb > 0 ? Math.round((checkedOb / totalOb) * 100) : 0;
   document.getElementById("dashOnboardingVal").textContent = `${obPct}%`;
   document.getElementById("dashOnboardingProgress").style.width = `${obPct}%`;
@@ -1787,16 +1791,16 @@ function initQuickLinks() {
   // Function to save to both LocalStorage and Firebase
   function saveQuickLinks() {
     localStorage.setItem('revital-team-links-array', JSON.stringify(savedLinks));
-    if (db && db.collection) {
-      db.collection("hub").doc("quickLinks").set({ links: savedLinks })
+    if (window.firebaseSetDoc && window.firebaseDb && window.firebaseDoc) {
+      window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb, "hub", "quickLinks"), { links: savedLinks })
         .catch(err => console.error("Error saving Quick Links to Firebase:", err));
     }
   }
 
   // Subscribe to Firebase changes
-  if (db && db.collection) {
-    db.collection("hub").doc("quickLinks").onSnapshot((doc) => {
-      if (doc.exists) {
+  if (window.firebaseOnSnapshot && window.firebaseDb && window.firebaseDoc) {
+    window.firebaseOnSnapshot(window.firebaseDoc(window.firebaseDb, "hub", "quickLinks"), (docSnap) => {
+      if (docSnap.exists()) {
         const data = doc.data();
         if (data && Array.isArray(data.links)) {
           savedLinks = data.links;
