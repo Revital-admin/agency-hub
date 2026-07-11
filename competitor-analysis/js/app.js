@@ -347,8 +347,7 @@ function downloadPDF() {
     if (!val) {
       span.innerHTML = '<span style="color: #94a3b8; font-style: italic;">N/A</span>';
     } else {
-      span.innerHTML = val.replace(/
-/g, '<br>');
+      span.innerHTML = val.replace(/\\n/g, '<br>');
     }
     
     // For date or company inputs at top

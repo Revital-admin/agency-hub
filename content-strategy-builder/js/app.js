@@ -720,8 +720,7 @@ function setupEventHandlers() {
       
       const formatText = (txt) => {
         if (!txt) return '<span style="color: #94a3b8; font-style: italic;">Not provided</span>';
-        return txt.replace(/
-/g, '<br>');
+        return txt.replace(/\\n/g, '<br>');
       };
       
       const formatArray = (arr) => {

@@ -2033,7 +2033,7 @@ function loadDatabase() {
             activeClientName = Object.keys(clientsDb)[0] || "";
           }
           
-          populateClientDropdown();
+          buildClientDropdown();
           refreshAllViews();
           renderDashboard();
         }
@@ -2044,7 +2044,7 @@ function loadDatabase() {
     });
   } else {
     // No firebase, just render
-    populateClientDropdown();
+    buildClientDropdown();
     refreshAllViews();
     renderDashboard();
   }
