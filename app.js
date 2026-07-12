@@ -1932,11 +1932,15 @@ function backfillMissingClientChecklists() {
   return changed;
 }
 
+let _cloudSaveDebounceTimer = null;
+
 function saveDatabase() {
-  // 1. Save locally as fallback
+  // 1. Save locally as fallback - always instant, never debounced, so nothing
+  // is lost even if the tab closes before the debounced cloud write below
+  // fires.
   backfillMissingClientChecklists();
   localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
-  
+
   // 2. Trigger Autosave UI indicator
   const indicator = document.getElementById("autosaveIndicator");
   if (indicator) {
@@ -1944,7 +1948,18 @@ function saveDatabase() {
     indicator.style.opacity = "1";
   }
 
-  // 3. Save to Firebase
+  // 3. Debounce the actual cloud write (see comment above this function).
+  if (_cloudSaveDebounceTimer) clearTimeout(_cloudSaveDebounceTimer);
+  _cloudSaveDebounceTimer = setTimeout(() => {
+    _cloudSaveDebounceTimer = null;
+    commitDatabaseToCloud();
+  }, 500);
+}
+
+function commitDatabaseToCloud() {
+  const indicator = document.getElementById("autosaveIndicator");
+
+  // Save to Firebase
   if (window.firebaseSetDoc && window.firebaseDoc && window.firebaseDb) {
     const docRef = window.firebaseDoc(window.firebaseDb, "agency", "clientsDb");
     const cleanDb = JSON.parse(JSON.stringify(clientsDb));
@@ -2003,6 +2018,29 @@ async function syncPublicPortalDocs(dbSnapshot) {
     ([, client]) => client && client.portalConfig && client.portalConfig.magicToken
   );
 
+  // Small helpers shared between "fold onto this sync's outgoing clone"
+  // and "fold onto the real, live clientsDb" below.
+  function foldInOnboardingChecked(targetCategories, existingCategories) {
+    if (!Array.isArray(targetCategories) || !Array.isArray(existingCategories)) return;
+    const checkedIds = new Set();
+    existingCategories.forEach(cat => (cat.items || []).forEach(item => {
+      if (item.checked) checkedIds.add(item.id);
+    }));
+    targetCategories.forEach(cat => (cat.items || []).forEach(item => {
+      if (checkedIds.has(item.id)) item.checked = true;
+    }));
+  }
+
+  function foldInClientChecklistChecked(targetItems, existingItems) {
+    if (!Array.isArray(targetItems) || !Array.isArray(existingItems)) return;
+    const checkedIds = new Set(existingItems.filter(item => item.checked).map(item => item.id));
+    targetItems.forEach(item => {
+      if (checkedIds.has(item.id)) item.checked = true;
+    });
+  }
+
+  let anyRealClientMutated = false;
+
   for (const [name, client] of entries) {
     const token = client.portalConfig.magicToken;
     const publicRef = window.firebaseDb.collection("clients").doc(token);
@@ -2016,26 +2054,21 @@ async function syncPublicPortalDocs(dbSnapshot) {
       if (existing.exists) {
         const existingData = existing.data();
 
-        const existingChecklist = existingData.onboardingChecklist;
-        if (Array.isArray(existingChecklist) && Array.isArray(localChecklist)) {
-          const checkedIds = new Set();
-          existingChecklist.forEach(cat => (cat.items || []).forEach(item => {
-            if (item.checked) checkedIds.add(item.id);
-          }));
-          localChecklist.forEach(cat => (cat.items || []).forEach(item => {
-            if (checkedIds.has(item.id)) item.checked = true;
-          }));
-        }
+        foldInOnboardingChecked(localChecklist, existingData.onboardingChecklist);
+        foldInClientChecklistChecked(localClientChecklist, existingData.clientChecklist);
 
-        // Same fold-in, but for the separate client-facing checklist.
-        const existingClientChecklist = existingData.clientChecklist;
-        if (Array.isArray(existingClientChecklist) && Array.isArray(localClientChecklist)) {
-          const checkedClientIds = new Set(
-            existingClientChecklist.filter(item => item.checked).map(item => item.id)
-          );
-          localClientChecklist.forEach(item => {
-            if (checkedClientIds.has(item.id)) item.checked = true;
-          });
+        // The two fold-ins above only touched `dbSnapshot`'s clone, so this
+        // sync's outgoing write doesn't stomp on the client's own progress.
+        // But that clone is discarded after this function returns - without
+        // also applying it to the real, live clientsDb, the admin's own
+        // Client Portal Manager view (and dashboard) would never actually
+        // learn the client had checked anything off; only the portal doc
+        // would know. Mirror the checked state onto the real object too.
+        const realClient = clientsDb[name];
+        if (realClient) {
+          foldInOnboardingChecked(realClient.onboardingChecklist, existingData.onboardingChecklist);
+          foldInClientChecklistChecked(realClient.clientChecklist, existingData.clientChecklist);
+          anyRealClientMutated = true;
         }
       }
     } catch (e) {
@@ -2056,6 +2089,25 @@ async function syncPublicPortalDocs(dbSnapshot) {
     publicRef.set(projection).catch(err => {
       console.error("Public portal doc write failed for", name, err);
     });
+  }
+
+  // Persist any checked-state we just pulled in from clients' own portal
+  // activity, and refresh the on-screen views so the admin sees it without
+  // needing to switch tabs or reload.
+  if (anyRealClientMutated) {
+    localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
+    try { renderOnboardingChecklist(); } catch (e) {}
+    try { renderDashboard(); } catch (e) {}
+    try {
+      if (typeof iframeNeedsReload !== "undefined" && iframeNeedsReload["tab-portal"] !== undefined) {
+        iframeNeedsReload["tab-portal"] = true;
+        const activeTabBtn = document.querySelector(".nav-item-btn.active");
+        const activeTab = activeTabBtn ? activeTabBtn.getAttribute("data-tab") : "";
+        if (activeTab === "tab-portal") {
+          refreshIframeTab("tab-portal");
+        }
+      }
+    } catch (e) {}
   }
 }
 
