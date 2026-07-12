@@ -28,6 +28,11 @@ body {
   font-family: var(--font-body);
   line-height: 1.5;
   overflow: hidden;
+  /* Without this, a trackpad's horizontal two-finger swipe over an
+     embedded iframe (e.g. a wide ClickUp table/Gantt view) can get
+     hijacked by the browser's own back/forward navigation gesture
+     instead of reaching the iframe's content. */
+  overscroll-behavior-x: contain;
 }
 
 /* Loader */
@@ -345,6 +350,7 @@ body {
   border: 1px solid var(--color-border);
   border-radius: 12px;
   overflow: hidden;
+  overscroll-behavior-x: contain;
 }
 .iframe-wrapper.full-height {
   flex-grow: 1;

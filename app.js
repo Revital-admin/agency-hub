@@ -1967,6 +1967,20 @@ function loadDatabase() {
     const docRef = window.firebaseDoc(window.firebaseDb, "agency", "clientsDb");
     window.firebaseOnSnapshot(docRef, (docSnap) => {
       if (docSnap.exists) {
+        // Firestore delivers a snapshot immediately for our own writes too,
+        // before the server has confirmed them ("pending write" / optimistic
+        // echo). If the admin is actively editing (e.g. typing in the Client
+        // Portal Manager, where every keystroke triggers a save), a later
+        // keystroke can update clientsDb in memory before an earlier
+        // keystroke's echo arrives here - and applying that stale echo would
+        // clobber the newer edit, making it look like the change "didn't
+        // save" until a full page reload re-fetched the true latest state.
+        // Skip echoes of our own unconfirmed writes; only rebuild from
+        // snapshots that reflect data the server has actually confirmed.
+        if (docSnap.metadata && docSnap.metadata.hasPendingWrites) {
+          return;
+        }
+
         const cloudData = docSnap.data();
         
         const cloudStr = JSON.stringify(cloudData);
