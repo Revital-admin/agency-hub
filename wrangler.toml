@@ -1,4 +1,4 @@
-name = "client-onboarding-hub"
+name = "agency-hub"
 compatibility_date = "2024-03-20"
 main = "_worker.js"
 

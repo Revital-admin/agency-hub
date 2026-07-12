@@ -26,7 +26,10 @@ service cloud.firestore {
         && request.auth.token.email.lower() == 'admin@revitalproductions.com';
     }
 
-    match /agency/clientsDb {
+    // Covers every document under agency/ (clientsDb, activityLog, and any
+    // future admin-only document), instead of allow-listing each one by
+    // name and silently 403'ing new ones added later.
+    match /agency/{document} {
       allow read, write: if isAdmin();
     }
 

@@ -1901,6 +1901,14 @@ function loadDatabase() {
     activeClientName = defaultName;
   }
 
+  // Render immediately with whatever we have (localStorage cache or the
+  // seeded default) so the dropdown is never left empty while we wait on
+  // the network. The Firestore listener below will re-render again once
+  // cloud data arrives, whether or not it differs from this first render.
+  buildClientDropdown();
+  refreshAllViews();
+  renderDashboard();
+
   // 2. Setup Firebase real-time listener
   if (window.firebaseOnSnapshot && window.firebaseDoc && window.firebaseDb) {
     const docRef = window.firebaseDoc(window.firebaseDb, "agency", "clientsDb");
@@ -1927,12 +1935,13 @@ function loadDatabase() {
         // Doc doesn't exist yet, we push our local DB to seed it
         saveDatabase();
       }
+    }, (err) => {
+      // Previously silent: a permission-denied or network error here would
+      // just leave the dropdown stuck on whatever rendered first, with no
+      // indication anything was wrong. Now it's at least visible/debuggable.
+      console.error("Client DB Firestore listener error:", err);
+      showBanner("error", "Couldn't sync with the cloud database: " + err.message);
     });
-  } else {
-    // No firebase, just render
-    buildClientDropdown();
-    refreshAllViews();
-    renderDashboard();
   }
 }
 
