@@ -90,6 +90,11 @@ window.addEventListener('error', function(e) {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"></path><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"></path></svg>
           Monthly Reports
         </button>
+        <button class="nav-btn" data-target="view-approvals" id="navApprovals" style="display:none;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+          Approvals
+          <span id="navApprovalsBadge" class="nav-badge" style="display:none;">0</span>
+        </button>
         <button class="nav-btn" data-target="view-guide" id="navGuide">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
           Guide &amp; FAQ
@@ -272,6 +277,24 @@ window.addEventListener('error', function(e) {
       </section>
 
 
+      <!-- APPROVALS VIEW -->
+      <section id="view-approvals" class="view-section">
+        <header class="view-header">
+          <h2>Approvals</h2>
+          <p>Review deliverables and let us know your decision.</p>
+        </header>
+
+        <div class="approval-block">
+          <h3 class="approval-block-heading">Waiting on You</h3>
+          <div id="pendingApprovalsContainer" class="approval-cards"></div>
+        </div>
+
+        <div class="approval-block">
+          <h3 class="approval-block-heading">Your Decisions</h3>
+          <div id="approvalHistoryContainer" class="approval-history"></div>
+        </div>
+      </section>
+
       <!-- GUIDE & FAQ VIEW -->
       <section id="view-guide" class="view-section">
         <header class="view-header">
@@ -298,6 +321,38 @@ window.addEventListener('error', function(e) {
           </div>
 
           <div class="guide-section">
+            <h3>Campaign Briefs &mdash; What to Expect</h3>
+            <p class="guide-intro">Before we produce anything, we create a Campaign Brief outlining the objective, audience, message, creative direction, platforms, and timeline. When a brief arrives:</p>
+            <table class="guide-table">
+              <thead><tr><th>Step</th><th>What to Do</th></tr></thead>
+              <tbody>
+                <tr><td>1. Review</td><td>Review the brief in full &mdash; check the objective, messaging, and direction</td></tr>
+                <tr><td>2. Question or Comment</td><td>Leave any questions or feedback directly in the brief task</td></tr>
+                <tr><td>3. Confirm</td><td>Confirm approval with your account manager</td></tr>
+              </tbody>
+            </table>
+            <p class="guide-intro" style="margin-top: 12px; margin-bottom: 0;">&#9888;&#65039; Production does not begin until the brief is approved &mdash; the sooner you review it, the sooner your content is in production.</p>
+          </div>
+
+          <div class="guide-section">
+            <h3>Content Calendar Status Guide</h3>
+            <p class="guide-intro">Every piece of content moves through these statuses on your Content Calendar, from first draft to published:</p>
+            <table class="guide-table">
+              <thead><tr><th>Status</th><th>What It Means</th></tr></thead>
+              <tbody>
+                <tr><td>&#128992; Brief Received</td><td>The campaign brief has been logged and is queued for production</td></tr>
+                <tr><td>&#128309; In Production</td><td>Our team is actively creating the content</td></tr>
+                <tr><td>&#128995; Internal Review</td><td>Content is going through our internal quality check before it reaches you</td></tr>
+                <tr><td>&#128993; Client Review</td><td>Ready for your review &mdash; you'll get an email notification</td></tr>
+                <tr><td>&#128308; Revision Requested</td><td>You've requested changes and we're applying them</td></tr>
+                <tr><td>&#128994; Approved</td><td>You've approved the content and it's queued to go live</td></tr>
+                <tr><td>&#9989; Published</td><td>The content is live</td></tr>
+              </tbody>
+            </table>
+            <p class="guide-intro" style="margin-top: 12px; margin-bottom: 0;">&#128276; You will receive an email notification every time something moves to <strong>Client Review</strong> &mdash; that's your cue to review the content and complete your approval form.</p>
+          </div>
+
+          <div class="guide-section">
             <h3>Our Commitments to You</h3>
             <table class="guide-table">
               <thead><tr><th>Commitment</th><th>Timing</th></tr></thead>
@@ -314,6 +369,16 @@ window.addEventListener('error', function(e) {
 
           <div class="guide-section">
             <h3>How to Submit Feedback &amp; Revisions</h3>
+            <p class="guide-intro">When a deliverable is ready for your review, you'll receive an email with a link to the content and a Content Approval Form. Complete the form and return it within <strong>48 hours</strong>. The form has three options:</p>
+            <table class="guide-table">
+              <thead><tr><th>Option</th><th>What Happens</th></tr></thead>
+              <tbody>
+                <tr><td>&#9989; Approved</td><td>We publish on the scheduled date &mdash; no further action needed</td></tr>
+                <tr><td>&#128260; Approved with Minor Corrections</td><td>Note the changes and we apply them before publishing</td></tr>
+                <tr><td>&#10060; Revision Required</td><td>We action your feedback and send a revised version</td></tr>
+              </tbody>
+            </table>
+            <p class="guide-intro" style="margin-top: 12px;">&#128274; Verbal approvals are not accepted. A completed approval form is required before any content is published.</p>
             <p class="guide-intro">All feedback must come through the portal &mdash; not via email, text, or phone. Use the <strong>Submit a Revision</strong> button in Quick Actions, name the task clearly, write your feedback as specifically as possible, and set a priority.</p>
             <table class="guide-table">
               <thead><tr><th>&#10060; Vague</th><th>&#9989; Specific</th></tr></thead>
@@ -336,6 +401,52 @@ window.addEventListener('error', function(e) {
                 <tr><td>Video and Reels</td><td>3&ndash;4 business days</td></tr>
                 <tr><td>Email campaigns</td><td>2 business days</td></tr>
                 <tr><td>Website pages</td><td>3&ndash;5 business days</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="guide-section">
+            <h3>What You Can See in Your Live Analytics</h3>
+            <p class="guide-intro">Your live performance dashboard on the Dashboard tab pulls real data directly from your platforms and refreshes automatically &mdash; no need to wait for the monthly report.</p>
+            <table class="guide-table">
+              <thead><tr><th>Metric</th><th>What It Shows</th></tr></thead>
+              <tbody>
+                <tr><td>Website Traffic</td><td>Visits and top-performing pages</td></tr>
+                <tr><td>Social Media</td><td>Reach, engagement, and follower growth</td></tr>
+                <tr><td>Paid Ads</td><td>Spend, clicks, conversions, and ROAS</td></tr>
+                <tr><td>Email</td><td>Open rates and click-through rates</td></tr>
+                <tr><td>SEO</td><td>Rankings and organic traffic</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="guide-section">
+            <h3>What You Can Upload</h3>
+            <p class="guide-intro">Use the Upload Files button in Quick Actions to send us anything &mdash; no login or account needed. Just fill in your name, company, what you're uploading, and attach your files.</p>
+            <table class="guide-table">
+              <thead><tr><th>Category</th><th>Examples</th></tr></thead>
+              <tbody>
+                <tr><td>Logo Files</td><td>PNG, SVG, AI, EPS</td></tr>
+                <tr><td>Brand Guidelines</td><td>Style guides and brand standards</td></tr>
+                <tr><td>Media</td><td>Photography and video assets</td></tr>
+                <tr><td>Written Content</td><td>Copy, scripts, or reference material</td></tr>
+                <tr><td>Anything Else</td><td>Any other brand files or reference materials</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="guide-section">
+            <h3>How to Reach Us</h3>
+            <table class="guide-table">
+              <thead><tr><th>Situation</th><th>How to Contact</th></tr></thead>
+              <tbody>
+                <tr><td>Day-to-day questions</td><td>Email your account manager</td></tr>
+                <tr><td>Urgent or time-sensitive</td><td>Call or text your account manager directly</td></tr>
+                <tr><td>Revision requests</td><td>Submit a Revision in Quick Actions &mdash; always through the portal</td></tr>
+                <tr><td>Content ideas or new post requests</td><td>Submit Content Request in Quick Actions</td></tr>
+                <tr><td>Upload files or brand assets</td><td>Upload Files in Quick Actions</td></tr>
+                <tr><td>Billing questions</td><td>Email your account manager</td></tr>
+                <tr><td>New service or scope change</td><td>Email your account manager</td></tr>
               </tbody>
             </table>
           </div>
@@ -375,6 +486,6 @@ window.addEventListener('error', function(e) {
     </main>
   </div>
 
-  <script src="js/app.js?v=73"></script>
+  <script src="js/app.js?v=75"></script>
 </body>
 </html>

@@ -59,7 +59,8 @@ const inputs = {
   accountManagerName: document.getElementById("accountManagerName"),
   accountManagerEmail: document.getElementById("accountManagerEmail"),
   accountManagerPhone: document.getElementById("accountManagerPhone"),
-  calendlyLink: document.getElementById("calendlyLink")
+  calendlyLink: document.getElementById("calendlyLink"),
+  clientContactEmail: document.getElementById("clientContactEmail")
 };
 
 function init() {
@@ -92,6 +93,7 @@ function init() {
       liveAnalyticsUrl: "",
       clientLogoUrl: "",
       clientContactName: "",
+      clientContactEmail: "",
       primaryColor: "#10b981",
       secondaryColor: "#6366f1",
       magicToken: generateSecureToken()
@@ -109,7 +111,13 @@ function init() {
     if (parentSave) parentSave();
   }
 
+  // Ensure approvals arrays exist for clients created before this feature.
+  if (!Array.isArray(client.pendingApprovals)) client.pendingApprovals = [];
+  if (!Array.isArray(client.approvalHistory)) client.approvalHistory = [];
+
   renderClientChecklist(client);
+  renderApprovals(client);
+  initApprovalControls();
 
   const config = client.portalConfig;
 
@@ -458,3 +466,250 @@ initClientChecklistControls();
 
 // Wait a tiny bit for the parent to fully inject state if loading fresh
 setTimeout(init, 300);
+
+// ── Content Approvals ──
+// Type-specific review checklists, duplicated here (rather than shared)
+// for the same reason DEFAULT_CLIENT_CHECKLIST_FALLBACK is duplicated -
+// this runs in its own iframe document and can't see the parent's or
+// portal's top-level `const` declarations. Keep this list in sync with
+// the matching one in portal/js/app.js if you edit either.
+const APPROVAL_TYPE_LABELS = {
+  social: "Social Media Content",
+  ads: "Paid Ad Creative",
+  email: "Email Campaign",
+  website: "Website Page",
+  video: "Video & Production"
+};
+
+const APPROVAL_CHECKLISTS = {
+  social: [
+    "All copy (captions, text overlays, hashtags) is correct",
+    "All visuals (images, graphics, video) are approved",
+    "Tone and messaging align with our brand voice",
+    "No spelling, grammar, or factual errors",
+    "The scheduled go-live date is correct"
+  ],
+  ads: [
+    "All ad images/videos are approved",
+    "Headlines and body copy are correct",
+    "CTAs and destination URLs are correct and tested",
+    "Target audience and campaign objective are correct as briefed",
+    "The ad budget and campaign dates are confirmed"
+  ],
+  email: [
+    "Subject line and preview text are correct",
+    "All body copy is correct - no spelling or factual errors",
+    "All links have been tested and go to the correct destination",
+    "The sending list/segment is correct",
+    "The scheduled send date and time are correct"
+  ],
+  website: [
+    "All page copy (headlines, body text, CTAs) is correct",
+    "Colors, fonts, and branding match our brand guidelines",
+    "All navigation links and buttons work correctly",
+    "Any forms or integrations have been tested",
+    "The page looks correct on both mobile and desktop"
+  ],
+  video: [
+    "The overall concept, message, and storyline are approved",
+    "All on-screen text and captions are correct",
+    "Voiceover or dialogue is correct",
+    "Music/audio is appropriate and approved",
+    "The final frame CTA and branding are correct"
+  ]
+};
+
+function escapeHtmlLocal(str) {
+  const div = document.createElement("div");
+  div.textContent = str == null ? "" : String(str);
+  return div.innerHTML;
+}
+
+// Builds a ready-to-send email (not auto-sent - this app has no email
+// backend/API anywhere) notifying the client that something is waiting
+// on them, and drops it into the read-only-turned-editable panel so the
+// account manager can review, tweak, and send it from their own inbox.
+function buildApprovalEmail(client, entry) {
+  const config = client.portalConfig || {};
+  const clientFirstName = (config.clientContactName || client.name || "there").split(" ")[0];
+  const baseUrl = window.location.origin + "/portal/index.html";
+  const clientNameRaw = client.id || client.name || "Client";
+  const portalLink = config.magicToken
+    ? `${baseUrl}?c=${encodeURIComponent(clientNameRaw)}&t=${config.magicToken}`
+    : "";
+  const amFirstName = config.accountManagerName ? config.accountManagerName.split(" ")[0] : "Your account manager";
+  const typeLabel = APPROVAL_TYPE_LABELS[entry.contentType] || "deliverable";
+
+  const subject = `${entry.title} is ready for your approval`;
+  const bodyLines = [
+    `Hi ${clientFirstName},`,
+    "",
+    `${entry.title} (${typeLabel}) is ready for your review.`,
+    ""
+  ];
+  if (entry.previewLink) {
+    bodyLines.push(`Preview: ${entry.previewLink}`, "");
+  }
+  bodyLines.push(
+    "Please head to your Client Portal and open the Approvals tab to review and respond - you can select Approved, Approved with Minor Corrections, or Revision Required:",
+    portalLink,
+    "",
+    "We ask for a response within 48 hours so we can stay on schedule.",
+    "",
+    "Thanks!",
+    amFirstName
+  );
+  const body = bodyLines.join("\n");
+
+  const toEl = document.getElementById("approvalEmailTo");
+  const subjectEl = document.getElementById("approvalEmailSubject");
+  const bodyEl = document.getElementById("approvalEmailBody");
+  const openBtn = document.getElementById("approvalEmailOpenBtn");
+  const panel = document.getElementById("approvalEmailReady");
+  if (!toEl || !subjectEl || !bodyEl || !openBtn || !panel) return;
+
+  toEl.value = config.clientContactEmail || "";
+  subjectEl.value = subject;
+  bodyEl.value = body;
+
+  const refreshMailto = () => {
+    const mailto = `mailto:${encodeURIComponent(toEl.value)}?subject=${encodeURIComponent(subjectEl.value)}&body=${encodeURIComponent(bodyEl.value)}`;
+    openBtn.href = mailto;
+  };
+  refreshMailto();
+  [toEl, subjectEl, bodyEl].forEach(el => {
+    el.removeEventListener("input", refreshMailto);
+    el.addEventListener("input", refreshMailto);
+  });
+
+  panel.style.display = "block";
+}
+
+function renderApprovals(client) {
+  const pendingEl = document.getElementById("pendingApprovalsList");
+  const historyEl = document.getElementById("approvalHistoryList");
+  if (!pendingEl || !historyEl) return;
+
+  const pending = Array.isArray(client.pendingApprovals) ? client.pendingApprovals : [];
+  const history = Array.isArray(client.approvalHistory) ? client.approvalHistory : [];
+
+  pendingEl.innerHTML = "";
+  if (pending.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "client-checklist-empty";
+    empty.textContent = "No pending approvals.";
+    pendingEl.appendChild(empty);
+  } else {
+    pending.forEach(entry => {
+      const row = document.createElement("div");
+      row.className = "approval-row";
+      row.innerHTML = `
+        <div class="approval-row-main">
+          <strong>${escapeHtmlLocal(entry.title)}</strong>
+          <div class="approval-row-meta">${escapeHtmlLocal(APPROVAL_TYPE_LABELS[entry.contentType] || "")} &middot; Awaiting client response</div>
+        </div>
+        <button type="button" class="client-checklist-remove approval-remove-btn" data-id="${escapeHtmlLocal(entry.id)}">Remove</button>
+      `;
+      pendingEl.appendChild(row);
+    });
+    pendingEl.querySelectorAll(".approval-remove-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        client.pendingApprovals = client.pendingApprovals.filter(p => p.id !== btn.dataset.id);
+        if (parentSave) parentSave();
+        renderApprovals(client);
+      });
+    });
+  }
+
+  historyEl.innerHTML = "";
+  if (history.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "client-checklist-empty";
+    empty.textContent = "No decisions yet.";
+    historyEl.appendChild(empty);
+  } else {
+    const decisionLabels = {
+      approved: "✅ Approved",
+      minor: "🔄 Approved with Minor Corrections",
+      revision: "❌ Revision Required"
+    };
+    history.slice().reverse().forEach(entry => {
+      const row = document.createElement("div");
+      row.className = "approval-row approval-history-row";
+      const decisionLabel = decisionLabels[entry.decision] || entry.decision || "";
+      const decidedDate = entry.decidedAt ? new Date(entry.decidedAt).toLocaleDateString() : "";
+      row.innerHTML = `
+        <div class="approval-row-main">
+          <strong>${escapeHtmlLocal(entry.title)}</strong>
+          <div class="approval-row-meta">${decisionLabel} &middot; ${escapeHtmlLocal(decidedDate)}</div>
+          ${entry.notes ? `<div class="approval-notes">&ldquo;${escapeHtmlLocal(entry.notes)}&rdquo;</div>` : ""}
+        </div>
+      `;
+      historyEl.appendChild(row);
+    });
+  }
+}
+
+function initApprovalControls() {
+  const createBtn = document.getElementById("createApprovalBtn");
+  const copyBtn = document.getElementById("approvalEmailCopyBtn");
+  if (!createBtn) return;
+
+  createBtn.addEventListener("click", () => {
+    const client = getActiveClient();
+    if (!client) return;
+
+    const typeEl = document.getElementById("newApprovalType");
+    const titleEl = document.getElementById("newApprovalTitle");
+    const linkEl = document.getElementById("newApprovalLink");
+
+    const title = titleEl.value.trim();
+    if (!title) {
+      alert("Please enter a deliverable title.");
+      return;
+    }
+
+    if (!Array.isArray(client.pendingApprovals)) client.pendingApprovals = [];
+
+    const entry = {
+      id: generateSecureToken(8),
+      contentType: typeEl.value,
+      title: title,
+      previewLink: linkEl.value.trim(),
+      checklist: APPROVAL_CHECKLISTS[typeEl.value] || [],
+      createdAt: new Date().toISOString()
+    };
+    client.pendingApprovals.push(entry);
+    if (parentSave) parentSave();
+
+    titleEl.value = "";
+    linkEl.value = "";
+
+    buildApprovalEmail(client, entry);
+    renderApprovals(client);
+  });
+
+  if (copyBtn) {
+    copyBtn.addEventListener("click", async () => {
+      const to = document.getElementById("approvalEmailTo").value;
+      const subject = document.getElementById("approvalEmailSubject").value;
+      const body = document.getElementById("approvalEmailBody").value;
+      const text = `To: ${to}\nSubject: ${subject}\n\n${body}`;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const bodyEl = document.getElementById("approvalEmailBody");
+          bodyEl.select();
+          document.execCommand("copy");
+        }
+        const originalText = copyBtn.textContent;
+        copyBtn.textContent = "Copied!";
+        setTimeout(() => { copyBtn.textContent = originalText; }, 2000);
+      } catch (err) {
+        console.error("Failed to copy approval email", err);
+        alert("Failed to copy. Please manually select and copy the text.");
+      }
+    });
+  }
+}

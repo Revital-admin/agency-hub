@@ -29,6 +29,10 @@
           <input type="text" id="clientContactName" placeholder="Welcome back, Sarah!">
         </div>
         <div class="form-group">
+          <label for="clientContactEmail">Client Contact Email</label>
+          <input type="email" id="clientContactEmail" placeholder="sarah@clientcompany.com">
+        </div>
+        <div class="form-group">
           <label>Client Logo (Drag & Drop)</label>
           <div id="logoDropZone" class="drop-zone">
             <div id="dropZoneText">Drop transparent PNG here<br><small>or click to upload</small></div>
@@ -185,8 +189,71 @@
       </div>
     </div>
 
+    <div class="step-card" style="margin-top: 24px;">
+      <div class="section-title" style="margin-bottom: 24px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+        <h2 style="font-family: var(--font-heading); color: var(--color-primary);">Content Approvals</h2>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--color-text-secondary); margin-top: -12px; margin-bottom: 20px;">
+        Send a deliverable to the client for approval. They'll see it in their portal under a new Approvals tab with a checklist matched to the content type, and can respond Approved, Approved with Minor Corrections, or Revision Required &mdash; synced back here live.
+      </p>
+
+      <div class="responsive-2col">
+        <div class="form-group">
+          <label for="newApprovalType">Content Type</label>
+          <select id="newApprovalType">
+            <option value="social">Social Media Content</option>
+            <option value="ads">Paid Ad Creative</option>
+            <option value="email">Email Campaign</option>
+            <option value="website">Website Page</option>
+            <option value="video">Video &amp; Production</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="newApprovalTitle">Deliverable Title</label>
+          <input type="text" id="newApprovalTitle" placeholder="e.g. Instagram Post - May 15">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="newApprovalLink">Preview Link</label>
+        <input type="text" id="newApprovalLink" placeholder="https://drive.google.com/... or https://frame.io/...">
+      </div>
+
+      <button class="download-pdf-btn" id="createApprovalBtn" style="padding: 10px 20px;">Send for Approval</button>
+
+      <div id="approvalEmailReady" class="approval-email-ready" style="display:none;">
+        <p class="approval-email-ready-label">Email ready to send:</p>
+        <div class="form-group">
+          <label for="approvalEmailTo">To</label>
+          <input type="text" id="approvalEmailTo">
+        </div>
+        <div class="form-group">
+          <label for="approvalEmailSubject">Subject</label>
+          <input type="text" id="approvalEmailSubject">
+        </div>
+        <div class="form-group">
+          <label for="approvalEmailBody">Body</label>
+          <textarea id="approvalEmailBody" rows="8"></textarea>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <a href="#" id="approvalEmailOpenBtn" class="download-pdf-btn" style="padding: 10px 20px; text-decoration:none;" target="_blank" rel="noopener">Open in Email App</a>
+          <button class="btn-secondary" id="approvalEmailCopyBtn" type="button" style="padding: 10px 20px;">Copy Text</button>
+        </div>
+      </div>
+
+      <div style="margin-top: 28px;">
+        <h3 class="approval-list-heading">Pending Approvals</h3>
+        <div id="pendingApprovalsList" class="client-checklist-list"></div>
+      </div>
+
+      <div style="margin-top: 24px;">
+        <h3 class="approval-list-heading">Decision History</h3>
+        <div id="approvalHistoryList" class="client-checklist-list"></div>
+      </div>
+    </div>
+
   </main>
 
-  <script src="js/app.js?v=60"></script>
+  <script src="js/app.js?v=61"></script>
 </body>
 </html>

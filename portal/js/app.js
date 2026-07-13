@@ -200,6 +200,9 @@ function renderPortal() {
 
   // Checklist
   renderChecklist();
+
+  // Content Approvals
+  renderApprovalsView();
 }
 
 function setupIframe(navId, iframeId, url) {
@@ -474,3 +477,156 @@ document.querySelectorAll(".nav-btn").forEach(btn => {
     }
   });
 });
+
+// ── Content Approvals ──
+// Type label lookup, duplicated from client-portal-manager/js/app.js for
+// the same cross-iframe reason DEFAULT_CLIENT_CHECKLIST_FALLBACK is
+// duplicated there - each iframe document only sees its own top-level
+// `const` declarations. Keep this in sync with APPROVAL_TYPE_LABELS in
+// client-portal-manager/js/app.js if you edit either.
+const PORTAL_APPROVAL_TYPE_LABELS = {
+  social: "Social Media Content",
+  ads: "Paid Ad Creative",
+  email: "Email Campaign",
+  website: "Website Page",
+  video: "Video & Production"
+};
+
+const PORTAL_DECISION_LABELS = {
+  approved: "✅ Approved",
+  minor: "🔄 Approved with Minor Corrections",
+  revision: "❌ Revision Required"
+};
+
+function renderApprovalsView() {
+  const pendingContainer = document.getElementById("pendingApprovalsContainer");
+  const historyContainer = document.getElementById("approvalHistoryContainer");
+  const navApprovals = document.getElementById("navApprovals");
+  const badge = document.getElementById("navApprovalsBadge");
+  if (!pendingContainer || !historyContainer || !navApprovals) return;
+
+  const pending = Array.isArray(clientData.pendingApprovals) ? clientData.pendingApprovals : [];
+  const history = Array.isArray(clientData.approvalHistory) ? clientData.approvalHistory : [];
+
+  // Only show the nav item at all once there's something to see, so
+  // clients with nothing pending yet aren't confused by an empty tab.
+  if (pending.length === 0 && history.length === 0) {
+    navApprovals.style.display = "none";
+  } else {
+    navApprovals.style.display = "flex";
+  }
+
+  if (pending.length > 0) {
+    badge.textContent = String(pending.length);
+    badge.style.display = "inline-flex";
+  } else {
+    badge.style.display = "none";
+  }
+
+  pendingContainer.innerHTML = "";
+  if (pending.length === 0) {
+    pendingContainer.innerHTML = '<p class="approval-empty">Nothing waiting on you right now.</p>';
+  } else {
+    pending.forEach(entry => {
+      const typeLabel = PORTAL_APPROVAL_TYPE_LABELS[entry.contentType] || "Deliverable";
+      const checklist = Array.isArray(entry.checklist) ? entry.checklist : [];
+
+      const card = document.createElement("div");
+      card.className = "approval-card";
+
+      const checklistHtml = checklist.length
+        ? `<ul class="approval-checklist">${checklist.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+        : "";
+
+      card.innerHTML = `
+        <div class="approval-card-header">
+          <span class="approval-type-badge">${escapeHtml(typeLabel)}</span>
+          <h4>${escapeHtml(entry.title)}</h4>
+        </div>
+        ${entry.previewLink ? `<a href="${escapeHtml(entry.previewLink)}" target="_blank" rel="noopener" class="approval-preview-link">View Preview &rarr;</a>` : ""}
+        ${checklistHtml}
+        <textarea class="approval-notes-input" placeholder="Notes (required if requesting corrections or a revision)"></textarea>
+        <div class="approval-actions">
+          <button type="button" class="btn-approval btn-approve" data-decision="approved">Approved</button>
+          <button type="button" class="btn-approval btn-minor" data-decision="minor">Minor Corrections</button>
+          <button type="button" class="btn-approval btn-revision" data-decision="revision">Revision Required</button>
+        </div>
+      `;
+
+      card.querySelectorAll(".btn-approval").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const notesEl = card.querySelector(".approval-notes-input");
+          const notes = notesEl ? notesEl.value.trim() : "";
+          const decision = btn.dataset.decision;
+
+          if (decision !== "approved" && !notes) {
+            alert("Please add a quick note so we know what to change.");
+            return;
+          }
+
+          decideApproval(entry, decision, notes);
+        });
+      });
+
+      pendingContainer.appendChild(card);
+    });
+  }
+
+  historyContainer.innerHTML = "";
+  if (history.length === 0) {
+    historyContainer.innerHTML = '<p class="approval-empty">No decisions yet.</p>';
+  } else {
+    history.slice().reverse().forEach(entry => {
+      const typeLabel = PORTAL_APPROVAL_TYPE_LABELS[entry.contentType] || "Deliverable";
+      const decisionLabel = PORTAL_DECISION_LABELS[entry.decision] || entry.decision || "";
+      const decidedDate = entry.decidedAt ? new Date(entry.decidedAt).toLocaleDateString() : "";
+
+      const row = document.createElement("div");
+      row.className = "approval-history-row";
+      row.innerHTML = `
+        <div class="approval-history-main">
+          <strong>${escapeHtml(entry.title)}</strong>
+          <span class="approval-history-type">${escapeHtml(typeLabel)}</span>
+        </div>
+        <div class="approval-history-meta">${decisionLabel} &middot; ${escapeHtml(decidedDate)}</div>
+        ${entry.notes ? `<div class="approval-history-notes">&ldquo;${escapeHtml(entry.notes)}&rdquo;</div>` : ""}
+      `;
+      historyContainer.appendChild(row);
+    });
+  }
+}
+
+function decideApproval(entry, decision, notes) {
+  const docRef = db.collection("clients").doc(clientToken);
+
+  const historyEntry = {
+    id: entry.id,
+    contentType: entry.contentType,
+    title: entry.title,
+    previewLink: entry.previewLink || "",
+    decision: decision,
+    notes: notes || "",
+    decidedAt: new Date().toISOString()
+  };
+
+  const newPending = (clientData.pendingApprovals || []).filter(p => p.id !== entry.id);
+  const newHistory = (clientData.approvalHistory || []).concat([historyEntry]);
+
+  // Update local state immediately so the UI reflects the decision without
+  // waiting on the round trip, then persist. Same JSON-purify step as
+  // updateFirebaseChecklist - strips this iframe's own realm off the
+  // objects before they cross into the parent-bound Firestore SDK.
+  clientData.pendingApprovals = newPending;
+  clientData.approvalHistory = newHistory;
+  renderApprovalsView();
+
+  const purifiedPending = JSON.parse(JSON.stringify(newPending));
+  const purifiedHistory = JSON.parse(JSON.stringify(newHistory));
+
+  docRef.set({
+    pendingApprovals: purifiedPending,
+    approvalHistory: purifiedHistory
+  }, { merge: true }).catch(err => {
+    console.error("Error recording approval decision:", err);
+  });
+}
