@@ -55,8 +55,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const html = `
       <div class="pdf-page" id="page-1">
         <img src="../logo.png" class="pdf-logo" alt="Revital Hub">
-        <div class="pdf-title">Welcome to Revital Hub, ${clientName}!</div>
-        <div class="pdf-subtitle">First Step: Complete Your Intake Form</div>
+        <div class="pdf-title">Welcome to Revital Productions, ${clientName}!</div>
+        <div class="pdf-subtitle">Let's Get Your Onboarding Started</div>
 
         <div class="welcome-note">
           Hi there! ${welcomeNote}
