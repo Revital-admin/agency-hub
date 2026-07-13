@@ -68,7 +68,7 @@ if (isEmbedded) {
 
   // Render headers
   const headerInputs = document.querySelectorAll('.comp-name');
-  if (isEmbedded && headerInputs.length === 3) {
+  if (isEmbedded && webComp && headerInputs.length === 3) {
     headerInputs.forEach(function(input, idx) {
       input.value = webComp.names[idx] || '';
       input.addEventListener('input', function() {
@@ -95,13 +95,13 @@ if (isEmbedded) {
       ta.placeholder = row.placeholder;
 
       // Sync saved value
-      if (isEmbedded && webComp.rows[row.key]) {
+      if (isEmbedded && webComp && webComp.rows[row.key]) {
         ta.value = webComp.rows[row.key][compIdx] || '';
       }
 
       // Sync back on edit
       ta.addEventListener('input', function() {
-        if (isEmbedded) {
+        if (isEmbedded && webComp) {
           if (!webComp.rows[row.key]) {
             webComp.rows[row.key] = ['', '', ''];
           }
@@ -134,7 +134,7 @@ if (isEmbedded) {
     starsDiv.dataset.comp = comp;
 
     let savedStars = 0;
-    if (isEmbedded && webComp.stars) {
+    if (isEmbedded && webComp && webComp.stars) {
       savedStars = webComp.stars[compIdx] || 0;
     }
 
@@ -163,7 +163,7 @@ if (isEmbedded) {
         });
         fill.style.width = (i / 5 * 100) + '%';
 
-        if (isEmbedded) {
+        if (isEmbedded && webComp) {
           if (!webComp.stars) webComp.stars = [0, 0, 0];
           webComp.stars[compIdx] = i;
           window.parent.saveDatabase();
@@ -250,7 +250,7 @@ if (isEmbedded) {
     ta.placeholder = sw.placeholder;
     
     // Sync saved value
-    if (isEmbedded) {
+    if (isEmbedded && webComp) {
       ta.value = webComp.swot[sw.key] || '';
     }
     
@@ -289,7 +289,7 @@ if (isEmbedded) {
 
     // Save SWOT inputs
     ta.addEventListener('input', function() {
-      if (isEmbedded) {
+      if (isEmbedded && webComp) {
         webComp.swot[sw.key] = ta.value;
         window.parent.saveDatabase();
       }
@@ -302,7 +302,7 @@ if (isEmbedded) {
   const insight = document.querySelector('.insight-text');
   if (!insight) return;
 
-  if (isEmbedded) {
+  if (isEmbedded && webComp) {
     if (webComp.insight) {
       insight.textContent = webComp.insight;
     }
@@ -424,7 +424,7 @@ function clearAll() {
   }
 
   // Clear parent state if connected
-  if (isEmbedded) {
+  if (isEmbedded && webComp) {
     const today = new Date().toLocaleDateString('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' });
     webComp.market = "";
     webComp.date = today;

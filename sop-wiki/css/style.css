@@ -376,6 +376,22 @@ body {
   background: rgba(255, 255, 255, 0.04);
 }
 
+/* ClickUp table cells often carry stray blank paragraph lines used as
+   spacers in their own editor. Left alone, each one drags in a full
+   paragraph margin and makes every cell balloon with empty vertical
+   space even though the actual text is a single short line. Collapse
+   paragraph spacing inside cells and hide genuinely empty paragraphs
+   so pasted tables render at their natural, compact height. */
+.doc-body td p, .doc-body th p,
+.editor-richtext td p, .editor-richtext th p {
+  margin: 0;
+}
+
+.doc-body p:empty,
+.editor-richtext p:empty {
+  display: none;
+}
+
 /* ── Alerts ── */
 .alert-warning {
   border-left: 4px solid #f59e0b;
