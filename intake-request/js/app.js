@@ -146,17 +146,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const exportContainer = document.createElement('div');
     exportContainer.innerHTML = pdfContainer.innerHTML;
 
-    // Rather than continuing to guess at why this occasionally renders
-    // one extra blank leading page, detect and remove it directly via
-    // jsPDF's own page API before saving. This tool's content is always
-    // exactly 1 real page - if jsPDF produced more, the earlier ones are
-    // always blank, so trim from the front until exactly 1 page remains.
-    const EXPECTED_PAGES = 1;
-    html2pdf().set(opt).from(exportContainer).toPdf().get('pdf').then((pdf) => {
-      while (pdf.internal.getNumberOfPages() > EXPECTED_PAGES) {
-        pdf.deletePage(1);
-      }
-      pdf.save(opt.filename);
+    // NOTE: an earlier attempt intercepted the chain via
+    // .toPdf().get('pdf').then(pdf => { ...trim pages...; pdf.save(...) })
+    // to manually strip a leading blank page via jsPDF's own page API.
+    // That produced a consistently EMPTY (3289-byte, zero-content) PDF -
+    // .get('pdf') appears to resolve before the canvas image is actually
+    // attached to the page, so calling pdf.save() on it directly skips
+    // content that the built-in .save() step normally attaches. Reverted
+    // to the plain, built-in .save() chain, which reliably captures full,
+    // correct content (confirmed via multiple rendered test files).
+    html2pdf().set(opt).from(exportContainer).save().then(() => {
       generateBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download PDF';
       generateBtn.disabled = false;
     }).catch((err) => {
