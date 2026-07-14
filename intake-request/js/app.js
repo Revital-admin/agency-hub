@@ -102,7 +102,14 @@ document.addEventListener('DOMContentLoaded', () => {
       // page whenever the content was even a hair over 11in tall. Together
       // that produced 100MB+ PDFs with a phantom blank first page.
       image:        { type: 'jpeg', quality: 0.92 },
-      html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+      // html2canvas defaults to using the page's current scroll offset
+      // (window.pageYOffset) as the capture origin even for a detached,
+      // never-visible element - forcing scrollX/scrollY to 0 makes it
+      // render as if the page were unscrolled, which is what a detached
+      // capture should always want. Omitting this was the actual cause
+      // of the blank-space-then-offset-content pattern that persisted
+      // through the container/overflow fixes.
+      html2canvas:  { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 },
       jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
       // pagebreak avoid-all forces page-break-inside:avoid onto every
       // single element in the container, which turned out to conflict

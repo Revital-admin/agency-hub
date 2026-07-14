@@ -198,7 +198,14 @@ document.addEventListener('DOMContentLoaded', () => {
       // slicing in a mostly-blank extra page whenever content ran a hair
       // past 11in. Old settings were producing 100MB+ files.
       image:        { type: 'jpeg', quality: 0.92 },
-      html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+      // html2canvas defaults to using the page's current scroll offset
+      // (window.pageYOffset) as the capture origin even for a detached,
+      // never-visible element - forcing scrollX/scrollY to 0 makes it
+      // render as if the page were unscrolled, which is what a detached
+      // capture should always want. Omitting this was the actual cause
+      // of the blank-space-then-offset-content pattern that persisted
+      // through the container/overflow fixes.
+      html2canvas:  { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 },
       jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
       // pagebreak avoid-all forces page-break-inside:avoid onto every
       // single element in the container, which turned out to conflict
