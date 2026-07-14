@@ -92,7 +92,23 @@
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
-.checkbox-pill input { accent-color: var(--color-accent); width: 14px; height: 14px; }
+.checkbox-pill input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none; margin: 0; flex-shrink: 0;
+  width: 14px; height: 14px; border-radius: 4px;
+  border: 1.5px solid var(--color-border-md);
+  background: var(--color-surface-2);
+  cursor: pointer; position: relative; transition: all var(--transition);
+}
+.checkbox-pill input[type="checkbox"]:checked {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.checkbox-pill input[type="checkbox"]:checked::after {
+  content: ''; position: absolute; left: 4px; top: 1px;
+  width: 4px; height: 8px;
+  border: solid #070a13; border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
 .checkbox-pill:has(input:checked) {
   background: var(--color-accent-dim);
   border-color: var(--color-accent);
