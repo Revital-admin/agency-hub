@@ -759,7 +759,7 @@ function setupEventHandlers() {
           h2 { font-size: 20px; font-weight: 600; margin-bottom: 15px; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-top: 30px; }
           h3 { font-size: 16px; font-weight: 600; margin-bottom: 10px; color: #334155; margin-top: 20px;}
           p { margin-bottom: 15px; }
-          .logo { height: 50px; margin-bottom: 40px;  }
+          .logo { height: 50px; width: 144px; object-fit: contain; margin-bottom: 40px;  }
           .grid { display: flex; flex-wrap: wrap; gap: 20px; }
           .col { flex: 1; min-width: 300px; }
           .box { background:#f8fafc; padding:15px; border-radius:8px; margin-bottom:15px; }

@@ -6,7 +6,15 @@
 
 /* PDF Output Styling */
 .pdf-page { width: 8.5in; height: 11in; background: var(--color-surface); padding: 1in; box-sizing: border-box; position: relative; box-shadow: 0 10px 25px rgba(0,0,0,0.1); flex-shrink: 0; display: flex; flex-direction: column; page-break-inside: avoid; }
-.pdf-logo { height: 40px; width: auto; object-fit: contain; margin-bottom: 0.5in; }
+.pdf-logo {
+  /* Explicit width (not "auto") pinned to the logo's real 739x257
+     aspect ratio. Relying on width:auto meant the box wasn't sized
+     until the browser had the image's natural dimensions - if
+     html2canvas captured before that finished loading, the image
+     rendered stretched across whatever fallback width it got instead
+     of scaling down to match the 40px height. */
+  height: 40px; width: 115px; object-fit: contain; margin-bottom: 0.5in;
+}
 .pdf-title { font-size: 32px; font-weight: 800; color: var(--color-text-primary); letter-spacing: -1px; margin-bottom: 12px; }
 .pdf-subtitle { font-size: 18px; color: var(--color-text-muted); margin-bottom: 0.5in; font-weight: 500; }
 .pdf-h2 { font-size: 18px; font-weight: 700; color: var(--color-text-primary); margin-top: 0.3in; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid var(--color-border); padding-bottom: 8px; }
