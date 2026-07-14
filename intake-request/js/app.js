@@ -151,16 +151,27 @@ document.addEventListener('DOMContentLoaded', () => {
     exportContainer.innerHTML = pdfContainer.innerHTML;
     document.body.appendChild(exportContainer);
 
-    html2pdf().set(opt).from(exportContainer).save().then(() => {
-      exportContainer.remove();
-      generateBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download PDF';
-      generateBtn.disabled = false;
-    }).catch((err) => {
-      console.error('PDF generation failed:', err);
-      exportContainer.remove();
-      alert('PDF generation failed - check the browser console for details.');
-      generateBtn.innerHTML = 'Download PDF';
-      generateBtn.disabled = false;
+    // Appending to the DOM doesn't guarantee the browser has actually
+    // laid out/painted the new element before the next line runs - layout
+    // is batched, not synchronous. Capturing immediately was producing a
+    // genuinely empty result with no thrown error at all (html2canvas
+    // just found nothing to draw yet). A double requestAnimationFrame
+    // waits for two real paint cycles, the standard reliable way to
+    // guarantee layout has happened before capturing.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        html2pdf().set(opt).from(exportContainer).save().then(() => {
+          exportContainer.remove();
+          generateBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download PDF';
+          generateBtn.disabled = false;
+        }).catch((err) => {
+          console.error('PDF generation failed:', err);
+          exportContainer.remove();
+          alert('PDF generation failed - check the browser console for details.');
+          generateBtn.innerHTML = 'Download PDF';
+          generateBtn.disabled = false;
+        });
+      });
     });
   });
 
