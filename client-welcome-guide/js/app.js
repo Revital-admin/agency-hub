@@ -198,7 +198,14 @@ document.addEventListener('DOMContentLoaded', () => {
       // slicing in a mostly-blank extra page whenever content ran a hair
       // past 11in. Old settings were producing 100MB+ files.
       image:        { type: 'jpeg', quality: 0.92 },
-      html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+      // scrollY/scrollX compensate for a well-documented html2canvas quirk:
+      // it captures using the page's current scroll offset even when
+      // targeting one specific element. Since the live preview panel is
+      // sticky and the form is long, the page is often scrolled down when
+      // this button is clicked - without this, the capture started from
+      // that scrolled offset, producing blank leading pages with the real
+      // content only appearing partway down the last one.
+      html2canvas:  { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: -window.scrollY },
       jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
       pagebreak:    { mode: 'avoid-all' }
     };

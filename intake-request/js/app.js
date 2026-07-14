@@ -102,7 +102,14 @@ document.addEventListener('DOMContentLoaded', () => {
       // page whenever the content was even a hair over 11in tall. Together
       // that produced 100MB+ PDFs with a phantom blank first page.
       image:        { type: 'jpeg', quality: 0.92 },
-      html2canvas:  { scale: 2, useCORS: true, letterRendering: true },
+      // scrollY/scrollX compensate for a well-documented html2canvas quirk:
+      // it captures using the page's current scroll offset even when
+      // targeting one specific element. Since the live preview panel is
+      // sticky and the form is long, the page is often scrolled down when
+      // this button is clicked - without this, the capture started from
+      // that scrolled offset, producing blank leading pages with the real
+      // content only appearing partway down the last one.
+      html2canvas:  { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: -window.scrollY },
       jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
       pagebreak:    { mode: 'avoid-all' }
     };
