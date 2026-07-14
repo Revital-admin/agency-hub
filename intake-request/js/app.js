@@ -145,15 +145,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // element - appending it off-screen gives it an actual, measurable
     // position/size while staying invisible to the user.
     const exportContainer = document.createElement('div');
-    exportContainer.style.position = 'fixed';
+    exportContainer.style.position = 'absolute';
     exportContainer.style.top = '0';
-    exportContainer.style.left = '-99999px';
+    exportContainer.style.left = '-9999px';
     exportContainer.innerHTML = pdfContainer.innerHTML;
     document.body.appendChild(exportContainer);
 
     html2pdf().set(opt).from(exportContainer).save().then(() => {
       exportContainer.remove();
       generateBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download PDF';
+      generateBtn.disabled = false;
+    }).catch((err) => {
+      console.error('PDF generation failed:', err);
+      exportContainer.remove();
+      alert('PDF generation failed - check the browser console for details.');
+      generateBtn.innerHTML = 'Download PDF';
       generateBtn.disabled = false;
     });
   });
