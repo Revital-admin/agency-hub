@@ -388,6 +388,16 @@ function downloadPDF() {
   const hides = container.querySelectorAll('.action-row, .controls-row, .prompt-toggle, .prompt-panel, button');
   hides.forEach(el => el.style.display = 'none');
 
+  // The on-screen nav branding is a generic "REVITAL HUB" icon+wordmark
+  // (see logo.js), not the actual client-facing logo used on every other
+  // exported PDF in the Hub. Swap in the real logo just for the capture,
+  // then restore the nav version afterward so the live tool is unaffected.
+  const logoContainer = container.querySelector('.brand-logo-container');
+  const origLogoHTML = logoContainer ? logoContainer.innerHTML : null;
+  if (logoContainer) {
+    logoContainer.innerHTML = '<img src="../logo.png" alt="Revital Hub" style="height: 40px; width: 115px; object-fit: contain;">';
+  }
+
   // Replace inputs/textareas with their text values temporarily
   const inputs = container.querySelectorAll('input, textarea');
   const replacements = [];
@@ -438,6 +448,7 @@ function downloadPDF() {
         r.span.remove();
         r.el.style.display = '';
       });
+      if (logoContainer) logoContainer.innerHTML = origLogoHTML;
       if (pdfBtn) {
         pdfBtn.disabled = false;
         pdfBtn.innerHTML = origText;

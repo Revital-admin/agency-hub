@@ -527,6 +527,7 @@ document.addEventListener('DOMContentLoaded', () => {
         .btn-link { display: inline-block; background: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600; margin-top: 20px;}
         .tier-box { border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 20px; background: #fff; }
         .tier-box.recommended { border-color: #3b82f6; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-width: 2px; }
+        .logo { height: 50px; width: 144px; object-fit: contain; margin-bottom: 40px; }
       </style>
     `;
 
@@ -542,6 +543,7 @@ document.addEventListener('DOMContentLoaded', () => {
       
       <!-- PAGE 1: COVER -->
       <div class="page">
+        <img src="../logo.png" alt="Revital Hub" class="logo">
         <h1 class="cover-title">MARKETING PROPOSAL</h1>
         <div class="meta-text"><strong>Prepared For:</strong> ${clientName}</div>
         <div class="meta-text"><strong>Contact:</strong> ${contactName}</div>
