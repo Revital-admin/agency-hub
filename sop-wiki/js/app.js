@@ -246,14 +246,54 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      // Block-level wrapper tags (div, section, etc.) from ClickUp/Word
+      // usually represent one line, table cell, or field - not just
+      // decoration. Splicing their content straight into whatever
+      // surrounds them (the old behavior) throws away that line break,
+      // so two adjacent fields like "...ahead of the Welcome Guide email"
+      // and "Deadline: Client must submit..." end up glued together as
+      // "...emailDeadline: Client must submit..." with no space at all.
+      // Wrap the block's content in its own <p> instead so the break is
+      // preserved and it picks up normal paragraph spacing.
+      const BLOCK_LEVEL_TAGS = new Set([
+        'DIV', 'SECTION', 'ARTICLE', 'HEADER', 'FOOTER', 'ASIDE',
+        'FIGURE', 'FIGCAPTION', 'MAIN', 'NAV', 'DD', 'DT', 'DL'
+      ]);
       if (!ALLOWED_TAGS.has(tag)) {
-        // Unwrap disallowed wrapper tags (span, div, font, etc. from
-        // ClickUp/Word) but keep their inner content.
         sanitizeNode(child);
-        while (child.firstChild) {
-          node.insertBefore(child.firstChild, child);
+        if (BLOCK_LEVEL_TAGS.has(tag) && child.textContent.trim() !== '') {
+          const wrapped = document.createElement('p');
+          while (child.firstChild) {
+            wrapped.appendChild(child.firstChild);
+          }
+          node.insertBefore(wrapped, child);
+        } else {
+          // Genuinely inline wrappers (span, font, etc.) - unwrap flat,
+          // no break needed, they sit mid-sentence.
+          while (child.firstChild) {
+            node.insertBefore(child.firstChild, child);
+          }
         }
         node.removeChild(child);
+        return;
+      }
+
+      // ClickUp/Word/Google Docs heading tags aren't a reliable signal on
+      // their own - some exports wrap entire multi-sentence paragraphs (or
+      // even a whole "step" block) in <h1> even though nothing about that
+      // text is actually a heading. Left alone, that paragraph renders at
+      // the oversized heading font-size, making pasted SOP updates look
+      // "very big" compared to hand-authored ones. Real headings are short
+      // labels, so demote any heading-tagged block that reads like running
+      // prose down to a plain paragraph before it keeps its tag.
+      const HEADING_TAGS = new Set(['H1', 'H2', 'H3', 'H4']);
+      if (HEADING_TAGS.has(tag) && child.textContent.trim().length > 120) {
+        const demoted = document.createElement('p');
+        while (child.firstChild) {
+          demoted.appendChild(child.firstChild);
+        }
+        node.replaceChild(demoted, child);
+        sanitizeNode(demoted);
         return;
       }
 
@@ -277,10 +317,33 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // ClickUp/Word/Google Docs don't consistently mark a pasted table's
+  // header row as <th> - some exports use a plain <td> row styled bold
+  // instead. Left alone, that means some pasted tables get the wiki's
+  // indigo-tinted header background/color (.doc-body th) and others render
+  // with plain, uncolored cells for their header row, so tables end up
+  // looking inconsistent from one SOP to the next. Force the first row of
+  // every table to real <th> cells so every pasted table's header looks
+  // the same regardless of how the source app marked it up.
+  function normalizeTableHeaders(container) {
+    container.querySelectorAll('table').forEach(table => {
+      const firstRow = table.querySelector('tr');
+      if (!firstRow) return;
+      Array.from(firstRow.children).forEach(cell => {
+        if (cell.tagName === 'TD') {
+          const th = document.createElement('th');
+          th.innerHTML = cell.innerHTML;
+          cell.replaceWith(th);
+        }
+      });
+    });
+  }
+
   function sanitizeHtml(rawHtml) {
     const container = document.createElement('div');
     container.innerHTML = rawHtml;
     sanitizeNode(container);
+    normalizeTableHeaders(container);
     return container.innerHTML;
   }
 
