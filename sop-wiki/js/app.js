@@ -436,9 +436,20 @@ document.addEventListener('DOMContentLoaded', () => {
         .map(line => `<p>${escapeHtml(line)}</p>`)
         .join('') || '<p></p>';
     }
-
-    document.execCommand('insertHTML', false, toInsert);
+function unwrapEmptyHeadingShells(container) {
+  const headings = Array.from(container.querySelectorAll('h1,h2,h3,h4'));
+  headings.forEach(h => {
+    const hasOwnText = Array.from(h.childNodes).some(
+      n => n.nodeType === Node.TEXT_NODE && n.textContent.trim() !== ''
+    );
+    if (!hasOwnText && h.children.length > 0) {
+      while (h.firstChild) h.parentNode.insertBefore(h.firstChild, h);
+      h.parentNode.removeChild(h);
+    }
   });
+}
+    document.execCommand('insertHTML', false, toInsert);
+  unwrapEmptyHeadingShells(editorContent); });
 
   // ── Toolbar ──
   editorToolbar.querySelectorAll('button').forEach(btn => {
