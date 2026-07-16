@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ad Account Setup</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../forms.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="aas-wrap">
+
+    <div class="aas-header">
+      <div>
+        <h1 class="aas-title">Ad Account Setup</h1>
+        <div class="aas-client-name" id="clientNameDisplay">Loading client…</div>
+      </div>
+      <div class="aas-header-actions">
+        <span class="aas-save-indicator" id="saveIndicator"></span>
+        <button class="btn-primary" id="saveBtn">Save Progress</button>
+      </div>
+    </div>
+
+    <div class="aas-platform-tabs" id="platformTabs">
+      <button class="aas-platform-tab active" data-platform="meta">Meta</button>
+      <button class="aas-platform-tab" data-platform="google">Google Ads</button>
+      <button class="aas-platform-tab" data-platform="tiktok">TikTok Ads</button>
+      <button class="aas-platform-tab" data-platform="linkedin">LinkedIn Ads</button>
+    </div>
+
+    <div class="aas-progress-row">
+      <div class="aas-progress-bar-track">
+        <div class="aas-progress-bar-fill" id="progressFill"></div>
+      </div>
+      <span class="aas-progress-label" id="progressLabel">0 / 0 steps complete</span>
+    </div>
+
+    <div class="aas-platform-panel" id="panel-meta"></div>
+    <div class="aas-platform-panel" id="panel-google" style="display:none;"></div>
+    <div class="aas-platform-panel" id="panel-tiktok" style="display:none;"></div>
+    <div class="aas-platform-panel" id="panel-linkedin" style="display:none;"></div>
+
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

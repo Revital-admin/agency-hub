@@ -1,0 +1,284 @@
+/* Ad Account Setup — tool-specific styles (uses shared ../style.css variables) */
+
+body {
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-family: var(--font-sans, 'Plus Jakarta Sans', -apple-system, sans-serif);
+  margin: 0;
+  padding: 24px;
+}
+
+.aas-wrap {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+/* Header */
+.aas-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.aas-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 4px 0;
+  color: var(--text-main);
+}
+
+.aas-client-name {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.aas-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.aas-save-indicator {
+  font-size: 12px;
+  color: var(--success, #10b981);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.aas-save-indicator.show {
+  opacity: 1;
+}
+
+.btn-primary {
+  background: var(--primary, #6366f1);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover, #4f46e5);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.btn-secondary:hover {
+  border-color: var(--border-focus, rgba(99, 102, 241, 0.6));
+  background: var(--bg-card-hover);
+}
+
+/* Platform tabs */
+.aas-platform-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.aas-platform-tab {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 16px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.aas-platform-tab:hover {
+  color: var(--text-main);
+}
+
+.aas-platform-tab.active {
+  color: var(--primary, #6366f1);
+  border-bottom-color: var(--primary, #6366f1);
+}
+
+/* Progress bar */
+.aas-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.aas-progress-bar-track {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.aas-progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--primary, #6366f1), var(--secondary, #a855f7));
+  transition: width 0.25s ease;
+}
+
+.aas-progress-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Sections */
+.aas-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 20px 22px;
+  margin-bottom: 16px;
+}
+
+.aas-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0 0 14px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aas-section-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-card-hover);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+/* Checklist items */
+.aas-check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.aas-check-item:last-child {
+  border-bottom: none;
+}
+
+.aas-check-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  accent-color: var(--primary, #6366f1);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.aas-check-item-body {
+  flex: 1;
+}
+
+.aas-check-item-label {
+  font-size: 14px;
+  color: var(--text-main);
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.aas-check-item.checked .aas-check-item-label {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--border-color);
+}
+
+.aas-guide-text {
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: rgba(99, 102, 241, 0.08);
+  border-left: 2px solid var(--primary, #6366f1);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+/* Field rows (text / number / select / textarea) */
+.aas-field-row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.aas-field-row:last-child {
+  border-bottom: none;
+}
+
+.aas-field-row label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 6px;
+}
+
+.aas-field-row input[type="text"],
+.aas-field-row input[type="number"],
+.aas-field-row select,
+.aas-field-row textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-main);
+  font-size: 14px;
+  font-family: inherit;
+  padding: 9px 12px;
+}
+
+.aas-field-row input:focus,
+.aas-field-row select:focus,
+.aas-field-row textarea:focus {
+  outline: none;
+  border-color: var(--border-focus, rgba(99, 102, 241, 0.6));
+}
+
+.aas-field-row textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+.aas-field-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* Coming soon placeholder for not-yet-built platforms */
+.aas-coming-soon {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+  font-size: 14px;
+}

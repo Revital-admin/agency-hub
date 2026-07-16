@@ -1,0 +1,77 @@
+AD ACCOUNT SETUP — Deploy Instructions (Meta tab, v1)
+========================================================
+
+WHAT THIS IS
+A new per-client tool: an interactive Meta (Facebook/Instagram) ad account
+setup checklist, matching the same "namespaced key on the client object"
+pattern every other Hub tool uses (paidAdsAudit, onboardingChecklist,
+etc.) so it saves to the client's profile automatically. Google Ads,
+TikTok Ads, and LinkedIn Ads tabs are scaffolded (their tab buttons show
+"coming soon") — we'll fill those in next, one at a time, as you asked.
+
+PART 1 — ADD THE THREE NEW FILES
+Create these exact paths in the repo (new files, via GitHub's "Add file"
+→ "Create new file"):
+
+  ad-account-setup/index.html      ← from ad-account-setup-index.html
+  ad-account-setup/css/style.css   ← from ad-account-setup-style.css
+  ad-account-setup/js/app.js       ← from ad-account-setup-app.js
+
+(GitHub lets you type the full path including folders directly into the
+"Name your file" box — typing "ad-account-setup/index.html" will create
+the folder automatically.)
+
+PART 2 — WIRE IT INTO THE SIDEBAR
+This part touches the main index.html and app.js at the repo root. Three
+small additions, each modeled exactly on how the existing "Discovery Call
+Script" entry works.
+
+1. In the root index.html, find the sidebar button for Discovery Call
+   Script — search for:
+     data-tab="tab-discoverycall"
+   Right after that whole <li>...</li> block, add a new one:
+
+   <li>
+     <button class="nav-item-btn" data-tab="tab-adaccountsetup">
+       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"></path></svg>
+       <span>Ad Account Setup</span>
+     </button>
+   </li>
+
+2. Still in index.html, find the matching content section — search for:
+     id="tab-discoverycall"
+   Right after that entire <section>...</section> block, add:
+
+   <section id="tab-adaccountsetup" class="tab-section">
+     <iframe style="width:100%; height:100%; border:none; background:transparent;" allow="clipboard-write" allowtransparency="true"></iframe>
+   </section>
+
+3. In the root app.js, find:
+     function renderDiscoveryCall
+   Right after that whole function, add:
+
+   function renderAdAccountSetup() {
+     setIframeAbsoluteSrc('#tab-adaccountsetup iframe', 'ad-account-setup/index.html?v=1.0');
+   }
+
+4. Still in app.js, find the switch statement that starts with:
+     function refreshIframeTab(tabId) {
+       switch (tabId) {
+   Inside it, find any existing case (e.g. "case "tab-discoverycall":")
+   and add a new case right after it, following the same pattern:
+
+     case "tab-adaccountsetup":
+       renderAdAccountSetup();
+       break;
+
+COMMIT MESSAGE
+Add Ad Account Setup module (Meta tab) — new per-client interactive checklist
+
+AFTER YOU DEPLOY
+Open any client, click "Ad Account Setup" in the sidebar, and the Meta
+tab should load with all 7 sections. Check a few boxes and refresh — it
+should still be checked (confirms the save wiring is hitting the client
+profile correctly). Google Ads / TikTok / LinkedIn tabs will show
+"coming soon" until we build them next.
+
+Let me know once this is live and I'll start on Google Ads.
