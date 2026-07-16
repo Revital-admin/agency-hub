@@ -205,6 +205,7 @@ async function generateClientPDF() {
 let clientsDb = {};
 let activeClientName = "";
 let iframeNeedsReload = {
+  "tab-adaccountsetup": true,
   "tab-uxui": true,
   "tab-seo": true,
   "tab-strategy": true,
