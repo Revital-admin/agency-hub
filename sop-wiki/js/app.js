@@ -286,15 +286,30 @@ document.addEventListener('DOMContentLoaded', () => {
       // "very big" compared to hand-authored ones. Real headings are short
       // labels, so demote any heading-tagged block that reads like running
       // prose down to a plain paragraph before it keeps its tag.
+      //
+      // Length alone isn't enough of a signal - a short block like
+      // "<h1><strong>Owner:</strong> Account Manager<strong>Trigger:</strong>
+      // Client gives notice...</h1>" is only ~80 characters (under a
+      // pure length cutoff) but is clearly two merged "Label: value"
+      // fields, not a heading. Multiple bold sub-labels or multiple
+      // colons inside one heading tag are just as strong a signal as
+      // raw length, so any of the three trips the demotion.
       const HEADING_TAGS = new Set(['H1', 'H2', 'H3', 'H4']);
-      if (HEADING_TAGS.has(tag) && child.textContent.trim().length > 120) {
-        const demoted = document.createElement('p');
-        while (child.firstChild) {
-          demoted.appendChild(child.firstChild);
+      if (HEADING_TAGS.has(tag)) {
+        const headingText = child.textContent.trim();
+        const boldSubLabels = child.querySelectorAll('strong, b').length;
+        const colonCount = (headingText.match(/:/g) || []).length;
+        const looksLikeMergedFields =
+          headingText.length > 120 || boldSubLabels > 1 || colonCount > 1;
+        if (looksLikeMergedFields) {
+          const demoted = document.createElement('p');
+          while (child.firstChild) {
+            demoted.appendChild(child.firstChild);
+          }
+          node.replaceChild(demoted, child);
+          sanitizeNode(demoted);
+          return;
         }
-        node.replaceChild(demoted, child);
-        sanitizeNode(demoted);
-        return;
       }
 
       const allowedAttrs = ALLOWED_ATTRS[tag] || [];
@@ -339,11 +354,70 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Some source apps glue adjacent inline runs together with zero
+  // separating space at all - e.g. ClickUp exporting
+  // "<strong>Owner:</strong> Account Manager<strong>Trigger:</strong> ..."
+  // as one flat run. Unlike the block-level-unwrap case above (which has
+  // a wrapper tag to convert into a <p>), there's no wrapper here to hang
+  // a fix on - it's just two inline elements sitting shoulder to shoulder.
+  // Walk every text node in document order and insert a line break
+  // wherever one run ends and the next begins with no whitespace between
+  // them at all, so "...Account Manager" and "Trigger:..." don't render
+  // as "...Account ManagerTrigger:...". Table cells are skipped since
+  // their own cell boundaries already provide real separation.
+  function preserveGluedInlineRuns(container) {
+     const PROTECTED_WORDS = ['ClickUp'];
+  function isProtectedBoundary(beforeText, afterText) {
+    return PROTECTED_WORDS.some(word => {
+      const splitPoint = word.length - 1;
+      return beforeText.endsWith(word.slice(0, splitPoint)) &&
+        afterText.startsWith(word.slice(splitPoint));
+    });
+  }
+  const BLOCK_GROUPING_TAGS = new Set(['P', 'LI', 'H1', 'H2', 'H3', 'H4', 'BLOCKQUOTE', 'TD', 'TH', 'PRE']);
+  function nearestBlock(node) {
+    let el = node.parentNode;
+    while (el && el !== container) {
+      if (BLOCK_GROUPING_TAGS.has(el.tagName)) return el;
+      el = el.parentNode;
+    }
+    return container;
+  }
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+  const textNodes = [];
+  let n;
+  while ((n = walker.nextNode())) {
+    let inTable = false;
+    let anc = n.parentNode;
+    while (anc && anc !== container) {
+      if (anc.tagName === 'TABLE') { inTable = true; break; }
+      anc = anc.parentNode;
+    }
+    if (!inTable) textNodes.push(n);
+  }
+  for (let i = 0; i < textNodes.length - 1; i++) {
+    const cur = textNodes[i];
+    const next = textNodes[i + 1];
+    if (nearestBlock(cur) !== nearestBlock(next)) continue;
+    const curVal = cur.nodeValue;
+    const nextVal = next.nodeValue;
+    if (!curVal || !nextVal) continue;
+    const lastChar = curVal[curVal.length - 1];
+    const firstChar = nextVal[0];
+    if (/[a-z\)\]:]/.test(lastChar) && /[A-Z]/.test(firstChar)) {
+      if (isProtectedBoundary(curVal, nextVal)) continue;
+      const br = document.createElement('br');
+      next.parentNode.insertBefore(br, next);
+    }
+  }
+}
+
   function sanitizeHtml(rawHtml) {
     const container = document.createElement('div');
     container.innerHTML = rawHtml;
     sanitizeNode(container);
     normalizeTableHeaders(container);
+    preserveGluedInlineRuns(container);
     return container.innerHTML;
   }
 
@@ -362,9 +436,20 @@ document.addEventListener('DOMContentLoaded', () => {
         .map(line => `<p>${escapeHtml(line)}</p>`)
         .join('') || '<p></p>';
     }
-
-    document.execCommand('insertHTML', false, toInsert);
+function unwrapEmptyHeadingShells(container) {
+  const headings = Array.from(container.querySelectorAll('h1,h2,h3,h4'));
+  headings.forEach(h => {
+    const hasOwnText = Array.from(h.childNodes).some(
+      n => n.nodeType === Node.TEXT_NODE && n.textContent.trim() !== ''
+    );
+    if (!hasOwnText && h.children.length > 0) {
+      while (h.firstChild) h.parentNode.insertBefore(h.firstChild, h);
+      h.parentNode.removeChild(h);
+    }
   });
+}
+    document.execCommand('insertHTML', false, toInsert);
+  unwrapEmptyHeadingShells(editorContent); });
 
   // ── Toolbar ──
   editorToolbar.querySelectorAll('button').forEach(btn => {

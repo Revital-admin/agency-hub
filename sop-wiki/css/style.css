@@ -776,3 +776,9 @@ body {
 .editor-richtext tr:last-child td {
   border-bottom: none;
 }
+.doc-body pre, .editor-richtext pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  max-width: 100%;
+}
