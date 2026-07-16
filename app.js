@@ -621,6 +621,9 @@ function refreshIframeTab(tabId) {
     case "tab-welcomeguide":
       renderWelcomeGuide();
       break;
+      case "tab-adaccountsetup":
+      renderAdAccountSetup();
+      break;
     case "tab-emailsig":
       renderEmailSigGenerator();
       break;
@@ -1406,6 +1409,11 @@ function renderIntakeQualifier() {
 // ── Discovery Call Script Controller ──
 function renderDiscoveryCallScript() {
   setIframeAbsoluteSrc('#tab-discoverycall iframe', "discovery-call-script/index.html");
+}
+
+// ── Ad Account Setup Controller ──
+function renderAdAccountSetup() {
+  setIframeAbsoluteSrc('#tab-adaccountsetup iframe', "ad-account-setup/index.html");
 }
 
 // ── Package Recommendation Engine Controller ──
