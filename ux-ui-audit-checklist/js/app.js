@@ -446,7 +446,7 @@ function attachEvents() {
           .page:last-child { page-break-after: auto; }
           h1 { font-size: 28px; font-weight: 700; margin-bottom: 5px; color: #0f172a; border-bottom: 4px solid #f59e0b; padding-bottom: 20px;}
           p { margin-bottom: 15px; color:#475569; }
-          .logo { height: 50px; margin-bottom: 40px;  }
+          .logo { height: 50px; width: 144px; object-fit: contain; margin-bottom: 40px;  }
           .score-box { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:20px; margin-bottom:30px; text-align:center;}
           .score-val { font-size:36px; font-weight:bold; color:#3b82f6; }
         </style>
@@ -474,8 +474,8 @@ function attachEvents() {
         const opt = {
           margin:       0,
           filename:     `Audit_Report_${new Date().toISOString().split('T')[0]}.pdf`,
-          image:        { type: 'png' },
-          html2canvas:  { scale: 4, letterRendering: true, useCORS: true },
+          image:        { type: 'jpeg', quality: 0.92 },
+          html2canvas:  { scale: 2, letterRendering: true, useCORS: true },
           jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
         };
         

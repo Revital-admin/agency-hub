@@ -27,9 +27,12 @@ const checklistContainer = document.getElementById("checklistContainer");
 const amInitial = document.getElementById("amInitial");
 const amName = document.getElementById("amName");
 const amEmail = document.getElementById("amEmail");
+const amPhone = document.getElementById("amPhone");
 const btnBookCall = document.getElementById("btnBookCall");
 const btnRevision = document.getElementById("btnRevision");
 const btnContentRequest = document.getElementById("btnContentRequest");
+const btnUploadFiles = document.getElementById("btnUploadFiles");
+const btnDriveFolder = document.getElementById("btnDriveFolder");
 const quickActionsWidget = document.getElementById("quickActionsWidget");
 
 
@@ -45,31 +48,34 @@ function getUrlParams() {
 
 function init() {
   getUrlParams();
-  
-  if (!clientName || !clientToken) {
+
+  // The token IS the document ID now (a capability-URL / "anyone with the
+  // link" model) - clientName is only used for the on-screen label below,
+  // it no longer has any bearing on access.
+  if (!clientToken) {
     loader.innerHTML = "<h2>Access Denied</h2><p>Invalid or missing magic link.</p>";
     return;
   }
 
-  const docRef = db.collection("agency").doc("clientsDb");
-  
+  const docRef = db.collection("clients").doc(clientToken);
+
   // Real-time listener
   docRef.onSnapshot((doc) => {
     if (doc.exists) {
-      const data = doc.data();
-      if (data[clientName] && data[clientName].portalConfig && data[clientName].portalConfig.magicToken === clientToken) {
-        clientData = data[clientName];
-        renderPortal();
-        
-        // Hide loader on first success
-        if (loader.style.display !== "none") {
-          loader.style.display = "none";
-          appLayout.style.display = "flex";
-        }
-      } else {
-        loader.innerHTML = "<h2>Access Denied</h2><p>Link expired or invalid token.</p>";
+      clientData = doc.data();
+      renderPortal();
+
+      // Hide loader on first success
+      if (loader.style.display !== "none") {
+        loader.style.display = "none";
+        appLayout.style.display = "flex";
       }
+    } else {
+      loader.innerHTML = "<h2>Access Denied</h2><p>Link expired or invalid token.</p>";
     }
+  }, (err) => {
+    console.error("Portal listener error:", err);
+    loader.innerHTML = "<h2>Access Denied</h2><p>Unable to load this portal.</p>";
   });
 }
 
@@ -114,6 +120,14 @@ function renderPortal() {
     amEmail.textContent = "Email " + config.accountManagerName.split(' ')[0];
     amEmail.href = "mailto:" + config.accountManagerEmail;
   }
+  if (config.accountManagerPhone) {
+    var amFirstName = config.accountManagerName ? config.accountManagerName.split(' ')[0] : "";
+    amPhone.textContent = "Call/Text " + amFirstName;
+    amPhone.href = "tel:" + config.accountManagerPhone.replace(/[^0-9+]/g, '');
+    amPhone.style.display = "block";
+  } else {
+    amPhone.style.display = "none";
+  }
   if (config.calendlyLink) {
     btnBookCall.style.display = "inline-flex";
     btnBookCall.href = config.calendlyLink;
@@ -125,6 +139,26 @@ function renderPortal() {
   setupIframe("navCampaign", "campaignIframe", config.campaignBriefUrl);
   setupIframe("navCompleted", "completedIframe", config.completedWorkUrl);
   setupIframe("navAssets", "assetsIframe", config.brandAssetsUrl);
+
+  // Monthly Reports is always visible - it shows the published report
+  // archive natively regardless of whether an external embed link is also
+  // configured. The embed (if any) is just an optional extra section
+  // beneath the archive, not the only content.
+  document.getElementById("navMonthlyReports").style.display = "flex";
+  const monthlyReportsEmbedWrapper = document.getElementById("monthlyReportsEmbedWrapper");
+  const monthlyReportsIframe = document.getElementById("monthlyReportsIframe");
+  if (config.monthlyReportsUrl) {
+    monthlyReportsEmbedWrapper.style.display = "block";
+    monthlyReportsIframe.dataset.src = config.monthlyReportsUrl;
+    const viewSection = document.getElementById("view-monthlyreports");
+    if (viewSection && viewSection.classList.contains("active") && monthlyReportsIframe.src !== config.monthlyReportsUrl) {
+      monthlyReportsIframe.src = config.monthlyReportsUrl;
+    }
+  } else {
+    monthlyReportsEmbedWrapper.style.display = "none";
+  }
+
+  renderReportArchive();
 
   const analyticsEmbed = document.getElementById("analyticsEmbedContainer");
   if (config.liveAnalyticsUrl) {
@@ -149,6 +183,16 @@ function renderPortal() {
     btnContentRequest.href = config.contentRequestFormUrl;
     hasQuickActions = true;
   }
+  if (config.fileUploadUrl) {
+    btnUploadFiles.style.display = "inline-flex";
+    btnUploadFiles.href = config.fileUploadUrl;
+    hasQuickActions = true;
+  }
+  if (config.driveFolderUrl) {
+    btnDriveFolder.style.display = "inline-flex";
+    btnDriveFolder.href = config.driveFolderUrl;
+    hasQuickActions = true;
+  }
   if (hasQuickActions) {
     quickActionsWidget.style.display = "block";
   }
@@ -156,6 +200,9 @@ function renderPortal() {
 
   // Checklist
   renderChecklist();
+
+  // Content Approvals
+  renderApprovalsView();
 }
 
 function setupIframe(navId, iframeId, url) {
@@ -178,30 +225,133 @@ function setupIframe(navId, iframeId, url) {
   }
 }
 
+// ── Monthly Reports (published archive) ──
+// Same metric key -> label mapping used by the admin-side report tool
+// (competitor-analysis/script.js). Duplicated here rather than shared
+// since this is a separate iframe document.
+const REPORT_METRIC_LABELS = {
+  followers_total: "Followers (Total)",
+  followers_new: "Followers (New)",
+  impressions: "Impressions",
+  engagement: "Engagement Rate",
+  posted: "Content Posted",
+  top_post: "Top Performing Post"
+};
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str == null ? "" : String(str);
+  return div.innerHTML;
+}
+
+function renderReportArchive() {
+  const listEl = document.getElementById("reportArchiveList");
+  const detailEl = document.getElementById("reportDetailView");
+  if (!listEl || !detailEl) return;
+
+  detailEl.style.display = "none";
+  listEl.style.display = "flex";
+  listEl.style.flexDirection = "column";
+  listEl.style.gap = "16px";
+  listEl.innerHTML = "";
+
+  const reports = Array.isArray(clientData.reportArchive) ? clientData.reportArchive : [];
+
+  if (reports.length === 0) {
+    listEl.style.display = "block";
+    listEl.innerHTML = '<p class="report-archive-empty" style="color:var(--color-text-secondary);">No reports have been published yet. Check back soon!</p>';
+    return;
+  }
+
+  [...reports].reverse().forEach((report) => {
+    const card = document.createElement("div");
+    card.className = "report-card";
+    card.style.background = "var(--color-bg-elevated)";
+    card.style.border = "1px solid var(--color-border)";
+    card.style.borderRadius = "8px";
+    card.style.padding = "20px";
+    
+    // Check if it's the old schema or the new schema
+    if (report.monthYear && report.url) {
+      card.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <h3 style="margin:0 0 8px 0; font-size:18px;">${escapeHtml(report.monthYear)}</h3>
+            <p style="margin:0; font-size:14px; color:var(--color-text-secondary);">${escapeHtml(report.notes || "")}</p>
+          </div>
+          <a href="${escapeHtml(report.url)}" target="_blank" class="btn-primary" style="text-decoration:none;">View Report</a>
+        </div>
+      `;
+    } else {
+      // old schema
+      card.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <h3 style="margin:0 0 8px 0; font-size:18px;">${escapeHtml(report.date || "Untitled Report")}</h3>
+            <p style="margin:0; font-size:14px; color:var(--color-text-secondary);">${escapeHtml(report.focus || "")}</p>
+          </div>
+          <button class="btn-primary">View Details</button>
+        </div>
+      `;
+      card.querySelector('button').addEventListener("click", () => showReportDetail(report));
+    }
+    listEl.appendChild(card);
+  });
+}
+
+function showReportDetail(report) {
+  const listEl = document.getElementById("reportArchiveList");
+  const detailEl = document.getElementById("reportDetailView");
+  const contentEl = document.getElementById("reportDetailContent");
+  if (!listEl || !detailEl || !contentEl) return;
+
+  listEl.style.display = "none";
+  detailEl.style.display = "block";
+
+  const platforms = Array.isArray(report.platforms) ? report.platforms : [];
+  const cellData = report.cellData || {};
+  const metricKeys = Object.keys(REPORT_METRIC_LABELS);
+
+  let tableHtml = '<table class="report-metrics-table"><thead><tr><th>Metric</th>';
+  platforms.forEach((p) => {
+    tableHtml += `<th><span class="platform-dot" style="background:${escapeHtml(p.color || "#999")}"></span>${escapeHtml(p.name || "Platform")}</th>`;
+  });
+  tableHtml += "</tr></thead><tbody>";
+
+  metricKeys.forEach((key) => {
+    tableHtml += `<tr><td class="metric-label">${escapeHtml(REPORT_METRIC_LABELS[key])}</td>`;
+    platforms.forEach((_, idx) => {
+      const val = cellData[key] && cellData[key][idx] ? cellData[key][idx] : "\u2014";
+      tableHtml += `<td>${escapeHtml(val)}</td>`;
+    });
+    tableHtml += "</tr>";
+  });
+  tableHtml += "</tbody></table>";
+
+  contentEl.innerHTML = `
+    <div class="report-detail-header">
+      <h3>${escapeHtml(report.date || "Report")}</h3>
+      ${report.preparedBy ? `<p class="report-meta">Prepared by ${escapeHtml(report.preparedBy)}</p>` : ""}
+      ${report.focus ? `<p class="report-meta">Focus: ${escapeHtml(report.focus)}</p>` : ""}
+    </div>
+    ${report.wins ? `<div class="report-wins"><strong>Key wins this month</strong><p>${escapeHtml(report.wins)}</p></div>` : ""}
+    ${platforms.length > 0 ? tableHtml : ""}
+  `;
+}
+
 function renderChecklist() {
   checklistContainer.innerHTML = "";
-  
-  // Backwards compatibility for older schema
-  const checklistSource = clientData.onboardingChecklist || clientData.onboarding;
-  
-  if (!checklistSource || !Array.isArray(checklistSource) || checklistSource.length === 0) return;
-  
-  let allItems = [];
-  checklistSource.forEach(cat => {
-    if (cat && cat.items && Array.isArray(cat.items)) {
-      cat.items.forEach(item => {
-        // Only show items that start with "Client:" or we can just show all phase 1.
-        if ((cat.category && cat.category.includes("Phase 1")) || (item.label && item.label.toLowerCase().includes("client"))) {
-          allItems.push(item);
-        }
-      });
-    }
-  });
 
-  // If we couldn't filter easily, just grab the first 4 tasks.
-  if (allItems.length === 0 && checklistSource[0] && checklistSource[0].items) {
-    allItems = checklistSource[0].items.slice(0, 4);
-  }
+  // The client-facing checklist is its own, fully independent list -
+  // configured per-client in the hub's "Client Checklist" section - rather
+  // than a filtered view of the account manager's internal onboarding
+  // tracker (clientData.onboardingChecklist). That older approach kept
+  // leaking internal-only tasks onto the client's portal because it relied
+  // on keyword-guessing or a manual per-task visibility flag layered on
+  // top of internal data. This is just whatever the admin put here.
+  const allItems = Array.isArray(clientData.clientChecklist) ? clientData.clientChecklist : [];
+
+  if (allItems.length === 0) return;
 
   let completedCount = 0;
 
@@ -239,15 +389,28 @@ function renderChecklist() {
 
 
 function updateFirebaseChecklist() {
-  const docRef = db.collection("agency").doc("clientsDb");
-  
-  // To avoid prototype issues, deep clone
-  const purifiedData = JSON.parse(JSON.stringify(clientData));
-  
+  const docRef = db.collection("clients").doc(clientToken);
+
+  // Firestore rules only allow unauthenticated writes that touch the
+  // clientChecklist field - this is the client's own separate checklist,
+  // not the account manager's internal onboarding tracker.
+  const checklist = Array.isArray(clientData.clientChecklist) ? clientData.clientChecklist : [];
+  const purifiedChecklist = JSON.parse(JSON.stringify(checklist));
+
   docRef.set({
-    [clientName]: purifiedData
+    clientChecklist: purifiedChecklist
   }, { merge: true }).catch(err => {
     console.error("Error updating checklist:", err);
+  });
+}
+
+// Back button from a report's detail view to the archive grid
+const btnBackToReports = document.getElementById("btnBackToReports");
+if (btnBackToReports) {
+  btnBackToReports.addEventListener("click", () => {
+    document.getElementById("reportDetailView").style.display = "none";
+    document.getElementById("reportArchiveList").style.display = "";
+    renderReportArchive();
   });
 }
 
@@ -340,3 +503,227 @@ document.querySelectorAll(".nav-btn").forEach(btn => {
     }
   });
 });
+
+// ── Content Approvals ──
+// Type label lookup, duplicated from client-portal-manager/js/app.js for
+// the same cross-iframe reason DEFAULT_CLIENT_CHECKLIST_FALLBACK is
+// duplicated there - each iframe document only sees its own top-level
+// `const` declarations. Keep this in sync with APPROVAL_TYPE_LABELS in
+// client-portal-manager/js/app.js if you edit either.
+const PORTAL_APPROVAL_TYPE_LABELS = {
+  social: "Social Media Content",
+  ads: "Paid Ad Creative",
+  email: "Email Campaign",
+  website: "Website Page",
+  video: "Video & Production"
+};
+
+const PORTAL_DECISION_LABELS = {
+  approved: "✅ Approved",
+  minor: "🔄 Approved with Minor Corrections",
+  revision: "❌ Revision Required"
+};
+
+function renderApprovalsView() {
+  const pendingContainer = document.getElementById("pendingApprovalsContainer");
+  const historyContainer = document.getElementById("approvalHistoryContainer");
+  const navApprovals = document.getElementById("navApprovals");
+  const badge = document.getElementById("navApprovalsBadge");
+  if (!pendingContainer || !historyContainer || !navApprovals) return;
+
+  const pending = Array.isArray(clientData.pendingApprovals) ? clientData.pendingApprovals : [];
+  const history = Array.isArray(clientData.approvalHistory) ? clientData.approvalHistory : [];
+
+  // Only show the nav item at all once there's something to see, so
+  // clients with nothing pending yet aren't confused by an empty tab.
+  if (pending.length === 0 && history.length === 0) {
+    navApprovals.style.display = "none";
+  } else {
+    navApprovals.style.display = "flex";
+  }
+
+  if (pending.length > 0) {
+    badge.textContent = String(pending.length);
+    badge.style.display = "inline-flex";
+  } else {
+    badge.style.display = "none";
+  }
+
+  pendingContainer.innerHTML = "";
+  if (pending.length === 0) {
+    pendingContainer.innerHTML = '<p class="approval-empty">Nothing waiting on you right now.</p>';
+  } else {
+    pending.forEach(entry => {
+      const typeLabel = PORTAL_APPROVAL_TYPE_LABELS[entry.contentType] || "Deliverable";
+      const checklist = Array.isArray(entry.checklist) ? entry.checklist : [];
+
+      const card = document.createElement("div");
+      card.className = "approval-card";
+
+      const checklistHtml = checklist.length
+        ? `<ul class="approval-checklist">${checklist.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+        : "";
+
+      card.innerHTML = `
+        <div class="approval-card-header">
+          <span class="approval-type-badge">${escapeHtml(typeLabel)}</span>
+          <h4>${escapeHtml(entry.title)}</h4>
+        </div>
+        ${entry.previewLink ? `<a href="${escapeHtml(entry.previewLink)}" target="_blank" rel="noopener" class="approval-preview-link">View Preview &rarr;</a>` : ""}
+        ${checklistHtml}
+        <textarea class="approval-notes-input" placeholder="Notes (required if requesting corrections or a revision)"></textarea>
+        <div class="approval-actions">
+          <button type="button" class="btn-approval btn-approve" data-decision="approved">Approved</button>
+          <button type="button" class="btn-approval btn-minor" data-decision="minor">Minor Corrections</button>
+          <button type="button" class="btn-approval btn-revision" data-decision="revision">Revision Required</button>
+        </div>
+      `;
+
+      card.querySelectorAll(".btn-approval").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const notesEl = card.querySelector(".approval-notes-input");
+          const notes = notesEl ? notesEl.value.trim() : "";
+          const decision = btn.dataset.decision;
+
+          if (decision !== "approved" && !notes) {
+            alert("Please add a quick note so we know what to change.");
+            return;
+          }
+
+          decideApproval(entry, decision, notes);
+        });
+      });
+
+      pendingContainer.appendChild(card);
+    });
+  }
+
+  historyContainer.innerHTML = "";
+  if (history.length === 0) {
+    historyContainer.innerHTML = '<p class="approval-empty">No decisions yet.</p>';
+  } else {
+    history.slice().reverse().forEach(entry => {
+      const typeLabel = PORTAL_APPROVAL_TYPE_LABELS[entry.contentType] || "Deliverable";
+      const decisionLabel = PORTAL_DECISION_LABELS[entry.decision] || entry.decision || "";
+      const decidedDate = entry.decidedAt ? new Date(entry.decidedAt).toLocaleDateString() : "";
+
+      const row = document.createElement("div");
+      row.className = "approval-history-row";
+      row.innerHTML = `
+        <div class="approval-history-main">
+          <strong>${escapeHtml(entry.title)}</strong>
+          <span class="approval-history-type">${escapeHtml(typeLabel)}</span>
+        </div>
+        <div class="approval-history-meta">${decisionLabel} &middot; ${escapeHtml(decidedDate)}</div>
+        ${entry.notes ? `<div class="approval-history-notes">&ldquo;${escapeHtml(entry.notes)}&rdquo;</div>` : ""}
+      `;
+      historyContainer.appendChild(row);
+    });
+  }
+}
+
+function decideApproval(entry, decision, notes) {
+  const docRef = db.collection("clients").doc(clientToken);
+
+  const historyEntry = {
+    id: entry.id,
+    contentType: entry.contentType,
+    title: entry.title,
+    previewLink: entry.previewLink || "",
+    decision: decision,
+    notes: notes || "",
+    decidedAt: new Date().toISOString()
+  };
+
+  const newPending = (clientData.pendingApprovals || []).filter(p => p.id !== entry.id);
+  const newHistory = (clientData.approvalHistory || []).concat([historyEntry]);
+
+  // Update local state immediately so the UI reflects the decision without
+  // waiting on the round trip, then persist. Same JSON-purify step as
+  // updateFirebaseChecklist - strips this iframe's own realm off the
+  // objects before they cross into the parent-bound Firestore SDK.
+  clientData.pendingApprovals = newPending;
+  clientData.approvalHistory = newHistory;
+  renderApprovalsView();
+
+  const purifiedPending = JSON.parse(JSON.stringify(newPending));
+  const purifiedHistory = JSON.parse(JSON.stringify(newHistory));
+
+  docRef.set({
+    pendingApprovals: purifiedPending,
+    approvalHistory: purifiedHistory
+  }, { merge: true }).catch(err => {
+    console.error("Error recording approval decision:", err);
+  });
+}
+
+function renderActionItems() {
+  const container = document.getElementById("actionItemsWidget");
+  const list = document.getElementById("actionItemsList");
+  if (!container || !list) return;
+
+  const items = Array.isArray(clientData.openActionItems) ? clientData.openActionItems : [];
+  if (items.length === 0) {
+    container.style.display = "none";
+    return;
+  }
+
+  container.style.display = "block";
+  list.innerHTML = items.map(ai => `
+    <div style="display:flex; gap:12px; align-items:flex-start; padding:12px; background:rgba(0,0,0,0.2); border-radius:8px;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" style="margin-top:2px; flex-shrink:0;"><circle cx="12" cy="12" r="10"></circle></svg>
+      <div>
+        <p style="margin:0; font-size:15px;">${escapeHtml(ai.text)}</p>
+        <small style="color:var(--color-text-secondary); font-size:12px;">Logged: ${escapeHtml(ai.meetingDate || '')}</small>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderBrandKit() {
+  const container = document.getElementById("brandKitContainer");
+  const colorsList = document.getElementById("brandColorsList");
+  const typographyInfo = document.getElementById("typographyInfo");
+  const logoLink = document.getElementById("brandLogoLink");
+  if (!container) return;
+
+  const kit = clientData.brandKit;
+  if (!kit || (!kit.primaryColor && !kit.fontPrimary && !kit.logoUrl)) {
+    container.style.display = "none";
+    return;
+  }
+
+  container.style.display = "block";
+  
+  // Colors
+  colorsList.innerHTML = '';
+  const colors = [
+    { label: 'Primary', hex: kit.primaryColor },
+    { label: 'Secondary', hex: kit.secondaryColor },
+    { label: 'Accent', hex: kit.accentColor }
+  ];
+  colors.forEach(c => {
+    if (c.hex) {
+      colorsList.innerHTML += `
+        <div style="text-align:center;">
+          <div style="width:48px; height:48px; border-radius:8px; background-color:${escapeHtml(c.hex)}; border:1px solid rgba(255,255,255,0.1); margin-bottom:4px;"></div>
+          <div style="font-size:10px; color:var(--color-text-secondary);">${escapeHtml(c.hex)}</div>
+        </div>
+      `;
+    }
+  });
+
+  // Typography
+  typographyInfo.innerHTML = `
+    ${kit.fontPrimary ? `<div><strong style="color:var(--color-text);">Primary Font:</strong> ${escapeHtml(kit.fontPrimary)}</div>` : ''}
+    ${kit.fontSecondary ? `<div style="margin-top:4px;"><strong style="color:var(--color-text);">Secondary Font:</strong> ${escapeHtml(kit.fontSecondary)}</div>` : ''}
+    ${kit.toneOfVoice ? `<div style="margin-top:8px; color:var(--color-text-secondary);">${escapeHtml(kit.toneOfVoice)}</div>` : ''}
+  `;
+
+  // Logo
+  if (kit.logoUrl) {
+    logoLink.innerHTML = `<a href="${escapeHtml(kit.logoUrl)}" target="_blank" class="btn-secondary" style="text-decoration:none;">Access Logo / Brand Assets Folder</a>`;
+  } else {
+    logoLink.innerHTML = '';
+  }
+}

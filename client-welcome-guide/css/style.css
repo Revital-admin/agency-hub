@@ -5,8 +5,39 @@
 .alert-box svg { color: #3b82f6; flex-shrink: 0; }
 
 /* PDF Output Styling */
-.pdf-page { width: 8.5in; height: 11in; background: var(--color-surface); padding: 1in; box-sizing: border-box; position: relative; box-shadow: 0 10px 25px rgba(0,0,0,0.1); flex-shrink: 0; display: flex; flex-direction: column; page-break-inside: avoid; }
-.pdf-logo { height: 40px; width: auto; object-fit: contain; margin-bottom: 0.5in; }
+.pdf-page {
+  width: 8.5in; height: 11in; overflow: hidden; background: var(--color-surface);
+  padding: 1in; box-sizing: border-box; position: relative;
+  /* box-shadow removed: its blur radius bleeds a few extra pixels
+     beyond the box's exact edges when rasterized, which was enough to
+     tip html2canvas's measured height over the one-page threshold and
+     trigger a spurious blank second page. Not needed for a printed
+     PDF anyway. */
+  flex-shrink: 0;
+  display: flex; flex-direction: column;
+  /* page-break-inside: avoid removed - html2pdf.js's default pagebreak
+     mode respects CSS page-break rules, and this property on the ONLY
+     element in the capture appears to have been triggering a forced
+     break before it (a spurious blank leading page) rather than
+     actually preventing a break inside it. Nothing left to avoid a
+     break inside of now that overflow:hidden guarantees single-page
+     sizing, so this rule was pure risk with no benefit. */
+  /* overflow: hidden is the real fix for the multi-page/blank-page bug -
+     without it, content even a hair taller than 11in silently overflows
+     past this fixed height, and html2canvas measures the full overflowed
+     scrollHeight instead of clamping to the box, producing extra pages
+     regardless of scroll context or container attachment (which is why
+     patching those didn'''t fully resolve it). This hard-clips instead. */
+}
+.pdf-logo {
+  /* Explicit width (not "auto") pinned to the logo's real 739x257
+     aspect ratio. Relying on width:auto meant the box wasn't sized
+     until the browser had the image's natural dimensions - if
+     html2canvas captured before that finished loading, the image
+     rendered stretched across whatever fallback width it got instead
+     of scaling down to match the 40px height. */
+  height: 40px; width: 115px; object-fit: contain; margin-bottom: 0.5in;
+}
 .pdf-title { font-size: 32px; font-weight: 800; color: var(--color-text-primary); letter-spacing: -1px; margin-bottom: 12px; }
 .pdf-subtitle { font-size: 18px; color: var(--color-text-muted); margin-bottom: 0.5in; font-weight: 500; }
 .pdf-h2 { font-size: 18px; font-weight: 700; color: var(--color-text-primary); margin-top: 0.3in; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid var(--color-border); padding-bottom: 8px; }
@@ -32,6 +63,11 @@
 
 .btn-pdf { display: inline-flex; align-items: center; justify-content: center; background: #f68d5f; color: white; padding: 16px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; width: 100%; text-align: center; margin-top: auto; border: none; }
 .btn-pdf svg { margin-right: 12px; }
+
+.video-card { background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: 8px; padding: 20px; margin-bottom: 0.4in; }
+.video-card h3 { font-size: 16px; font-weight: 700; color: var(--color-text-primary); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+.video-card p { font-size: 14px; color: var(--color-text-muted); line-height: 1.5; margin-bottom: 16px; }
+.btn-pdf-secondary { display: inline-flex; align-items: center; gap: 8px; background: transparent; color: #f68d5f; border: 2px solid #f68d5f; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; }
 
 .policy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 .policy-card { background: var(--color-surface-2); padding: 20px; border-radius: 8px; border: 1px solid var(--color-border); }

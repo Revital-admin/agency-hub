@@ -68,7 +68,7 @@ if (isEmbedded) {
 
   // Render headers
   const headerInputs = document.querySelectorAll('.comp-name');
-  if (isEmbedded && headerInputs.length === 3) {
+  if (isEmbedded && socialComp && headerInputs.length === 3) {
     headerInputs.forEach(function(input, idx) {
       input.value = socialComp.names[idx] || '';
       input.addEventListener('input', function() {
@@ -95,13 +95,13 @@ if (isEmbedded) {
       ta.placeholder = row.placeholder;
 
       // Sync saved value
-      if (isEmbedded && socialComp.rows[row.key]) {
+      if (isEmbedded && socialComp && socialComp.rows[row.key]) {
         ta.value = socialComp.rows[row.key][compIdx] || '';
       }
 
       // Sync back on edit
       ta.addEventListener('input', function() {
-        if (isEmbedded) {
+        if (isEmbedded && socialComp) {
           if (!socialComp.rows[row.key]) {
             socialComp.rows[row.key] = ['', '', ''];
           }
@@ -134,7 +134,7 @@ if (isEmbedded) {
     starsDiv.dataset.comp = comp;
 
     let savedStars = 0;
-    if (isEmbedded && socialComp.stars) {
+    if (isEmbedded && socialComp && socialComp.stars) {
       savedStars = socialComp.stars[compIdx] || 0;
     }
 
@@ -163,7 +163,7 @@ if (isEmbedded) {
         });
         fill.style.width = (i / 5 * 100) + '%';
 
-        if (isEmbedded) {
+        if (isEmbedded && socialComp) {
           if (!socialComp.stars) socialComp.stars = [0, 0, 0];
           socialComp.stars[compIdx] = i;
           window.parent.saveDatabase();
@@ -250,7 +250,7 @@ if (isEmbedded) {
     ta.placeholder = sw.placeholder;
     
     // Sync saved value
-    if (isEmbedded) {
+    if (isEmbedded && socialComp) {
       ta.value = socialComp.swot[sw.key] || '';
     }
     
@@ -289,7 +289,7 @@ if (isEmbedded) {
 
     // Save SWOT inputs
     ta.addEventListener('input', function() {
-      if (isEmbedded) {
+      if (isEmbedded && socialComp) {
         socialComp.swot[sw.key] = ta.value;
         window.parent.saveDatabase();
       }
@@ -302,7 +302,7 @@ if (isEmbedded) {
   const insight = document.querySelector('.insight-text');
   if (!insight) return;
 
-  if (isEmbedded) {
+  if (isEmbedded && socialComp) {
     if (socialComp.insight) {
       insight.textContent = socialComp.insight;
     }
@@ -332,6 +332,16 @@ function downloadPDF() {
   // Hide UI elements
   const hides = container.querySelectorAll('.action-row, .controls-row, .prompt-toggle, .prompt-panel, button');
   hides.forEach(el => el.style.display = 'none');
+
+  // The on-screen nav branding is a generic "REVITAL HUB" icon+wordmark
+  // (see logo.js), not the actual client-facing logo used on every other
+  // exported PDF in the Hub. Swap in the real logo just for the capture,
+  // then restore the nav version afterward so the live tool is unaffected.
+  const logoContainer = container.querySelector('.brand-logo-container');
+  const origLogoHTML = logoContainer ? logoContainer.innerHTML : null;
+  if (logoContainer) {
+    logoContainer.innerHTML = '<img src="../logo.png" alt="Revital Hub" style="height: 40px; width: 115px; object-fit: contain;">';
+  }
 
   // Replace inputs/textareas with their text values temporarily
   const inputs = container.querySelectorAll('input, textarea');
@@ -363,8 +373,8 @@ function downloadPDF() {
   const opt = {
     margin:       0.5,
     filename:     'Competitor_Analysis.pdf',
-    image:        { type: 'png' },
-    html2canvas:  { scale: 4, letterRendering: true, useCORS: true },
+    image:        { type: 'jpeg', quality: 0.92 },
+    html2canvas:  { scale: 2, letterRendering: true, useCORS: true },
     jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' }
   };
   
@@ -383,6 +393,7 @@ function downloadPDF() {
         r.span.remove();
         r.el.style.display = '';
       });
+      if (logoContainer) logoContainer.innerHTML = origLogoHTML;
       if (pdfBtn) {
         pdfBtn.disabled = false;
         pdfBtn.innerHTML = origText;
@@ -424,7 +435,7 @@ function clearAll() {
   }
 
   // Clear parent state if connected
-  if (isEmbedded) {
+  if (isEmbedded && socialComp) {
     const today = new Date().toLocaleDateString('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' });
     socialComp.niche = "";
     socialComp.date = today;

@@ -47,8 +47,17 @@
         <label>Current Situation: Opportunities</label>
         <textarea id="propOpps" class="num-input" placeholder="2-4 specific gaps or areas for improvement..." style="min-height: 80px; resize: vertical; margin-bottom: 12px;"></textarea>
 
-        <label>Stripe Payment Link URL</label>
-        <input type="url" id="propStripeUrl" class="num-input" placeholder="https://buy.stripe.com/..." style="margin-bottom: 12px;">
+        <label>Meeting Recap</label>
+        <textarea id="propMeetingRecap" class="num-input" placeholder="Brief summary of what was discussed on the call..." style="min-height: 60px; resize: vertical; margin-bottom: 12px;"></textarea>
+
+        <label>Client Testimonial (optional)</label>
+        <textarea id="propTestimonial" class="num-input" placeholder="Paste a relevant client quote here - name and company optional." style="min-height: 60px; resize: vertical; margin-bottom: 12px;"></textarea>
+
+        <label>Stripe Payment Link</label>
+        <input type="url" id="propStripeUrl" class="num-input" placeholder="Paste client-specific Stripe payment link here" style="margin-bottom: 12px;">
+
+        <label>Proposed Start Date</label>
+        <input type="text" id="propStartDate" class="num-input" placeholder="e.g. August 1, 2026" style="margin-bottom: 12px;">
 
         <div style="display: flex; gap: 12px;">
           <div style="flex: 1;">
@@ -83,6 +92,7 @@
         <label for="contractTerm" style="font-size: 0.9rem; margin-bottom: 6px; display: block;">Contract Term (Discount)</label>
         <select id="contractTerm" class="select-input">
           <option value="0">Month-to-Month (0% off)</option>
+          <option value="5">3-Month Contract (5% off)</option>
           <option value="10">6-Month Contract (10% off)</option>
           <option value="15">12-Month Contract (15% off)</option>
         </select>
@@ -594,6 +604,6 @@
 
   </div>
 
-  <script src="js/app.js?v=62"></script>
+  <script src="js/app.js?v=67"></script>
 </body>
 </html>

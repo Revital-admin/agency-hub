@@ -40,12 +40,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const html = `
 <div style="font-family: Arial, sans-serif; font-size: 13px; color: #414141; max-width: 600px;">
-  <table cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 20px;">
+  <table cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 20px; background-color: #ffffff;">
     <tr>
-      <td valign="middle" align="center" style="padding-right: 28px; border-right: 2px solid #f68d5f;">
-        <img src="${logoUrl}" alt="Revital Productions" width="260" style="display: block; max-width: 100%; height: auto; object-fit: contain;" />
+      <td valign="top" align="center" style="padding-right: 28px; border-right: 2px solid #f68d5f;">
+        <img src="${logoUrl}" alt="Revital Productions" width="220" style="display: block; max-width: 100%; height: auto; object-fit: contain;" />
       </td>
-      <td valign="middle" style="padding-left: 28px;">
+      <td valign="top" style="padding-left: 28px;">
         <div style="font-family: Arial, sans-serif; font-size: 18px; font-weight: bold; color: #f68d5f;">${name}</div>
         <div style="font-family: Arial, sans-serif; font-size: 14px; color: #f68d5f; margin-bottom: 12px; font-weight: bold;">${title}</div>
         
@@ -71,7 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     </tr>
   </table>
-  <div style="font-family: Arial, sans-serif; font-size: 10px; color: #999999; line-height: 1.4; border-top: 1px solid #eeeeee; padding-top: 15px;">
+  <div style="font-family: Arial, sans-serif; font-size: 10px; color: #999999; line-height: 1.4; border-top: 1px solid #eeeeee; padding-top: 15px; background-color: #ffffff;">
     CONFIDENTIALITY NOTICE: This electronic mail message and any attachment hereto may contain confidential information of Revital Productions LLC, and is intended for the personal and confidential use of the intended recipient(s) only, or as expressly authorized by the sender. If you are not the intended recipient, and you have received this message in error, any review, distribution, or copying of this message or any attachment hereto is prohibited. If you have received this message in error, please promptly notify the sender and permanently delete it from your computer.
   </div>
 </div>

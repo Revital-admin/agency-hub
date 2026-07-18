@@ -22,12 +22,23 @@
   padding: 0;
 }
 
+html {
+  overscroll-behavior-x: none;
+}
+
 body {
   background-color: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-body);
   line-height: 1.5;
   overflow: hidden;
+  /* Without this, a trackpad's horizontal two-finger swipe over an
+     embedded iframe (e.g. a wide ClickUp table/Gantt view) can get
+     hijacked by the browser's own back/forward navigation gesture
+     instead of reaching the iframe's content. 'none' (not just
+     'contain') because 'contain' still let the gesture escape to the
+     browser's navigation handler in testing. */
+  overscroll-behavior-x: none;
 }
 
 /* Loader */
@@ -82,6 +93,7 @@ body {
   flex-direction: column;
   padding: 24px;
   flex-shrink: 0;
+  overflow-y: auto;
 }
 
 .sidebar-header h1 {
@@ -256,6 +268,7 @@ body {
   flex-grow: 1;
   overflow-y: auto;
   position: relative;
+  overscroll-behavior-x: none;
 }
 
 .view-section {
@@ -344,6 +357,7 @@ body {
   border: 1px solid var(--color-border);
   border-radius: 12px;
   overflow: hidden;
+  overscroll-behavior-x: none;
 }
 .iframe-wrapper.full-height {
   flex-grow: 1;
@@ -353,6 +367,7 @@ body {
   width: 100%;
   height: 100%;
   min-height: 500px;
+  overscroll-behavior-x: none;
 }
 
 /* Confetti */
@@ -474,4 +489,427 @@ body {
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── Monthly Reports (published archive) ── */
+.report-archive-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.report-archive-empty {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.report-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.report-card:hover {
+  border-color: var(--color-primary);
+  background: var(--color-surface-hover);
+}
+
+.report-card-date {
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 4px;
+}
+
+.report-card-focus {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
+.report-detail-header h3 {
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  margin-bottom: 8px;
+}
+
+.report-meta {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 4px;
+}
+
+.report-wins {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 16px;
+  margin: 20px 0;
+  font-size: 0.9rem;
+}
+
+.report-wins strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--color-primary);
+}
+
+.report-wins p {
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+}
+
+.report-metrics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.report-metrics-table th,
+.report-metrics-table td {
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.report-metrics-table th {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.report-metrics-table td.metric-label {
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.report-metrics-table td {
+  color: var(--color-text);
+}
+
+.platform-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+
+/* Guide & FAQ */
+.guide-content {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  max-width: 820px;
+}
+.guide-section h3 {
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  margin-bottom: 12px;
+  color: var(--color-text);
+}
+.guide-intro {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  margin-bottom: 16px;
+  line-height: 1.6;
+}
+.guide-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.guide-table th,
+.guide-table td {
+  text-align: left;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+}
+.guide-table tr:last-child td {
+  border-bottom: none;
+}
+.guide-table th {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: rgba(255, 255, 255, 0.02);
+}
+.guide-table td:first-child {
+  color: var(--color-text);
+  font-weight: 500;
+}
+.guide-table td {
+  color: var(--color-text-secondary);
+}
+.guide-faq {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.guide-faq-item {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.guide-faq-item summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--color-text);
+  list-style: none;
+}
+.guide-faq-item summary::-webkit-details-marker {
+  display: none;
+}
+.guide-faq-item summary::before {
+  content: "+ ";
+  color: var(--color-primary);
+  font-weight: 700;
+}
+.guide-faq-item[open] summary::before {
+  content: "\2013 ";
+}
+.guide-faq-item p {
+  margin-top: 10px;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+/* Approvals */
+.nav-badge {
+  background: var(--color-primary);
+  color: #09090b;
+  font-size: 0.7rem;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  margin-left: auto;
+}
+
+.approval-block {
+  margin-bottom: 32px;
+  max-width: 640px;
+}
+.approval-block-heading {
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  margin-bottom: 14px;
+}
+
+.approval-empty {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.approval-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.approval-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.approval-card-header {
+  margin-bottom: 10px;
+}
+.approval-card-header h4 {
+  font-family: var(--font-heading);
+  font-size: 1.05rem;
+  margin-top: 4px;
+}
+
+.approval-type-badge {
+  display: inline-block;
+  background: var(--color-primary-glow);
+  color: var(--color-primary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.approval-preview-link {
+  display: inline-block;
+  font-size: 0.85rem;
+  color: var(--color-primary);
+  text-decoration: none;
+  margin-bottom: 12px;
+}
+.approval-preview-link:hover {
+  text-decoration: underline;
+}
+
+.approval-checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 14px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.approval-checklist li {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  padding-left: 20px;
+  position: relative;
+}
+.approval-checklist li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  border: 1px solid var(--color-border);
+}
+
+.approval-notes-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  padding: 10px 12px;
+  resize: vertical;
+  min-height: 60px;
+  margin-bottom: 12px;
+}
+.approval-notes-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn-approval {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-body);
+}
+.btn-approve {
+  background: var(--color-primary);
+  color: #09090b;
+}
+.btn-minor {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+.btn-revision {
+  background: transparent;
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.approval-history {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.approval-history-row {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.approval-history-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.approval-history-main strong {
+  font-size: 0.9rem;
+}
+.approval-history-type {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+.approval-history-meta {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  margin-top: 4px;
+}
+.approval-history-notes {
+  font-size: 0.85rem;
+  color: var(--color-text);
+  margin-top: 8px;
+  font-style: italic;
+}
+
+/* Referral Program */
+.referral-rewards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+.referral-reward-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 24px;
+}
+.referral-reward-card h4 {
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  color: var(--color-text);
+  margin-bottom: 8px;
+}
+.referral-reward-value {
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: 8px;
+}
+.referral-reward-card p {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+.referral-note {
+  background: var(--color-primary-glow);
+  color: var(--color-primary);
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.5;
 }

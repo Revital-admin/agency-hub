@@ -7,10 +7,11 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Client Onboarding & Audit Hub</title>
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=4">
   <!-- Firebase SDK Compat (Synchronous loading so app.js can use it immediately) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 
   <script>
     const firebaseConfig = {
@@ -29,6 +30,19 @@
     // Map compat functions to window for app.js to use synchronously
     window.firebaseDb = db;
     window.firebaseSetDoc = function(docRef, data) { return docRef.set(data); };
+    // Tool iframes (Client Portal Manager, SOP Wiki, etc.) run in their own
+    // browsing context with their own separate Object/JSON/Array globals.
+    // An object literal built inside an iframe and handed straight to
+    // firebaseSetDoc above gets rejected by the Firestore SDK ("a custom
+    // Object object") because it doesn't recognize a plain object from a
+    // different JS realm as one of its own - even though it looks
+    // identical. Passing a JSON string instead and parsing it here, in the
+    // parent's own realm, produces a plain object native to this page that
+    // Firestore accepts normally. Iframes needing to write cross-boundary
+    // objects should use this instead of firebaseSetDoc directly.
+    window.firebaseSetDocFromJSON = function(docRef, jsonString) {
+      return docRef.set(JSON.parse(jsonString));
+    };
     window.firebaseDoc = function(db, collectionPath, docPath) { return db.collection(collectionPath).doc(docPath); };
     window.firebaseOnSnapshot = function(docRef, callback, errorCallback) { return docRef.onSnapshot(callback, errorCallback); };
     window.firebaseGetDoc = function(docRef) { return docRef.get(); };
@@ -41,6 +55,20 @@
 
 </head>
 <body>
+
+  <!-- Admin Auth Gate: blocks the hub until signed into Firebase as the
+       authorized admin account. Hidden by default; app.js shows it if the
+       user isn't signed in, and hides it once they are. -->
+  <div id="authGate" style="display:none; position:fixed; inset:0; z-index:9999; background:#0b0f14; color:#e5e7eb; flex-direction:column; align-items:center; justify-content:center; gap:16px; font-family:inherit; text-align:center; padding:24px;">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+    <h2 style="margin:0;">Revital Hub</h2>
+    <!-- Shown immediately while the silent Cloudflare Access -> Firebase
+         exchange runs; app.js hides this and shows the button below only
+         if that silent exchange fails. -->
+    <p id="authGateStatus" style="max-width:380px; color:#9ca3af; margin:0;">Checking access&hellip;</p>
+    <button id="authGateSignInBtn" style="display:none; padding:10px 20px; border-radius:8px; border:none; background:#10b981; color:#04120c; font-weight:600; cursor:pointer;">Sign in with Google</button>
+    <p id="authGateError" style="display:none; color:#ef4444; max-width:380px; margin:0;"></p>
+  </div>
 
   <!-- Dynamic Background Accents -->
   <div class="bg-grid"></div>
@@ -104,8 +132,12 @@
       <nav class="sidebar-nav">
         <ul class="nav-menu">
           
-          <!-- CORE -->
-          <li class="nav-section-title">CORE</li>
+          <li class="nav-section" data-section="core">
+            <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <span>CORE</span>
+              <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <ul class="nav-section-items">
           <li>
             <button class="nav-item-btn active" data-tab="tab-dashboard">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
@@ -148,9 +180,24 @@
               <span>Creative Brief Generator</span>
             </button>
           </li>
+          <li>
+  <button class="nav-item-btn" data-tab="tab-adaccountsetup">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"></path></svg>
+    <span>Ad Account Setup</span>
+  </button>
+</li>
 
           <!-- AUDITS -->
-          <li class="nav-section-title">AUDITS</li>
+          
+            </ul>
+          </li>
+
+          <li class="nav-section" data-section="audits">
+            <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <span>AUDITS</span>
+              <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <ul class="nav-section-items">
           <li>
             <button class="nav-item-btn" data-tab="tab-uxui">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -189,7 +236,16 @@
           </li>
 
           <!-- STRATEGY & COMPETITION -->
-          <li class="nav-section-title">STRATEGY & COMPETITION</li>
+          
+            </ul>
+          </li>
+
+          <li class="nav-section" data-section="strategy-competition">
+            <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <span>STRATEGY & COMPETITION</span>
+              <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <ul class="nav-section-items">
           <li>
             <button class="nav-item-btn" data-tab="tab-strategy">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
@@ -222,7 +278,34 @@
           </li>
 
           <!-- EXECUTION -->
-          <li class="nav-section-title">EXECUTION</li>
+          
+            </ul>
+          </li>
+
+          <li class="nav-section" data-section="execution">
+            <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <span>EXECUTION</span>
+              <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <ul class="nav-section-items">
+          <li>
+            <button class="nav-item-btn" data-tab="tab-meetingnotes">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+              <span>Meeting Notes</span>
+            </button>
+          </li>
+          <li>
+            <button class="nav-item-btn" data-tab="tab-reportarchive">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              <span>Report Archive</span>
+            </button>
+          </li>
+          <li>
+            <button class="nav-item-btn" data-tab="tab-brandassetkit">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 4.9V17L12 22l-9-4.9V6.9z"></path><path d="M12 22V12"></path><path d="M12 12l8.5-4.6"></path><path d="M12 12L3.5 7.4"></path></svg>
+              <span>Brand Asset Kit</span>
+            </button>
+          </li>
           <li>
             <button class="nav-item-btn" data-tab="tab-copywriting">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"></path></svg>
@@ -236,7 +319,16 @@
             </button>
           </li>
         <!-- LAUNCH QA -->
-          <li class="nav-section-title">LAUNCH QA</li>
+          
+            </ul>
+          </li>
+
+          <li class="nav-section" data-section="launch-qa">
+            <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <span>LAUNCH QA</span>
+              <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <ul class="nav-section-items">
           <li>
             <button class="nav-item-btn" data-tab="tab-campaignlaunch">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
@@ -246,20 +338,45 @@
 
           
           <!-- SALES -->
-          <li class="nav-section-title">SALES</li>
+          
+            </ul>
+          </li>
+
+          <li class="nav-section" data-section="sales">
+            <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <span>SALES</span>
+              <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <ul class="nav-section-items">
+          <li>
+            <button class="nav-item-btn" data-tab="tab-intakequalifier">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+              <span>Client Intake Pre-Qualifier</span>
+            </button>
+          </li>
+          <li>
+            <button class="nav-item-btn" data-tab="tab-discoverycall">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+              <span>Discovery Call Script</span>
+            </button>
+          </li>
+ 
+          <li>
+            <button class="nav-item-btn" data-tab="tab-packagerecommend">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+              <span>Package Recommendation Engine</span>
+            </button>
+          </li>
+          <li>
+            <button class="nav-item-btn" data-tab="tab-followuptracker">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+              <span>Proposal Follow-Up Tracker</span>
+            </button>
+          </li>
           <li>
             <button class="nav-item-btn" data-tab="tab-roiprojector">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
               <span>Marketing ROI Projector</span>
-            </button>
-          </li>
-
-          <!-- AGENCY GLOBALS (INTERNAL) -->
-          <li class="nav-section-title">AGENCY GLOBALS</li>
-          <li>
-            <button class="nav-item-btn" data-tab="tab-sopwiki">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-              <span>SOP & Wiki Library</span>
             </button>
           </li>
           <li>
@@ -268,6 +385,39 @@
               <span>Proposal Calculator</span>
             </button>
           </li>
+          <li>
+            <button class="nav-item-btn" data-tab="tab-intakerequest">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22 6 12 13 2 6"></polyline></svg>
+              <span>Intake Request Gen</span>
+            </button>
+          </li>
+
+          <!-- AGENCY GLOBALS (INTERNAL) -->
+          
+            </ul>
+          </li>
+
+          <li class="nav-section" data-section="agency-globals">
+            <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <span>AGENCY GLOBALS</span>
+              <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <ul class="nav-section-items">
+          <li>
+            <button class="nav-item-btn" data-tab="tab-budgetpacing">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+              <span>Budget Pacing</span>
+            </button>
+          </li>
+          <li>
+            <button class="nav-item-btn" data-tab="tab-sopwiki">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+              <span>SOP & Wiki Library</span>
+            </button>
+          </li>
+            </ul>
+          </li>
+
           </ul>
 
 
@@ -303,11 +453,8 @@
         </button>
 
         <div id="userProfileUI" style="display: flex; align-items: center; gap: 8px; margin-left: 8px; border-left: 1px solid var(--border-color); padding-left: 16px;">
-          <div id="userAvatar" style="width: 32px; height: 32px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px;">?</div>
-                              <div style="display: flex; flex-direction: column; line-height: 1.2;">
-            <span id="userEmail" style="font-size: 13px; font-weight: 500; color: var(--color-text);">Loading...</span>
-            <span id="userRole" style="font-size: 11px; color: var(--color-primary, #10b981); display: none;">Admin</span>
-          </div>
+          <div id="userAvatar" style="width: 32px; height: 32px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px;">R</div>
+                    <span id="userEmail" style="font-size: 13px; color: var(--text-muted);">Ronald</span>
           <a href="/cdn-cgi/access/logout?returnTo=https://hub.revitalproductions.com" id="logoutBtn" title="Log Out" style="margin-left: 8px; color: var(--color-danger, #ef4444); text-decoration: none; display: flex; align-items: center; justify-content: center; padding: 4px; border-radius: 4px; transition: background 0.2s;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
           </a>
@@ -683,29 +830,54 @@
         </div>
       </section>
 
+      <!-- ── SECTION: INTAKE REQUEST GEN ── -->
+      <section id="tab-intakerequest" class="tab-section" style="width: 100%; height: 100vh; padding: 0;">
+        <iframe src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
+      </section>
+
       <!-- ── SECTION: WELCOME GUIDE GEN ── -->
       <section id="tab-welcomeguide" class="tab-section" style="width: 100%; height: 100vh; padding: 0;">
-        <iframe src="client-welcome-guide/index.html" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
+        <iframe src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
       </section>
 
       <!-- ── SECTION: CREATIVE BRIEF GEN ── -->
       <section id="tab-creativebrief" class="tab-section" style="width: 100%; height: 100vh; padding: 0;">
-        <iframe src="creative-brief-generator/index.html" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
+        <iframe src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
       </section>
 
       <!-- ── SECTION: EMAIL SIG GEN ── -->
       <section id="tab-emailsig" class="tab-section" style="width: 100%; height: 100vh; padding: 0;">
-        <iframe src="email-signature-generator/index.html" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
+        <iframe src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
       </section>
 
       <!-- ── SECTION: ROI PROJECTOR ── -->
+      <section id="tab-intakequalifier" class="tab-section" style="width: 100%; height: 100vh; padding: 0;">
+        <iframe src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
+      </section>
+
+      <section id="tab-discoverycall" class="tab-section" style="width: 100%; height: 100vh; padding: 0;">
+        <iframe src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
+      </section>
+      
+<section id="tab-adaccountsetup" class="tab-section">
+  <iframe style="width:100%; height:100%; border:none; background:transparent;" allow="clipboard-write" allowtransparency="true"></iframe>
+</section>
+
+      <section id="tab-packagerecommend" class="tab-section" style="width: 100%; height: 100vh; padding: 0;">
+        <iframe src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
+      </section>
+
+      <section id="tab-followuptracker" class="tab-section" style="width: 100%; height: 100vh; padding: 0;">
+        <iframe src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
+      </section>
+
       <section id="tab-roiprojector" class="tab-section" style="width: 100%; height: 100vh; padding: 0;">
-        <iframe src="roi-projector/index.html" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
+        <iframe src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
       </section>
 
       <!-- ── SECTION: CLIENT PORTAL MANAGER ── -->
       <section id="tab-portal" class="tab-section" style="width: 100%; height: 100vh; padding: 0;">
-        <iframe src="client-portal-manager/index.html" style="width: 100%; height: 100%; border: none; background: transparent;" allow="clipboard-write" allowtransparency="true"></iframe>
+        <iframe src="" style="width: 100%; height: 100%; border: none; background: transparent;" allow="clipboard-write" allowtransparency="true"></iframe>
       </section>
 
       <!-- ── SECTION 2: CLIENT ONBOARDING CHECKLIST ── -->
@@ -985,36 +1157,36 @@
             <p>Audits and strategic planning for Meta/Google Ads setup.</p>
           </div>
           <div style="width: 100%; height: 100%;">
-            <iframe id="iframe-paidads" src="paid-ads-audit/index.html" style="width: 100%; height: 100%; border: none; border-radius: 0 0 12px 12px;" allow="clipboard-write"></iframe>
+            <iframe id="iframe-paidads" src="" style="width: 100%; height: 100%; border: none; border-radius: 0 0 12px 12px;" allow="clipboard-write"></iframe>
           </div>
         </div>
       </section>
 
       <!-- ── SECTION 11: EMAIL MARKETING AUDIT ── -->
       <section id="tab-emailstrategy" class="tab-section" style="width: 100%;">
-        <iframe src="email-marketing-audit/index.html?v=1.0" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;" allow="clipboard-write"></iframe>
+        <iframe src="" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;" allow="clipboard-write"></iframe>
       </section>
 
       <!-- ── SECTION 12: CONTENT AUDIT ── -->
       <section id="tab-contentaudit" class="tab-section" style="width: 100%; height: 100vh; padding: 0;">
-        <iframe id="frame-contentaudit" src="content-audit/index.html" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
+        <iframe id="frame-contentaudit" src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
       </section>
 
     
       <!-- ── SECTION 13: CAMPAIGN LAUNCH CHECKLIST ── -->
       <section id="tab-campaignlaunch" class="tab-section" style="width: 100%;">
-        <iframe src="campaign-launch-checklist/index.html" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;" allow="clipboard-write"></iframe>
+        <iframe src="" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;" allow="clipboard-write"></iframe>
       </section>
 
     
       <!-- ── SECTION 14: SOP & WIKI ── -->
       <section id="tab-sopwiki" class="tab-section" style="width: 100%; height: 100vh; padding: 0;">
-        <iframe src="sop-wiki/index.html?v=1.7" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
+        <iframe src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
       </section>
 
       <!-- ── SECTION 15: PROPOSAL CALCULATOR ── -->
       <section id="tab-proposal" class="tab-section" style="width: 100%; height: 100vh; padding: 0;">
-        <iframe src="proposal-calculator/index.html?v=10" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
+        <iframe src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
       </section>
 
     </main>

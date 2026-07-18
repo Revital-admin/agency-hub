@@ -540,7 +540,7 @@ function setupEventHandlers() {
           h2 { font-size: 20px; font-weight: 600; margin-bottom: 15px; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-top: 30px; }
           h3 { font-size: 16px; font-weight: 600; margin-bottom: 10px; color: #334155; margin-top: 20px;}
           p { margin-bottom: 15px; }
-          .logo { height: 50px; margin-bottom: 40px;  }
+          .logo { height: 50px; width: 144px; object-fit: contain; margin-bottom: 40px;  }
           .grid { display: flex; flex-wrap: wrap; gap: 20px; }
           .col { flex: 1; min-width: 300px; }
         </style>
@@ -639,8 +639,8 @@ function setupEventHandlers() {
         const opt = {
           margin:       0,
           filename:     'Personal_Branding_Strategy.pdf',
-          image:        { type: 'png' },
-          html2canvas:  { scale: 4, letterRendering: true, useCORS: true },
+          image:        { type: 'jpeg', quality: 0.92 },
+          html2canvas:  { scale: 2, letterRendering: true, useCORS: true },
           jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
         };
         
@@ -656,8 +656,6 @@ function setupEventHandlers() {
 
       pdfBtn.disabled = false;
       pdfBtn.innerHTML = origText;
-    });
-  }, 500);
     });
   }
 }

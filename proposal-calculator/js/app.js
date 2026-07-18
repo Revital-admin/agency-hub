@@ -41,6 +41,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const propStripeUrl = document.getElementById('propStripeUrl');
   const propAov = document.getElementById('propAov');
   const propConvRate = document.getElementById('propConvRate');
+  const propStartDate = document.getElementById('propStartDate');
+  const propMeetingRecap = document.getElementById('propMeetingRecap');
+  const propTestimonial = document.getElementById('propTestimonial');
 
   // NEW: Admin Controls
   const toggleMargin = document.getElementById('toggleMargin');
@@ -146,7 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (toggleMargin) toggleMargin.addEventListener('change', calculate);
 
   // New text inputs also trigger saveState
-  const textInputs = [propClientName, propContactName, propNote, propWorking, propOpps, propStripeUrl, propAov, propConvRate];
+  const textInputs = [propClientName, propContactName, propNote, propWorking, propOpps, propStripeUrl, propAov, propConvRate, propStartDate, propMeetingRecap, propTestimonial];
   textInputs.forEach(inp => {
     if (inp) {
       inp.addEventListener('input', saveState);
@@ -396,7 +399,10 @@ document.addEventListener('DOMContentLoaded', () => {
       opps: propOpps ? propOpps.value : "",
       stripe: propStripeUrl ? propStripeUrl.value : "",
       aov: propAov ? propAov.value : "",
-      convRate: propConvRate ? propConvRate.value : ""
+      convRate: propConvRate ? propConvRate.value : "",
+      startDate: propStartDate ? propStartDate.value : "",
+      meetingRecap: propMeetingRecap ? propMeetingRecap.value : "",
+      testimonial: propTestimonial ? propTestimonial.value : ""
     };
     if (isEmbedded && parentClient) { parentClient.proposal = state; window.parent.saveDatabase(); window.parent.renderDashboard(); } else { localStorage.setItem('proposal-calc-state-v2', JSON.stringify(state)); }
   }
@@ -422,6 +428,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (propStripeUrl && state.stripe) propStripeUrl.value = state.stripe;
         if (propAov && state.aov) propAov.value = state.aov;
         if (propConvRate && state.convRate) propConvRate.value = state.convRate;
+        if (propStartDate && state.startDate) propStartDate.value = state.startDate;
+        if (propMeetingRecap && state.meetingRecap) propMeetingRecap.value = state.meetingRecap;
+        if (propTestimonial && state.testimonial) propTestimonial.value = state.testimonial;
 
         if (state.customItems) {
           customItemsArray = state.customItems;
@@ -451,7 +460,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const monthlyStr = totalMonthlyEl.textContent;
     const setupStr = totalSetupEl.textContent;
     const stripeUrl = (propStripeUrl && propStripeUrl.value) ? propStripeUrl.value : "#";
+    const startDate = (propStartDate && propStartDate.value.trim()) ? propStartDate.value.trim() : "";
+    const meetingRecap = (propMeetingRecap && propMeetingRecap.value.trim()) ? propMeetingRecap.value.trim() : "";
+    const testimonial = (propTestimonial && propTestimonial.value.trim()) ? propTestimonial.value.trim() : "";
     const monthlyNum = parseInt(monthlyStr.replace(/[^0-9]/g, '')) || 0;
+
+    // Human-readable contract term (e.g. "6-Month Contract"), stripping the
+    // "(X% off)" detail that's only meaningful in the config UI dropdown.
+    let contractTermLabel = "Month-to-Month";
+    if (contractTerm && contractTerm.selectedIndex >= 0) {
+      const rawLabel = contractTerm.options[contractTerm.selectedIndex].text;
+      contractTermLabel = rawLabel.replace(/\s*\(\d+%\s*off\)\s*$/i, '').trim();
+    }
 
     // ROI projection math
     let roiHtml = "";
@@ -472,6 +492,11 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
       `;
     }
+
+    // Proposal expiry date - 14 days from the proposal date, used on both
+    // the cover page and the urgency line on the Next Steps page.
+    const expiryDate = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
+    const expiryDateStr = expiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
     // Build the massive HTML document
     const container = document.createElement('div');
@@ -502,6 +527,7 @@ document.addEventListener('DOMContentLoaded', () => {
         .btn-link { display: inline-block; background: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600; margin-top: 20px;}
         .tier-box { border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 20px; background: #fff; }
         .tier-box.recommended { border-color: #3b82f6; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-width: 2px; }
+        .logo { height: 50px; width: 144px; object-fit: contain; margin-bottom: 40px; }
       </style>
     `;
 
@@ -517,11 +543,14 @@ document.addEventListener('DOMContentLoaded', () => {
       
       <!-- PAGE 1: COVER -->
       <div class="page">
+        <img src="../logo.png" alt="Revital Hub" class="logo">
         <h1 class="cover-title">MARKETING PROPOSAL</h1>
         <div class="meta-text"><strong>Prepared For:</strong> ${clientName}</div>
         <div class="meta-text"><strong>Contact:</strong> ${contactName}</div>
         <div class="meta-text"><strong>Date:</strong> ${currentDateEl.textContent}</div>
         <div class="meta-text"><strong>Prepared By:</strong> Revital Productions</div>
+        <div class="meta-text" style="margin-top: 20px; font-size: 13px; color: #94a3b8;">This proposal is valid for 14 days from the date above.</div>
+        <div class="meta-text" style="font-size: 13px; color: #94a3b8;">Proposal expires: ${expiryDateStr}</div>
       </div>
 
       <!-- PAGE 2: NOTE & WHO WE ARE -->
@@ -542,9 +571,23 @@ document.addEventListener('DOMContentLoaded', () => {
         </ul>
       </div>
 
+      ${testimonial ? `
+      <!-- PAGE: WHAT OUR CLIENTS SAY (only when a testimonial is provided) -->
+      <div class="page">
+        <h2>WHAT OUR CLIENTS SAY</h2>
+        <div style="border-left: 4px solid #3b82f6; padding: 10px 30px; margin-top: 60px;">
+          <p style="font-size: 26px; font-style: italic; line-height: 1.5; color: #0f172a;">&ldquo;${testimonial.replace(/\\n/g, '<br>')}&rdquo;</p>
+        </div>
+      </div>
+      ` : ''}
+
       <!-- PAGE 3: SITUATION -->
       <div class="page">
         <h2>YOUR CURRENT SITUATION</h2>
+        ${meetingRecap ? `
+        <h3>Based on Our Conversation</h3>
+        <p>${meetingRecap.replace(/\\n/g, '<br>')}</p>
+        ` : ''}
         <h3>What's Working:</h3>
         <p>${working.replace(/\\n/g, '<br>')}</p>
         
@@ -562,6 +605,14 @@ document.addEventListener('DOMContentLoaded', () => {
         <p>The following scope of work outlines exactly what is included in our proposed engagement.</p>
         <ul style="list-style-type: square;">
           ${Array.from(sowListEl.querySelectorAll('li')).map(li => `<li>${li.textContent}</li>`).join('')}
+        </ul>
+
+        <h2 style="margin-top: 30px;">WHAT IS NOT INCLUDED</h2>
+        <ul style="list-style-type: square;">
+          <li>Ad spend and advertising platform fees (billed directly to client by the platform)</li>
+          <li>Software and platform subscription fees (e.g. email marketing tools, scheduling software)</li>
+          <li>Photography, videography, or on-location production shoots unless listed above</li>
+          <li>Any services not explicitly listed in the scope above</li>
         </ul>
       </div>
 
@@ -586,6 +637,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
             <span style="font-size:24px; font-weight:bold; color:#3b82f6;">${monthlyStr} / mo</span>
           </div>
+          <div style="font-size:13px; color:#3b82f6; font-weight:600; margin-top:6px;">Contract Term: ${contractTermLabel}</div>
           <p style="color:#64748b; font-size:13px; margin-top:5px;">The exact Scope of Services outlined on the previous page. Designed to hit your growth targets aggressively.</p>
         </div>
 
@@ -604,27 +656,45 @@ document.addEventListener('DOMContentLoaded', () => {
         </table>
       </div>
 
-      <!-- PAGE 6: NEXT STEPS -->
+      <!-- PAGE 6: TERMS & CONDITIONS -->
       <div class="page">
-        <h2>HOW WE GET STARTED</h2>
-        <table class="table">
-          <tr><th>Step</th><th>What Happens</th><th>Timeline</th></tr>
-          <tr><td>1</td><td>Sign this proposal and submit initial payment</td><td>Day 1</td></tr>
-          <tr><td>2</td><td>We send your welcome email and setup portal</td><td>Day 1-2</td></tr>
-          <tr><td>3</td><td>Kick-off call to align on strategy</td><td>Within 5 days</td></tr>
-          <tr><td>4</td><td>We build your campaigns and content</td><td>Week 1-2</td></tr>
-          <tr><td>5</td><td>We go live</td><td>Week 2-3</td></tr>
-        </table>
+        <h2>TERMS &amp; CONDITIONS</h2>
+        <ul>
+          <li>Payment is processed via Stripe on the 1st of each month, in advance for that month's services</li>
+          <li>The first payment is due upon signing and confirms intent to begin services. Work does not begin until the first payment is received.</li>
+          <li>Written cancellation notice must be received by Revital Productions no later than the 20th of the month to avoid being charged for the following month's retainer</li>
+          <li>Ad spend and advertising platform fees are billed directly to the client by the platform and are entirely separate from Revital Productions management fees</li>
+          <li>Any services not explicitly listed in the Scope of Services above require a written Change Order before work begins</li>
+          <li>Revision requests must be submitted through the Submit a Revision Quick Action in the client's Hub portal &mdash; not via email or text</li>
+          <li>Content approvals must be submitted through the Hub portal Approvals tab</li>
+          <li>Full legal terms are covered in the Statement of Work and Master Service Agreement included with this proposal</li>
+        </ul>
+      </div>
 
+      <!-- PAGE 7: NEXT STEPS -->
+      <div class="page">
         <h2>NEXT STEPS</h2>
-        <p>Ready to move forward with the Recommended Package?</p>
-        <p>1. Review the Terms & Conditions below.<br>2. Click the button below to submit your first invoice payment and lock in your kickoff date.</p>
-        
+        <p>Ready to move forward with the Recommended Package? Here's exactly what happens next:</p>
+
+        <div style="margin-top: 20px;">
+          <p style="margin-bottom: 10px;"><strong>Step 1</strong> &mdash; Review this proposal and the included Statement of Work and Master Service Agreement</p>
+          <p style="margin-bottom: 10px;"><strong>Step 2</strong> &mdash; Sign the Statement of Work and Master Service Agreement</p>
+          <p style="margin-bottom: 10px;"><strong>Step 3</strong> &mdash; Submit your first payment via the button below to lock in your start date</p>
+          <p style="margin-bottom: 10px;"><strong>Step 4</strong> &mdash; We send your welcome email and set up your Hub portal (Day 1-2)</p>
+          <p style="margin-bottom: 10px;"><strong>Step 5</strong> &mdash; Kick-off call to align on strategy (Within 5 days)</p>
+          <p style="margin-bottom: 10px;"><strong>Step 6</strong> &mdash; We build your campaigns and content (Week 1-2)</p>
+          <p style="margin-bottom: 10px;"><strong>Step 7</strong> &mdash; We go live (Week 2-3)</p>
+        </div>
+
+        ${startDate ? `<p style="margin-top: 20px;"><strong>Proposed Start Date:</strong> ${startDate}</p>` : ''}
+
         ${stripeUrl !== '#' ? `
         <div style="text-align:center; margin-top:40px;">
-          <a href="${stripeUrl}" class="btn-link" target="_blank">Proceed to Secure Payment</a>
+          <a href="${stripeUrl}" class="btn-link" target="_blank">Submit Payment &amp; Lock In Your Start Date</a>
         </div>
         ` : ''}
+
+        <p style="margin-top: 30px; font-size: 13px; color: #94a3b8;">This proposal expires on ${expiryDateStr}. Prices and availability are not guaranteed after this date.</p>
       </div>
     `;
 
@@ -632,8 +702,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const opt = {
         margin:       0,
         filename:     `${clientName.replace(/\s+/g, '_')}_Proposal_${new Date().toISOString().split('T')[0]}.pdf`,
-        image:        { type: 'png' },
-        html2canvas:  { scale: 4, letterRendering: true, useCORS: true },
+        image:        { type: 'jpeg', quality: 0.92 },
+        html2canvas:  { scale: 2, letterRendering: true, useCORS: true },
         jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
       };
       

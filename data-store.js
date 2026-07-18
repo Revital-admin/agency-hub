@@ -33,6 +33,20 @@ const DEFAULT_ONBOARDING_CHECKLIST = [
   }
 ];
 
+// 1b. DEFAULT CLIENT CHECKLIST
+// Shown directly on the client's own portal (Client Portal Manager -> new
+// "Client Checklist" section). This is intentionally a separate, flat list
+// from DEFAULT_ONBOARDING_CHECKLIST above - that one is the account
+// manager's internal task tracker and should never be shown to a client
+// as-is. Clients can check these off themselves from the portal.
+const DEFAULT_CLIENT_CHECKLIST = [
+  { id: 'cc_1', label: 'Complete the intake questionnaire' },
+  { id: 'cc_2', label: 'Attend the kickoff call' },
+  { id: 'cc_3', label: 'Share brand guidelines & assets' },
+  { id: 'cc_4', label: 'Confirm project goals & KPIs' },
+  { id: 'cc_5', label: 'Provide platform access (GA4, Ads, social accounts, etc.)' }
+];
+
 // 2. DEFAULT SEO AUDIT (8 Steps from reference)
 const DEFAULT_SEO_AUDIT = [
   {

@@ -264,6 +264,17 @@ body {
   font-weight: 600;
 }
 
+/* h1 and h4 previously had no explicit font-size here, so pasted ClickUp/
+   Google Docs "Heading 1" text fell back to the browser's default h1 size
+   (~2em) instead of following this doc's type scale - that's what made
+   some pasted headings look oversized compared to h2/h3. */
+.doc-body h1 {
+  font-size: 1.9rem;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.15);
+  padding-bottom: 10px;
+  margin-top: 0;
+}
+
 .doc-body h2 { 
   font-size: 1.6rem; 
   border-bottom: 1px solid rgba(99, 102, 241, 0.15); /* Soft indigo divider */
@@ -276,6 +287,12 @@ body {
   color: #a5b4fc; /* Very soft pastel indigo/blue */
   margin-top: 2em; 
   margin-bottom: 1em; 
+}
+
+.doc-body h4 {
+  font-size: 1.1rem;
+  margin-top: 1.5em;
+  margin-bottom: 0.6em;
 }
 
 .doc-body p {
@@ -359,6 +376,22 @@ body {
   background: rgba(255, 255, 255, 0.04);
 }
 
+/* ClickUp table cells often carry stray blank paragraph lines used as
+   spacers in their own editor. Left alone, each one drags in a full
+   paragraph margin and makes every cell balloon with empty vertical
+   space even though the actual text is a single short line. Collapse
+   paragraph spacing inside cells and hide genuinely empty paragraphs
+   so pasted tables render at their natural, compact height. */
+.doc-body td p, .doc-body th p,
+.editor-richtext td p, .editor-richtext th p {
+  margin: 0;
+}
+
+.doc-body p:empty,
+.editor-richtext p:empty {
+  display: none;
+}
+
 /* ── Alerts ── */
 .alert-warning {
   border-left: 4px solid #f59e0b;
@@ -371,4 +404,381 @@ body {
 
 .alert-warning strong {
   color: #fbbf24;
+}
+/* ── SOP Editor: New/Edit/Delete controls ── */
+.sidebar-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.sidebar-header-top .wiki-title {
+  margin-bottom: 0;
+}
+
+.btn-new-sop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: var(--color-accent);
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-new-sop:hover {
+  background: rgba(99, 102, 241, 0.22);
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+.doc-header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.doc-header-top .doc-category {
+  margin-bottom: 0;
+}
+
+.doc-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.btn-doc-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-doc-action:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-bright);
+}
+
+.btn-doc-action-danger:hover {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+/* ── Editor Modal ── */
+.editor-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+
+.editor-modal {
+  width: 100%;
+  max-width: 680px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: #0f1420;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.editor-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.editor-modal-header h2 {
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  color: var(--text-bright);
+}
+
+.editor-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+}
+
+.editor-close-btn:hover {
+  color: var(--text-bright);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.editor-modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 6px;
+  margin-top: 16px;
+}
+
+.editor-label:first-child {
+  margin-top: 0;
+}
+
+.editor-input,
+.editor-textarea {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-bright);
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+  padding: 10px 12px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.editor-textarea {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 220px;
+}
+
+.editor-input:focus,
+.editor-textarea:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+.editor-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.btn-editor-secondary,
+.btn-editor-primary {
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 9px 18px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-editor-secondary {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  color: var(--color-text-secondary);
+}
+
+.btn-editor-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-bright);
+}
+
+.btn-editor-primary {
+  background: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  color: #ffffff;
+}
+
+.btn-editor-primary:hover {
+  background: var(--primary-hover);
+}
+
+/* ── Rich-text editor (paste from ClickUp/Docs/Word) ── */
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  padding: 6px;
+}
+
+.editor-toolbar button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.editor-toolbar button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-bright);
+  border-color: var(--border-color);
+}
+
+.editor-toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-color);
+  margin: 0 2px;
+}
+
+.editor-richtext {
+  width: 100%;
+  min-height: 260px;
+  max-height: 50vh;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-color);
+  border-top: none;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  padding: 12px 14px;
+  outline: none;
+}
+
+.editor-richtext:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+.editor-richtext:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+}
+
+.editor-richtext h1, .editor-richtext h2, .editor-richtext h3, .editor-richtext h4 {
+  font-family: var(--font-heading);
+  color: var(--text-bright);
+  margin: 0.8em 0 0.4em;
+  font-weight: 600;
+}
+
+/* Same fix as .doc-body: h1/h4 had no explicit size, so pasted "Heading 1"
+   content looked oversized in the editor too, before you'd even saved it. */
+.editor-richtext h1 { font-size: 1.5rem; }
+.editor-richtext h2 { font-size: 1.3rem; }
+.editor-richtext h3 { font-size: 1.1rem; color: #a5b4fc; }
+.editor-richtext h4 { font-size: 1rem; }
+
+.editor-richtext p {
+  margin-bottom: 0.8em;
+}
+
+.editor-richtext ul, .editor-richtext ol {
+  margin-bottom: 0.8em;
+  padding-left: 22px;
+}
+
+.editor-richtext li {
+  margin-bottom: 0.3em;
+}
+
+.editor-richtext blockquote {
+  border-left: 3px solid rgba(99, 102, 241, 0.4);
+  padding-left: 12px;
+  margin: 0.8em 0;
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.editor-richtext a {
+  color: var(--color-accent);
+}
+
+.editor-richtext table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.8em;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.editor-richtext th, .editor-richtext td {
+  border-bottom: 1px solid var(--border-color);
+  padding: 6px 8px;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+/* Editor table cells previously had no distinct header treatment, so
+   pasted tables looked flat/unstyled while editing even though the saved
+   read view (.doc-body) rendered a proper header row - bring them in
+   line with each other. */
+.editor-richtext th {
+  background: rgba(99, 102, 241, 0.06);
+  color: #e0e7ff;
+  font-weight: 600;
+  font-family: var(--font-heading);
+}
+
+.editor-richtext tr:last-child td {
+  border-bottom: none;
+}
+.doc-body pre, .editor-richtext pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  max-width: 100%;
 }

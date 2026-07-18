@@ -8,12 +8,59 @@ document.addEventListener('DOMContentLoaded', () => {
     return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
   }
 
+  // ── Hub integration ──
+  // Auto-fill from the currently active client so nothing needs to be
+  // retyped by hand. Falls back gracefully to manual entry if this file is
+  // ever opened outside the Hub (no window.parent access).
+  function getParentActiveClient() {
+    try {
+      if (window.parent && typeof window.parent.getActiveClient === 'function') {
+        return window.parent.getActiveClient();
+      }
+    } catch (e) {
+      // Cross-origin or otherwise inaccessible - fall back to manual entry.
+    }
+    return null;
+  }
+
+  function buildPortalLink(client) {
+    if (!client || !client.portalConfig || !client.portalConfig.magicToken) return '';
+    const baseUrl = window.location.origin + '/portal/index.html';
+    const clientNameRaw = client.id || client.name || 'Client';
+    return `${baseUrl}?c=${encodeURIComponent(clientNameRaw)}&t=${client.portalConfig.magicToken}`;
+  }
+
+  function autoFillFromActiveClient() {
+    const client = getParentActiveClient();
+    if (!client) return;
+
+    const clientNameInput = document.getElementById('clientName');
+    const amNameInput = document.getElementById('amName');
+    const amEmailInput = document.getElementById('amEmail');
+    const portalLinkInput = document.getElementById('portalLink');
+
+    if (clientNameInput && !clientNameInput.value) {
+      clientNameInput.value = client.name || '';
+    }
+    const config = client.portalConfig || {};
+    if (amNameInput && !amNameInput.value) {
+      amNameInput.value = config.accountManagerName || '';
+    }
+    if (amEmailInput && !amEmailInput.value) {
+      amEmailInput.value = config.accountManagerEmail || '';
+    }
+    if (portalLinkInput) {
+      portalLinkInput.value = buildPortalLink(client);
+    }
+  }
+
   function renderPreview() {
     const clientName = document.getElementById('clientName').value || 'Acme Corp';
-    const intakeLink = document.getElementById('intakeLink').value || 'https://forms.gle/...';
+    const portalLink = document.getElementById('portalLink').value || 'https://hub.revitalproductions.com/portal/...';
     const amName = document.getElementById('amName').value || 'Jane Doe';
     const amEmail = document.getElementById('amEmail').value || 'jane@revitalproductions.com';
     const welcomeNote = document.getElementById('welcomeNote').value || `We are thrilled to partner with ${clientName} and can't wait to get started!`;
+    const loomLink = document.getElementById('loomLink').value.trim();
     
     const checkboxes = document.querySelectorAll('input[type="checkbox"]:checked');
     let servicesHtml = '';
@@ -44,6 +91,20 @@ document.addEventListener('DOMContentLoaded', () => {
           Hi there! ${welcomeNote}
         </div>
 
+        ${loomLink ? `
+        <div class="video-card">
+          <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f68d5f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+            Start Here &mdash; Watch Your Portal Walkthrough
+          </h3>
+          <p>Before your kick-off call, take a few minutes to watch this short video. It walks you through exactly how to use your portal and what to expect from us.</p>
+          <a href="${loomLink}" target="_blank" class="btn-pdf-secondary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+            Watch the Walkthrough Video
+          </a>
+        </div>
+        ` : ''}
+
         <div class="pdf-h2">Your Dedicated Account Manager</div>
         <div class="am-card">
           <div class="am-avatar">${getAvatarInitials(amName)}</div>
@@ -58,9 +119,9 @@ document.addEventListener('DOMContentLoaded', () => {
           ${servicesHtml}
         </div>
 
-        <a href="${intakeLink}" target="_blank" class="btn-pdf">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-          Click Here to Start Your Onboarding
+        <a href="${portalLink}" target="_blank" class="btn-pdf">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+          Access Your Client Portal
         </a>
         <div class="page-number">Page 1</div>
       </div>
@@ -131,9 +192,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const opt = {
       margin:       0,
       filename:     `Welcome_Guide_${clientName.replace(/\s+/g, '_')}.pdf`,
-      image:        { type: 'png' },
-      html2canvas:  { scale: 4, useCORS: true, letterRendering: true },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+      // Same fix as the Intake Request generator: JPEG instead of PNG (no
+      // alpha layer), scale 2 instead of 4, and an explicit pagebreak mode
+      // so html2pdf breaks at the two .pdf-page divs instead of silently
+      // slicing in a mostly-blank extra page whenever content ran a hair
+      // past 11in. Old settings were producing 100MB+ files.
+      image:        { type: 'jpeg', quality: 0.92 },
+      // html2canvas defaults to using the page's current scroll offset
+      // (window.pageYOffset) as the capture origin even for a detached,
+      // never-visible element - forcing scrollX/scrollY to 0 makes it
+      // render as if the page were unscrolled, which is what a detached
+      // capture should always want. Omitting this was the actual cause
+      // of the blank-space-then-offset-content pattern that persisted
+      // through the container/overflow fixes.
+      // Same fix as Intake Request, but this template has TWO .pdf-page
+      // divs stacked (page-1 and page-2), so the forced height is two
+      // full pages tall (816x2112 CSS px at 96dpi) instead of one.
+      html2canvas:  { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
+      // pagebreak avoid-all forces page-break-inside:avoid onto every
+      // single element in the container, which turned out to conflict
+      // with jsPDF's page-slicing math and was actively pushing this to
+      // 3 pages instead of fixing it (this was a 2-page bug before
+      // avoid-all was added). Now that .pdf-page has overflow:hidden
+      // guaranteeing it measures as exactly one true page, the default
+      // slicing behavior (no explicit pagebreak option) should have
+      // nothing left to slice.
     };
     
     generateBtn.innerHTML = 'Generating...';
@@ -145,12 +229,45 @@ document.addEventListener('DOMContentLoaded', () => {
       if (generateBtn) { generateBtn.disabled = false; generateBtn.innerHTML = 'Download PDF'; }
       return;
     }
-    html2pdf().set(opt).from(pdfContainer).save().then(() => {
+
+    // Capture from a detached copy of the preview content (never
+    // attached to the page) instead of the live pdfContainer sitting
+    // inside the sticky/scrollable preview panel. Appending it to
+    // document.body (even off-screen) was tried and made things worse -
+    // it produced a genuinely empty capture, so reverted to this simpler
+    // in-memory-only approach, which does reliably capture real content.
+    const exportContainer = document.createElement('div');
+    exportContainer.innerHTML = pdfContainer.innerHTML;
+
+    // NOTE: an earlier attempt intercepted the chain via
+    // .toPdf().get('pdf').then(pdf => { ...trim pages...; pdf.save(...) })
+    // to manually strip a leading blank page via jsPDF's own page API.
+    // That produced a consistently EMPTY (3289-byte, zero-content) PDF -
+    // .get('pdf') appears to resolve before the canvas image is actually
+    // attached to the page, so calling pdf.save() on it directly skips
+    // content that the built-in .save() step normally attaches. Reverted
+    // to the plain, built-in .save() chain, which reliably captures full,
+    // correct content (confirmed via multiple rendered test files).
+    html2pdf().set(opt).from(exportContainer).save().then(() => {
       generateBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download PDF';
+      generateBtn.disabled = false;
+    }).catch((err) => {
+      console.error('PDF generation failed:', err);
+      alert('PDF generation failed - check the browser console for details.');
+      generateBtn.innerHTML = 'Download PDF';
       generateBtn.disabled = false;
     });
   });
 
-  // Initial render
+  // Wait a tiny bit for the parent to fully inject its globals if this
+  // iframe just loaded fresh (same pattern used elsewhere in the Hub for
+  // the same reason), then auto-fill and render.
+  setTimeout(() => {
+    autoFillFromActiveClient();
+    renderPreview();
+  }, 300);
+
+  // Initial render (before the auto-fill above resolves, so the preview
+  // isn't blank while waiting).
   renderPreview();
 });

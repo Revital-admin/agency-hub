@@ -4,89 +4,134 @@
    ============================================================ */
 
 
-// ── Auth & Identity ──
-let currentUserEmail = null;
-let globalAdmins = [];
+// ── Cryptographically secure token generator ──
+// (replaces the old Math.random-based generator; used for magic link tokens)
+function generateSecureToken(length = 32) {
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
 
-async function checkIdentity() {
-  const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get('dev') === 'admin') {
-    currentUserEmail = "dev_bypass_admin";
-    isAdmin = true;
-    console.log("Developer Admin Bypass Active");
-    updateAdminUI();
-    updateUserProfile();
+// ── Firebase Auth gate (admin) ──
+// Cloudflare Access already verifies who reaches this page, but Firestore
+// has no knowledge of that identity on its own. Rather than making you log
+// in twice, this silently exchanges the Access-verified identity for a
+// Firebase session: _worker.js's /api/mint-firebase-token route reads the
+// already-verified Cf-Access-Authenticated-User-Email header and mints a
+// Firebase custom token, which we redeem here with no popup. A manual
+// Google sign-in is kept as a fallback (e.g. local dev without Access
+// in front, or if the token-minting function isn't configured yet).
+// Any Google account on this company domain is authorized - previously
+// this was a single hardcoded email, which silently locked out everyone
+// except that one account.
+const ADMIN_EMAIL_DOMAIN = "revitalproductions.com";
+let firebaseAuthReady = false;
+
+function initAdminAuthGate() {
+  if (!window.firebase || !firebase.auth) {
+    console.warn("Firebase Auth SDK not loaded; skipping auth gate.");
+    firebaseAuthReady = true;
+    boot();
     return;
   }
-  try {
-    const response = await fetch('/cdn-cgi/access/get-identity');
-    if (response.ok) {
-      const data = await response.json();
-      if (data && data.email) {
-        currentUserEmail = data.email.toLowerCase();
-        verifyAdminStatus();
+
+  const gate = document.getElementById("authGate");
+  const signInBtn = document.getElementById("authGateSignInBtn");
+  const statusEl = document.getElementById("authGateStatus");
+  const errorEl = document.getElementById("authGateError");
+
+  function showManualSignIn(message) {
+    if (statusEl) statusEl.style.display = "none";
+    if (signInBtn) signInBtn.style.display = "inline-block";
+    if (errorEl) {
+      if (message) {
+        errorEl.textContent = message;
+        errorEl.style.display = "block";
+      } else {
+        errorEl.style.display = "none";
       }
     }
-    updateUserProfile();
-  } catch (error) {
-    console.log("Running locally or Cloudflare identity unavailable.");
+    if (gate) gate.style.display = "flex";
   }
-}
 
-function verifyAdminStatus() {
-  if (currentUserEmail && globalAdmins.includes(currentUserEmail)) {
-    isAdmin = true;
-  } else {
-    isAdmin = false;
+  if (signInBtn) {
+    signInBtn.addEventListener("click", () => {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.setCustomParameters({ hd: ADMIN_EMAIL_DOMAIN });
+      firebase.auth().signInWithPopup(provider).catch(err => {
+        console.error("Manual sign-in failed:", err);
+        showManualSignIn("Sign-in failed: " + err.message);
+      });
+    });
   }
-  updateAdminUI();
-}
 
-function updateAdminUI() {
-  const adminBtn = document.getElementById("adminSettingsBtn");
-  if (adminBtn) adminBtn.style.display = isAdmin ? 'inline-block' : 'none';
-  
-  const addQuickLinkBtn = document.getElementById("addQuickLinkBtn");
-  if (addQuickLinkBtn) addQuickLinkBtn.style.display = isAdmin ? 'flex' : 'none';
-
-  if (typeof window.renderLinks === 'function') {
-    window.renderLinks();
+  let attemptedSilentSignIn = false;
+  async function attemptSilentSignIn() {
+    if (attemptedSilentSignIn) return;
+    attemptedSilentSignIn = true;
+    try {
+      const res = await fetch("/api/mint-firebase-token");
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.token) {
+        await firebase.auth().signInWithCustomToken(data.token);
+        // onAuthStateChanged below fires again and completes the boot.
+      } else {
+        console.log("Silent sign-in unavailable:", data.error || res.status);
+        showManualSignIn();
+      }
+    } catch (e) {
+      console.log("Silent sign-in failed (likely running locally without Access):", e);
+      showManualSignIn();
+    }
   }
+
+  // Show a lightweight "checking access" state immediately while the
+  // silent exchange runs, so the page isn't just blank.
+  if (gate) gate.style.display = "flex";
+
+  firebase.auth().onAuthStateChanged((user) => {
+    const isAuthorizedAdmin = !!(user && user.email && user.email.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN));
+
+    if (isAuthorizedAdmin) {
+      if (gate) gate.style.display = "none";
+      firebaseAuthReady = true;
+      boot();
+    } else if (user) {
+      // Signed into Firebase with the wrong account - sign back out.
+      firebase.auth().signOut();
+      showManualSignIn("That account isn't authorized for this hub.");
+    } else {
+      attemptSilentSignIn();
+    }
+  });
 }
 
-// ── Admin Modal Functions ──
-window.addAdminEmail = function() {
-  const input = document.getElementById("newAdminEmail");
-  const email = input.value.trim().toLowerCase();
-  if (!email || !email.includes("@")) return alert("Enter a valid email.");
-  if (globalAdmins.includes(email)) return alert("Already an admin.");
-  globalAdmins.push(email);
-  saveAdminsToFirebase();
-  input.value = "";
-}
-window.removeAdminEmail = function(email) {
-  if (email === "admin@revitalproductions.com") return;
-  if (!confirm(`Remove ${email} from admins?`)) return;
-  globalAdmins = globalAdmins.filter(e => e !== email);
-  saveAdminsToFirebase();
-}
+// boot() runs the rest of app init, but only once, and only after the
+// admin auth gate above has confirmed identity.
+let hasBooted = false;
+function boot() {
+  if (hasBooted) return;
+  hasBooted = true;
+  fetchCloudflareProfile();
+  try { initTabNavigation(); } catch(e) { console.error("TabNav Error:", e); }
+  try { initNavSectionToggles(); } catch(e) { console.error("NavSectionToggles Error:", e); }
+  try { initMobileNavigation(); } catch(e) { console.error("MobileNav Error:", e); }
+  try { initParentEventListeners(); } catch(e) { console.error("ParentListeners Error:", e); }
+  try { refreshAllViews(); } catch(e) { console.error("Refresh Error:", e); }
 
-// ── Theme & User Profile ──
-
-
-
-function updateUserProfile() {
-  const avatarEl = document.getElementById('userAvatar');
-  const emailEl = document.getElementById('userEmail');
-  if (!avatarEl || !emailEl) return;
-  
-  if (currentUserEmail) {
-    emailEl.textContent = currentUserEmail;
-    avatarEl.textContent = currentUserEmail.charAt(0).toUpperCase();
-  } else {
-    emailEl.textContent = "Ronald";
-    avatarEl.textContent = "R";
+  const resetSandboxBtn = document.getElementById("resetSandboxBtn");
+  if (resetSandboxBtn) {
+    resetSandboxBtn.addEventListener("click", () => {
+      const sandboxName = "Quick Sandbox (One-Offs)";
+      if (!confirm("Are you sure you want to clear all data in the Quick Sandbox? This will reset all checklist audits and competitor sheets back to blank templates.")) return;
+      clientsDb[sandboxName] = createClientBlankState(sandboxName);
+      saveDatabase();
+      refreshAllViews();
+      showBanner("success", "Quick Sandbox data cleared and reset successfully!");
+    });
   }
+
+  loadDatabase();
 }
 
 // ── PDF Generation ──
@@ -156,19 +201,11 @@ async function generateClientPDF() {
   btn.disabled = false;
 }
 
-function saveAdminsToFirebase() {
-  if (window.firebaseSetDoc && window.firebaseDb && window.firebaseDoc) {
-    window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb, "hub", "settings"), { admins: globalAdmins })
-      .then(() => renderAdminList())
-      .catch(err => console.error(err));
-  }
-}
-
-
 // ── Global Variables ──
 let clientsDb = {};
 let activeClientName = "";
 let iframeNeedsReload = {
+  "tab-adaccountsetup": true,
   "tab-uxui": true,
   "tab-seo": true,
   "tab-strategy": true,
@@ -178,7 +215,27 @@ let iframeNeedsReload = {
   "tab-webcomp": true,
   "tab-socialcomp": true,
   "tab-report": true,
-  "tab-copywriting": true
+  "tab-copywriting": true,
+  // These tool tabs previously had a hardcoded iframe src in index.html and
+  // were never wired into the reload system at all, so switching client
+  // workspaces never refreshed them - they kept showing whichever client
+  // was active when the page first loaded until a full page refresh.
+  "tab-portal": true,
+  "tab-intakerequest": true,
+  "tab-welcomeguide": true,
+  "tab-emailsig": true,
+  "tab-creativebrief": true,
+  "tab-contentaudit": true,
+  "tab-paidads": true,
+  "tab-emailstrategy": true,
+  "tab-campaignlaunch": true,
+  "tab-roiprojector": true,
+  "tab-sopwiki": true,
+  "tab-proposal": true,
+  "tab-intakequalifier": true,
+  "tab-discoverycall": true,
+  "tab-packagerecommend": true,
+  "tab-followuptracker": true
 };
 
 // ── Initial State Blueprint ──
@@ -193,8 +250,22 @@ function createClientBlankState(name) {
       id: item.id,
       label: item.label,
       checked: false,
-      notes: "" // local note for this task
+      notes: "", // local note for this task
+      // Explicit opt-in flag for whether this task shows on the client
+      // portal's onboarding checklist. Defaults to false (internal-only)
+      // unless the template item was already marked visible - nothing is
+      // shown to the client unless someone deliberately flags it.
+      clientVisible: item.clientVisible || false
     }))
+  }));
+
+  // Separate, client-facing checklist - fully independent of the internal
+  // onboarding tracker above. Managed per-client in the Client Portal
+  // Manager tool and shown as-is on the client's own portal.
+  const clientChecklist = DEFAULT_CLIENT_CHECKLIST.map(item => ({
+    id: item.id,
+    label: item.label,
+    checked: false
   }));
 
   // Clone SEO audit steps
@@ -273,6 +344,8 @@ function createClientBlankState(name) {
     clickupUrl: "",
     onboardingDate: today,
     onboardingChecklist: onboarding,
+    clientChecklist: clientChecklist,
+    reportArchive: [], // published monthly reports shown on the client portal
     uxuiAudit: uxuiAudit,
     seoAudit: seoAudit,
     paidAdsAudit: paidAdsAudit,
@@ -363,10 +436,18 @@ copywriting: {
       liveAnalyticsUrl: "",
       clientLogoUrl: "",
       clientContactName: "",
+      clientContactEmail: "",
       primaryColor: "#10b981",
       secondaryColor: "#6366f1",
-      magicToken: Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
-    }
+      magicToken: generateSecureToken()
+    },
+    // Content Approvals - deliverables awaiting a client decision
+    // (pendingApprovals) and ones they've already decided on
+    // (approvalHistory). Client-side decisions write straight to the
+    // public clients/{token} doc, same as clientChecklist - synced back
+    // into this real object by ensureClientPortalListeners below.
+    pendingApprovals: [],
+    approvalHistory: []
   };
 }
 
@@ -427,6 +508,20 @@ function migrateSchemaAndDefaults() {
 
 function getActiveClient() {
   return clientsDb[activeClientName];
+}
+
+// Cross-client accessor for tools that need to see every client at once
+// (e.g. the Proposal Follow-Up Tracker), rather than just the active one.
+function getAllClients() {
+  return clientsDb;
+}
+
+// Shared helper so embedded iframe tools can jump the user to another tab
+// (e.g. "Open Proposal Calculator" buttons) by clicking the real sidebar
+// button, which keeps all the existing tab-switch/reload logic intact.
+function navigateToTab(tabId) {
+  const btn = document.querySelector(`.nav-item-btn[data-tab="${tabId}"]`);
+  if (btn) btn.click();
 }
 
 // ── Workspace Switching & View Management ──
@@ -518,6 +613,57 @@ function refreshIframeTab(tabId) {
     case "tab-seo":
       renderSeoAudit();
       break;
+    case "tab-portal":
+      renderClientPortalManagerTab();
+      break;
+    case "tab-intakerequest":
+      renderIntakeRequest();
+      break;
+    case "tab-welcomeguide":
+      renderWelcomeGuide();
+      break;
+      case "tab-adaccountsetup":
+      renderAdAccountSetup();
+      break;
+    case "tab-emailsig":
+      renderEmailSigGenerator();
+      break;
+    case "tab-creativebrief":
+      renderCreativeBrief();
+      break;
+    case "tab-contentaudit":
+      renderContentAudit();
+      break;
+    case "tab-paidads":
+      renderPaidAdsAudit();
+      break;
+    case "tab-emailstrategy":
+      renderEmailStrategyAudit();
+      break;
+    case "tab-campaignlaunch":
+      renderCampaignLaunchChecklist();
+      break;
+    case "tab-intakequalifier":
+      renderIntakeQualifier();
+      break;
+    case "tab-discoverycall":
+      renderDiscoveryCallScript();
+      break;
+    case "tab-packagerecommend":
+      renderPackageRecommendationEngine();
+      break;
+    case "tab-followuptracker":
+      renderFollowUpTracker();
+      break;
+    case "tab-roiprojector":
+      renderRoiProjector();
+      break;
+    case "tab-sopwiki":
+      renderSopWiki();
+      break;
+    case "tab-proposal":
+      renderProposalCalculator();
+      break;
     case "tab-strategy":
       renderContentStrategy();
       break;
@@ -558,6 +704,22 @@ function initTabNavigation() {
       navButtons.forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
 
+      // If this button lives inside a collapsed section (e.g. activated
+      // programmatically via a dashboard quick link), expand it so the
+      // user can see where they landed.
+      const parentSection = btn.closest(".nav-section");
+      if (parentSection && parentSection.classList.contains("collapsed")) {
+        parentSection.classList.remove("collapsed");
+        const toggleBtn = parentSection.querySelector(".nav-section-toggle");
+        if (toggleBtn) toggleBtn.setAttribute("aria-expanded", "true");
+        const slug = parentSection.getAttribute("data-section");
+        if (slug) {
+          const current = new Set(getCollapsedNavSections());
+          current.delete(slug);
+          saveCollapsedNavSections(Array.from(current));
+        }
+      }
+
       sections.forEach(sec => {
         sec.classList.remove("active");
         if (sec.id === targetTab) {
@@ -589,8 +751,68 @@ function initTabNavigation() {
   });
 }
 
+// ── Collapsible Nav Sections ──
+const NAV_COLLAPSED_SECTIONS_KEY = "REVITAL_HUB_NAV_COLLAPSED_SECTIONS";
+
+function getCollapsedNavSections() {
+  try {
+    const stored = localStorage.getItem(NAV_COLLAPSED_SECTIONS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveCollapsedNavSections(collapsedSlugs) {
+  try {
+    localStorage.setItem(NAV_COLLAPSED_SECTIONS_KEY, JSON.stringify(collapsedSlugs));
+  } catch (e) {}
+}
+
+function initNavSectionToggles() {
+  const sections = document.querySelectorAll(".nav-section");
+  if (!sections.length) return;
+
+  const collapsedSlugs = new Set(getCollapsedNavSections());
+
+  // Don't collapse the section that contains the currently active tab,
+  // so the user always lands on a page that shows where they are.
+  const activeBtn = document.querySelector(".nav-item-btn.active");
+  const activeSection = activeBtn ? activeBtn.closest(".nav-section") : null;
+  const activeSlug = activeSection ? activeSection.getAttribute("data-section") : null;
+
+  sections.forEach(section => {
+    const slug = section.getAttribute("data-section");
+    const toggleBtn = section.querySelector(".nav-section-toggle");
+    if (!toggleBtn || !slug) return;
+
+    if (collapsedSlugs.has(slug) && slug !== activeSlug) {
+      section.classList.add("collapsed");
+      toggleBtn.setAttribute("aria-expanded", "false");
+    }
+
+    toggleBtn.addEventListener("click", () => {
+      const isCollapsed = section.classList.toggle("collapsed");
+      toggleBtn.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
+
+      const current = new Set(getCollapsedNavSections());
+      if (isCollapsed) {
+        current.add(slug);
+      } else {
+        current.delete(slug);
+      }
+      saveCollapsedNavSections(Array.from(current));
+    });
+  });
+}
+
 // ── View Refresh Controllers ──
 function refreshAllViews() {
+  // Keep one live listener per client with a magic link so client-driven
+  // checklist changes reach the agency side immediately, not just as a
+  // side effect of the admin happening to save something.
+  try { ensureClientPortalListeners(); } catch (e) {}
+
   // Toggle Sandbox Banner
   const sandboxName = "Quick Sandbox (One-Offs)";
   const banner = document.getElementById("sandboxBanner");
@@ -846,7 +1068,12 @@ function renderDashboard() {
     let filledPbFields = 0;
     let totalPbFields = 0;
     
-    // Simplistic check: count all string properties that are not empty
+    // Simplistic check: count all string properties that are not empty.
+    // "platforms" is deliberately skipped here and counted separately below,
+    // because the builder auto-seeds a default (empty) LinkedIn platform row
+    // the moment the tab is opened -- counting the array itself as "filled"
+    // just because it's non-empty produced a false-positive percentage even
+    // when the user hadn't entered anything.
     const countFields = (obj) => {
       if (typeof obj === 'string') {
         totalPbFields++;
@@ -855,7 +1082,10 @@ function renderDashboard() {
         totalPbFields++;
         if (obj.length > 0) filledPbFields++;
       } else if (typeof obj === 'object' && obj !== null) {
-        Object.values(obj).forEach(countFields);
+        Object.entries(obj).forEach(([key, val]) => {
+          if (key === 'platforms') return;
+          countFields(val);
+        });
       }
     };
     countFields(client.personalBranding.data);
@@ -1069,8 +1299,6 @@ function renderOnboardingChecklist() {
         }, 50);
       });
 
-
-
       stack.appendChild(card);
     });
 
@@ -1108,11 +1336,14 @@ function renderOnboardingChecklist() {
 function setIframeAbsoluteSrc(iframeSelector, relativeFallbackPath) {
   const iframe = document.querySelector(iframeSelector);
   if (iframe) {
-    const rawSrc = iframe.getAttribute('src') || relativeFallbackPath;
-    const newSrc = new URL(rawSrc, window.location.href).href;
-    if (iframe.src !== newSrc) {
-      iframe.src = newSrc;
-    }
+    const newSrc = new URL(relativeFallbackPath, window.location.href).href;
+    // Force an actual reload every time this is called (called only when a
+    // tab is freshly navigated to, or right after switching the active
+    // client) so the tool inside always re-reads getActiveClient() fresh.
+    // Re-assigning the exact same src string is a no-op in browsers, so
+    // clear it first.
+    iframe.src = "about:blank";
+    iframe.src = newSrc;
   }
 }
 
@@ -1124,6 +1355,91 @@ function renderUxuiAudit() {
 // ── SEO Audit Suite Controller ──
 function renderSeoAudit() {
   setIframeAbsoluteSrc('#tab-seo iframe', "seo-audit-checklist/index.html");
+}
+
+// ── Client Portal Manager Controller ──
+function renderClientPortalManagerTab() {
+  setIframeAbsoluteSrc('#tab-portal iframe', "client-portal-manager/index.html");
+}
+
+// ── Intake Request Controller ──
+function renderIntakeRequest() {
+  setIframeAbsoluteSrc('#tab-intakerequest iframe', "intake-request/index.html");
+}
+
+// ── Client Welcome Guide Controller ──
+function renderWelcomeGuide() {
+  setIframeAbsoluteSrc('#tab-welcomeguide iframe', "client-welcome-guide/index.html");
+}
+
+// ── Email Signature Generator Controller ──
+function renderEmailSigGenerator() {
+  setIframeAbsoluteSrc('#tab-emailsig iframe', "email-signature-generator/index.html");
+}
+
+// ── Creative Brief Generator Controller ──
+function renderCreativeBrief() {
+  setIframeAbsoluteSrc('#tab-creativebrief iframe', "creative-brief-generator/index.html");
+}
+
+// ── Content Audit Controller ──
+function renderContentAudit() {
+  setIframeAbsoluteSrc('#tab-contentaudit iframe', "content-audit/index.html");
+}
+
+// ── Paid Ads Audit Controller ──
+function renderPaidAdsAudit() {
+  setIframeAbsoluteSrc('#tab-paidads iframe', "paid-ads-audit/index.html");
+}
+
+// ── Email Marketing Audit Controller ──
+function renderEmailStrategyAudit() {
+  setIframeAbsoluteSrc('#tab-emailstrategy iframe', "email-marketing-audit/index.html?v=1.0");
+}
+
+// ── Campaign Launch Checklist Controller ──
+function renderCampaignLaunchChecklist() {
+  setIframeAbsoluteSrc('#tab-campaignlaunch iframe', "campaign-launch-checklist/index.html");
+}
+
+// ── Client Intake Pre-Qualifier Controller ──
+function renderIntakeQualifier() {
+  setIframeAbsoluteSrc('#tab-intakequalifier iframe', "intake-prequalifier/index.html");
+}
+
+// ── Discovery Call Script Controller ──
+function renderDiscoveryCallScript() {
+  setIframeAbsoluteSrc('#tab-discoverycall iframe', "discovery-call-script/index.html");
+}
+
+// ── Ad Account Setup Controller ──
+function renderAdAccountSetup() {
+  setIframeAbsoluteSrc('#tab-adaccountsetup iframe', "ad-account-setup/index.html");
+}
+
+// ── Package Recommendation Engine Controller ──
+function renderPackageRecommendationEngine() {
+  setIframeAbsoluteSrc('#tab-packagerecommend iframe', "package-recommendation-engine/index.html");
+}
+
+// ── Proposal Follow-Up Sequence Tracker Controller ──
+function renderFollowUpTracker() {
+  setIframeAbsoluteSrc('#tab-followuptracker iframe', "proposal-followup-tracker/index.html");
+}
+
+// ── ROI Projector Controller ──
+function renderRoiProjector() {
+  setIframeAbsoluteSrc('#tab-roiprojector iframe', "roi-projector/index.html");
+}
+
+// ── SOP Wiki Controller ──
+function renderSopWiki() {
+  setIframeAbsoluteSrc('#tab-sopwiki iframe', "sop-wiki/index.html?v=1.7");
+}
+
+// ── Proposal Calculator Controller ──
+function renderProposalCalculator() {
+  setIframeAbsoluteSrc('#tab-proposal iframe', "proposal-calculator/index.html?v=10");
 }
 
 // ── Content Strategy Guide Controller ──
@@ -1353,7 +1669,8 @@ function initParentEventListeners() {
           id: newId,
           label: label,
           checked: false,
-          notes: ""
+          notes: "",
+          clientVisible: false
         });
         saveDatabase();
         labelInput.value = "";
@@ -1378,7 +1695,8 @@ function initParentEventListeners() {
           id: item.id,
           label: item.label,
           checked: false,
-          notes: ""
+          notes: "",
+          clientVisible: item.clientVisible || false
         }))
       }));
 
@@ -1558,19 +1876,17 @@ function fetchCloudflareProfile() {
       if (data && data.email && data.email !== 'Guest') {
         const userEmailEl = document.getElementById('userEmail');
         const userAvatarEl = document.getElementById('userAvatar');
-        const userRoleEl = document.getElementById('userRole');
         
         // Extract username from email
         let displayName = data.email;
         if (data.email.includes('@')) {
-          let username = data.email.split('@')[0];
-          // Replace dots and underscores with spaces
-          username = username.replace(/[._]/g, ' ');
-          // Capitalize each word
-          displayName = username.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+          const username = data.email.split('@')[0];
+          // Capitalize first letter
+          displayName = username.charAt(0).toUpperCase() + username.slice(1);
           
+          // Force 'Ronald' to show as 'Admin'
           if (displayName.toLowerCase() === 'ronald') {
-            if (userRoleEl) userRoleEl.style.display = 'block';
+            displayName = 'Admin';
           }
         }
         
@@ -1578,47 +1894,15 @@ function fetchCloudflareProfile() {
         if (userAvatarEl) {
           userAvatarEl.textContent = displayName.charAt(0).toUpperCase();
         }
-      } else {
-        // Fallback for Guest
-        const userEmailEl = document.getElementById('userEmail');
-        const userAvatarEl = document.getElementById('userAvatar');
-        if (userEmailEl) userEmailEl.textContent = "Team Member";
-        if (userAvatarEl) userAvatarEl.textContent = "T";
       }
     })
-    .catch(err => {
-      console.log('Running locally or no Cloudflare Access headers present.', err);
-      // Fallback
-      const userEmailEl = document.getElementById('userEmail');
-      const userAvatarEl = document.getElementById('userAvatar');
-      if (userEmailEl && userEmailEl.textContent === 'Ronald') {
-         userEmailEl.textContent = "Admin";
-      }
-    });
+    .catch(err => console.log('Running locally or no Cloudflare Access headers present.', err));
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  fetchCloudflareProfile();
-  try { initTabNavigation(); } catch(e) { console.error("TabNav Error:", e); }
-  try { initMobileNavigation(); } catch(e) { console.error("MobileNav Error:", e); }
-  try { initParentEventListeners(); } catch(e) { console.error("ParentListeners Error:", e); }
-  try { refreshAllViews(); } catch(e) { console.error("Refresh Error:", e); }
-
-  // Reset Sandbox Button listener
-  const resetSandboxBtn = document.getElementById("resetSandboxBtn");
-  if (resetSandboxBtn) {
-    resetSandboxBtn.addEventListener("click", () => {
-      const sandboxName = "Quick Sandbox (One-Offs)";
-      if (!confirm("Are you sure you want to clear all data in the Quick Sandbox? This will reset all checklist audits and competitor sheets back to blank templates.")) return;
-      clientsDb[sandboxName] = createClientBlankState(sandboxName);
-      saveDatabase();
-      refreshAllViews();
-      showBanner("success", "Quick Sandbox data cleared and reset successfully!");
-    });
-  }
-  
-  // Call loadDatabase AFTER DOM is ready and Module scripts are loaded
-  loadDatabase();
+  // Require Firebase sign-in as the admin account before booting the hub
+  // (checkIdentity/boot logic lives in initAdminAuthGate() -> boot()).
+  initAdminAuthGate();
 });
 
 // ── Brand Vault Controllers ──
@@ -1773,10 +2057,37 @@ function saveBrandVault() {
 // ── Firebase Cloud Sync ──
 let isInitialLoad = true;
 
+function backfillMissingClientChecklists() {
+  // Clients created before the client-facing checklist feature shipped
+  // never got a clientChecklist array. Client Portal Manager backfills it,
+  // but only for a client the admin has actually opened that tool for -
+  // any client that hasn't been visited there yet silently syncs an empty
+  // checklist to its portal, which just looks blank to the client with no
+  // explanation. Backfill here so every client gets the starter checklist
+  // regardless of whether Client Portal Manager has been opened for them.
+  let changed = false;
+  Object.values(clientsDb).forEach(client => {
+    if (client && !Array.isArray(client.clientChecklist)) {
+      client.clientChecklist = DEFAULT_CLIENT_CHECKLIST.map(item => ({
+        id: item.id,
+        label: item.label,
+        checked: false
+      }));
+      changed = true;
+    }
+  });
+  return changed;
+}
+
+let _cloudSaveDebounceTimer = null;
+
 function saveDatabase() {
-  // 1. Save locally as fallback
+  // 1. Save locally as fallback - always instant, never debounced, so nothing
+  // is lost even if the tab closes before the debounced cloud write below
+  // fires.
+  backfillMissingClientChecklists();
   localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
-  
+
   // 2. Trigger Autosave UI indicator
   const indicator = document.getElementById("autosaveIndicator");
   if (indicator) {
@@ -1784,41 +2095,390 @@ function saveDatabase() {
     indicator.style.opacity = "1";
   }
 
-  // 3. Save to Firebase
-  if (window.firebaseSetDoc && window.firebaseDoc && window.firebaseDb) {
-    const docRef = window.firebaseDoc(window.firebaseDb, "agency", "clientsDb");
-    const cleanDb = JSON.parse(JSON.stringify(clientsDb));
-    
-    // Add a manual timeout to detect hanging
-    let resolved = false;
-    setTimeout(() => {
-      if (!resolved && indicator) {
-        indicator.innerHTML = "Cloud Timeout ❌";
-        setTimeout(() => { indicator.style.opacity = "0"; }, 3000);
-      }
-    }, 10000);
+  // 3. Debounce the actual cloud write (see comment above this function).
+  if (_cloudSaveDebounceTimer) clearTimeout(_cloudSaveDebounceTimer);
+  _cloudSaveDebounceTimer = setTimeout(() => {
+    _cloudSaveDebounceTimer = null;
+    commitDatabaseToCloud();
+  }, 500);
+}
 
-    window.firebaseSetDoc(docRef, cleanDb).then(() => {
-      resolved = true;
-      if (indicator) {
-        indicator.innerHTML = "Saved to Cloud ✅";
-        setTimeout(() => { indicator.style.opacity = "0"; }, 2000);
-      }
-    }).catch(err => {
-      resolved = true;
-      console.error("Firebase save failed:", err);
-      if (indicator) {
-        indicator.innerHTML = "Cloud Error ❌: " + err.message;
-        setTimeout(() => { indicator.style.opacity = "0"; }, 5000);
-      }
-    });
-  } else {
+// ── clientsDb Firestore storage (sharded) ──
+//
+// HISTORY: clientsDb lived in a single agency/clientsDb document holding
+// every client's full state (onboarding, audits, competitor grids,
+// proposals, etc.) keyed by client name. That's the same single-document
+// pattern that caused the SOP & Wiki Library to hit Firestore's
+// 1,048,576-byte per-document hard limit once its combined content grew
+// past it - every save AND every load started failing, invisibly, until
+// someone happened to notice. clientsDb is well under that limit today
+// (roughly 15% as of this writing), but the failure mode when it
+// eventually crosses it is identical.
+//
+// FIX: the same sharding approach used for the SOP wiki. clientsDb is
+// bin-packed by client key across as many agency/clientsDb-shard-N
+// documents as needed to keep each one safely under a byte threshold,
+// plus one tiny agency/clientsDbShardMeta document ({ count: N })
+// tracking how many shards currently exist. Every shard is still a single
+// document directly under /agency/, so this needs no Firestore rules
+// changes. Everything else - loadDatabase(), saveDatabase(), every screen
+// that reads or writes clientsDb - keeps working against the same
+// in-memory `clientsDb` object as before and doesn't need to know shards
+// exist at all.
+const CLIENTS_DB_SHARD_PREFIX = "clientsDb-shard-";
+const CLIENTS_DB_MAX_SHARD_BYTES = 700000;
+
+let clientsDbShardData = {};          // { [shardIndex]: { clientName: state, ... } }
+let clientsDbShardUnsubscribers = [];
+let lastKnownClientsDbShardCount = 0;
+
+function getClientsDbShardMetaDocRef() {
+  if (!window.firebaseDb || !window.firebaseDoc) return null;
+  return window.firebaseDoc(window.firebaseDb, "agency", "clientsDbShardMeta");
+}
+
+function getClientsDbShardDocRef(shardIndex) {
+  if (!window.firebaseDb || !window.firebaseDoc) return null;
+  return window.firebaseDoc(window.firebaseDb, "agency", CLIENTS_DB_SHARD_PREFIX + shardIndex);
+}
+
+// Legacy pre-sharding location. Only ever read once, during the one-time
+// migration in loadDatabase() below - never written to again after that.
+function getLegacyClientsDbDocRef() {
+  if (!window.firebaseDb || !window.firebaseDoc) return null;
+  return window.firebaseDoc(window.firebaseDb, "agency", "clientsDb");
+}
+
+// Greedily bin-packs clientsDb's entries into shard-sized chunks, each
+// kept under CLIENTS_DB_MAX_SHARD_BYTES when serialized the same way
+// it's actually saved.
+function packClientsDbIntoShards(fullDb) {
+  const entries = Object.entries(fullDb);
+  const shards = [];
+  let current = {};
+  let currentCount = 0;
+  for (const [key, value] of entries) {
+    const trial = Object.assign({}, current, { [key]: value });
+    const size = new Blob([JSON.stringify(trial)]).size;
+    if (size > CLIENTS_DB_MAX_SHARD_BYTES && currentCount > 0) {
+      shards.push(current);
+      current = { [key]: value };
+      currentCount = 1;
+    } else {
+      current = trial;
+      currentCount++;
+    }
+  }
+  if (currentCount > 0 || shards.length === 0) shards.push(current);
+  return shards;
+}
+
+function rebuildClientsDbFromShards() {
+  const merged = {};
+  for (let i = 0; i < lastKnownClientsDbShardCount; i++) {
+    if (clientsDbShardData[i] && typeof clientsDbShardData[i] === 'object') {
+      Object.assign(merged, clientsDbShardData[i]);
+    }
+  }
+
+  const cloudStr = JSON.stringify(merged);
+  const localStr = JSON.stringify(clientsDb);
+  if (cloudStr === localStr) return;
+
+  clientsDb = merged;
+  localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
+
+  if (!clientsDb[activeClientName]) {
+    activeClientName = Object.keys(clientsDb)[0] || "";
+  }
+
+  buildClientDropdown();
+  refreshAllViews();
+  renderDashboard();
+}
+
+function listenToClientsDbShard(shardIndex) {
+  const docRef = getClientsDbShardDocRef(shardIndex);
+  if (!docRef || !window.firebaseOnSnapshot) return;
+  const unsubscribe = window.firebaseOnSnapshot(docRef, (docSnap) => {
+    // Skip echoes of our own unconfirmed writes for this shard - if the
+    // admin is actively editing (every keystroke triggers a debounced
+    // save), a later keystroke can update clientsDb in memory before an
+    // earlier keystroke's echo arrives here, and applying that stale
+    // echo would clobber the newer edit.
+    if (docSnap.metadata && docSnap.metadata.hasPendingWrites) return;
+    clientsDbShardData[shardIndex] = docSnap.exists ? docSnap.data() : {};
+    rebuildClientsDbFromShards();
+  }, (err) => {
+    console.error("clientsDb shard listener error:", err);
+    showBanner("error", "Couldn't sync with the cloud database: " + err.message);
+  });
+  clientsDbShardUnsubscribers.push(unsubscribe);
+}
+
+function setClientsDbShardListenerCount(count) {
+  if (count === lastKnownClientsDbShardCount && clientsDbShardUnsubscribers.length === count) return;
+  clientsDbShardUnsubscribers.forEach(unsubscribe => {
+    if (typeof unsubscribe === 'function') unsubscribe();
+  });
+  clientsDbShardUnsubscribers = [];
+  clientsDbShardData = {};
+  lastKnownClientsDbShardCount = count;
+  for (let i = 0; i < count; i++) listenToClientsDbShard(i);
+}
+
+function commitDatabaseToCloud() {
+  const indicator = document.getElementById("autosaveIndicator");
+
+  if (!(window.firebaseSetDoc && window.firebaseDoc && window.firebaseDb)) {
     // Firebase is not loaded!
     if (indicator) {
       indicator.innerHTML = "Firebase Not Loaded ❌";
       setTimeout(() => { indicator.style.opacity = "0"; }, 3000);
     }
+    return;
   }
+
+  const cleanDb = JSON.parse(JSON.stringify(clientsDb));
+  const shards = packClientsDbIntoShards(cleanDb);
+
+  const writes = shards.map((shardObj, i) => {
+    const docRef = getClientsDbShardDocRef(i);
+    return window.firebaseSetDoc(docRef, shardObj);
+  });
+
+  // If the client list just got shorter (client deleted) and now needs
+  // fewer shards than last time, blank out the now-unused trailing shard
+  // documents instead of leaving stale client data sitting in them.
+  for (let i = shards.length; i < lastKnownClientsDbShardCount; i++) {
+    const docRef = getClientsDbShardDocRef(i);
+    writes.push(window.firebaseSetDoc(docRef, {}));
+  }
+
+  const metaRef = getClientsDbShardMetaDocRef();
+  writes.push(window.firebaseSetDoc(metaRef, { count: shards.length }));
+
+  // Add a manual timeout to detect hanging
+  let resolved = false;
+  setTimeout(() => {
+    if (!resolved && indicator) {
+      indicator.innerHTML = "Cloud Timeout ❌";
+      setTimeout(() => { indicator.style.opacity = "0"; }, 3000);
+    }
+  }, 10000);
+
+  Promise.all(writes).then(() => {
+    resolved = true;
+    if (indicator) {
+      indicator.innerHTML = "Saved to Cloud ✅";
+      setTimeout(() => { indicator.style.opacity = "0"; }, 2000);
+    }
+  }).catch(err => {
+    resolved = true;
+    console.error("Firebase save failed:", err);
+    if (indicator) {
+      indicator.innerHTML = "Cloud Error ❌: " + err.message;
+      setTimeout(() => { indicator.style.opacity = "0"; }, 5000);
+    }
+  });
+
+  // Mirror only the portal-facing subset of each client into its own
+  // public document (see syncPublicPortalDocs). The full clientsDb data
+  // above is admin-only under Firestore rules; this is what the
+  // unauthenticated client portal is allowed to read.
+  syncPublicPortalDocs(cleanDb).catch(err => {
+    console.error("Public portal sync failed:", err);
+  });
+}
+
+// Push the portal-facing subset (branding + checklist) of every client that
+// has an active magic link out to clients/{magicToken}. That document's ID
+// *is* the capability token: Firestore rules allow anyone to GET a single
+// doc by its exact ID but never LIST the collection, so only someone
+// holding the actual magic link can read a given client's portal data.
+// Non-portal fields (proposals, SEO audits, internal notes, etc.) never
+// leave the admin-only agency/clientsDb document.
+function foldInOnboardingChecked(targetCategories, existingCategories) {
+  if (!Array.isArray(targetCategories) || !Array.isArray(existingCategories)) return false;
+  const checkedIds = new Set();
+  existingCategories.forEach(cat => (cat.items || []).forEach(item => {
+    if (item.checked) checkedIds.add(item.id);
+  }));
+  let changed = false;
+  targetCategories.forEach(cat => (cat.items || []).forEach(item => {
+    if (checkedIds.has(item.id) && !item.checked) {
+      item.checked = true;
+      changed = true;
+    }
+  }));
+  return changed;
+}
+
+function foldInClientChecklistChecked(targetItems, existingItems) {
+  if (!Array.isArray(targetItems) || !Array.isArray(existingItems)) return false;
+  const checkedIds = new Set(existingItems.filter(item => item.checked).map(item => item.id));
+  let changed = false;
+  targetItems.forEach(item => {
+    if (checkedIds.has(item.id) && !item.checked) {
+      item.checked = true;
+      changed = true;
+    }
+  });
+  return changed;
+}
+
+// Pull any approval decisions the client already made (which write
+// straight to the public clients/{token} doc, same as the checklist) into
+// a target object with .pendingApprovals / .approvalHistory arrays -
+// moving the decided item out of pending and into history. Works whether
+// "target" is the real live client object (ensureClientPortalListeners)
+// or a throwaway wrapper around an outgoing-write clone
+// (syncPublicPortalDocs), since both just need their two array
+// properties reassigned in place.
+function foldInApprovalDecisions(target, publicData) {
+  if (!target || !publicData || !Array.isArray(publicData.approvalHistory)) return false;
+  if (!Array.isArray(target.pendingApprovals)) target.pendingApprovals = [];
+  if (!Array.isArray(target.approvalHistory)) target.approvalHistory = [];
+
+  const knownIds = new Set(target.approvalHistory.map(a => a.id));
+  let changed = false;
+
+  publicData.approvalHistory.forEach(entry => {
+    if (!knownIds.has(entry.id)) {
+      target.approvalHistory = target.approvalHistory.concat([entry]);
+      target.pendingApprovals = target.pendingApprovals.filter(p => p.id !== entry.id);
+      changed = true;
+    }
+  });
+
+  return changed;
+}
+
+async function syncPublicPortalDocs(dbSnapshot) {
+  if (!window.firebaseDb || !window.firebaseDb.collection) return;
+
+  const entries = Object.entries(dbSnapshot).filter(
+    ([, client]) => client && client.portalConfig && client.portalConfig.magicToken
+  );
+
+  for (const [name, client] of entries) {
+    const token = client.portalConfig.magicToken;
+    const publicRef = window.firebaseDb.collection("clients").doc(token);
+    const localChecklist = client.onboardingChecklist || client.onboarding || [];
+    const localClientChecklist = client.clientChecklist || [];
+    const approvalsWrapper = {
+      pendingApprovals: client.pendingApprovals || [],
+      approvalHistory: client.approvalHistory || []
+    };
+
+    try {
+      // Fold in any checklist progress (and approval decisions) the client
+      // already made directly on the portal so this save doesn't stomp on
+      // it. (Pulling that progress into the real, live clientsDb so the
+      // admin side actually SEES it is handled separately and continuously
+      // by ensureClientPortalListeners below - not tied to whether the
+      // admin happens to save something.)
+      const existing = await publicRef.get();
+      if (existing.exists) {
+        const existingData = existing.data();
+        foldInOnboardingChecked(localChecklist, existingData.onboardingChecklist);
+        foldInClientChecklistChecked(localClientChecklist, existingData.clientChecklist);
+        foldInApprovalDecisions(approvalsWrapper, existingData);
+      }
+    } catch (e) {
+      console.warn("Could not read existing public portal doc for", name, e);
+    }
+
+    const projection = {
+      portalConfig: client.portalConfig,
+      onboardingChecklist: localChecklist,
+      clientChecklist: localClientChecklist,
+      pendingApprovals: approvalsWrapper.pendingApprovals,
+      approvalHistory: approvalsWrapper.approvalHistory,
+      // Published report snapshots (see competitor-analysis/script.js's
+      // publishToClientPortal). Admin-only to create - clients never write
+      // this field, so no fold-in-existing-progress step is needed here
+      // the way there is for the two checklists above.
+      reportArchive: client.reportArchive || []
+    };
+
+    publicRef.set(projection).catch(err => {
+      console.error("Public portal doc write failed for", name, err);
+    });
+  }
+}
+
+// ── Live sync: client-side checklist changes -> agency side ──
+// The client portal writes checklist checkbox changes directly to its own
+// clients/{token} doc (see updateFirebaseChecklist in portal/js/app.js) -
+// that write never goes through the admin's saveDatabase()/clientsDb at
+// all. Without a listener dedicated to watching for that, the agency side
+// only ever found out about it as an incidental side effect of the admin
+// happening to save something else - which is why checking a box on the
+// client portal didn't reliably (or promptly) show up here. This keeps one
+// real-time listener per client with an active magic link, purely to pull
+// client-driven checklist progress back into the real clientsDb the
+// moment it happens.
+const portalListenerUnsubscribers = {};
+
+function ensureClientPortalListeners() {
+  if (!window.firebaseDb || !window.firebaseOnSnapshot || !window.firebaseDoc) return;
+
+  const activeTokens = new Set();
+
+  Object.entries(clientsDb).forEach(([name, client]) => {
+    if (!client || !client.portalConfig || !client.portalConfig.magicToken) return;
+    const token = client.portalConfig.magicToken;
+    activeTokens.add(token);
+
+    if (portalListenerUnsubscribers[token]) return; // already listening
+
+    const docRef = window.firebaseDoc(window.firebaseDb, "clients", token);
+    const unsubscribe = window.firebaseOnSnapshot(docRef, (docSnap) => {
+      if (!docSnap.exists) return;
+      // Skip echoes of the admin's own not-yet-confirmed writes to this
+      // same doc (from syncPublicPortalDocs above) - only react to changes
+      // that actually came from somewhere else (the client's own portal).
+      if (docSnap.metadata && docSnap.metadata.hasPendingWrites) return;
+
+      const data = docSnap.data();
+      const currentClient = clientsDb[name];
+      if (!currentClient) return;
+
+      const changedOnboarding = foldInOnboardingChecked(currentClient.onboardingChecklist, data.onboardingChecklist);
+      const changedClientChecklist = foldInClientChecklistChecked(currentClient.clientChecklist, data.clientChecklist);
+      const changedApprovals = foldInApprovalDecisions(currentClient, data);
+
+      if (changedOnboarding || changedClientChecklist || changedApprovals) {
+        localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
+        try { renderOnboardingChecklist(); } catch (e) {}
+        try { renderDashboard(); } catch (e) {}
+        try {
+          if (typeof iframeNeedsReload !== "undefined" && iframeNeedsReload["tab-portal"] !== undefined) {
+            iframeNeedsReload["tab-portal"] = true;
+            const activeTabBtn = document.querySelector(".nav-item-btn.active");
+            const activeTab = activeTabBtn ? activeTabBtn.getAttribute("data-tab") : "";
+            if (activeTab === "tab-portal" && activeClientName === name) {
+              refreshIframeTab("tab-portal");
+            }
+          }
+        } catch (e) {}
+      }
+    }, (err) => {
+      console.error("Portal listener error for", name, err);
+    });
+
+    portalListenerUnsubscribers[token] = unsubscribe;
+  });
+
+  // Stop listening for tokens that no longer belong to any client (deleted
+  // client, or a regenerated magic link).
+  Object.keys(portalListenerUnsubscribers).forEach(token => {
+    if (!activeTokens.has(token)) {
+      try { portalListenerUnsubscribers[token](); } catch (e) {}
+      delete portalListenerUnsubscribers[token];
+    }
+  });
 }
 
 function loadDatabase() {
@@ -1845,38 +2505,61 @@ function loadDatabase() {
     activeClientName = defaultName;
   }
 
-  // 2. Setup Firebase real-time listener
-  if (window.firebaseOnSnapshot && window.firebaseDoc && window.firebaseDb) {
-    const docRef = window.firebaseDoc(window.firebaseDb, "agency", "clientsDb");
-    window.firebaseOnSnapshot(docRef, (docSnap) => {
-      if (docSnap.exists) {
-        const cloudData = docSnap.data();
-        
-        const cloudStr = JSON.stringify(cloudData);
-        const localStr = JSON.stringify(clientsDb);
-        
-        if (cloudStr !== localStr) {
-          clientsDb = cloudData;
+  // Self-heal any client missing a clientChecklist (see
+  // backfillMissingClientChecklists) and push the fix out immediately so
+  // it doesn't sit unsynced until the next unrelated edit.
+  if (backfillMissingClientChecklists()) {
+    saveDatabase();
+  }
+
+  // Render immediately with whatever we have (localStorage cache or the
+  // seeded default) so the dropdown is never left empty while we wait on
+  // the network. The Firestore listener below will re-render again once
+  // cloud data arrives, whether or not it differs from this first render.
+  buildClientDropdown();
+  refreshAllViews();
+  renderDashboard();
+
+    // 2. Setup Firebase real-time listener (sharded - see the
+  // "clientsDb Firestore storage (sharded)" comment block above
+  // commitDatabaseToCloud for why).
+  if (window.firebaseOnSnapshot && window.firebaseDoc && window.firebaseDb && window.firebaseGetDoc) {
+    const metaRef = getClientsDbShardMetaDocRef();
+    window.firebaseOnSnapshot(metaRef, async (metaSnap) => {
+      if (metaSnap.exists && typeof metaSnap.data().count === 'number') {
+        setClientsDbShardListenerCount(metaSnap.data().count);
+        return;
+      }
+
+      // No shard metadata yet - either a brand-new install, or a Hub
+      // still on the old single-document format that needs a one-time
+      // migration into shards.
+      try {
+        const legacyRef = getLegacyClientsDbDocRef();
+        const legacySnap = legacyRef ? await window.firebaseGetDoc(legacyRef) : null;
+        if (legacySnap && legacySnap.exists) {
+          clientsDb = legacySnap.data();
           localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
-          
           if (!clientsDb[activeClientName]) {
             activeClientName = Object.keys(clientsDb)[0] || "";
           }
-          
           buildClientDropdown();
           refreshAllViews();
           renderDashboard();
         }
-      } else {
-        // Doc doesn't exist yet, we push our local DB to seed it
-        saveDatabase();
+        // Writes the migrated (or first-ever, brand-new-install) state
+        // into shards + shard metadata. The metadata write above will
+        // re-trigger this listener with metaSnap.exists === true next
+        // time, switching over to the normal per-shard listeners.
+        commitDatabaseToCloud();
+      } catch (err) {
+        console.error("clientsDb migration failed:", err);
+        showBanner("error", "Couldn't migrate the client database to the new format: " + err.message);
       }
+    }, (err) => {
+      console.error("clientsDb shard meta listener error:", err);
+      showBanner("error", "Couldn't sync with the cloud database: " + err.message);
     });
-  } else {
-    // No firebase, just render
-    buildClientDropdown();
-    refreshAllViews();
-    renderDashboard();
   }
 }
 

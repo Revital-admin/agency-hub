@@ -30,7 +30,7 @@ window.addEventListener('error', function(e) {
   <!-- Main App (Hidden until loaded) -->
   
   <!-- Mobile Header -->
-  <header class="mobile-header" style="display: none;">
+  <header class="mobile-header">
     <button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Open Navigation">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <line x1="3" y1="12" x2="21" y2="12"></line>
@@ -60,7 +60,6 @@ window.addEventListener('error', function(e) {
           </svg>
         </button>
       </div>
-      </div>
 
       <nav class="sidebar-nav">
         <button class="nav-btn active" data-target="view-dashboard">
@@ -87,6 +86,23 @@ window.addEventListener('error', function(e) {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
           Completed Work
         </button>
+        <button class="nav-btn" data-target="view-monthlyreports" id="navMonthlyReports" style="display:none;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"></path><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"></path></svg>
+          Monthly Reports
+        </button>
+        <button class="nav-btn" data-target="view-approvals" id="navApprovals" style="display:none;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+          Approvals
+          <span id="navApprovalsBadge" class="nav-badge" style="display:none;">0</span>
+        </button>
+        <button class="nav-btn" data-target="view-guide" id="navGuide">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+          Guide &amp; FAQ
+        </button>
+        <button class="nav-btn" data-target="view-referral" id="navReferral">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="8" width="18" height="4" rx="1"></rect><path d="M12 8v13"></path><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"></path><path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8"></path><path d="M16.5 8a2.5 2.5 0 0 0 0-5C13 3 12 8 12 8"></path></svg>
+          Referral Program
+        </button>
       </nav>
 
       <!-- First Week Checklist Widget -->
@@ -109,6 +125,14 @@ window.addEventListener('error', function(e) {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
             Submit Content Request
           </a>
+          <a href="#" id="btnUploadFiles" class="btn-secondary" target="_blank" style="display:none; text-align:left; justify-content: flex-start; gap: 8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            Upload Files
+          </a>
+          <a href="#" id="btnDriveFolder" class="btn-secondary" target="_blank" style="display:none; text-align:left; justify-content: flex-start; gap: 8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            Google Drive Folder
+          </a>
         </div>
       </div>
 
@@ -120,6 +144,7 @@ window.addEventListener('error', function(e) {
           <div>
             <strong id="amName">Account Manager</strong>
             <a href="#" id="amEmail">Email Support</a>
+            <a href="#" id="amPhone" style="display:none;">Call/Text</a>
           </div>
         </div>
         <a href="#" id="btnBookCall" class="btn-primary" target="_blank" style="display:none;">Book a Call</a>
@@ -183,6 +208,21 @@ window.addEventListener('error', function(e) {
             <a href="#" id="btnFeedback" class="btn-secondary" target="_blank" style="display:none;">Submit Feedback</a>
           </div>
         </header>
+        
+        <div id="brandKitContainer" style="display:none; margin-bottom:24px; padding:20px; background:var(--color-bg-elevated); border:1px solid var(--color-border); border-radius:12px;">
+          <h3 style="margin:0 0 16px 0;">Brand Colors & Typography</h3>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+            <div>
+              <h4 style="font-size:12px; color:var(--color-text-secondary); margin-bottom:8px; text-transform:uppercase;">Brand Colors</h4>
+              <div style="display:flex; gap:12px;" id="brandColorsList"></div>
+            </div>
+            <div>
+              <h4 style="font-size:12px; color:var(--color-text-secondary); margin-bottom:8px; text-transform:uppercase;">Typography & Voice</h4>
+              <div id="typographyInfo" style="font-size:14px;"></div>
+            </div>
+          </div>
+          <div style="margin-top:24px;" id="brandLogoLink"></div>
+        </div>
         <div class="iframe-wrapper full-height">
           <iframe id="projectsIframe" src="" frameborder="0"></iframe>
         </div>
@@ -193,6 +233,21 @@ window.addEventListener('error', function(e) {
         <header class="view-header">
           <h2>Content Calendar</h2>
         </header>
+        
+        <div id="brandKitContainer" style="display:none; margin-bottom:24px; padding:20px; background:var(--color-bg-elevated); border:1px solid var(--color-border); border-radius:12px;">
+          <h3 style="margin:0 0 16px 0;">Brand Colors & Typography</h3>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+            <div>
+              <h4 style="font-size:12px; color:var(--color-text-secondary); margin-bottom:8px; text-transform:uppercase;">Brand Colors</h4>
+              <div style="display:flex; gap:12px;" id="brandColorsList"></div>
+            </div>
+            <div>
+              <h4 style="font-size:12px; color:var(--color-text-secondary); margin-bottom:8px; text-transform:uppercase;">Typography & Voice</h4>
+              <div id="typographyInfo" style="font-size:14px;"></div>
+            </div>
+          </div>
+          <div style="margin-top:24px;" id="brandLogoLink"></div>
+        </div>
         <div class="iframe-wrapper full-height">
           <iframe id="calendarIframe" src="" frameborder="0"></iframe>
         </div>
@@ -204,6 +259,21 @@ window.addEventListener('error', function(e) {
           <h2>Campaign Briefs</h2>
           <p>Review and approve the active strategy briefs.</p>
         </header>
+        
+        <div id="brandKitContainer" style="display:none; margin-bottom:24px; padding:20px; background:var(--color-bg-elevated); border:1px solid var(--color-border); border-radius:12px;">
+          <h3 style="margin:0 0 16px 0;">Brand Colors & Typography</h3>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+            <div>
+              <h4 style="font-size:12px; color:var(--color-text-secondary); margin-bottom:8px; text-transform:uppercase;">Brand Colors</h4>
+              <div style="display:flex; gap:12px;" id="brandColorsList"></div>
+            </div>
+            <div>
+              <h4 style="font-size:12px; color:var(--color-text-secondary); margin-bottom:8px; text-transform:uppercase;">Typography & Voice</h4>
+              <div id="typographyInfo" style="font-size:14px;"></div>
+            </div>
+          </div>
+          <div style="margin-top:24px;" id="brandLogoLink"></div>
+        </div>
         <div class="iframe-wrapper full-height">
           <iframe id="campaignIframe" src="" frameborder="0"></iframe>
         </div>
@@ -215,8 +285,47 @@ window.addEventListener('error', function(e) {
           <h2>Completed Work</h2>
           <p>An archive of final deliverables and completed tasks.</p>
         </header>
+        
+        <div id="brandKitContainer" style="display:none; margin-bottom:24px; padding:20px; background:var(--color-bg-elevated); border:1px solid var(--color-border); border-radius:12px;">
+          <h3 style="margin:0 0 16px 0;">Brand Colors & Typography</h3>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+            <div>
+              <h4 style="font-size:12px; color:var(--color-text-secondary); margin-bottom:8px; text-transform:uppercase;">Brand Colors</h4>
+              <div style="display:flex; gap:12px;" id="brandColorsList"></div>
+            </div>
+            <div>
+              <h4 style="font-size:12px; color:var(--color-text-secondary); margin-bottom:8px; text-transform:uppercase;">Typography & Voice</h4>
+              <div id="typographyInfo" style="font-size:14px;"></div>
+            </div>
+          </div>
+          <div style="margin-top:24px;" id="brandLogoLink"></div>
+        </div>
         <div class="iframe-wrapper full-height">
           <iframe id="completedIframe" src="" frameborder="0"></iframe>
+        </div>
+      </section>
+
+      <!-- MONTHLY REPORTS VIEW -->
+      <section id="view-monthlyreports" class="view-section">
+        <header class="view-header">
+          <h2>Monthly Reports</h2>
+          <p>Your monthly performance and results summaries.</p>
+        </header>
+
+        <div id="reportArchiveList" class="report-archive-list">
+          <!-- Populated by JS -->
+        </div>
+
+        <div id="reportDetailView" class="report-detail-view" style="display:none;">
+          <button id="btnBackToReports" class="btn-secondary" style="margin-bottom: 20px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+            Back to all reports
+          </button>
+          <div id="reportDetailContent"></div>
+        </div>
+
+        <div id="monthlyReportsEmbedWrapper" class="iframe-wrapper full-height" style="display:none; margin-top: 32px;">
+          <iframe id="monthlyReportsIframe" src="" frameborder="0"></iframe>
         </div>
       </section>
 
@@ -226,14 +335,284 @@ window.addEventListener('error', function(e) {
           <h2>Assets & Brand</h2>
           <p>Access your logos, guidelines, and final deliverables.</p>
         </header>
+        
+        <div id="brandKitContainer" style="display:none; margin-bottom:24px; padding:20px; background:var(--color-bg-elevated); border:1px solid var(--color-border); border-radius:12px;">
+          <h3 style="margin:0 0 16px 0;">Brand Colors & Typography</h3>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+            <div>
+              <h4 style="font-size:12px; color:var(--color-text-secondary); margin-bottom:8px; text-transform:uppercase;">Brand Colors</h4>
+              <div style="display:flex; gap:12px;" id="brandColorsList"></div>
+            </div>
+            <div>
+              <h4 style="font-size:12px; color:var(--color-text-secondary); margin-bottom:8px; text-transform:uppercase;">Typography & Voice</h4>
+              <div id="typographyInfo" style="font-size:14px;"></div>
+            </div>
+          </div>
+          <div style="margin-top:24px;" id="brandLogoLink"></div>
+        </div>
         <div class="iframe-wrapper full-height">
           <iframe id="assetsIframe" src="" frameborder="0"></iframe>
+        </div>
+      </section>
+
+
+      <!-- APPROVALS VIEW -->
+      <section id="view-approvals" class="view-section">
+        <header class="view-header">
+          <h2>Approvals</h2>
+          <p>Review deliverables and let us know your decision.</p>
+        </header>
+
+        <div class="approval-block">
+          <h3 class="approval-block-heading">Waiting on You</h3>
+          <div id="pendingApprovalsContainer" class="approval-cards"></div>
+        </div>
+
+        <div class="approval-block">
+          <h3 class="approval-block-heading">Your Decisions</h3>
+          <div id="approvalHistoryContainer" class="approval-history"></div>
+        </div>
+      </section>
+
+      <!-- GUIDE & FAQ VIEW -->
+      <section id="view-guide" class="view-section">
+        <header class="view-header">
+          <h2>Guide &amp; FAQ</h2>
+          <p>How your portal works, what to expect from us, and answers to common questions.</p>
+        </header>
+
+        <div class="guide-content">
+          <div class="guide-section">
+            <h3>How Your Portal Is Organized</h3>
+            <table class="guide-table">
+              <thead><tr><th>Section</th><th>What It's For</th></tr></thead>
+              <tbody>
+                <tr><td>Dashboard</td><td>Your live performance snapshot and analytics, always up to date</td></tr>
+                <tr><td>Active Projects</td><td>Everything currently in production &mdash; a real-time view of what your team is working on</td></tr>
+                <tr><td>Content Calendar</td><td>All upcoming content and go-live dates for the month</td></tr>
+                <tr><td>Campaign Briefs</td><td>Every campaign starts here &mdash; review and approve before production begins</td></tr>
+                <tr><td>Feedback &amp; Revisions</td><td>Submit ALL feedback using the Quick Actions links &mdash; not by email or text</td></tr>
+                <tr><td>Monthly Reports</td><td>Performance reports delivered on or before the 5th of every month</td></tr>
+                <tr><td>Assets &amp; Brand</td><td>Your logos, fonts, guidelines, and all final delivered files</td></tr>
+                <tr><td>Completed Work</td><td>Your full archive of approved and published deliverables</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="guide-section">
+            <h3>Campaign Briefs &mdash; What to Expect</h3>
+            <p class="guide-intro">Before we produce anything, we create a Campaign Brief outlining the objective, audience, message, creative direction, platforms, and timeline. When a brief arrives:</p>
+            <table class="guide-table">
+              <thead><tr><th>Step</th><th>What to Do</th></tr></thead>
+              <tbody>
+                <tr><td>1. Review</td><td>Review the brief in full &mdash; check the objective, messaging, and direction</td></tr>
+                <tr><td>2. Question or Comment</td><td>Leave any questions or feedback directly in the brief task</td></tr>
+                <tr><td>3. Confirm</td><td>Confirm approval with your account manager</td></tr>
+              </tbody>
+            </table>
+            <p class="guide-intro" style="margin-top: 12px; margin-bottom: 0;">&#9888;&#65039; Production does not begin until the brief is approved &mdash; the sooner you review it, the sooner your content is in production.</p>
+          </div>
+
+          <div class="guide-section">
+            <h3>Content Calendar Status Guide</h3>
+            <p class="guide-intro">Every piece of content moves through these statuses on your Content Calendar, from first draft to published:</p>
+            <table class="guide-table">
+              <thead><tr><th>Status</th><th>What It Means</th></tr></thead>
+              <tbody>
+                <tr><td>&#128992; Brief Received</td><td>The campaign brief has been logged and is queued for production</td></tr>
+                <tr><td>&#128309; In Production</td><td>Our team is actively creating the content</td></tr>
+                <tr><td>&#128995; Internal Review</td><td>Content is going through our internal quality check before it reaches you</td></tr>
+                <tr><td>&#128993; Client Review</td><td>Ready for your review &mdash; you'll get an email notification</td></tr>
+                <tr><td>&#128308; Revision Requested</td><td>You've requested changes and we're applying them</td></tr>
+                <tr><td>&#128994; Approved</td><td>You've approved the content and it's queued to go live</td></tr>
+                <tr><td>&#9989; Published</td><td>The content is live</td></tr>
+              </tbody>
+            </table>
+            <p class="guide-intro" style="margin-top: 12px; margin-bottom: 0;">&#128276; You will receive an email notification every time something moves to <strong>Client Review</strong> &mdash; that's your cue to review the content and complete your approval form.</p>
+          </div>
+
+          <div class="guide-section">
+            <h3>Our Commitments to You</h3>
+            <table class="guide-table">
+              <thead><tr><th>Commitment</th><th>Timing</th></tr></thead>
+              <tbody>
+                <tr><td>Email response</td><td>Within 1 business day</td></tr>
+                <tr><td>Calls and texts</td><td>Same day during office hours</td></tr>
+                <tr><td>Client Review notification</td><td>Same day it's ready &mdash; you'll get an email</td></tr>
+                <tr><td>Monthly report delivery</td><td>On or before the 5th of every month</td></tr>
+                <tr><td>Revision turnaround</td><td>2&ndash;4 business days depending on content type</td></tr>
+                <tr><td>Kick-off call follow-up</td><td>Written summary within 24 hours</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="guide-section">
+            <h3>How to Submit Feedback &amp; Revisions</h3>
+            <p class="guide-intro">When a deliverable is ready for your review, you'll receive an email with a link to the content and a Content Approval Form. Complete the form and return it within <strong>48 hours</strong>. The form has three options:</p>
+            <table class="guide-table">
+              <thead><tr><th>Option</th><th>What Happens</th></tr></thead>
+              <tbody>
+                <tr><td>&#9989; Approved</td><td>We publish on the scheduled date &mdash; no further action needed</td></tr>
+                <tr><td>&#128260; Approved with Minor Corrections</td><td>Note the changes and we apply them before publishing</td></tr>
+                <tr><td>&#10060; Revision Required</td><td>We action your feedback and send a revised version</td></tr>
+              </tbody>
+            </table>
+            <p class="guide-intro" style="margin-top: 12px;">&#128274; Verbal approvals are not accepted. A completed approval form is required before any content is published.</p>
+            <p class="guide-intro">All feedback must come through the portal &mdash; not via email, text, or phone. Use the <strong>Submit a Revision</strong> button in Quick Actions, name the task clearly, write your feedback as specifically as possible, and set a priority.</p>
+            <table class="guide-table">
+              <thead><tr><th>&#10060; Vague</th><th>&#9989; Specific</th></tr></thead>
+              <tbody>
+                <tr><td>"I don't like it"</td><td>"Can we change the font color to our brand blue?"</td></tr>
+                <tr><td>"Change the copy"</td><td>"The headline feels too formal &mdash; try something more conversational"</td></tr>
+                <tr><td>"The image is wrong"</td><td>"Can we use something with natural lighting and a warmer tone?"</td></tr>
+                <tr><td>"Fix the video"</td><td>"At 0:23 the text is too small on mobile &mdash; increase the font size"</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="guide-section">
+            <h3>Revision Turnaround Times</h3>
+            <table class="guide-table">
+              <thead><tr><th>Content Type</th><th>Turnaround</th></tr></thead>
+              <tbody>
+                <tr><td>Social posts and graphics</td><td>2 business days</td></tr>
+                <tr><td>Paid ad creative</td><td>2 business days</td></tr>
+                <tr><td>Video and Reels</td><td>3&ndash;4 business days</td></tr>
+                <tr><td>Email campaigns</td><td>2 business days</td></tr>
+                <tr><td>Website pages</td><td>3&ndash;5 business days</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="guide-section">
+            <h3>What You Can See in Your Live Analytics</h3>
+            <p class="guide-intro">Your live performance dashboard on the Dashboard tab pulls real data directly from your platforms and refreshes automatically &mdash; no need to wait for the monthly report.</p>
+            <table class="guide-table">
+              <thead><tr><th>Metric</th><th>What It Shows</th></tr></thead>
+              <tbody>
+                <tr><td>Website Traffic</td><td>Visits and top-performing pages</td></tr>
+                <tr><td>Social Media</td><td>Reach, engagement, and follower growth</td></tr>
+                <tr><td>Paid Ads</td><td>Spend, clicks, conversions, and ROAS</td></tr>
+                <tr><td>Email</td><td>Open rates and click-through rates</td></tr>
+                <tr><td>SEO</td><td>Rankings and organic traffic</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="guide-section">
+            <h3>What You Can Upload</h3>
+            <p class="guide-intro">Use the Upload Files button in Quick Actions to send us anything &mdash; no login or account needed. Just fill in your name, company, what you're uploading, and attach your files.</p>
+            <table class="guide-table">
+              <thead><tr><th>Category</th><th>Examples</th></tr></thead>
+              <tbody>
+                <tr><td>Logo Files</td><td>PNG, SVG, AI, EPS</td></tr>
+                <tr><td>Brand Guidelines</td><td>Style guides and brand standards</td></tr>
+                <tr><td>Media</td><td>Photography and video assets</td></tr>
+                <tr><td>Written Content</td><td>Copy, scripts, or reference material</td></tr>
+                <tr><td>Anything Else</td><td>Any other brand files or reference materials</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="guide-section">
+            <h3>How to Reach Us</h3>
+            <table class="guide-table">
+              <thead><tr><th>Situation</th><th>How to Contact</th></tr></thead>
+              <tbody>
+                <tr><td>Day-to-day questions</td><td>Email your account manager</td></tr>
+                <tr><td>Urgent or time-sensitive</td><td>Call or text your account manager directly</td></tr>
+                <tr><td>Revision requests</td><td>Submit a Revision in Quick Actions &mdash; always through the portal</td></tr>
+                <tr><td>Content ideas or new post requests</td><td>Submit Content Request in Quick Actions</td></tr>
+                <tr><td>Upload files or brand assets</td><td>Upload Files in Quick Actions</td></tr>
+                <tr><td>Billing questions</td><td>Email your account manager</td></tr>
+                <tr><td>New service or scope change</td><td>Email your account manager</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="guide-section">
+            <h3>Frequently Asked Questions</h3>
+            <div class="guide-faq">
+              <details class="guide-faq-item">
+                <summary>How do I know when something needs my review?</summary>
+                <p>You'll get an email notification the same day it's ready. You can also check Active Projects for anything awaiting your review.</p>
+              </details>
+              <details class="guide-faq-item">
+                <summary>Can I send feedback via email or text?</summary>
+                <p>Please use the portal only, via the Submit a Revision or Submit Content Request buttons in Quick Actions. That keeps everything in one trackable place.</p>
+              </details>
+              <details class="guide-faq-item">
+                <summary>How many revisions am I allowed?</summary>
+                <p>Your revision rounds are outlined in your Statement of Work. Additional rounds beyond what's included may require a Change Order &mdash; your account manager will let you know.</p>
+              </details>
+              <details class="guide-faq-item">
+                <summary>How do I send you files or brand assets?</summary>
+                <p>Use the Upload Files button in Quick Actions. No login needed &mdash; just fill in your details, describe what you're uploading, and attach your files. We'll confirm receipt within 1 business day.</p>
+              </details>
+              <details class="guide-faq-item">
+                <summary>Can I submit ideas for content or posts?</summary>
+                <p>Yes &mdash; use the Submit Content Request button in Quick Actions. Tell us your idea, the platform, and any inspiration you have. We'll follow up within 2 business days.</p>
+              </details>
+              <details class="guide-faq-item">
+                <summary>What if I want to add a new service or change my plan?</summary>
+                <p>Email your account manager &mdash; they'll prepare a proposal or Change Order. No scope changes happen without written agreement from both sides.</p>
+              </details>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- REFERRAL VIEW -->
+      <section id="view-referral" class="view-section">
+        <header class="view-header">
+          <h2>Referral Program</h2>
+          <p>Share Revital Productions and earn rewards for every client you send our way.</p>
+        </header>
+
+        <div class="guide-content">
+          <div class="guide-section">
+            <p class="guide-intro">If someone you refer becomes a Revital Productions client, you earn a reward &mdash; no limit on how many times you can refer.</p>
+          </div>
+
+          <div class="guide-section">
+            <h3>Your Reward Options</h3>
+            <p class="guide-intro">As a first-time referrer, choose whichever reward works best for you:</p>
+            <div class="referral-rewards-grid">
+              <div class="referral-reward-card">
+                <h4>Account Credit</h4>
+                <div class="referral-reward-value">$250</div>
+                <p>Applied to your next invoice</p>
+              </div>
+              <div class="referral-reward-card">
+                <h4>Gift Card</h4>
+                <div class="referral-reward-value">$250</div>
+                <p>Amazon, Visa prepaid, or a Louisiana restaurant of your choice</p>
+              </div>
+              <div class="referral-reward-card">
+                <h4>Percentage of First Month</h4>
+                <div class="referral-reward-value">10%</div>
+                <p>Of your referral's first invoice</p>
+              </div>
+              <div class="referral-reward-card">
+                <h4>Free Service Add-On</h4>
+                <div class="referral-reward-value">Up to $500</div>
+                <p>Worth of a service not currently in your plan</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="guide-section">
+            <h3>How to Refer</h3>
+            <p class="guide-intro">Give your Account Manager your contact's name and email, or make a direct introduction yourself &mdash; we'll take it from there.</p>
+          </div>
+
+          <p class="referral-note">&#128156; Rewards increase with every successful referral &mdash; your 2nd and 3rd+ referrals unlock even bigger rewards.</p>
         </div>
       </section>
 
     </main>
   </div>
 
-  <script src="js/app.js?v=71"></script>
+  <script src="js/app.js?v=75"></script>
 </body>
 </html>

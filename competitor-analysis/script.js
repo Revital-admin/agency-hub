@@ -282,6 +282,42 @@ function removePlatform(idx) {
   showBanner('success', `Platform "${pName}" was removed.`);
 }
 
+/* ── Publish current report as a new dated entry in the client's report
+   archive, shown natively on their portal. This is a deliberate, separate
+   action from autosave - saveToParent()/autosave just persists your
+   in-progress draft to the hub, it does NOT touch the archive or the
+   client-visible portal. Only clicking this button does. ── */
+function publishToClientPortal() {
+  if (!isEmbedded || !parentClient) {
+    showBanner('error', 'This can only be published from inside the Hub.');
+    return;
+  }
+
+  // Make sure reportState reflects whatever's currently in the form.
+  saveToParent();
+
+  if (!Array.isArray(parentClient.reportArchive)) {
+    parentClient.reportArchive = [];
+  }
+
+  const snapshot = {
+    id: 'report_' + Date.now(),
+    date: reportState.date || '',
+    preparedBy: reportState.preparedBy || '',
+    focus: reportState.focus || '',
+    wins: reportState.wins || '',
+    platforms: JSON.parse(JSON.stringify(reportState.platforms || [])),
+    cellData: JSON.parse(JSON.stringify(reportState.cellData || {})),
+    publishedAt: new Date().toISOString()
+  };
+
+  // Newest first.
+  parentClient.reportArchive.unshift(snapshot);
+  window.parent.saveDatabase();
+
+  showBanner('success', 'Report published! It now shows on the client\'s portal.');
+}
+
 /* ── Show Status Notification Banners ── */
 function showBanner(type, message) {
   const successBanner = document.getElementById('banner-success');
@@ -352,6 +388,16 @@ function downloadPDF() {
   const hides = container.querySelectorAll('.action-row, .controls-row, .prompt-toggle, .prompt-panel, button');
   hides.forEach(el => el.style.display = 'none');
 
+  // The on-screen nav branding is a generic "REVITAL HUB" icon+wordmark
+  // (see logo.js), not the actual client-facing logo used on every other
+  // exported PDF in the Hub. Swap in the real logo just for the capture,
+  // then restore the nav version afterward so the live tool is unaffected.
+  const logoContainer = container.querySelector('.brand-logo-container');
+  const origLogoHTML = logoContainer ? logoContainer.innerHTML : null;
+  if (logoContainer) {
+    logoContainer.innerHTML = '<img src="../logo.png" alt="Revital Hub" style="height: 40px; width: 115px; object-fit: contain;">';
+  }
+
   // Replace inputs/textareas with their text values temporarily
   const inputs = container.querySelectorAll('input, textarea');
   const replacements = [];
@@ -382,8 +428,8 @@ function downloadPDF() {
   const opt = {
     margin:       0.5,
     filename:     'Competitor_Analysis.pdf',
-    image:        { type: 'png' },
-    html2canvas:  { scale: 4, letterRendering: true, useCORS: true },
+    image:        { type: 'jpeg', quality: 0.92 },
+    html2canvas:  { scale: 2, letterRendering: true, useCORS: true },
     jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' }
   };
   
@@ -402,6 +448,7 @@ function downloadPDF() {
         r.span.remove();
         r.el.style.display = '';
       });
+      if (logoContainer) logoContainer.innerHTML = origLogoHTML;
       if (pdfBtn) {
         pdfBtn.disabled = false;
         pdfBtn.innerHTML = origText;
