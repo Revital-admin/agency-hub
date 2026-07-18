@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contract & Invoice Status Tracker</title>
+<link rel="stylesheet" href="../style.css?v=1">
+<link rel="stylesheet" href="css/style.css?v=1">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<main class="container container-wide">
+<div class="brand-bar">
+<div class="brand-logo-container"></div>
+</div>
+
+<header class="site-header">
+<div class="header-eyebrow">
+<span class="dot"></span>
+<span>Finance & Legal</span>
+</div>
+<h1 class="site-title">Contract & Invoice <em>Status Tracker</em></h1>
+<p class="site-subtitle">Where every contract and invoice stands, per client — nothing falls through on signature or payment.</p>
+</header>
+
+<div class="summary-bar" id="summaryBar">
+<div class="summary-stat"><span class="summary-num" id="summaryAwaitingSignature">0</span><span class="summary-label">Contracts Awaiting Signature</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryDueSoon">0</span><span class="summary-label">Invoices Due Within 7 Days</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryOverdue">0</span><span class="summary-label">Invoices Overdue</span></div>
+</div>
+
+<div class="step-card tracker-controls">
+<div class="tracker-controls-row">
+<select id="newClientSelect">
+<option value="">Select a client to track...</option>
+</select>
+<button id="addTrackedClientBtn" class="btn-primary">+ Track Client</button>
+<label class="show-closed-toggle">
+<input type="checkbox" id="showClosedToggle"> Show fully settled
+</label>
+</div>
+</div>
+
+<div class="step-card table-card">
+<div class="tracker-table-wrap">
+<table class="tracker-table">
+<thead>
+<tr>
+<th>Client</th>
+<th>Contract</th>
+<th>Contract Sent</th>
+<th>Contract Signed</th>
+<th>Invoice</th>
+<th>Invoice Due</th>
+<th>Invoice Paid</th>
+<th>Notes</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="trackerTableBody">
+</tbody>
+</table>
+<p id="emptyState" class="empty-state" style="display: none;">No clients being tracked yet. Add one above.</p>
+</div>
+</div>
+</main>
+
+<script src="js/app.js?v=1"></script>
+</body>
+</html>

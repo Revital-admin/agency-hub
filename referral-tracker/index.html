@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Referral Tracker</title>
+<link rel="stylesheet" href="../style.css?v=1">
+<link rel="stylesheet" href="css/style.css?v=1">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<main class="container container-wide">
+<div class="brand-bar">
+<div class="brand-logo-container"></div>
+</div>
+
+<header class="site-header">
+<div class="header-eyebrow">
+<span class="dot"></span>
+<span>Growth & Partnerships</span>
+</div>
+<h1 class="site-title">Referral <em>Tracker</em></h1>
+<p class="site-subtitle">Every referral in the pipeline — who sent it, where it stands, and what's owed.</p>
+</header>
+
+<div class="summary-bar" id="summaryBar">
+<div class="summary-stat"><span class="summary-num" id="summaryPending">0</span><span class="summary-label">Pending</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryWon">0</span><span class="summary-label">Became Clients</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryOwed">0</span><span class="summary-label">Rewards Owed</span></div>
+</div>
+
+<div class="step-card tracker-controls">
+<div class="tracker-controls-row">
+<input type="text" id="newReferrerName" list="referrerOptions" placeholder="Referred by...">
+<datalist id="referrerOptions"></datalist>
+<input type="text" id="newReferredName" placeholder="Referred prospect / company...">
+<input type="date" id="newReferralDate">
+<button id="addReferralBtn" class="btn-primary">+ Add Referral</button>
+</div>
+</div>
+
+<div class="step-card table-card">
+<div class="tracker-table-wrap">
+<table class="tracker-table">
+<thead>
+<tr>
+<th>Referred By</th>
+<th>Referred Prospect</th>
+<th>Date</th>
+<th>Status</th>
+<th>Reward Status</th>
+<th>Reward Amount</th>
+<th>Notes</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="trackerTableBody">
+</tbody>
+</table>
+<p id="emptyState" class="empty-state" style="display: none;">No referrals logged yet. Add one above.</p>
+</div>
+</div>
+</main>
+
+<script src="js/app.js?v=1"></script>
+</body>
+</html>
