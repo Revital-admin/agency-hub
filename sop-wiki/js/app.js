@@ -29,6 +29,47 @@ document.addEventListener('DOMContentLoaded', () => {
   let activeSopId = null;
   let editingSopId = null; // null while creating a new SOP, set while editing an existing one
 
+  // ── Non-blocking status toasts ──
+  //
+  // The old failure path was a native window.alert(), which blocks all page
+  // JavaScript until a human clicks OK - that's what made the original
+  // Firestore size-limit bug look like an unresponsive freeze instead of a
+  // reported error. This toast is a plain DOM element with no blocking
+  // behavior, so a failed save is visible without halting the page for
+  // anyone (including automated tooling, screen readers, or anyone away
+  // from the keyboard when it happens).
+  function ensureToastContainer() {
+    let container = document.getElementById('sopToastContainer');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'sopToastContainer';
+      container.style.cssText = 'position:fixed; bottom:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:8px; max-width:360px; pointer-events:none;';
+      document.body.appendChild(container);
+    }
+    return container;
+  }
+
+  function showToast(message, type) {
+    const container = ensureToastContainer();
+    const toast = document.createElement('div');
+    const isError = type === 'error';
+    toast.style.cssText = [
+      'pointer-events:auto',
+      'background:' + (isError ? '#3f1d1d' : '#16321f'),
+      'border:1px solid ' + (isError ? '#ef4444' : '#22c55e'),
+      'color:#f3f4f6',
+      'padding:12px 14px',
+      'border-radius:8px',
+      'font-size:0.85rem',
+      'line-height:1.4',
+      'box-shadow:0 4px 14px rgba(0,0,0,0.45)',
+      'font-family:inherit'
+    ].join(';');
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => { toast.remove(); }, isError ? 9000 : 3500);
+  }
+
   // ── Firestore-backed storage ──
   //
   // HISTORY: SOPs originally lived in a single agency/sops document
@@ -101,10 +142,15 @@ document.addEventListener('DOMContentLoaded', () => {
     return shards;
   }
 
+  // Returns the underlying Promise so callers can await real confirmation
+  // of a successful write instead of assuming success the moment this
+  // function is called. Previously this function swallowed the result
+  // itself (fire-and-forget + its own alert() on failure), which is what
+  // let the UI show "saved" before the cloud write had actually landed -
+  // callers now decide what "saved" and "failed" should look like.
   function saveSopsToFirestore() {
     if (!window.parent || !window.parent.firebaseDb || !window.parent.firebaseDoc || !window.parent.firebaseSetDocFromJSON) {
-      alert("Couldn't reach the Hub's database - try reopening this tab from the Hub.");
-      return;
+      return Promise.reject(new Error("Couldn't reach the Hub's database - try reopening this tab from the Hub."));
     }
 
     const shards = packSopsIntoShards(sops);
@@ -131,10 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const metaRef = getSopShardMetaDocRef();
     writes.push(window.parent.firebaseSetDocFromJSON(metaRef, JSON.stringify({ count: shards.length })));
 
-    Promise.all(writes).catch(err => {
-      console.error("Failed to save SOPs:", err);
-      alert("Couldn't save to the cloud: " + err.message);
-    });
+    return Promise.all(writes);
   }
 
   function rebuildSopsFromShards() {
@@ -218,7 +261,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // metadata write above will re-trigger this listener with
         // metaSnap.exists === true next time, switching over to the normal
         // per-shard listeners.
-        saveSopsToFirestore();
+        saveSopsToFirestore().catch(err => {
+          console.error("SOP migration save failed:", err);
+          showToast("Couldn't migrate the SOP library to the new format: " + err.message, 'error');
+        });
         renderSopList(sops);
       } catch (err) {
         // Even if migration fails for some reason, still show the bundled
@@ -681,7 +727,18 @@ document.addEventListener('DOMContentLoaded', () => {
     return text.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'sop';
   }
 
-  function handleSaveSop() {
+  // Both handlers below follow the same shape: mutate the local `sops`
+  // array, THEN await the actual Firestore write, and only treat the
+  // action as done (close the editor, drop the confirmed view, etc.) once
+  // that write has genuinely confirmed. If it rejects, the local mutation
+  // is rolled back and an error toast explains why - the editor/viewer
+  // stays exactly where the user left it instead of quietly pretending the
+  // save worked. This replaces the old fire-and-forget pattern, where
+  // saveSopsToFirestore() was called without waiting for it and the editor
+  // closed immediately regardless of whether the write behind it actually
+  // succeeded - so a failed save and a successful one looked identical
+  // until the next reload.
+  async function handleSaveSop() {
     let category = editorCategory.value === '__new__'
       ? editorNewCategory.value.trim()
       : editorCategory.value.trim();
@@ -693,11 +750,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const content = editorContent.innerHTML.trim();
 
     if (!category || !title) {
-      alert('Category and Title are required.');
+      showToast('Category and Title are required.', 'error');
       return;
     }
 
     const today = new Date().toISOString().slice(0, 10);
+
+    // Snapshot so a failed write can be rolled back cleanly - sops holds
+    // the same object references used elsewhere (renderSopList, loadSop),
+    // so this is a shallow copy of the array with shallow-cloned entries,
+    // not a deep clone of everything.
+    const previousSops = sops.map(s => ({ ...s }));
+    const wasEditing = !!editingSopId;
+    let targetId;
 
     if (editingSopId) {
       const existing = sops.find(s => s.id === editingSopId);
@@ -707,7 +772,7 @@ document.addEventListener('DOMContentLoaded', () => {
         existing.content = content;
         existing.format = 'html';
         existing.date = today;
-        activeSopId = existing.id;
+        targetId = existing.id;
       }
     } else {
       const baseId = 'sop-' + slugify(title);
@@ -717,33 +782,75 @@ document.addEventListener('DOMContentLoaded', () => {
         id = `${baseId}-${suffix}`;
         suffix++;
       }
-      const newSop = { id, category, title, content, format: 'html', date: today };
-      sops.push(newSop);
-      activeSopId = id;
+      sops.push({ id, category, title, content, format: 'html', date: today });
+      targetId = id;
     }
 
-    saveSopsToFirestore();
-    closeEditor();
+    const originalBtnLabel = saveSopBtn.textContent;
+    saveSopBtn.disabled = true;
+    saveSopBtn.textContent = 'Saving…';
 
-    const sop = sops.find(s => s.id === activeSopId);
-    if (sop) loadSop(sop);
-    renderSopList(sops);
+    try {
+      await saveSopsToFirestore();
+
+      activeSopId = targetId;
+      closeEditor();
+      const sop = sops.find(s => s.id === activeSopId);
+      if (sop) loadSop(sop);
+      renderSopList(sops);
+      showToast(wasEditing ? 'SOP updated.' : 'SOP saved.', 'success');
+    } catch (err) {
+      console.error('Failed to save SOP:', err);
+      sops = previousSops;
+      showToast("Couldn't save to the cloud: " + err.message + " - your edits are still in the form, try again.", 'error');
+      // Editor deliberately stays open - the title/category/content fields
+      // are untouched, so nothing typed is lost and Save can just be
+      // clicked again once the underlying problem (usually connectivity,
+      // or a still-oversized shard) is sorted out.
+    } finally {
+      saveSopBtn.disabled = false;
+      saveSopBtn.textContent = originalBtnLabel;
+    }
   }
 
-  function handleDeleteSop() {
+  async function handleDeleteSop() {
     if (!activeSopId) return;
     const sop = sops.find(s => s.id === activeSopId);
     if (!sop) return;
 
+    // A native confirm() here is fine - it's a deliberate yes/no decision
+    // point, not a failure notification, so blocking is the expected UX
+    // and there's no ambiguity about whether an action already happened.
     const ok = confirm(`Delete "${sop.title}"? This can't be undone.`);
     if (!ok) return;
 
-    sops = sops.filter(s => s.id !== activeSopId);
-    activeSopId = null;
-    viewerState.style.display = 'none';
-    welcomeState.style.display = 'block';
-    saveSopsToFirestore();
-    renderSopList(sops);
+    const previousSops = sops.map(s => ({ ...s }));
+    const deletedId = activeSopId;
+
+    sops = sops.filter(s => s.id !== deletedId);
+
+    const originalBtnLabel = deleteSopBtn.textContent;
+    deleteSopBtn.disabled = true;
+    deleteSopBtn.textContent = 'Deleting…';
+
+    try {
+      await saveSopsToFirestore();
+
+      activeSopId = null;
+      viewerState.style.display = 'none';
+      welcomeState.style.display = 'block';
+      renderSopList(sops);
+      showToast('SOP deleted.', 'success');
+    } catch (err) {
+      console.error('Failed to delete SOP:', err);
+      sops = previousSops;
+      renderSopList(sops);
+      showToast("Couldn't delete from the cloud: " + err.message + " - it's still here, try again.", 'error');
+      // Viewer pane deliberately left showing the (still-undeleted) SOP.
+    } finally {
+      deleteSopBtn.disabled = false;
+      deleteSopBtn.textContent = originalBtnLabel;
+    }
   }
 
   newSopBtn.addEventListener('click', openNewSopForm);
