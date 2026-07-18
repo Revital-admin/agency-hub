@@ -30,43 +30,163 @@ document.addEventListener('DOMContentLoaded', () => {
   let editingSopId = null; // null while creating a new SOP, set while editing an existing one
 
   // ── Firestore-backed storage ──
-  // SOPs live in a single agency/sops document ({ list: [...] }), the same
-  // pattern the rest of the hub uses for agency/clientsDb and
-  // agency/activityLog. That means they fall under the existing
-  // "match /agency/{document} { allow read, write: if isAdmin(); }" rule
-  // automatically - no Firestore rules changes needed for this feature.
-  function getSopsDocRef() {
+  //
+  // HISTORY: SOPs originally lived in a single agency/sops document
+  // ({ list: [...] }), the same pattern the rest of the hub uses for
+  // agency/clientsDb and agency/activityLog, so everything fell under the
+  // existing "match /agency/{document} { allow read, write: if isAdmin(); }"
+  // rule automatically. That worked fine while the wiki was small, but
+  // Firestore caps every document at 1,048,576 bytes, and once the combined
+  // text of every SOP crossed that ceiling, EVERY save (and delete) started
+  // failing outright - the whole document is rewritten on every write, so
+  // one oversized document blocks all future changes to any SOP, not just
+  // the newest one.
+  //
+  // FIX: split the same { list: [...] } payload across as many
+  // agency/sops-shard-N documents as needed to keep each one safely under
+  // the limit, plus one tiny agency/sopShardMeta document ({ count: N })
+  // recording how many shards currently exist. Every shard is still a
+  // single document directly under /agency/, so this still needs no
+  // Firestore rules changes. Everything below this storage layer -
+  // rendering, search, the editor, save/delete button handlers - keeps
+  // working against the same in-memory `sops` array as before and doesn't
+  // need to know shards exist at all.
+  const SOP_SHARD_PREFIX = "sops-shard-";
+  // Comfortably under Firestore's 1,048,576-byte hard limit, leaving
+  // headroom for Firestore's own per-field/document storage overhead
+  // (actual on-disk document size isn't identical to JSON.stringify().length).
+  const MAX_SHARD_BYTES = 700000;
+
+  let shardData = {};           // { [shardIndex]: [...sopsInThatShard] }
+  let shardUnsubscribers = [];  // active onSnapshot unsubscribe fns, one per shard
+  let lastKnownShardCount = 0;  // shard count as of the last successful sync
+
+  function getSopShardMetaDocRef() {
+    if (!window.parent || !window.parent.firebaseDb || !window.parent.firebaseDoc) return null;
+    return window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "sopShardMeta");
+  }
+
+  function getSopShardDocRef(shardIndex) {
+    if (!window.parent || !window.parent.firebaseDb || !window.parent.firebaseDoc) return null;
+    return window.parent.firebaseDoc(window.parent.firebaseDb, "agency", SOP_SHARD_PREFIX + shardIndex);
+  }
+
+  // Legacy pre-sharding location. Only ever read once, during the one-time
+  // migration in initSops() below - never written to again after that.
+  function getLegacySopsDocRef() {
     if (!window.parent || !window.parent.firebaseDb || !window.parent.firebaseDoc) return null;
     return window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "sops");
   }
 
+  // Greedily bin-packs the full SOP list into shard-sized chunks, each kept
+  // under MAX_SHARD_BYTES when serialized the same way it's actually saved
+  // (JSON.stringify({ list: [...] })). Blob's UTF-8 byte length matches
+  // what Firestore actually stores far more accurately than .length would
+  // for any SOP containing non-ASCII characters (emoji, curly quotes, etc.
+  // are all over these SOPs).
+  function packSopsIntoShards(allSops) {
+    const shards = [];
+    let current = [];
+    for (const sop of allSops) {
+      const trial = [...current, sop];
+      const size = new Blob([JSON.stringify({ list: trial })]).size;
+      if (size > MAX_SHARD_BYTES && current.length > 0) {
+        shards.push(current);
+        current = [sop];
+      } else {
+        current = trial;
+      }
+    }
+    if (current.length > 0 || shards.length === 0) shards.push(current);
+    return shards;
+  }
+
   function saveSopsToFirestore() {
-    const docRef = getSopsDocRef();
-    if (!docRef || !window.parent.firebaseSetDocFromJSON) {
+    if (!window.parent || !window.parent.firebaseDb || !window.parent.firebaseDoc || !window.parent.firebaseSetDocFromJSON) {
       alert("Couldn't reach the Hub's database - try reopening this tab from the Hub.");
       return;
     }
+
+    const shards = packSopsIntoShards(sops);
+
     // Pass a JSON string, not an object literal, across the iframe
     // boundary. An object built in this iframe's own JS realm gets
     // rejected by Firestore ("a custom Object object") when handed
     // straight to a Firestore call bound to the parent page - a string is
     // a primitive with no realm identity problem, and firebaseSetDocFromJSON
     // parses it in the parent's own realm before writing.
-    const jsonString = JSON.stringify({ list: sops });
-    try {
-      window.parent.firebaseSetDocFromJSON(docRef, jsonString).catch(err => {
-        console.error("Failed to save SOPs:", err);
-        alert("Couldn't save to the cloud: " + err.message);
-      });
-    } catch (err) {
+    const writes = shards.map((shardList, i) => {
+      const docRef = getSopShardDocRef(i);
+      return window.parent.firebaseSetDocFromJSON(docRef, JSON.stringify({ list: shardList }));
+    });
+
+    // If the list just got shorter/smaller and now needs fewer shards than
+    // last time, blank out the now-unused trailing shard documents instead
+    // of leaving stale content sitting in them.
+    for (let i = shards.length; i < lastKnownShardCount; i++) {
+      const docRef = getSopShardDocRef(i);
+      writes.push(window.parent.firebaseSetDocFromJSON(docRef, JSON.stringify({ list: [] })));
+    }
+
+    const metaRef = getSopShardMetaDocRef();
+    writes.push(window.parent.firebaseSetDocFromJSON(metaRef, JSON.stringify({ count: shards.length })));
+
+    Promise.all(writes).catch(err => {
       console.error("Failed to save SOPs:", err);
       alert("Couldn't save to the cloud: " + err.message);
+    });
+  }
+
+  function rebuildSopsFromShards() {
+    const merged = [];
+    for (let i = 0; i < lastKnownShardCount; i++) {
+      if (Array.isArray(shardData[i])) merged.push(...shardData[i]);
+    }
+    sops = merged;
+
+    const query = searchInput.value.trim().toLowerCase();
+    renderSopList(query ? filterSops(query) : sops);
+
+    // If the currently-open SOP changed or was deleted (e.g. from another
+    // tab), refresh the reading pane to match.
+    if (activeSopId) {
+      const stillExists = sops.find(s => s.id === activeSopId);
+      if (stillExists) {
+        loadSop(stillExists);
+      } else {
+        activeSopId = null;
+        viewerState.style.display = 'none';
+        welcomeState.style.display = 'block';
+      }
     }
   }
 
+  function listenToShard(shardIndex) {
+    const docRef = getSopShardDocRef(shardIndex);
+    if (!docRef || !window.parent.firebaseOnSnapshot) return;
+    const unsubscribe = window.parent.firebaseOnSnapshot(docRef, (docSnap) => {
+      shardData[shardIndex] = docSnap.exists && Array.isArray(docSnap.data().list) ? docSnap.data().list : [];
+      rebuildSopsFromShards();
+    }, (err) => {
+      console.error("SOP shard listener error:", err);
+    });
+    shardUnsubscribers.push(unsubscribe);
+  }
+
+  function setShardListenerCount(count) {
+    if (count === lastKnownShardCount && shardUnsubscribers.length === count) return;
+    shardUnsubscribers.forEach(unsubscribe => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    });
+    shardUnsubscribers = [];
+    shardData = {};
+    lastKnownShardCount = count;
+    for (let i = 0; i < count; i++) listenToShard(i);
+  }
+
   function initSops() {
-    const docRef = getSopsDocRef();
-    if (!docRef || !window.parent.firebaseOnSnapshot) {
+    const metaRef = getSopShardMetaDocRef();
+    if (!metaRef || !window.parent.firebaseOnSnapshot || !window.parent.firebaseGetDoc) {
       // No parent Firebase access (e.g. this file opened directly outside
       // the Hub) - fall back to the bundled starter content, read-only.
       sops = typeof SOPS !== "undefined" && Array.isArray(SOPS) ? SOPS : [];
@@ -74,42 +194,42 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    window.parent.firebaseOnSnapshot(docRef, (docSnap) => {
-      if (docSnap.exists) {
-        const data = docSnap.data();
-        sops = Array.isArray(data.list) ? data.list : [];
-      } else {
-        // First run ever: migrate the bundled starter SOPs into Firestore
-        // once, so nothing already written is lost and everything becomes
-        // editable going forward.
-        sops = typeof SOPS !== "undefined" && Array.isArray(SOPS) ? JSON.parse(JSON.stringify(SOPS)) : [];
-        try {
-          saveSopsToFirestore();
-        } catch (err) {
-          // Even if the migration save fails for some reason, still show
-          // the bundled content below rather than leaving the sidebar
-          // blank with no explanation.
-          console.error("SOP migration save failed:", err);
-        }
+    window.parent.firebaseOnSnapshot(metaRef, async (metaSnap) => {
+      if (metaSnap.exists && typeof metaSnap.data().count === 'number') {
+        setShardListenerCount(metaSnap.data().count);
+        return;
       }
 
-      const query = searchInput.value.trim().toLowerCase();
-      renderSopList(query ? filterSops(query) : sops);
+      // No shard metadata yet - either a brand-new install, or a Hub still
+      // on the old single-document format that needs a one-time migration
+      // into shards.
+      try {
+        const legacyRef = getLegacySopsDocRef();
+        const legacySnap = legacyRef ? await window.parent.firebaseGetDoc(legacyRef) : null;
+        const legacyList = legacySnap && legacySnap.exists && Array.isArray(legacySnap.data().list)
+          ? legacySnap.data().list
+          : null;
 
-      // If the currently-open SOP changed or was deleted (e.g. from another
-      // tab), refresh the reading pane to match.
-      if (activeSopId) {
-        const stillExists = sops.find(s => s.id === activeSopId);
-        if (stillExists) {
-          loadSop(stillExists);
-        } else {
-          activeSopId = null;
-          viewerState.style.display = 'none';
-          welcomeState.style.display = 'block';
-        }
+        sops = legacyList
+          ? legacyList
+          : (typeof SOPS !== "undefined" && Array.isArray(SOPS) ? JSON.parse(JSON.stringify(SOPS)) : []);
+
+        // Writes the migrated list into shards + shard metadata. The
+        // metadata write above will re-trigger this listener with
+        // metaSnap.exists === true next time, switching over to the normal
+        // per-shard listeners.
+        saveSopsToFirestore();
+        renderSopList(sops);
+      } catch (err) {
+        // Even if migration fails for some reason, still show the bundled
+        // content below rather than leaving the sidebar blank with no
+        // explanation.
+        console.error("SOP migration failed:", err);
+        sops = typeof SOPS !== "undefined" && Array.isArray(SOPS) ? JSON.parse(JSON.stringify(SOPS)) : [];
+        renderSopList(sops);
       }
     }, (err) => {
-      console.error("SOP listener error:", err);
+      console.error("SOP shard meta listener error:", err);
     });
   }
 
@@ -238,10 +358,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const tag = child.tagName;
 
-      // Images are deliberately dropped, not just unwrapped: SOPs share one
-      // Firestore document, and a pasted screenshot as a base64 data URL
-      // could blow past Firestore's per-document size limit and break
-      // every SOP at once, not just this one.
+      // Images are deliberately dropped, not just unwrapped: SOPs share a
+      // handful of Firestore documents, and a pasted screenshot as a
+      // base64 data URL could still blow past a single shard's size limit
+      // and break every SOP in that shard at once, not just this one.
       if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'IMG' || tag === 'META' || tag === 'LINK' || tag === 'IFRAME') {
         child.remove();
         return;
@@ -367,51 +487,51 @@ document.addEventListener('DOMContentLoaded', () => {
   // as "...Account ManagerTrigger:...". Table cells are skipped since
   // their own cell boundaries already provide real separation.
   function preserveGluedInlineRuns(container) {
-     const PROTECTED_WORDS = ['ClickUp'];
-  function isProtectedBoundary(beforeText, afterText) {
-    return PROTECTED_WORDS.some(word => {
-      const splitPoint = word.length - 1;
-      return beforeText.endsWith(word.slice(0, splitPoint)) &&
-        afterText.startsWith(word.slice(splitPoint));
-    });
-  }
-  const BLOCK_GROUPING_TAGS = new Set(['P', 'LI', 'H1', 'H2', 'H3', 'H4', 'BLOCKQUOTE', 'TD', 'TH', 'PRE']);
-  function nearestBlock(node) {
-    let el = node.parentNode;
-    while (el && el !== container) {
-      if (BLOCK_GROUPING_TAGS.has(el.tagName)) return el;
-      el = el.parentNode;
+    const PROTECTED_WORDS = ['ClickUp'];
+    function isProtectedBoundary(beforeText, afterText) {
+      return PROTECTED_WORDS.some(word => {
+        const splitPoint = word.length - 1;
+        return beforeText.endsWith(word.slice(0, splitPoint)) &&
+          afterText.startsWith(word.slice(splitPoint));
+      });
     }
-    return container;
-  }
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
-  const textNodes = [];
-  let n;
-  while ((n = walker.nextNode())) {
-    let inTable = false;
-    let anc = n.parentNode;
-    while (anc && anc !== container) {
-      if (anc.tagName === 'TABLE') { inTable = true; break; }
-      anc = anc.parentNode;
+    const BLOCK_GROUPING_TAGS = new Set(['P', 'LI', 'H1', 'H2', 'H3', 'H4', 'BLOCKQUOTE', 'TD', 'TH', 'PRE']);
+    function nearestBlock(node) {
+      let el = node.parentNode;
+      while (el && el !== container) {
+        if (BLOCK_GROUPING_TAGS.has(el.tagName)) return el;
+        el = el.parentNode;
+      }
+      return container;
     }
-    if (!inTable) textNodes.push(n);
-  }
-  for (let i = 0; i < textNodes.length - 1; i++) {
-    const cur = textNodes[i];
-    const next = textNodes[i + 1];
-    if (nearestBlock(cur) !== nearestBlock(next)) continue;
-    const curVal = cur.nodeValue;
-    const nextVal = next.nodeValue;
-    if (!curVal || !nextVal) continue;
-    const lastChar = curVal[curVal.length - 1];
-    const firstChar = nextVal[0];
-    if (/[a-z\)\]:]/.test(lastChar) && /[A-Z]/.test(firstChar)) {
-      if (isProtectedBoundary(curVal, nextVal)) continue;
-      const br = document.createElement('br');
-      next.parentNode.insertBefore(br, next);
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+    const textNodes = [];
+    let n;
+    while ((n = walker.nextNode())) {
+      let inTable = false;
+      let anc = n.parentNode;
+      while (anc && anc !== container) {
+        if (anc.tagName === 'TABLE') { inTable = true; break; }
+        anc = anc.parentNode;
+      }
+      if (!inTable) textNodes.push(n);
+    }
+    for (let i = 0; i < textNodes.length - 1; i++) {
+      const cur = textNodes[i];
+      const next = textNodes[i + 1];
+      if (nearestBlock(cur) !== nearestBlock(next)) continue;
+      const curVal = cur.nodeValue;
+      const nextVal = next.nodeValue;
+      if (!curVal || !nextVal) continue;
+      const lastChar = curVal[curVal.length - 1];
+      const firstChar = nextVal[0];
+      if (/[a-z\)\]:]/.test(lastChar) && /[A-Z]/.test(firstChar)) {
+        if (isProtectedBoundary(curVal, nextVal)) continue;
+        const br = document.createElement('br');
+        next.parentNode.insertBefore(br, next);
+      }
     }
   }
-}
 
   function sanitizeHtml(rawHtml) {
     const container = document.createElement('div');
@@ -437,20 +557,21 @@ document.addEventListener('DOMContentLoaded', () => {
         .map(line => `<p>${escapeHtml(line)}</p>`)
         .join('') || '<p></p>';
     }
-function unwrapEmptyHeadingShells(container) {
-  const headings = Array.from(container.querySelectorAll('h1,h2,h3,h4'));
-  headings.forEach(h => {
-    const hasOwnText = Array.from(h.childNodes).some(
-      n => n.nodeType === Node.TEXT_NODE && n.textContent.trim() !== ''
-    );
-    if (!hasOwnText && h.children.length > 0) {
-      while (h.firstChild) h.parentNode.insertBefore(h.firstChild, h);
-      h.parentNode.removeChild(h);
+    function unwrapEmptyHeadingShells(container) {
+      const headings = Array.from(container.querySelectorAll('h1,h2,h3,h4'));
+      headings.forEach(h => {
+        const hasOwnText = Array.from(h.childNodes).some(
+          n => n.nodeType === Node.TEXT_NODE && n.textContent.trim() !== ''
+        );
+        if (!hasOwnText && h.children.length > 0) {
+          while (h.firstChild) h.parentNode.insertBefore(h.firstChild, h);
+          h.parentNode.removeChild(h);
+        }
+      });
     }
-  });
-}
     document.execCommand('insertHTML', false, toInsert);
-  unwrapEmptyHeadingShells(editorContent); });
+    unwrapEmptyHeadingShells(editorContent);
+  });
 
   // ── Toolbar ──
   editorToolbar.querySelectorAll('button').forEach(btn => {
