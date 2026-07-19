@@ -95,6 +95,7 @@ function initAdminAuthGate() {
     if (isAuthorizedAdmin) {
       if (gate) gate.style.display = "none";
       firebaseAuthReady = true;
+      window.currentAdminEmail = user.email.toLowerCase();
       boot();
     } else if (user) {
       // Signed into Firebase with the wrong account - sign back out.
@@ -103,6 +104,61 @@ function initAdminAuthGate() {
     } else {
       attemptSilentSignIn();
     }
+  });
+}
+
+// ── Team Access restrictions (sidebar-level) ──
+// By default every @revitalproductions.com Google account gets full
+// access to every section of the Hub - unchanged from before. The
+// Team Access panel (tab-teamaccess) lets Ronald optionally restrict
+// specific teammates to only certain sections; anyone not explicitly
+// listed in agency/teamAccess keeps full access. This only hides
+// sidebar sections client-side - it is not a data-security boundary,
+// by design (see Team Access panel copy), so it's meant for trusted
+// internal teammates rather than outside parties.
+function applyTeamAccessRestrictions(allowedSections) {
+  const navSections = document.querySelectorAll('.nav-section[data-section]');
+  let activeItemHidden = false;
+
+  navSections.forEach(sectionEl => {
+    const key = sectionEl.getAttribute('data-section');
+    const allowed = !allowedSections || allowedSections.indexOf(key) !== -1;
+    sectionEl.style.display = allowed ? '' : 'none';
+    if (!allowed && sectionEl.querySelector('.nav-item-btn.active')) {
+      activeItemHidden = true;
+    }
+  });
+
+  // The Team Access panel itself is only for full-access (unrestricted)
+  // accounts - a restricted teammate should never see the tool that
+  // controls everyone's restrictions. It lives in the sidebar footer
+  // (with Export/Import/Delete), not inside a nav-section, so hide the
+  // button directly rather than looking for a wrapping <li>.
+  const teamAccessBtn = document.getElementById('teamAccessFooterBtn');
+  if (teamAccessBtn) {
+    teamAccessBtn.style.display = allowedSections ? 'none' : '';
+  }
+
+  // If restrictions just hid whatever tab the user was looking at,
+  // land them on the first tab they're still allowed to see instead
+  // of leaving them on a now-hidden section.
+  if (allowedSections && activeItemHidden) {
+    const firstVisibleBtn = document.querySelector('.nav-section[data-section]:not([style*="display: none"]) .nav-item-btn');
+    if (firstVisibleBtn) firstVisibleBtn.click();
+  }
+}
+
+function initTeamAccessGate() {
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseOnSnapshot) return;
+  const ref = window.firebaseDoc(window.firebaseDb, "agency", "teamAccess");
+  window.firebaseOnSnapshot(ref, (docSnap) => {
+    const data = docSnap.exists ? docSnap.data() : null;
+    const users = (data && data.users) ? data.users : {};
+    const email = (window.currentAdminEmail || "").toLowerCase();
+    const allowedSections = Object.prototype.hasOwnProperty.call(users, email) ? users[email] : null;
+    applyTeamAccessRestrictions(allowedSections);
+  }, (err) => {
+    console.error("Team access gate listener error:", err);
   });
 }
 
@@ -117,6 +173,7 @@ function boot() {
   try { initNavSectionToggles(); } catch(e) { console.error("NavSectionToggles Error:", e); }
   try { initMobileNavigation(); } catch(e) { console.error("MobileNav Error:", e); }
   try { initParentEventListeners(); } catch(e) { console.error("ParentListeners Error:", e); }
+  try { initTeamAccessGate(); } catch(e) { console.error("TeamAccessGate Error:", e); }
   try { refreshAllViews(); } catch(e) { console.error("Refresh Error:", e); }
 
   const resetSandboxBtn = document.getElementById("resetSandboxBtn");
@@ -206,6 +263,7 @@ let clientsDb = {};
 let activeClientName = "";
 let iframeNeedsReload = {
   "tab-adaccountsetup": true,
+  "tab-teamaccess": true,
   "tab-uxui": true,
   "tab-seo": true,
   "tab-strategy": true,
@@ -632,6 +690,9 @@ function refreshIframeTab(tabId) {
       break;
       case "tab-adaccountsetup":
       renderAdAccountSetup();
+      break;
+    case "tab-teamaccess":
+      renderTeamAccess();
       break;
     case "tab-emailsig":
       renderEmailSigGenerator();
@@ -1432,6 +1493,11 @@ function renderDiscoveryCallScript() {
 // ── Ad Account Setup Controller ──
 function renderAdAccountSetup() {
   setIframeAbsoluteSrc('#tab-adaccountsetup iframe', "ad-account-setup/index.html");
+}
+
+// ── Team Access Controller ──
+function renderTeamAccess() {
+  setIframeAbsoluteSrc('#tab-teamaccess iframe', "team-access-manager/index.html");
 }
 
 // ── Package Recommendation Engine Controller ──

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Team Access</title>
+<link rel="stylesheet" href="../style.css?v=1">
+<link rel="stylesheet" href="css/style.css?v=1">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+<main class="main-content" style="max-width: 100%;">
+
+<header class="site-header">
+<div class="header-eyebrow">
+<span class="dot"></span>
+<span>Admin</span>
+</div>
+<h1 class="site-title">Team <em>Access</em></h1>
+<p class="site-subtitle">Control which parts of the Hub each teammate can see. Anyone not listed below has full access to everything — this only restricts people you add here.</p>
+</header>
+
+<div id="notAuthorizedState" class="step-card" style="display:none; text-align:center; color: var(--color-text-secondary);">
+You don't have access to manage Team Access.
+</div>
+
+<div id="teamAccessContent">
+
+<div class="step-card">
+<div class="section-title" style="margin-bottom: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent);">Restrict a Teammate</h2>
+</div>
+<div class="form-group">
+<label for="restrictEmailInput">Teammate's email</label>
+<input type="email" id="restrictEmailInput" placeholder="teammate@revitalproductions.com">
+</div>
+<div class="form-group">
+<label>Sections they CAN see</label>
+<div id="sectionCheckboxes" class="section-checkbox-grid"></div>
+</div>
+<button id="saveRestrictionBtn" class="btn-primary">Save Access</button>
+<span id="formStatus" class="form-status"></span>
+</div>
+
+<div class="step-card table-card">
+<div class="section-title" style="margin: 0; padding: 20px 20px 0; border: none;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent);">Restricted Teammates</h2>
+</div>
+<div class="tracker-table-wrap">
+<table class="tracker-table">
+<thead>
+<tr>
+<th>Email</th>
+<th>Allowed Sections</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="restrictionsTableBody"></tbody>
+</table>
+<p id="emptyState" class="empty-state" style="display:none;">No one is restricted yet — everyone has full access.</p>
+</div>
+</div>
+
+</div>
+
+</main>
+<script src="js/app.js?v=1"></script>
+</body>
+</html>

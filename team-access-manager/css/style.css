@@ -1,0 +1,76 @@
+.form-status {
+  display: inline-block;
+  margin-left: 12px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+.form-status.success { color: #22c55e; }
+.form-status.error { color: #ef4444; }
+
+.section-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px 20px;
+}
+
+.table-card { padding: 0; overflow: hidden; margin-top: 24px; }
+.tracker-table-wrap { overflow-x: auto; }
+.tracker-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 16px; }
+.tracker-table th {
+  text-align: left;
+  padding: 12px 20px;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+.tracker-table td {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  vertical-align: top;
+}
+.tracker-table tr:last-child td { border-bottom: none; }
+.tracker-table td.email-cell { font-weight: 600; white-space: nowrap; }
+
+.section-tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.section-tag {
+  display: inline-block;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-md);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+.section-tag-empty { color: var(--color-text-muted); font-style: italic; }
+
+.row-actions { display: flex; flex-direction: column; gap: 4px; min-width: 90px; }
+.row-actions button {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 100px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition);
+}
+.row-actions button:hover {
+  background: var(--color-surface-2);
+  border-color: var(--color-border-md);
+  color: var(--color-accent);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
+}
+.row-actions button.remove-btn:hover { border-color: #ef4444; color: #ef4444; box-shadow: 0 3px 8px rgba(239, 68, 68, 0.2); }
+
+.empty-state { text-align: center; padding: 40px 20px; color: var(--color-text-muted); font-size: 14px; }

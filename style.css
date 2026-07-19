@@ -414,6 +414,22 @@ body {
   background: rgba(255, 255, 255, 0.02);
 }
 
+/* Team Access lives in the footer alongside Export/Import/Delete, but
+   it's still a .nav-item-btn under the hood so tab-switching works.
+   Override the sidebar-list "active" styling (flush-left border,
+   asymmetric radius) so it doesn't look broken on a bordered footer
+   button - just a subtle highlight instead. */
+#teamAccessFooterBtn.active {
+  background: rgba(99, 102, 241, 0.15);
+  border-radius: var(--radius-sm);
+  border-left: none;
+  border-color: var(--primary);
+  color: var(--primary);
+}
+#teamAccessFooterBtn.active svg {
+  stroke: var(--primary);
+}
+
 .btn-danger-outline {
   background: transparent;
   border: 1px solid rgba(239, 68, 68, 0.2);
