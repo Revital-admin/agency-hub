@@ -49,6 +49,17 @@
   color: var(--color-text-secondary);
 }
 
+/* Before a client is picked, the left panel is empty but still reserves
+   300px, which visually shoves the "Select a client" placeholder off to
+   the right instead of centering it in the module. Hide the empty left
+   panel and let the placeholder center in the full width instead. */
+.split-layout:has(.right-panel .empty-state) .left-panel {
+  display: none;
+}
+.split-layout:has(.right-panel .empty-state) .right-panel {
+  flex: 1 1 100%;
+}
+
 .form-row {
   display: flex;
   gap: 16px;
