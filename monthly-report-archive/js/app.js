@@ -158,4 +158,21 @@ document.addEventListener('DOMContentLoaded', () => {
   el('clientSelect').addEventListener('change', renderState);
   el('saveReportBtn').addEventListener('click', saveReport);
   renderState();
+
+  // The parent Hub loads its client database asynchronously (instant
+  // localStorage boot, then a Firestore sync on top of that). If this
+  // module's iframe finishes loading before that data is ready,
+  // populateClientSelect() above runs against an empty client list and -
+  // since nothing else ever re-triggers it - the dropdown stays empty
+  // forever, even after the real data arrives moments later. Poll
+  // briefly and re-populate once real client data shows up.
+  let clientPollAttempts = 0;
+  const clientPoll = setInterval(() => {
+    clientPollAttempts++;
+    const hasClients = Object.keys(getClients()).length > 0;
+    if (hasClients || clientPollAttempts > 30) {
+      clearInterval(clientPoll);
+      if (hasClients) populateClientSelect();
+    }
+  }, 250);
 });

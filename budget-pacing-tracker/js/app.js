@@ -42,14 +42,14 @@ function populateClientSelect() {
 
 function getPacingClass(spent, total, startDate, endDate) {
   if (!total || total <= 0) return 'pace-good';
-  
+
   const start = new Date(startDate);
   const end = new Date(endDate);
   const now = new Date();
-  
+
   if (now > end) return 'pace-danger'; // past end date
   if (now < start) return 'pace-good'; // hasn't started
-  
+
   const totalDays = (end - start) / (1000 * 60 * 60 * 24);
   const daysPassed = (now - start) / (1000 * 60 * 60 * 24);
   const expectedPacingRatio = daysPassed / totalDays;
@@ -71,7 +71,7 @@ function renderTable() {
   listEl.innerHTML = '';
 
   const tracked = Object.keys(clients).filter(name => clients[name].budgetPacing);
-  
+
   if (tracked.length === 0) {
     el('emptyState').style.display = 'flex';
   } else {
@@ -85,7 +85,7 @@ function renderTable() {
 
     const card = document.createElement('div');
     card.className = 'pacing-card';
-    
+
     card.innerHTML = `
       <div class="card-header">
         <div>
@@ -204,7 +204,7 @@ el('addTrackerBtn').addEventListener('click', () => {
 
   const clients = getClients();
   const type = confirm("Track Ad Spend? (Cancel for Retainer Hours)") ? 'Ad Spend' : 'Retainer Hours';
-  
+
   clients[clientName].budgetPacing = {
     budgetType: type,
     totalBudget: type === 'Ad Spend' ? 5000 : 20,
@@ -222,4 +222,25 @@ el('addTrackerBtn').addEventListener('click', () => {
 document.addEventListener('DOMContentLoaded', () => {
   populateClientSelect();
   renderTable();
+
+  // The parent Hub loads its client database asynchronously (instant
+  // localStorage boot, then a Firestore sync on top of that). If this
+  // module's iframe finishes loading before that data is ready,
+  // populateClientSelect()/renderTable() above run against an empty
+  // client list and - since nothing else ever re-triggers them - the
+  // dropdown (and any already-tracked budgets) stay missing forever,
+  // even after the real data arrives moments later. Poll briefly and
+  // re-render once real client data shows up.
+  let clientPollAttempts = 0;
+  const clientPoll = setInterval(() => {
+    clientPollAttempts++;
+    const hasClients = Object.keys(getClients()).length > 0;
+    if (hasClients || clientPollAttempts > 30) {
+      clearInterval(clientPoll);
+      if (hasClients) {
+        populateClientSelect();
+        renderTable();
+      }
+    }
+  }, 250);
 });
