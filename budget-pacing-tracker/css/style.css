@@ -1,8 +1,8 @@
 .module-body {
   margin: 0;
   padding: 0;
-  background: var(--color-bg);
-  color: var(--color-text);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
   font-family: 'Inter', sans-serif;
   min-height: 100vh;
 }
@@ -25,7 +25,7 @@
 }
 
 .pacing-card {
-  background: var(--color-bg-elevated);
+  background: var(--color-surface-2);
   border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 20px;

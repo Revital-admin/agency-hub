@@ -1,8 +1,8 @@
 .module-body {
   margin: 0;
   padding: 0;
-  background: var(--color-bg);
-  color: var(--color-text);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
   font-family: 'Inter', sans-serif;
   min-height: 100vh;
 }
@@ -49,4 +49,39 @@
 .form-row {
   display: flex;
   gap: 16px;
+}
+
+/* ── Client select styling fix ──
+   This module's client picker isn't wrapped in the shared ".form-group"
+   div the other modules use, so it was falling back to the browser's
+   unstyled native white select instead of the Hub's dark theme. Copied
+   the exact rule from the shared stylesheet's ".form-group select" and
+   targeted #clientSelect directly so it matches every other module. */
+#clientSelect {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-family: var(--font-body);
+  color: var(--color-text-primary);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+#clientSelect:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-dim);
+}
+
+/* ── Mobile responsiveness ── */
+@media (max-width: 768px) {
+  .brand-kit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 8px;
+  }
 }

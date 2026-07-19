@@ -1,8 +1,8 @@
 .module-body {
   margin: 0;
   padding: 0;
-  background: var(--color-bg);
-  color: var(--color-text);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
   font-family: 'Inter', sans-serif;
   height: 100vh;
   overflow: hidden;
@@ -61,7 +61,7 @@
 }
 
 .report-card {
-  background: var(--color-bg-elevated);
+  background: var(--color-surface-2);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 16px;
@@ -85,4 +85,43 @@
   display: flex;
   gap: 12px;
   align-items: center;
+}
+
+/* ── Mobile responsiveness ── */
+@media (max-width: 768px) {
+  .module-body {
+    height: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .module-container {
+    height: auto;
+  }
+
+  .split-layout {
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  .left-panel {
+    flex: none;
+    width: 100%;
+  }
+
+  .right-panel {
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .report-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
 }
