@@ -216,6 +216,11 @@ let iframeNeedsReload = {
   "tab-socialcomp": true,
   "tab-report": true,
   "tab-copywriting": true,
+  "tab-meetingnotes": true,
+  "tab-reportarchive": true,
+  "tab-brandassetkit": true,
+  "tab-budgetpacing": true,
+
   // These tool tabs previously had a hardcoded iframe src in index.html and
   // were never wired into the reload system at all, so switching client
   // workspaces never refreshed them - they kept showing whichever client
