@@ -2184,7 +2184,18 @@ function saveDatabase() {
   // is lost even if the tab closes before the debounced cloud write below
   // fires.
   backfillMissingClientChecklists();
-  localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
+  // Second line of defense (see rebuildClientsDbFromShards): never let
+  // this overwrite the local cache with a clientsDb we know is still
+  // mid-sync. In the normal case clientsDb is never in that state by
+  // the time anything can call saveDatabase(), but a cross-client tool
+  // acting the instant its iframe loads is exactly the edge case that
+  // exposed this, so it's worth checking here too rather than trusting
+  // a single guard.
+  if (!lastKnownClientsDbShardCount || clientsDbAllShardsLoaded) {
+    localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
+  } else {
+    console.warn("saveDatabase: skipping localStorage write - clientsDb shards still loading.");
+  }
 
   // 2. Trigger Autosave UI indicator
   const indicator = document.getElementById("autosaveIndicator");
@@ -2282,6 +2293,20 @@ function packClientsDbIntoShards(fullDb) {
 }
 
 function rebuildClientsDbFromShards() {
+  // Don't downgrade the already-loaded clientsDb (booted instantly from
+  // localStorage - see loadDatabase()) to a partial state while shards
+  // are still trickling in. Each shard's onSnapshot used to rebuild
+  // clientsDb from ONLY the shards that had arrived so far, so a
+  // complete five-client roster could be briefly - or, if a shard was
+  // slow/failed, not-so-briefly - replaced by a two-client partial
+  // merge and written straight to localStorage. That's what made
+  // clients "disappear": any tool reading clientsDb during that window
+  // (e.g. a cross-client tool like Contract & Invoice Tracker) would
+  // see, and could persist, the incomplete list. Wait until every
+  // expected shard has been seen at least once before promoting the
+  // merge.
+  if (!clientsDbAllShardsLoaded) return;
+
   const merged = {};
   for (let i = 0; i < lastKnownClientsDbShardCount; i++) {
     if (clientsDbShardData[i] && typeof clientsDbShardData[i] === 'object') {

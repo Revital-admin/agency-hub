@@ -252,4 +252,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadReferrals();
   renderTable();
   initListeners();
+
+  // Same class of fix as the other trackers: if this iframe finishes
+  // loading before the parent Hub's clientsDb has synced, the referrer
+  // autocomplete list comes up empty and never refills since it only
+  // ever populates once. Poll briefly and re-populate once real data
+  // shows up (harmless no-op once it's already populated).
+  let pollAttempts = 0;
+  const pollTimer = setInterval(() => {
+    pollAttempts++;
+    let clientCount = 0;
+    try { clientCount = isEmbedded ? Object.keys(window.parent.getAllClients() || {}).length : 0; } catch (e) {}
+    if (clientCount > 0) {
+      populateReferrerDatalist();
+      clearInterval(pollTimer);
+    } else if (pollAttempts >= 30) {
+      clearInterval(pollTimer);
+    }
+  }, 250);
 });

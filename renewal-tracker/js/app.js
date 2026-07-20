@@ -250,4 +250,20 @@ document.addEventListener('DOMContentLoaded', () => {
   populateClientSelect();
   renderTable();
   initListeners();
+
+  // Same fix as Contract & Invoice Tracker: this iframe can finish
+  // loading before the parent Hub's clientsDb has synced, leaving the
+  // "select a client" dropdown permanently empty since it only ever
+  // populates once. Poll briefly and re-populate once real data shows up.
+  let pollAttempts = 0;
+  const pollTimer = setInterval(() => {
+    pollAttempts++;
+    if (Object.keys(getClients()).length > 0) {
+      populateClientSelect();
+      renderTable();
+      clearInterval(pollTimer);
+    } else if (pollAttempts >= 30) {
+      clearInterval(pollTimer);
+    }
+  }, 250);
 });

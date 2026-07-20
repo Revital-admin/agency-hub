@@ -275,4 +275,21 @@ document.addEventListener('DOMContentLoaded', () => {
   populateClientSelect();
   renderTable();
   initListeners();
+
+  // This iframe can finish loading before the parent Hub's clientsDb
+  // has synced from Firestore, in which case getClients() returns {}
+  // and the "select a client" dropdown is stuck empty forever - it
+  // only ever populates once, right here. Poll briefly and re-populate
+  // once real data shows up.
+  let pollAttempts = 0;
+  const pollTimer = setInterval(() => {
+    pollAttempts++;
+    if (Object.keys(getClients()).length > 0) {
+      populateClientSelect();
+      renderTable();
+      clearInterval(pollTimer);
+    } else if (pollAttempts >= 30) {
+      clearInterval(pollTimer);
+    }
+  }, 250);
 });
