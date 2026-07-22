@@ -565,5 +565,58 @@ const SERVICE_CATALOG = [
         "defaultCost": 0
       }
     ]
+  },
+  {
+    "category": "🎨 Branding & Design",
+    "services": [
+      {
+        "name": "Brand Strategy Session",
+        "defaultPrice": 0,
+        "defaultFeeType": "setup",
+        "defaultCost": 0
+      },
+      {
+        "name": "Primary Logo Design",
+        "defaultPrice": 0,
+        "defaultFeeType": "setup",
+        "defaultCost": 0
+      },
+      {
+        "name": "Logo Variations & Submark",
+        "defaultPrice": 0,
+        "defaultFeeType": "setup",
+        "defaultCost": 0
+      },
+      {
+        "name": "Color Palette & Typography System",
+        "defaultPrice": 0,
+        "defaultFeeType": "setup",
+        "defaultCost": 0
+      },
+      {
+        "name": "Brand Style Guide / Guidelines",
+        "defaultPrice": 0,
+        "defaultFeeType": "setup",
+        "defaultCost": 0
+      },
+      {
+        "name": "Social Media Profile Graphics",
+        "defaultPrice": 0,
+        "defaultFeeType": "setup",
+        "defaultCost": 0
+      },
+      {
+        "name": "Branded Social Media Templates",
+        "defaultPrice": 0,
+        "defaultFeeType": "setup",
+        "defaultCost": 0
+      },
+      {
+        "name": "Business Card / Promotional Design",
+        "defaultPrice": 0,
+        "defaultFeeType": "setup",
+        "defaultCost": 0
+      }
+    ]
   }
 ];
