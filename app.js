@@ -355,7 +355,10 @@ let iframeNeedsReload = {
   "tab-revisionfeedback": true,
   "tab-callsheet": true,
   "tab-rawfootage": true,
-  "tab-releaseforms": true
+  "tab-releaseforms": true,
+  "tab-runofshow": true,
+  "tab-venuespecs": true,
+  "tab-vendorrental": true
 };
 
 // ── Initial State Blueprint ──
@@ -816,6 +819,15 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-releaseforms":
       renderReleaseFormsTab();
+      break;
+    case "tab-runofshow":
+      renderRunOfShowTab();
+      break;
+    case "tab-venuespecs":
+      renderVenueTechSpecsTab();
+      break;
+    case "tab-vendorrental":
+      renderVendorRentalTab();
       break;
     case "tab-sopwiki":
       renderSopWiki();
@@ -1708,6 +1720,21 @@ function renderRawFootageTab() {
 // ── Release Forms Tracker Controller ──
 function renderReleaseFormsTab() {
   setIframeAbsoluteSrc('#tab-releaseforms iframe', "release-forms-tracker/index.html");
+}
+
+// ── Run of Show Tracker Controller ──
+function renderRunOfShowTab() {
+  setIframeAbsoluteSrc('#tab-runofshow iframe', "run-of-show-tracker/index.html");
+}
+
+// ── Venue Tech-Spec Library Controller ──
+function renderVenueTechSpecsTab() {
+  setIframeAbsoluteSrc('#tab-venuespecs iframe', "venue-tech-spec-library/index.html");
+}
+
+// ── Vendor / Rental & COI Tracker Controller ──
+function renderVendorRentalTab() {
+  setIframeAbsoluteSrc('#tab-vendorrental iframe', "vendor-rental-tracker/index.html");
 }
 
 // ── SOP Wiki Controller ──

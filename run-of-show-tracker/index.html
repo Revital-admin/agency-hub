@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Run of Show Tracker</title>
+<link rel="stylesheet" href="../style.css?v=1">
+<link rel="stylesheet" href="css/style.css?v=1">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<main class="container container-wide">
+<div class="brand-bar">
+<div class="brand-logo-container"></div>
+</div>
+
+<header class="site-header">
+<div class="header-eyebrow">
+<span class="dot"></span>
+<span>Production</span>
+</div>
+<h1 class="site-title">Run of Show <em>Tracker</em></h1>
+<p class="site-subtitle">Log the run of show for each event — paste in what the client or their planner gave you, then layer your own AV technical cues on top. Not a builder from scratch; a place to keep the schedule and the cues that go with it in one spot.</p>
+</header>
+
+<div class="summary-bar" id="summaryBar">
+<div class="summary-stat"><span class="summary-num" id="summaryTotal">0</span><span class="summary-label">Events Logged</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryConfirmed">0</span><span class="summary-label">Confirmed</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryDraft">0</span><span class="summary-label">Draft</span></div>
+</div>
+
+<div class="step-card">
+<div class="section-title" style="margin-bottom: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent);">Log an Event</h2>
+</div>
+
+<div class="form-grid">
+<div class="form-group"><label for="clientName">Client Name</label><input type="text" id="clientName" list="clientOptions" placeholder="Client / company name..."><datalist id="clientOptions"></datalist></div>
+<div class="form-group"><label for="eventTitle">Event / Project Title</label><input type="text" id="eventTitle"></div>
+<div class="form-group"><label for="eventDate">Event Date</label><input type="date" id="eventDate"></div>
+<div class="form-group"><label for="venueName">Venue / Location</label><input type="text" id="venueName" placeholder="e.g. Grand Hall, Downtown Conference Center..."></div>
+<div class="form-group"><label for="status">Status</label><select id="status"><option>Draft</option><option>Confirmed</option><option>Completed</option><option>Cancelled</option></select></div>
+<div class="form-group"><label for="sourceLink">Original Doc Link (optional)</label><input type="text" id="sourceLink" placeholder="Link to the client's PDF/doc if stored elsewhere..."></div>
+</div>
+<div class="form-group"><label for="clientRunOfShow">Client Run of Show</label><textarea id="clientRunOfShow" rows="6" placeholder="Paste the run of show as given by the client or their planner — times, segments, who's speaking, etc."></textarea></div>
+<div class="form-group"><label for="avCues">AV Technical Cues (Revital's notes)</label><textarea id="avCues" rows="6" placeholder="Layer your own cues on top of their schedule — mic cues, video/playback cues, lighting cues, crew handoffs..."></textarea></div>
+<div class="form-group"><label for="notes">Notes</label><input type="text" id="notes" placeholder="Anything else worth flagging..."></div>
+
+<button id="saveEntryBtn" class="btn-primary">Log Event</button>
+</div>
+
+<div class="step-card">
+<div class="tracker-controls-row" style="flex-wrap: wrap; gap: 14px;">
+<input type="text" id="filterClientInput" placeholder="Filter by client name..." style="flex:1; min-width:220px;">
+</div>
+</div>
+
+<div class="step-card table-card">
+<div class="tracker-table-wrap">
+<table class="tracker-table">
+<thead>
+<tr>
+<th>Client</th>
+<th>Event</th>
+<th>Date</th>
+<th>Venue</th>
+<th>Status</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="logTableBody"></tbody>
+</table>
+<p id="emptyState" class="empty-state" style="display:none;">No events logged yet.</p>
+</div>
+</div>
+
+</main>
+<script src="js/app.js?v=1"></script>
+</body>
+</html>

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Venue Tech-Spec Library</title>
+<link rel="stylesheet" href="../style.css?v=1">
+<link rel="stylesheet" href="css/style.css?v=1">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<main class="container container-wide">
+<div class="brand-bar">
+<div class="brand-logo-container"></div>
+</div>
+
+<header class="site-header">
+<div class="header-eyebrow">
+<span class="dot"></span>
+<span>Production</span>
+</div>
+<h1 class="site-title">Venue Tech-Spec <em>Library</em></h1>
+<p class="site-subtitle">Power, rigging, and load-in details for every venue you've worked in — so repeat bookings don't mean re-scouting the building from scratch, and show day doesn't surprise you.</p>
+</header>
+
+<div class="summary-bar" id="summaryBar">
+<div class="summary-stat"><span class="summary-num" id="summaryTotal">0</span><span class="summary-label">Venues Logged</span></div>
+</div>
+
+<div class="step-card">
+<div class="section-title" style="margin-bottom: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent);">Log a Venue</h2>
+</div>
+
+<div class="form-grid">
+<div class="form-group"><label for="venueName">Venue Name</label><input type="text" id="venueName" list="venueOptions" placeholder="e.g. Grand Hall, Downtown Conference Center..."><datalist id="venueOptions"></datalist></div>
+<div class="form-group"><label for="address">Address</label><input type="text" id="address"></div>
+<div class="form-group"><label for="contactName">Venue Contact Name</label><input type="text" id="contactName"></div>
+<div class="form-group"><label for="contactPhone">Venue Contact Phone / Email</label><input type="text" id="contactPhone"></div>
+<div class="form-group"><label for="networkAvailability">Network / Wi-Fi Availability</label><input type="text" id="networkAvailability" placeholder="e.g. Guest Wi-Fi only, hardline available at FOH..."></div>
+<div class="form-group"><label for="lastUsedDate">Last Used Date</label><input type="date" id="lastUsedDate"></div>
+</div>
+<div class="form-group"><label for="power">Power / Circuits Available</label><textarea id="power" rows="4" placeholder="Amps, circuit locations, whether AV has a dedicated circuit, generator needs..."></textarea></div>
+<div class="form-group"><label for="rigging">Rigging Points & Weight Limits</label><textarea id="rigging" rows="4" placeholder="Where you can rig, weight limits, ceiling height, truss restrictions..."></textarea></div>
+<div class="form-group"><label for="loadIn">Load-In Access</label><textarea id="loadIn" rows="4" placeholder="Dock size, elevator access, stairs-only areas, freight restrictions, parking for the truck..."></textarea></div>
+<div class="form-group"><label for="notes">Notes</label><input type="text" id="notes" placeholder="Anything else worth flagging for next time..."></div>
+
+<button id="saveEntryBtn" class="btn-primary">Log Venue</button>
+</div>
+
+<div class="step-card">
+<div class="tracker-controls-row" style="flex-wrap: wrap; gap: 14px;">
+<input type="text" id="filterInput" placeholder="Filter by venue name..." style="flex:1; min-width:220px;">
+</div>
+</div>
+
+<div class="step-card table-card">
+<div class="tracker-table-wrap">
+<table class="tracker-table">
+<thead>
+<tr>
+<th>Venue</th>
+<th>Address</th>
+<th>Contact</th>
+<th>Last Used</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="logTableBody"></tbody>
+</table>
+<p id="emptyState" class="empty-state" style="display:none;">No venues logged yet.</p>
+</div>
+</div>
+
+</main>
+<script src="js/app.js?v=1"></script>
+</body>
+</html>

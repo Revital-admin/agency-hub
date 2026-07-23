@@ -1,0 +1,113 @@
+.container-wide { max-width: 1320px; }
+.container { position: relative; z-index: 1; margin: 0 auto; padding: 3rem 1.5rem 4rem; }
+
+.summary-bar {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.summary-stat {
+  flex: 1;
+  min-width: 160px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.summary-num { font-family: var(--font-display); font-size: 32px; color: var(--color-accent); line-height: 1; }
+.summary-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--color-text-muted); }
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 4px 20px;
+}
+
+.tracker-controls-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.tracker-controls-row input[type="text"] {
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-md);
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.table-card { padding: 0; overflow: hidden; }
+.tracker-table-wrap { overflow-x: auto; }
+.tracker-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tracker-table th {
+  text-align: left;
+  padding: 12px 14px;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+.tracker-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  vertical-align: top;
+}
+.tracker-table tr:last-child td { border-bottom: none; }
+.tracker-table td.client-cell { font-weight: 600; white-space: nowrap; }
+.tracker-table td.date-cell { white-space: nowrap; color: var(--color-text-secondary); }
+
+.section-tag {
+  display: inline-block;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-md);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+.section-tag.status-draft { border-color: #eab308; color: #eab308; }
+.section-tag.status-confirmed { border-color: #22c55e; color: #22c55e; }
+.section-tag.status-completed { border-color: #6b7280; color: #9ca3af; }
+.section-tag.status-cancelled { border-color: #ef4444; color: #ef4444; }
+
+.row-actions { display: flex; flex-direction: column; gap: 4px; min-width: 90px; }
+.row-actions button {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 100px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.row-actions button:hover { background: var(--color-surface-2); border-color: var(--color-border-md); color: var(--color-accent); }
+.row-actions button.remove-btn:hover { border-color: #ef4444; color: #ef4444; }
+
+.detail-row td { background: var(--color-surface-2); padding: 0; }
+.detail-row-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 16px 20px; }
+.detail-panel h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--color-text-muted); margin: 0 0 6px; }
+.detail-panel pre { white-space: pre-wrap; word-wrap: break-word; font-family: var(--font-body); font-size: 13px; color: var(--color-text-primary); margin: 0; background: none; border: none; padding: 0; }
+.detail-panel .empty-hint { color: var(--color-text-muted); font-style: italic; font-size: 13px; }
+@media (max-width: 768px) {
+  .detail-row-inner { grid-template-columns: 1fr; }
+}
+
+.empty-state { text-align: center; padding: 40px 20px; color: var(--color-text-muted); font-size: 14px; }
+
+@media (max-width: 768px) {
+  html, body { overflow-x: hidden; }
+  .site-title { font-size: 1.6rem; overflow-wrap: break-word; }
+  .container, .container-wide { width: 100%; padding: 2rem 1rem 3rem; }
+  .summary-stat { min-width: 130px; }
+}

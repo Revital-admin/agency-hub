@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vendor / Rental & COI Tracker</title>
+<link rel="stylesheet" href="../style.css?v=1">
+<link rel="stylesheet" href="css/style.css?v=1">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<main class="container container-wide">
+<div class="brand-bar">
+<div class="brand-logo-container"></div>
+</div>
+
+<header class="site-header">
+<div class="header-eyebrow">
+<span class="dot"></span>
+<span>Production</span>
+</div>
+<h1 class="site-title">Vendor / Rental &amp; <em>COI Tracker</em></h1>
+<p class="site-subtitle">Gear rented from outside companies, and insurance certificates on file for vendors and subcontractors — so nothing gets missed before load-in.</p>
+</header>
+
+<div class="summary-bar" id="summaryBar">
+<div class="summary-stat"><span class="summary-num" id="summaryActive">0</span><span class="summary-label">Active</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryMissingCoi">0</span><span class="summary-label">Missing / Expired COI</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryTotal">0</span><span class="summary-label">Total Logged</span></div>
+</div>
+
+<div class="step-card">
+<div class="section-title" style="margin-bottom: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent);">Log a Vendor / Rental</h2>
+</div>
+
+<div class="form-grid">
+<div class="form-group"><label for="vendorName">Vendor / Company Name</label><input type="text" id="vendorName" list="vendorOptions" placeholder="Rental company or subcontractor name..."><datalist id="vendorOptions"></datalist></div>
+<div class="form-group"><label for="recordType">Record Type</label><select id="recordType"><option>Equipment Rental</option><option>Subcontractor / Crew</option><option>Both</option></select></div>
+<div class="form-group"><label for="itemService">Item / Service</label><input type="text" id="itemService" placeholder="What's rented, or the role/service provided..."></div>
+<div class="form-group"><label for="jobReference">Job / Event Reference</label><input type="text" id="jobReference" list="clientOptions" placeholder="Client or event this is tied to..."><datalist id="clientOptions"></datalist></div>
+<div class="form-group"><label for="startDate">Start / Rental Date</label><input type="date" id="startDate"></div>
+<div class="form-group"><label for="endDate">Return / End Date</label><input type="date" id="endDate"></div>
+<div class="form-group"><label for="cost">Cost ($)</label><input type="number" id="cost" min="0" step="1" placeholder="0"></div>
+<div class="form-group"><label for="status">Status</label><select id="status"><option>Active</option><option>Returned / Completed</option><option>Cancelled</option></select></div>
+<div class="form-group"><label for="coiStatus">COI Status</label><select id="coiStatus"><option>Not Required</option><option>On File</option><option>Missing</option><option>Expired</option></select></div>
+<div class="form-group"><label for="coiExpiration">COI Expiration Date</label><input type="date" id="coiExpiration"></div>
+</div>
+<div class="form-group"><label for="conditionNotes">Condition Notes (out / in)</label><input type="text" id="conditionNotes" placeholder="Condition at pickup and at return, for damage disputes..."></div>
+<div class="form-group"><label for="notes">Notes</label><input type="text" id="notes" placeholder="Anything else worth flagging..."></div>
+
+<button id="saveEntryBtn" class="btn-primary">Log Entry</button>
+</div>
+
+<div class="step-card">
+<div class="tracker-controls-row" style="flex-wrap: wrap; gap: 14px;">
+<input type="text" id="filterInput" placeholder="Filter by vendor name..." style="flex:1; min-width:220px;">
+</div>
+</div>
+
+<div class="step-card table-card">
+<div class="tracker-table-wrap">
+<table class="tracker-table">
+<thead>
+<tr>
+<th>Vendor</th>
+<th>Type</th>
+<th>Item / Service</th>
+<th>Job</th>
+<th>Dates</th>
+<th>COI Status</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="logTableBody"></tbody>
+</table>
+<p id="emptyState" class="empty-state" style="display:none;">No vendors or rentals logged yet.</p>
+</div>
+</div>
+
+</main>
+<script src="js/app.js?v=1"></script>
+</body>
+</html>
