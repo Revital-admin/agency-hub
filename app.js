@@ -677,6 +677,47 @@ function createNewClient() {
   showBanner("success", `Client workspace "${name}" initialized successfully!`);
 }
 
+function renameActiveClient() {
+  const sandboxName = "Quick Sandbox (One-Offs)";
+  if (activeClientName === sandboxName) {
+    showBanner("error", "Cannot rename the Quick Sandbox workspace.");
+    return;
+  }
+  if (!activeClientName || !clientsDb[activeClientName]) {
+    showBanner("error", "No active client workspace to rename.");
+    return;
+  }
+
+  const oldName = activeClientName;
+  const newNameInput = prompt(`Rename "${oldName}" to:`, oldName);
+  if (!newNameInput) return;
+  const newName = newNameInput.trim();
+  if (newName === "" || newName === oldName) return;
+
+  if (clientsDb[newName]) {
+    showBanner("error", `A client workspace named "${newName}" already exists.`);
+    return;
+  }
+
+  // Move the client's full state to the new key and update its internal
+  // `name` field to match (kept in sync since createClientBlankState()
+  // stores name on the object itself). Client portal links are unaffected
+  // - the portal resolves clients by a separate Firestore token, not by
+  // this name/key, so nothing on the client-facing side breaks.
+  const clientState = clientsDb[oldName];
+  clientState.name = newName;
+  clientsDb[newName] = clientState;
+  delete clientsDb[oldName];
+
+  activeClientName = newName;
+  localStorage.setItem("REVITAL_HUB_ACTIVE_CLIENT", activeClientName);
+
+  saveDatabase();
+  buildClientDropdown();
+  refreshAllViews();
+  showBanner("success", `Renamed "${oldName}" to "${newName}".`);
+}
+
 function deleteActiveClient() {
   const sandboxName = "Quick Sandbox (One-Offs)";
   if (activeClientName === sandboxName) {
@@ -2200,6 +2241,12 @@ function initParentEventListeners() {
   const deleteClientBtn = document.getElementById("deleteClientBtn");
   if (deleteClientBtn) {
     deleteClientBtn.addEventListener("click", deleteActiveClient);
+  }
+
+  // Edit (rename) Client Button
+  const editClientBtn = document.getElementById("editClientBtn");
+  if (editClientBtn) {
+    editClientBtn.addEventListener("click", renameActiveClient);
   }
 
   // Add Client button dropdown
