@@ -766,6 +766,10 @@ function buildClientDropdown() {
     }
     select.appendChild(option);
   });
+
+  // Native tooltip fallback so the full name is always reachable even when
+  // the styled dropdown truncates a long client name with an ellipsis.
+  select.title = activeClientName;
 }
 
 // ── Helper to reload iframe if needed ──
@@ -2259,6 +2263,7 @@ function initParentEventListeners() {
   const clientSelect = document.getElementById("clientSelect");
   if (clientSelect) {
     clientSelect.addEventListener("change", (e) => {
+      e.target.title = e.target.value;
       switchClient(e.target.value);
     });
   }
