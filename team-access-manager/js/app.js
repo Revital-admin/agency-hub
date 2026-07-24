@@ -15,7 +15,8 @@ const SECTION_DEFS = [
   { key: "core", label: "Core" },
   { key: "account-management", label: "Account Management" },
   { key: "production", label: "Production" },
-  { key: "execution", label: "Execution" },
+  { key: "content-creation", label: "Content Creation" },
+  { key: "account-ops", label: "Account Ops" },
   { key: "audits", label: "Audits" },
   { key: "strategy-competition", label: "Strategy & Competition" },
   { key: "sales", label: "Sales" },
@@ -35,7 +36,7 @@ const SECTION_DEFS = [
 const ROLE_TIERS = [
   {
     tier: "Full Access — Leadership",
-    sections: ["core", "account-management", "production", "execution", "audits", "strategy-competition", "sales", "agency-globals"],
+    sections: ["core", "account-management", "production", "content-creation", "account-ops", "audits", "strategy-competition", "sales", "agency-globals"],
     roles: ["Founder / CEO", "Creative Director", "Executive Producer", "Chief Operating Officer (COO)", "Head of Strategy"]
   },
   {
@@ -45,12 +46,12 @@ const ROLE_TIERS = [
   },
   {
     tier: "Account Management / Client Services",
-    sections: ["core", "account-management", "production", "execution", "sales"],
+    sections: ["core", "account-management", "production", "content-creation", "account-ops", "sales"],
     roles: ["Producer", "Senior Producer", "Account Manager", "Account Coordinator", "Client Success Manager"]
   },
   {
     tier: "Digital Marketing",
-    sections: ["account-management", "execution", "audits", "strategy-competition"],
+    sections: ["account-management", "content-creation", "account-ops", "audits", "strategy-competition"],
     roles: ["Digital Marketing Strategist", "Social Media Manager", "Content Manager", "SEO Specialist", "Paid Ads Specialist", "Email Marketing Specialist", "Analytics / Reporting Specialist"]
   },
   {
