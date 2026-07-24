@@ -19,7 +19,9 @@ const SECTION_DEFS = [
   { key: "account-ops", label: "Account Ops" },
   { key: "audits", label: "Audits" },
   { key: "strategy-competition", label: "Strategy & Competition" },
-  { key: "sales", label: "Sales" },
+  { key: "sales-pipeline", label: "Sales Pipeline" },
+  { key: "client-retention", label: "Client Retention" },
+  { key: "social-proof", label: "Social Proof" },
   { key: "agency-globals", label: "Agency Globals" }
 ];
 
@@ -36,17 +38,17 @@ const SECTION_DEFS = [
 const ROLE_TIERS = [
   {
     tier: "Full Access — Leadership",
-    sections: ["core", "account-management", "production", "content-creation", "account-ops", "audits", "strategy-competition", "sales", "agency-globals"],
+    sections: ["core", "account-management", "production", "content-creation", "account-ops", "audits", "strategy-competition", "sales-pipeline", "client-retention", "social-proof", "agency-globals"],
     roles: ["Founder / CEO", "Creative Director", "Executive Producer", "Chief Operating Officer (COO)", "Head of Strategy"]
   },
   {
     tier: "Sales & Business Development",
-    sections: ["sales", "strategy-competition"],
+    sections: ["sales-pipeline", "social-proof", "strategy-competition"],
     roles: ["Business Development Manager", "New Business Representative", "Sales Coordinator", "Partnerships Manager", "Proposal & Bids Specialist"]
   },
   {
     tier: "Account Management / Client Services",
-    sections: ["core", "account-management", "production", "content-creation", "account-ops", "sales"],
+    sections: ["core", "account-management", "production", "content-creation", "account-ops", "client-retention", "social-proof"],
     roles: ["Producer", "Senior Producer", "Account Manager", "Account Coordinator", "Client Success Manager"]
   },
   {
