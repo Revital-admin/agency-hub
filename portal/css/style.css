@@ -184,10 +184,17 @@ body {
   right: 0;
   margin-top: 10px;
   z-index: 60;
-  background: var(--color-surface);
+  /* --color-surface is a near-transparent rgba(255,255,255,0.03) tint,
+     designed to sit on top of the page's solid background - fine for
+     cards in the normal content flow, but this dropdown floats OVER other
+     UI (the nav), so that transparency let the sidebar nav bleed straight
+     through and made both look like a garbled double-exposure. Composited
+     onto the page's actual solid background color here so it's a genuine
+     opaque panel instead. */
+  background: linear-gradient(var(--color-surface), var(--color-surface)), var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
   max-height: 360px;
   display: flex;
   flex-direction: column;
