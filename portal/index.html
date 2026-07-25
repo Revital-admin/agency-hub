@@ -16,6 +16,7 @@ window.addEventListener('error', function(e) {
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
   <!-- Loading State -->
@@ -278,12 +279,22 @@ window.addEventListener('error', function(e) {
         </div>
 
         <div id="reportDetailView" class="report-detail-view" style="display:none;">
-          <button id="btnBackToReports" class="btn-secondary" style="margin-bottom: 20px;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-            Back to all reports
-          </button>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+            <button id="btnBackToReports" class="btn-secondary" style="margin-bottom:0; width:auto;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+              Back to all reports
+            </button>
+            <button id="btnDownloadReportPdf" class="btn-secondary" style="margin-bottom:0; width:auto; display:none;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              Download PDF
+            </button>
+          </div>
           <div id="reportDetailContent"></div>
         </div>
+
+        <!-- Off-screen container used only when building the PDF export -
+             never shown, html2canvas captures it directly. -->
+        <div id="reportPdfExportContainer" style="position:absolute; left:-9999px; top:0;"></div>
 
         <div id="monthlyReportsEmbedWrapper" class="iframe-wrapper full-height" style="display:none; margin-top: 32px;">
           <iframe id="monthlyReportsIframe" src="" frameborder="0"></iframe>
@@ -554,6 +565,12 @@ window.addEventListener('error', function(e) {
         </header>
 
         <div class="guide-content">
+          <div class="guide-section" id="myReferralsSection" style="display:none;">
+            <h3>Your Referrals</h3>
+            <p class="guide-intro" id="myReferralsSummary"></p>
+            <div id="myReferralsList" class="referral-tracked-list"></div>
+          </div>
+
           <div class="guide-section">
             <p class="guide-intro">If someone you refer becomes a Revital Productions client, you earn a reward &mdash; no limit on how many times you can refer.</p>
           </div>

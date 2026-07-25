@@ -786,6 +786,30 @@ body {
   }
 }
 
+/* PDF export of a single report (see btnDownloadReportPdf in app.js) -
+   rendered off-screen, captured by html2canvas/html2pdf. Uses the same
+   CSS vars already set per-client at runtime (primary/secondary colors,
+   fonts), so the exported file matches that client's own portal branding
+   rather than a fixed look. */
+.pdf-export-page {
+  width: 8.5in;
+  padding: 0.75in;
+  box-sizing: border-box;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+.pdf-export-header {
+  margin-bottom: 24px;
+}
+.pdf-export-header .pdf-export-title {
+  font-family: var(--font-heading);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 16px 0 4px 0;
+}
+
 /* ── Monthly Reports (published archive) ── */
 .report-archive-list {
   display: grid;
@@ -1297,6 +1321,42 @@ body {
   color: var(--color-text);
   margin-top: 8px;
   font-style: italic;
+}
+
+/* Tracked referrals (read-only, pulled from the Referral Tracker) */
+.referral-tracked-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+.referral-tracked-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+.referral-tracked-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.referral-tracked-main strong {
+  font-size: 0.9rem;
+}
+.referral-tracked-date {
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+}
+.referral-tracked-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 /* Referral Program */

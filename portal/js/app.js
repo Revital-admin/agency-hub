@@ -200,6 +200,8 @@ function renderPortal() {
     }
   }
 
+  renderReferralSummary(clientData.referralSummary);
+
   const analyticsEmbed = document.getElementById("analyticsEmbedContainer");
   const statsPlaceholder = document.getElementById("dashboardStatsPlaceholder");
   if (config.liveAnalyticsUrl) {
@@ -357,11 +359,17 @@ function renderReportArchive() {
   });
 }
 
+let currentReportForExport = null;
+
 function showReportDetail(report) {
   const listEl = document.getElementById("reportArchiveList");
   const detailEl = document.getElementById("reportDetailView");
   const contentEl = document.getElementById("reportDetailContent");
   if (!listEl || !detailEl || !contentEl) return;
+
+  currentReportForExport = report;
+  const downloadBtn = document.getElementById("btnDownloadReportPdf");
+  if (downloadBtn) downloadBtn.style.display = "inline-flex";
 
   listEl.style.display = "none";
   detailEl.style.display = "block";
@@ -557,6 +565,56 @@ function renderBillingSummary(summary) {
   `;
 }
 
+// ── Referral tracking (read-only) ──
+// Pulled from the Referral Tracker via the hub's syncPublicPortalDocs (see
+// fetchReferralSummaries in app.js). Shown unconditionally (no per-client
+// toggle, unlike Billing) since this is just a reflection of referrals the
+// client themselves made - nothing sensitive to gate behind an opt-in.
+const REFERRAL_STATUS_CLASSES = {
+  "Pending": "status-sent",
+  "Became Client": "status-paid",
+  "Declined": "status-overdue"
+};
+const REWARD_STATUS_CLASSES = {
+  "Not Owed": "status-not-sent",
+  "Owed": "status-sent",
+  "Paid": "status-paid"
+};
+
+function referralPill(value, classMap) {
+  const cls = classMap[value] || "status-not-sent";
+  return `<span class="billing-status-pill ${cls}">${escapeHtml(value || "")}</span>`;
+}
+
+function renderReferralSummary(summary) {
+  const section = document.getElementById("myReferralsSection");
+  const summaryEl = document.getElementById("myReferralsSummary");
+  const listEl = document.getElementById("myReferralsList");
+  if (!section || !summaryEl || !listEl) return;
+
+  if (!summary || !Array.isArray(summary.entries) || summary.entries.length === 0) {
+    section.style.display = "none";
+    return;
+  }
+
+  section.style.display = "block";
+  const clientWord = summary.becameClientCount === 1 ? "client" : "clients";
+  summaryEl.textContent = `You've referred ${summary.totalReferrals} ${summary.totalReferrals === 1 ? "person" : "people"} so far - ${summary.becameClientCount} became ${clientWord}.`;
+
+  listEl.innerHTML = summary.entries.map(entry => `
+    <div class="referral-tracked-row">
+      <div class="referral-tracked-main">
+        <strong>${escapeHtml(entry.referredName)}</strong>
+        <span class="referral-tracked-date">${escapeHtml(entry.dateReferred)}</span>
+      </div>
+      <div class="referral-tracked-pills">
+        ${referralPill(entry.status, REFERRAL_STATUS_CLASSES)}
+        ${referralPill(entry.rewardStatus, REWARD_STATUS_CLASSES)}
+      </div>
+    </div>
+  `).join("");
+}
+
 // ── Notification Bell ──
 // The hub pushes an entry here (new approval request, new published
 // report) via pushClientNotification() in the parent app.js. The portal
@@ -679,7 +737,85 @@ if (btnBackToReports) {
   btnBackToReports.addEventListener("click", () => {
     document.getElementById("reportDetailView").style.display = "none";
     document.getElementById("reportArchiveList").style.display = "";
+    currentReportForExport = null;
     renderReportArchive();
+  });
+}
+
+// ── Report PDF export ──
+// Builds a standalone, branded copy of the currently-open report (client's
+// own logo/colors, not a fixed Revital look - this page's CSS vars are
+// already set per-client in renderPortal) into the off-screen container
+// below, then hands it to html2pdf. Only ever used for the "old schema"
+// structured reports (date/focus/wins/platforms/cellData) - the newer
+// monthYear/url reports are just external links with nothing in-app to
+// export, and showReportDetail (the only thing that reveals this button)
+// is never called for those.
+const btnDownloadReportPdf = document.getElementById("btnDownloadReportPdf");
+if (btnDownloadReportPdf) {
+  btnDownloadReportPdf.addEventListener("click", () => {
+    if (!currentReportForExport || typeof html2pdf === "undefined") return;
+
+    const report = currentReportForExport;
+    const config = clientData.portalConfig || {};
+    const platforms = Array.isArray(report.platforms) ? report.platforms : [];
+    const cellData = report.cellData || {};
+    const metricKeys = Object.keys(REPORT_METRIC_LABELS);
+
+    let tableRows = "";
+    metricKeys.forEach((key) => {
+      tableRows += `<tr><td class="metric-label">${escapeHtml(REPORT_METRIC_LABELS[key])}</td>`;
+      platforms.forEach((_, idx) => {
+        const val = cellData[key] && cellData[key][idx] ? cellData[key][idx] : "—";
+        tableRows += `<td>${escapeHtml(val)}</td>`;
+      });
+      tableRows += "</tr>";
+    });
+    let platformHeaders = "";
+    platforms.forEach((p) => {
+      platformHeaders += `<th><span class="platform-dot" style="background:${escapeHtml(p.color || "#999")}"></span>${escapeHtml(p.name || "Platform")}</th>`;
+    });
+
+    const brandLabel = config.clientLogoUrl
+      ? `<img src="${escapeHtml(config.clientLogoUrl)}" style="height:36px; max-width:180px; object-fit:contain;">`
+      : `<div style="font-family:var(--font-heading); font-size:1.1rem; font-weight:700; background:linear-gradient(to right, var(--color-primary), var(--color-secondary)); -webkit-background-clip:text; -webkit-text-fill-color:transparent;">${escapeHtml(clientName)} Portal</div>`;
+
+    const exportContainer = document.getElementById("reportPdfExportContainer");
+    exportContainer.innerHTML = `
+      <div class="pdf-export-page">
+        <div class="pdf-export-header">
+          ${brandLabel}
+          <div class="pdf-export-title">${escapeHtml(report.date || "Report")}</div>
+          ${report.preparedBy ? `<p class="report-meta">Prepared by ${escapeHtml(report.preparedBy)}</p>` : ""}
+          ${report.focus ? `<p class="report-meta">Focus: ${escapeHtml(report.focus)}</p>` : ""}
+        </div>
+        ${report.wins ? `<div class="report-wins"><strong>Key wins this month</strong><p>${escapeHtml(report.wins)}</p></div>` : ""}
+        ${platforms.length > 0 ? `<table class="report-metrics-table"><thead><tr><th>Metric</th>${platformHeaders}</tr></thead><tbody>${tableRows}</tbody></table>` : ""}
+      </div>
+    `;
+
+    const originalText = btnDownloadReportPdf.innerHTML;
+    btnDownloadReportPdf.textContent = "Generating...";
+    btnDownloadReportPdf.disabled = true;
+
+    const fileName = `${(clientName || "Client").replace(/\s+/g, "_")}_Report_${(report.date || "report").replace(/[^a-z0-9]+/gi, "_")}.pdf`;
+
+    html2pdf().set({
+      margin: 0,
+      filename: fileName,
+      image: { type: "jpeg", quality: 0.92 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: null, scrollX: 0, scrollY: 0 },
+      jsPDF: { unit: "in", format: "letter", orientation: "portrait" }
+    }).from(exportContainer.querySelector(".pdf-export-page")).save().then(() => {
+      btnDownloadReportPdf.innerHTML = originalText;
+      btnDownloadReportPdf.disabled = false;
+      exportContainer.innerHTML = "";
+    }).catch((err) => {
+      console.error("PDF export failed:", err);
+      btnDownloadReportPdf.innerHTML = originalText;
+      btnDownloadReportPdf.disabled = false;
+      exportContainer.innerHTML = "";
+    });
   });
 }
 

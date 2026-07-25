@@ -3103,6 +3103,39 @@ async function fetchBillingSummaries() {
   return summaries;
 }
 
+// Same pattern as fetchBillingSummaries above, but for the Referral
+// Tracker's agency/referrals collection - it too deliberately lives
+// outside clientsDb (a referral can come from someone who isn't a client
+// yet). Aggregates every entry where referrerName matches this client by
+// name into one summary: how many referrals, how many became clients, and
+// the individual entries so the portal can list them.
+async function fetchReferralSummaries() {
+  const summaries = {};
+  try {
+    const snap = await window.firebaseDb.collection("agency").doc("referrals").get();
+    const list = (snap.exists && snap.data().list) || [];
+    list.forEach(rec => {
+      if (!rec.referrerName) return;
+      const key = rec.referrerName.toLowerCase();
+      if (!summaries[key]) {
+        summaries[key] = { totalReferrals: 0, becameClientCount: 0, entries: [] };
+      }
+      summaries[key].totalReferrals++;
+      if (rec.status === 'Became Client') summaries[key].becameClientCount++;
+      summaries[key].entries.push({
+        referredName: rec.referredName || "",
+        dateReferred: rec.dateReferred || "",
+        status: rec.status || "Pending",
+        rewardStatus: rec.rewardStatus || "Not Owed",
+        rewardAmount: rec.rewardAmount || ""
+      });
+    });
+  } catch (e) {
+    console.warn("Could not read referral records for referral summaries:", e);
+  }
+  return summaries;
+}
+
 async function syncPublicPortalDocs(dbSnapshot) {
   if (!window.firebaseDb || !window.firebaseDb.collection) return;
 
@@ -3111,6 +3144,7 @@ async function syncPublicPortalDocs(dbSnapshot) {
   );
 
   const billingSummaries = await fetchBillingSummaries();
+  const referralSummaries = await fetchReferralSummaries();
 
   for (const [name, client] of entries) {
     const token = client.portalConfig.magicToken;
@@ -3186,6 +3220,10 @@ async function syncPublicPortalDocs(dbSnapshot) {
       // client isn't tracked there under a matching name. The portal only
       // shows this at all if portalConfig.showBillingInPortal is on.
       billingSummary: billingSummaries[name.toLowerCase()] || null,
+      // Read-only referral tracking pulled from the Referral Tracker (see
+      // fetchReferralSummaries above). null if this client has never
+      // referred anyone under a matching name.
+      referralSummary: referralSummaries[name.toLowerCase()] || null,
       // Carried forward as-is (see preservedLastVisitedAt above) - the
       // admin never writes this, only preserves whatever the portal itself
       // already recorded so a Hub save doesn't erase it.
