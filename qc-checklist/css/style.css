@@ -1,5 +1,7 @@
 .container { position: relative; z-index: 1; max-width: 1000px; margin: 0 auto; padding: 3rem 1.5rem 4rem; }
 
+.tracker-controls-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
 .category-header {
   display: flex;
   justify-content: space-between;
