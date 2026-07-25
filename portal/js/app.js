@@ -367,6 +367,8 @@ function showReportDetail(report) {
 function renderChecklist() {
   checklistContainer.innerHTML = "";
 
+  const checklistHeading = document.getElementById("checklistHeading");
+
   // The client-facing checklist is its own, fully independent list -
   // configured per-client in the hub's "Client Checklist" section - rather
   // than a filtered view of the account manager's internal onboarding
@@ -402,6 +404,14 @@ function renderChecklist() {
     div.appendChild(span);
     checklistContainer.appendChild(div);
   });
+
+  // Once every item is checked off, the widget is no longer really an
+  // "onboarding" list - swap the heading to just "Checklist".
+  if (checklistHeading) {
+    checklistHeading.textContent = (allItems.length > 0 && completedCount === allItems.length)
+      ? "Checklist"
+      : "Onboarding Checklist";
+  }
 
   // Check Confetti
   if (allItems.length > 0 && completedCount === allItems.length) {
