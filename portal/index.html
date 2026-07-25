@@ -56,10 +56,21 @@ window.addEventListener('error', function(e) {
           <div class="sidebar-header-brand">
             <img id="brandLogo" src="" alt="Client Logo" style="display:none; max-width: 140px; max-height: 40px;"><h1 id="brandName">Client Portal</h1>
           </div>
-          <button id="notifBellBtn" class="notif-bell-btn" aria-label="Notifications">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-            <span id="notifBellBadge" class="nav-badge notif-bell-badge" style="display:none;">0</span>
-          </button>
+          <div class="notif-bell-wrap">
+            <button id="notifBellBtn" class="notif-bell-btn" aria-label="Notifications">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+              <span id="notifBellBadge" class="nav-badge notif-bell-badge" style="display:none;">0</span>
+            </button>
+            <div id="notifDropdown" class="notif-dropdown" style="display:none;">
+              <div class="notif-dropdown-header">
+                <span>Notifications</span>
+                <button id="notifMarkAllReadBtn" class="notif-mark-read-btn" type="button">Mark all read</button>
+              </div>
+              <div id="notifList" class="notif-list">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+          </div>
         </div>
         <button id="mobileCloseBtn" class="mobile-close-btn" aria-label="Close Navigation" style="display: none;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -67,16 +78,6 @@ window.addEventListener('error', function(e) {
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
-      </div>
-
-      <div id="notifDropdown" class="notif-dropdown" style="display:none;">
-        <div class="notif-dropdown-header">
-          <span>Notifications</span>
-          <button id="notifMarkAllReadBtn" class="notif-mark-read-btn" type="button">Mark all read</button>
-        </div>
-        <div id="notifList" class="notif-list">
-          <!-- Populated by JS -->
-        </div>
       </div>
 
       <nav class="sidebar-nav">

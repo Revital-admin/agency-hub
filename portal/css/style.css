@@ -137,7 +137,14 @@ body {
 }
 
 /* Notification bell + dropdown - client-facing heads-up for new approvals
-   and newly published reports, without relying solely on email. */
+   and newly published reports, without relying solely on email. The
+   dropdown is anchored to this wrapper (not a fixed pixel offset from the
+   sidebar) so it sits right below the bell regardless of how tall the
+   header gets - e.g. a long client name wrapping to two lines. */
+.notif-bell-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
 .notif-bell-btn {
   position: relative;
   flex-shrink: 0;
@@ -164,9 +171,10 @@ body {
 }
 .notif-dropdown {
   position: absolute;
-  top: 76px;
-  left: 24px;
-  right: 24px;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 300px;
+  max-width: calc(100vw - 64px);
   z-index: 60;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
