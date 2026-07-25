@@ -22,7 +22,7 @@ At Revital's likely volume (approval requests, stale-client nudges, testimonial 
 ## What integration actually involves
 
 1. **Sign up for Resend** (or whichever service you pick) — this step is yours to do, not something I can do on your behalf.
-2. **Verify a sending domain** — you'll need to add SPF/DKIM/DMARC DNS records for whatever domain the emails should come from (e.g. `mail.revitalproductions.com` or a subdomain of it), through wherever your DNS is hosted (GoDaddy, per the SOPs). Sending from a bare Gmail address won't work for a real API integration.
+2. **Verify a sending domain** — you'll need to add SPF/DKIM/DMARC DNS records for whatever domain the emails should come from (e.g. `mail.revitalproductions.com` or a subdomain of it). Your DNS is managed through Cloudflare (GoDaddy is just the registrar, per the Subscription & Tool Cost Tracker — DNS is delegated to Cloudflare's nameservers), which actually makes this easier: it's the same dashboard/account that already hosts the Worker, so there's no separate login or nameserver hunting — just add the records Resend gives you directly in the Cloudflare DNS tab. Sending from a bare Gmail address won't work for a real API integration.
 3. **Get an API key** and hand it to me (or store it yourself) — it gets set as a Cloudflare Worker secret (`wrangler secret put RESEND_API_KEY`), never committed to the repo or put in client-side code.
 4. **Add one Worker route** (e.g. `POST /api/send-email`) that accepts `{to, subject, body}` from the Hub's admin-side JS, calls Resend's send endpoint server-side, and returns success/failure. This is the only new backend code needed — everything else stays the same.
 5. **Wire specific flows to call it**, one at a time rather than all at once:
