@@ -745,6 +745,7 @@ function createNewClient() {
   refreshAllViews();
   showBanner("success", `Client workspace "${name}" initialized successfully!`);
   logAdminActivity("Client created", name);
+  generateNewClientOnboardingEmails(clientsDb[name], name).catch(e => console.warn("Could not draft onboarding emails:", e));
 }
 
 function renameActiveClient() {
@@ -3118,6 +3119,80 @@ function buildStaleNudgeDraftEmail(client, name, pendingCount) {
   return { to: config.clientContactEmail, subject: subject, body: body };
 }
 
+// Templates in the Email Template Library are authored as simple <p>/<br>
+// HTML (see email-template-library/js/data.js), not full markup - a
+// lightweight regex swap to plain text is enough for a mailto body without
+// needing a real HTML parser.
+function templateHtmlToPlainText(html) {
+  return (html || "")
+    .replace(/<\/p>\s*<p>/gi, "\n\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/?p>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .trim();
+}
+
+function fillTemplateVars(text, vars) {
+  return Object.keys(vars).reduce((acc, key) => acc.split(`{{${key}}}`).join(vars[key] || ""), text);
+}
+
+async function fetchEmailTemplateById(templateId) {
+  if (!window.firebaseDb || !window.firebaseDb.collection) return null;
+  try {
+    const snap = await window.firebaseDb.collection("agency").doc("emailTemplates").get();
+    const list = (snap.exists && snap.data().list) || [];
+    return list.find(t => t.id === templateId) || null;
+  } catch (e) {
+    console.warn(`Could not fetch email template ${templateId}:`, e);
+    return null;
+  }
+}
+
+// Fires once, right when a new client workspace is created (Day 1 of the
+// Client Onboarding SOP) - pulls the real Welcome Email (#8) and Intake
+// Form (#17) templates from the Email Template Library and substitutes
+// whatever client info exists so far. Contact name / account manager name
+// are usually still blank at this exact moment (Client Portal Manager
+// hasn't been filled in yet for a brand-new client), so this falls back to
+// generic phrasing the admin can tighten up before sending - same as every
+// other draft-email feature in the Hub. Both PDFs (Welcome Guide, Intake
+// Form) still need to be attached by hand from the Welcome Guide / Intake
+// Request tools - a mailto link can't carry an attachment; real auto-send
+// (see Auto-Send Email Integration Plan.md) would attach them directly.
+async function generateNewClientOnboardingEmails(client, name) {
+  const config = client.portalConfig || {};
+  const contactName = config.clientContactName || name;
+  const accountManagerName = config.accountManagerName || "the Revital Productions team";
+  const contactEmail = config.clientContactEmail || "";
+
+  const [welcomeTpl, intakeTpl] = await Promise.all([
+    fetchEmailTemplateById("tpl-welcome-8"),
+    fetchEmailTemplateById("tpl-intake-send-17")
+  ]);
+
+  if (welcomeTpl) {
+    const filled = fillTemplateVars(welcomeTpl.content, { contactName, clientName: name, accountManagerName });
+    const body = templateHtmlToPlainText(filled) + "\n\n[Attach the Welcome Guide PDF - generate it from the Welcome Guide tool for this client]";
+    pushAdminNotification(
+      'client_welcome_email',
+      `Welcome email drafted for ${name}.`,
+      name,
+      { to: contactEmail, subject: welcomeTpl.subjectLine, body: body }
+    );
+  }
+
+  if (intakeTpl) {
+    const filled = fillTemplateVars(intakeTpl.content, { contactName, clientName: name, accountManagerName });
+    const body = templateHtmlToPlainText(filled) + "\n\n[Attach the Client Onboarding Form PDF - generate it from the Intake Form tool for this client]";
+    pushAdminNotification(
+      'client_intake_email',
+      `Intake form email drafted for ${name}.`,
+      name,
+      { to: contactEmail, subject: intakeTpl.subjectLine, body: body }
+    );
+  }
+}
+
 // Slow-moving signal, so this only needs to run occasionally rather than on
 // every refreshAllViews() call (which fires on nearly every save). Flags
 // clients who have something waiting on them (a pending approval) AND
@@ -3218,7 +3293,7 @@ function renderAdminNotifications() {
       const draftBtn = document.createElement("button");
       draftBtn.type = "button";
       draftBtn.className = "admin-notif-draft-btn";
-      draftBtn.textContent = expandedDraftEmailIds.has(item.id) ? "Hide reminder email" : "Draft reminder email";
+      draftBtn.textContent = expandedDraftEmailIds.has(item.id) ? "Hide draft email" : "Show draft email";
       draftBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         if (expandedDraftEmailIds.has(item.id)) expandedDraftEmailIds.delete(item.id);
