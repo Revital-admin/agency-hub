@@ -33,12 +33,16 @@ const primaryColorInput = document.getElementById("primaryColor");
 const colorHexText = document.getElementById("colorHex");
 const secondaryColorInput = document.getElementById("secondaryColor");
 const colorHexSecondaryText = document.getElementById("colorHexSecondary");
+const accentColorInput = document.getElementById("accentColor");
+const colorHexAccentText = document.getElementById("colorHexAccent");
 const logoDropZone = document.getElementById("logoDropZone");
 const dropZoneText = document.getElementById("dropZoneText");
 const logoPreview = document.getElementById("logoPreview");
 const logoFileInput = document.getElementById("logoFileInput");
 const btnEyedropper = document.getElementById("btnEyedropper");
 const btnEyedropperSec = document.getElementById("btnEyedropperSec");
+const btnEyedropperAccent = document.getElementById("btnEyedropperAccent");
+const syncFromBrandKitBtn = document.getElementById("syncFromBrandKitBtn");
 
 
 const inputs = {
@@ -96,6 +100,7 @@ function init() {
       clientContactEmail: "",
       primaryColor: "#10b981",
       secondaryColor: "#6366f1",
+      accentColor: "#f59e0b",
       magicToken: generateSecureToken()
     };
     if (parentSave) parentSave();
@@ -132,6 +137,8 @@ function init() {
   colorHexText.textContent = config.primaryColor || "#10b981";
   secondaryColorInput.value = config.secondaryColor || "#6366f1";
   colorHexSecondaryText.textContent = config.secondaryColor || "#6366f1";
+  accentColorInput.value = config.accentColor || "#f59e0b";
+  colorHexAccentText.textContent = config.accentColor || "#f59e0b";
 
   // Load Text Inputs
   // Load Logo
@@ -142,6 +149,7 @@ function init() {
     if (window.EyeDropper) {
       btnEyedropper.style.display = "flex";
       btnEyedropperSec.style.display = "flex";
+      btnEyedropperAccent.style.display = "flex";
     }
   }
 
@@ -197,6 +205,18 @@ function init() {
         console.log("Eyedropper cancelled");
       }
     });
+
+    btnEyedropperAccent.addEventListener("click", async () => {
+      try {
+        const eyeDropper = new EyeDropper();
+        const result = await eyeDropper.open();
+        accentColorInput.value = result.sRGBHex;
+        colorHexAccentText.textContent = result.sRGBHex;
+        updateConfig("accentColor", result.sRGBHex);
+      } catch (e) {
+        console.log("Eyedropper cancelled");
+      }
+    });
   }
 
   Object.keys(inputs).forEach(key => {
@@ -216,6 +236,10 @@ function init() {
   secondaryColorInput.addEventListener("input", (e) => {
     colorHexSecondaryText.textContent = e.target.value;
     updateConfig("secondaryColor", e.target.value);
+  });
+  accentColorInput.addEventListener("input", (e) => {
+    colorHexAccentText.textContent = e.target.value;
+    updateConfig("accentColor", e.target.value);
   });
 
   copyLinkBtn.addEventListener("click", () => {
@@ -243,6 +267,47 @@ function init() {
     
     copyToClipboard();
   });
+
+  // Pulls colors from whichever brand-color source has actually been
+  // filled in and saved for this client - Brand Guidelines Builder (the
+  // fuller reference, preferred if present) or Brand Asset Kit (Lite).
+  // Both store client.brandGuideline / client.brandKit only once their
+  // own "Save" button has been clicked, so their mere presence here is a
+  // reliable signal real colors were chosen, not just placeholder values.
+  if (syncFromBrandKitBtn) {
+    syncFromBrandKitBtn.addEventListener("click", () => {
+      const activeClient = getActiveClient();
+      if (!activeClient) return;
+
+      const source = activeClient.brandGuideline || activeClient.brandKit;
+      const sourceLabel = activeClient.brandGuideline ? "Brand Guidelines Builder" : "Brand Asset Kit";
+
+      if (!source || (!source.primaryColor && !source.secondaryColor && !source.accentColor)) {
+        alert("No brand colors saved yet for this client. Set them in Brand Asset Kit (Lite) or Brand Guidelines Builder first, then come back and sync.");
+        return;
+      }
+
+      if (source.primaryColor) {
+        primaryColorInput.value = source.primaryColor;
+        colorHexText.textContent = source.primaryColor;
+        updateConfig("primaryColor", source.primaryColor);
+      }
+      if (source.secondaryColor) {
+        secondaryColorInput.value = source.secondaryColor;
+        colorHexSecondaryText.textContent = source.secondaryColor;
+        updateConfig("secondaryColor", source.secondaryColor);
+      }
+      if (source.accentColor) {
+        accentColorInput.value = source.accentColor;
+        colorHexAccentText.textContent = source.accentColor;
+        updateConfig("accentColor", source.accentColor);
+      }
+
+      const originalText = syncFromBrandKitBtn.innerHTML;
+      syncFromBrandKitBtn.textContent = `Synced from ${sourceLabel}`;
+      setTimeout(() => { syncFromBrandKitBtn.innerHTML = originalText; }, 2500);
+    });
+  }
 }
 
 // Allowed image types and their magic-byte signatures (checked against actual
@@ -348,6 +413,7 @@ function handleImageUpload(file) {
         if (window.EyeDropper) {
           btnEyedropper.style.display = "flex";
           btnEyedropperSec.style.display = "flex";
+          btnEyedropperAccent.style.display = "flex";
         }
 
         // Save

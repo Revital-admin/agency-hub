@@ -110,6 +110,13 @@ function renderPortal() {
     document.documentElement.style.setProperty("--color-secondary", "#6366f1");
     document.documentElement.style.setProperty("--color-secondary-glow", hexToRgba("#6366f1", 0.2));
   }
+  if (config.accentColor) {
+    document.documentElement.style.setProperty("--color-accent", config.accentColor);
+    document.documentElement.style.setProperty("--color-accent-glow", hexToRgba(config.accentColor, 0.2));
+  } else {
+    document.documentElement.style.setProperty("--color-accent", "#f59e0b");
+    document.documentElement.style.setProperty("--color-accent-glow", hexToRgba("#f59e0b", 0.2));
+  }
 
   // Account Manager
   if (config.accountManagerName) {
