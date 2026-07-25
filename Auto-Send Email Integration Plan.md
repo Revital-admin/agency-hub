@@ -19,6 +19,19 @@ Rough shape as researched (verify current numbers directly on each vendor's pric
 
 At Revital's likely volume (approval requests, stale-client nudges, testimonial asks — probably well under a few hundred/month), Resend's free tier should cover it for a long time.
 
+## Is Resend actually right for Revital, long-term?
+
+Yes, with one caveat below. Two things make it a good fit specifically for this setup, not just a generic recommendation:
+
+- **Technical fit with Workers is real, not incidental.** Both Resend's own docs and Cloudflare's own developer docs walk through this exact pairing (Resend + Workers) as a supported path, because Workers can't open raw SMTP sockets — Resend's plain REST API is one of the few transactional providers that fits that constraint cleanly. SendGrid/Mailgun's official SDKs lean on Node APIs Workers doesn't have.
+- **DNS is already on Cloudflare** (per Ronald), so domain verification is a same-dashboard task, not a separate registrar login.
+
+The one real caveat from researching this further: Resend's shared-IP/log-retention setup is tuned for typical SaaS transactional volume, and gets noticeably less favorable above roughly 100k emails/month (pricier per-email, shorter log retention for debugging). That's not a near-term concern — Revital's actual volume (approval requests, stale nudges, testimonial asks, maybe onboarding/report notices across the client roster) is realistically in the dozens-to-low-hundreds per month, nowhere near that ceiling.
+
+If Revital ever wants **bulk marketing sends** (a newsletter blast to all clients, not one-to-one transactional emails), that's a different product category — worth evaluating separately at that point rather than assuming Resend covers it too.
+
+**Why the vendor choice itself is low-risk:** the integration point is a single Worker route (`POST /api/send-email`, step 4 below) that the rest of the Hub calls generically. If Resend ever stops fitting, swapping providers later means rewriting that one server-side function — nothing else in the Hub or portal talks to the email provider directly. So the bigger future-proofing decision isn't really "which vendor" — it's keeping that one-route abstraction, which this plan already does.
+
 ## What integration actually involves
 
 1. **Sign up for Resend** (or whichever service you pick) — this step is yours to do, not something I can do on your behalf.
