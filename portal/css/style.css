@@ -112,6 +112,10 @@ body {
   background: linear-gradient(to right, var(--color-primary), var(--color-secondary), var(--color-accent));
 }
 
+.sidebar-header {
+  position: relative;
+}
+
 .sidebar-header h1 {
   font-family: var(--font-heading);
   font-size: 1.25rem;
@@ -138,11 +142,15 @@ body {
 
 /* Notification bell + dropdown - client-facing heads-up for new approvals
    and newly published reports, without relying solely on email. The
-   dropdown is anchored to this wrapper (not a fixed pixel offset from the
-   sidebar) so it sits right below the bell regardless of how tall the
-   header gets - e.g. a long client name wrapping to two lines. */
+   dropdown is a sibling of the header row, not nested inside the narrow
+   bell button - anchoring it to the button itself (previous attempt) made
+   its fixed width overflow past the sidebar's own left edge, since the
+   bell sits near the right edge of a 280px-wide sidebar. Anchored to the
+   full-width .sidebar-header instead (position: relative, set above) with
+   left:0/right:0 so it can never be wider than the sidebar itself, and
+   top:100% so it always sits just below the header regardless of how tall
+   the header gets - e.g. a long client name wrapping to two lines. */
 .notif-bell-wrap {
-  position: relative;
   flex-shrink: 0;
 }
 .notif-bell-btn {
@@ -171,10 +179,10 @@ body {
 }
 .notif-dropdown {
   position: absolute;
-  top: calc(100% + 10px);
+  top: 100%;
+  left: 0;
   right: 0;
-  width: 300px;
-  max-width: calc(100vw - 64px);
+  margin-top: 10px;
   z-index: 60;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
