@@ -285,8 +285,22 @@ function saveGuideline() {
   }
 }
 
+function autoSelectActiveClient() {
+  if (!isEmbedded) return;
+  try {
+    const active = window.parent.getActiveClient && window.parent.getActiveClient();
+    const activeName = active && active.name;
+    const select = el('clientSelect');
+    if (activeName && Array.from(select.options).some(o => o.value === activeName)) {
+      select.value = activeName;
+    }
+  } catch (e) { /* CORS or not embedded - leave picker on "Select a client..." */ }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   populateClientSelect();
+  autoSelectActiveClient();
+  renderState();
   el('clientSelect').addEventListener('change', renderState);
   el('saveGuidelineBtn').addEventListener('click', saveGuideline);
   el('addLogoVarBtn').addEventListener('click', () => addLinkToList('logoVarLabel', 'logoVarUrl', logoVariations, renderLogoVariations));
@@ -307,7 +321,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const hasClients = Object.keys(getClients()).length > 0;
     if (hasClients || clientPollAttempts > 30) {
       clearInterval(clientPoll);
-      if (hasClients) populateClientSelect();
+      if (hasClients) {
+        populateClientSelect();
+        autoSelectActiveClient();
+        renderState();
+      }
     }
   }, 250);
 });
