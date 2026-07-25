@@ -1024,6 +1024,38 @@ const PORTAL_DECISION_LABELS = {
   revision: "❌ Revision Required"
 };
 
+// Visual preview tile for an approval card/row - a real thumbnail image if
+// the admin pasted one in client-portal-manager, otherwise a plain tile
+// labeled with the content type so there's still a visual anchor instead
+// of just a text "View Preview" link. sizeClass picks the large card-top
+// tile (approval-thumbnail) vs. the small history-row square
+// (approval-history-thumb); shared "thumb-visual" class carries the
+// image/fallback toggling logic so both share one CSS rule set.
+function thumbnailMarkup(entry, sizeClass) {
+  const typeLabel = PORTAL_APPROVAL_TYPE_LABELS[entry.contentType] || "Deliverable";
+  if (!entry.thumbnailUrl) {
+    return `<div class="thumb-visual ${sizeClass} thumb-empty"><div class="thumb-fallback">${escapeHtml(typeLabel)}</div></div>`;
+  }
+  return `<div class="thumb-visual ${sizeClass}">
+    <img src="${escapeHtml(entry.thumbnailUrl)}" alt="${escapeHtml(entry.title)}" loading="lazy">
+    <div class="thumb-fallback">${escapeHtml(typeLabel)}</div>
+  </div>`;
+}
+
+// A broken/unreachable thumbnailUrl (bad paste, expired share link) should
+// degrade to the same plain type tile used when there's no thumbnail at
+// all, not a broken-image icon. Wired via JS instead of an inline onerror
+// attribute to avoid fragile quote-escaping through a template literal -
+// the fallback div is already in the markup (hidden via CSS), this just
+// flips a class so CSS swaps which one shows.
+function wireThumbnailFallbacks(container) {
+  container.querySelectorAll(".thumb-visual img").forEach(img => {
+    img.addEventListener("error", () => {
+      img.parentElement.classList.add("broken");
+    });
+  });
+}
+
 function renderApprovalsView() {
   const pendingContainer = document.getElementById("pendingApprovalsContainer");
   const historyContainer = document.getElementById("approvalHistoryContainer");
@@ -1065,6 +1097,7 @@ function renderApprovalsView() {
         : "";
 
       card.innerHTML = `
+        ${thumbnailMarkup(entry, "approval-thumbnail")}
         <div class="approval-card-header">
           <span class="approval-type-badge">${escapeHtml(typeLabel)}</span>
           <h4>${escapeHtml(entry.title)}</h4>
@@ -1078,6 +1111,8 @@ function renderApprovalsView() {
           <button type="button" class="btn-approval btn-revision" data-decision="revision">Revision Required</button>
         </div>
       `;
+
+      wireThumbnailFallbacks(card);
 
       card.querySelectorAll(".btn-approval").forEach(btn => {
         btn.addEventListener("click", () => {
@@ -1110,13 +1145,19 @@ function renderApprovalsView() {
       const row = document.createElement("div");
       row.className = "approval-history-row";
       row.innerHTML = `
-        <div class="approval-history-main">
-          <strong>${escapeHtml(entry.title)}</strong>
-          <span class="approval-history-type">${escapeHtml(typeLabel)}</span>
+        <div class="approval-history-row-inner">
+          ${thumbnailMarkup(entry, "approval-history-thumb")}
+          <div class="approval-history-body">
+            <div class="approval-history-main">
+              <strong>${escapeHtml(entry.title)}</strong>
+              <span class="approval-history-type">${escapeHtml(typeLabel)}</span>
+            </div>
+            <div class="approval-history-meta">${decisionLabel} &middot; ${escapeHtml(decidedDate)}</div>
+            ${entry.notes ? `<div class="approval-history-notes">&ldquo;${escapeHtml(entry.notes)}&rdquo;</div>` : ""}
+          </div>
         </div>
-        <div class="approval-history-meta">${decisionLabel} &middot; ${escapeHtml(decidedDate)}</div>
-        ${entry.notes ? `<div class="approval-history-notes">&ldquo;${escapeHtml(entry.notes)}&rdquo;</div>` : ""}
       `;
+      wireThumbnailFallbacks(row);
       historyContainer.appendChild(row);
     });
   }
@@ -1130,6 +1171,7 @@ function decideApproval(entry, decision, notes) {
     contentType: entry.contentType,
     title: entry.title,
     previewLink: entry.previewLink || "",
+    thumbnailUrl: entry.thumbnailUrl || "",
     decision: decision,
     notes: notes || "",
     decidedAt: new Date().toISOString()

@@ -746,6 +746,7 @@ function initApprovalControls() {
     const typeEl = document.getElementById("newApprovalType");
     const titleEl = document.getElementById("newApprovalTitle");
     const linkEl = document.getElementById("newApprovalLink");
+    const thumbnailEl = document.getElementById("newApprovalThumbnail");
 
     const title = titleEl.value.trim();
     if (!title) {
@@ -760,6 +761,7 @@ function initApprovalControls() {
       contentType: typeEl.value,
       title: title,
       previewLink: linkEl.value.trim(),
+      thumbnailUrl: thumbnailEl ? thumbnailEl.value.trim() : "",
       checklist: APPROVAL_CHECKLISTS[typeEl.value] || [],
       createdAt: new Date().toISOString()
     };
@@ -775,6 +777,7 @@ function initApprovalControls() {
 
     titleEl.value = "";
     linkEl.value = "";
+    if (thumbnailEl) thumbnailEl.value = "";
 
     buildApprovalEmail(client, entry);
     renderApprovals(client);

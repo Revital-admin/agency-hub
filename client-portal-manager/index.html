@@ -276,6 +276,14 @@
         <input type="text" id="newApprovalLink" placeholder="https://drive.google.com/... or https://frame.io/...">
       </div>
 
+      <div class="form-group">
+        <label for="newApprovalThumbnail">Thumbnail Image URL (optional)</label>
+        <input type="text" id="newApprovalThumbnail" placeholder="Direct image link - e.g. a Frame.io share thumbnail or Drive image link">
+        <p style="font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 4px;">
+          Shows a visual preview on the client's approval card instead of just a text link. Leave blank to fall back to a plain content-type tile.
+        </p>
+      </div>
+
       <button class="download-pdf-btn" id="createApprovalBtn" style="padding: 10px 20px;">Send for Approval</button>
 
       <div id="approvalEmailReady" class="approval-email-ready" style="display:none;">
