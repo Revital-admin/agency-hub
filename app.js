@@ -208,6 +208,8 @@ function boot() {
   try { initNavSectionToggles(); } catch(e) { console.error("NavSectionToggles Error:", e); }
   try { initMobileNavigation(); } catch(e) { console.error("MobileNav Error:", e); }
   try { initParentEventListeners(); } catch(e) { console.error("ParentListeners Error:", e); }
+  try { initAdminNotifBell(); } catch(e) { console.error("AdminNotifBell Error:", e); }
+  try { loadAdminNotifications(); } catch(e) { console.error("AdminNotifications Error:", e); }
   try { initTeamAccessGate(); } catch(e) { console.error("TeamAccessGate Error:", e); }
   try { refreshAllViews(); } catch(e) { console.error("Refresh Error:", e); }
 
@@ -2910,6 +2912,148 @@ function foldInNotificationReadState(targetNotifications, existingNotifications)
   return changed;
 }
 
+// ── Admin-side notification bell ──
+// Mirrors the client portal's bell, but for Ronald: flags when a client
+// approves/requests revision on a deliverable, or submits a testimonial,
+// so he doesn't have to have that client open in the Hub to notice. Kept
+// in its own agency-wide Firestore doc (like the Contract & Invoice
+// Tracker's agency/contractInvoices) rather than per-client, since this is
+// a single admin-facing feed across every client at once. Loaded once at
+// boot and written whenever a new one is pushed - no live listener, since
+// this session is always the one generating them (client-driven events
+// arrive via ensureClientPortalListeners below, which already runs
+// continuously in this same session).
+let adminNotifications = [];
+
+async function loadAdminNotifications() {
+  if (!window.firebaseDb || !window.firebaseDb.collection) return;
+  try {
+    const snap = await window.firebaseDb.collection("agency").doc("adminNotifications").get();
+    adminNotifications = (snap.exists && snap.data().list) || [];
+  } catch (e) {
+    console.warn("Could not load admin notifications:", e);
+    adminNotifications = [];
+  }
+  renderAdminNotifications();
+}
+
+function persistAdminNotifications() {
+  if (!window.firebaseDb || !window.firebaseDb.collection) return;
+  window.firebaseDb.collection("agency").doc("adminNotifications").set({ list: adminNotifications }).catch(e => {
+    console.error("Could not save admin notifications:", e);
+  });
+}
+
+function pushAdminNotification(type, message) {
+  adminNotifications.unshift({
+    id: 'an_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    type: type || 'info',
+    message: message,
+    createdAt: new Date().toISOString(),
+    read: false
+  });
+  if (adminNotifications.length > 30) adminNotifications.length = 30;
+  persistAdminNotifications();
+  renderAdminNotifications();
+}
+
+function adminNotifTimeAgo(isoString) {
+  if (!isoString) return "";
+  const diffMs = Date.now() - new Date(isoString).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(isoString).toLocaleDateString();
+}
+
+function renderAdminNotifications() {
+  const badge = document.getElementById("adminNotifBellBadge");
+  const list = document.getElementById("adminNotifList");
+  if (!badge || !list) return;
+
+  const unreadCount = adminNotifications.filter(n => !n.read).length;
+  if (unreadCount > 0) {
+    badge.textContent = unreadCount > 9 ? "9+" : String(unreadCount);
+    badge.style.display = "flex";
+  } else {
+    badge.style.display = "none";
+  }
+
+  list.innerHTML = "";
+  if (adminNotifications.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "admin-notif-empty";
+    empty.textContent = "Nothing yet - you'll see client activity here as it happens.";
+    list.appendChild(empty);
+    return;
+  }
+
+  adminNotifications.forEach(item => {
+    const row = document.createElement("div");
+    row.className = "admin-notif-item" + (item.read ? " read" : "");
+
+    const dot = document.createElement("span");
+    dot.className = "admin-notif-item-dot";
+
+    const body = document.createElement("div");
+    body.className = "admin-notif-item-body";
+    const p = document.createElement("p");
+    p.textContent = item.message || "";
+    const time = document.createElement("div");
+    time.className = "admin-notif-item-time";
+    time.textContent = adminNotifTimeAgo(item.createdAt);
+    body.appendChild(p);
+    body.appendChild(time);
+
+    row.appendChild(dot);
+    row.appendChild(body);
+
+    row.addEventListener("click", () => {
+      if (!item.read) {
+        item.read = true;
+        renderAdminNotifications();
+        persistAdminNotifications();
+      }
+    });
+
+    list.appendChild(row);
+  });
+}
+
+function initAdminNotifBell() {
+  const bellBtn = document.getElementById("adminNotifBellBtn");
+  const dropdown = document.getElementById("adminNotifDropdown");
+  const markAllBtn = document.getElementById("adminNotifMarkAllReadBtn");
+  if (!bellBtn || !dropdown) return;
+
+  bellBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    dropdown.style.display = dropdown.style.display === "none" ? "flex" : "none";
+  });
+  document.addEventListener("click", (e) => {
+    if (dropdown.style.display !== "none" && !dropdown.contains(e.target) && e.target !== bellBtn) {
+      dropdown.style.display = "none";
+    }
+  });
+  if (markAllBtn) {
+    markAllBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      let changed = false;
+      adminNotifications.forEach(n => {
+        if (!n.read) { n.read = true; changed = true; }
+      });
+      if (changed) {
+        renderAdminNotifications();
+        persistAdminNotifications();
+      }
+    });
+  }
+}
+
 function foldInApprovalDecisions(target, publicData) {
   if (!target || !publicData || !Array.isArray(publicData.approvalHistory)) return false;
   if (!Array.isArray(target.pendingApprovals)) target.pendingApprovals = [];
@@ -2979,6 +3123,8 @@ async function syncPublicPortalDocs(dbSnapshot) {
       approvalHistory: client.approvalHistory || []
     };
 
+    let preservedLastVisitedAt = null;
+
     try {
       // Fold in onboarding progress and approval decisions the client
       // already made directly on the portal so this save doesn't stomp on
@@ -3005,6 +3151,12 @@ async function syncPublicPortalDocs(dbSnapshot) {
         foldInApprovalDecisions(approvalsWrapper, existingData);
         foldInTestimonialSubmission(client, existingData);
         foldInNotificationReadState(localNotifications, existingData.notifications);
+        // lastVisitedAt is written directly by the portal on load (see
+        // portal/js/app.js) and read back into clientsDb by
+        // ensureClientPortalListeners below - the admin never sets this
+        // field, so it just needs to be carried forward here rather than
+        // silently wiped by this being a full (non-merge) .set() below.
+        preservedLastVisitedAt = existingData.lastVisitedAt || null;
       }
     } catch (e) {
       console.warn("Could not read existing public portal doc for", name, e);
@@ -3033,7 +3185,11 @@ async function syncPublicPortalDocs(dbSnapshot) {
       // Status Tracker (see fetchBillingSummaries above). null if this
       // client isn't tracked there under a matching name. The portal only
       // shows this at all if portalConfig.showBillingInPortal is on.
-      billingSummary: billingSummaries[name.toLowerCase()] || null
+      billingSummary: billingSummaries[name.toLowerCase()] || null,
+      // Carried forward as-is (see preservedLastVisitedAt above) - the
+      // admin never writes this, only preserves whatever the portal itself
+      // already recorded so a Hub save doesn't erase it.
+      lastVisitedAt: preservedLastVisitedAt
     };
 
     publicRef.set(projection).catch(err => {
@@ -3081,10 +3237,39 @@ function ensureClientPortalListeners() {
 
       const changedOnboarding = foldInOnboardingChecked(currentClient.onboardingChecklist, data.onboardingChecklist);
       const changedClientChecklist = syncClientChecklistFromPortal(currentClient.clientChecklist, data.clientChecklist);
-      const changedApprovals = foldInApprovalDecisions(currentClient, data);
-      const changedTestimonial = foldInTestimonialSubmission(currentClient, data);
 
-      if (changedOnboarding || changedClientChecklist || changedApprovals || changedTestimonial) {
+      // Capture known approval IDs before folding so any newly-arrived
+      // decisions can be identified afterward and turned into an admin
+      // notification below - foldInApprovalDecisions itself only reports
+      // whether *something* changed, not which entries are new.
+      const priorApprovalIds = new Set((currentClient.approvalHistory || []).map(a => a.id));
+      const changedApprovals = foldInApprovalDecisions(currentClient, data);
+      if (changedApprovals) {
+        const decisionLabels = { approved: "Approved", minor: "Approved with Minor Corrections", revision: "Revision Requested" };
+        (currentClient.approvalHistory || [])
+          .filter(a => !priorApprovalIds.has(a.id))
+          .forEach(entry => {
+            const label = decisionLabels[entry.decision] || entry.decision || "responded";
+            pushAdminNotification("approval", `${name}: "${entry.title}" — ${label}`);
+          });
+      }
+
+      const changedTestimonial = foldInTestimonialSubmission(currentClient, data);
+      if (changedTestimonial) {
+        pushAdminNotification("testimonial", `${name} submitted a testimonial.`);
+      }
+
+      // Portal last-visited tracking - the portal writes lastVisitedAt to
+      // its own public doc on load (see portal/js/app.js); pull it into
+      // clientsDb here the same way everything else client-driven arrives,
+      // so admin-facing views (Agency Health Dashboard) can show it
+      // without a separate fetch.
+      const changedVisit = !!(data.lastVisitedAt && data.lastVisitedAt !== currentClient.portalLastVisitedAt);
+      if (changedVisit) {
+        currentClient.portalLastVisitedAt = data.lastVisitedAt;
+      }
+
+      if (changedOnboarding || changedClientChecklist || changedApprovals || changedTestimonial || changedVisit) {
         localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
         try { renderOnboardingChecklist(); } catch (e) {}
         try { renderDashboard(); } catch (e) {}

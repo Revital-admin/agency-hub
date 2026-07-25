@@ -117,6 +117,137 @@ body {
   gap: 12px;
   margin-bottom: 32px;
   padding: 4px;
+  position: relative;
+}
+
+/* Admin-side notification bell - mirrors the client portal's bell, but for
+   Ronald: flags when a client approves/requests revision on a deliverable
+   or submits a testimonial, so he doesn't have to have that client open to
+   notice. Anchored to .brand-section (position:relative, above) rather
+   than the narrow bell button itself, and constrained with left:0/right:0
+   so it can never be wider than the sidebar - the exact bug that hit the
+   client portal's version of this same widget three times before landing
+   on this pattern. */
+.admin-notif-bell-btn {
+  position: relative;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+.admin-notif-bell-btn:hover {
+  color: var(--text-bright);
+  border-color: var(--primary);
+}
+.admin-notif-bell-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+.admin-notif-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 10px;
+  z-index: 200;
+  /* Solid --bg-sidebar, not the translucent --bg-card, since this floats
+     OVER the sidebar nav below it rather than sitting in normal content
+     flow - a translucent background here would let the nav bleed through. */
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+  max-height: 360px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.admin-notif-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+.admin-notif-mark-read-btn {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0;
+}
+.admin-notif-mark-read-btn:hover {
+  text-decoration: underline;
+}
+.admin-notif-list {
+  overflow-y: auto;
+}
+.admin-notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.admin-notif-item:last-child {
+  border-bottom: none;
+}
+.admin-notif-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.admin-notif-item-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warning);
+  margin-top: 5px;
+}
+.admin-notif-item.read .admin-notif-item-dot {
+  background: transparent;
+}
+.admin-notif-item-body p {
+  margin: 0 0 4px 0;
+  color: var(--text-main);
+}
+.admin-notif-item.read .admin-notif-item-body p {
+  color: var(--text-muted);
+}
+.admin-notif-item-time {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+.admin-notif-empty {
+  padding: 24px 14px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
 }
 
 .brand-logo-svg {

@@ -90,9 +90,17 @@ function buildRows() {
 
     const needsAttention = healthRating === 'Red' || renewalDueSoon || heavyRevisions;
 
+    // Written by the portal itself on page load (portal/js/app.js's
+    // recordPortalVisit), pulled into clientsDb by the Hub's
+    // ensureClientPortalListeners - just a simple "did they ever open the
+    // link" / "how long ago" signal, not tied to any specific action.
+    const portalLastVisitedAt = client.portalLastVisitedAt || null;
+    const daysSinceVisit = portalLastVisitedAt ? daysBetween(portalLastVisitedAt.slice(0, 10), todayStr()) : null;
+
     return {
       name, healthRating, lastCheckinDate, daysSinceCheckin, staleCheckin,
-      renewalDate, renewalDays, renewalDueSoon, openRevisions, heavyRevisions, needsAttention
+      renewalDate, renewalDays, renewalDueSoon, openRevisions, heavyRevisions, needsAttention,
+      portalLastVisitedAt, daysSinceVisit
     };
   }).sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -102,6 +110,13 @@ function healthBadgeHtml(rating) {
   const cls = map[rating] || 'health-none';
   const label = rating || 'No check-in';
   return `<span class="health-badge ${cls}"><span class="dot"></span>${label}</span>`;
+}
+
+function portalVisitCellHtml(row) {
+  if (!row.portalLastVisitedAt) return '<span class="date-cell">Never</span>';
+  const d = row.daysSinceVisit;
+  const label = d <= 0 ? 'Today' : d === 1 ? '1d ago' : `${d}d ago`;
+  return `<span class="date-cell">${label}</span>`;
 }
 
 function renewalCellHtml(row) {
@@ -141,6 +156,7 @@ function renderTable() {
       <td class="date-cell">${row.lastCheckinDate ? `${row.lastCheckinDate} (${row.daysSinceCheckin}d ago)` : 'Never'}</td>
       <td>${renewalCellHtml(row)}</td>
       <td>${row.openRevisions}</td>
+      <td>${portalVisitCellHtml(row)}</td>
       <td><span class="section-tag ${row.needsAttention ? 'status-attention' : 'status-ok'}">${row.needsAttention ? 'Needs Attention' : 'On Track'}</span></td>
     `;
     tbody.appendChild(tr);

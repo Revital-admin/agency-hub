@@ -71,9 +71,12 @@ service cloud.firestore {
       // never constructing a new notification, the same trust boundary the
       // client-side checklist/approvals already operate under). The
       // internal onboardingChecklist, branding, embed URLs, report
-      // archive, etc. all stay immutable to public writes.
+      // archive, etc. all stay immutable to public writes. lastVisitedAt
+      // is also portal-writable - a simple "I loaded this page" timestamp
+      // used to show Ronald whether a client is actually opening their
+      // portal, nothing sensitive.
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
-                        .hasOnly(['clientChecklist', 'pendingApprovals', 'approvalHistory', 'testimonialSubmission', 'notifications']);
+                        .hasOnly(['clientChecklist', 'pendingApprovals', 'approvalHistory', 'testimonialSubmission', 'notifications', 'lastVisitedAt']);
     }
 
     // Deny everything else by default.

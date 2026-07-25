@@ -74,6 +74,7 @@ function init() {
       if (loader.style.display !== "none") {
         loader.style.display = "none";
         appLayout.style.display = "flex";
+        recordPortalVisit();
       }
     } else {
       loader.innerHTML = "<h2>Access Denied</h2><p>Link expired or invalid token.</p>";
@@ -81,6 +82,22 @@ function init() {
   }, (err) => {
     console.error("Portal listener error:", err);
     loader.innerHTML = "<h2>Access Denied</h2><p>Unable to load this portal.</p>";
+  });
+}
+
+// Records that this client actually opened their portal - surfaced to
+// Ronald on the Agency Health Dashboard so he can tell who's engaging with
+// it versus who's never opened the link. Written once per page load (not
+// on every live re-render, which would happen far too often) with a
+// merge write scoped to just this one field, matching the Firestore rule
+// that only allows public writes to touch specific known fields.
+let hasRecordedVisit = false;
+function recordPortalVisit() {
+  if (hasRecordedVisit) return;
+  hasRecordedVisit = true;
+  const docRef = db.collection("clients").doc(clientToken);
+  docRef.set({ lastVisitedAt: new Date().toISOString() }, { merge: true }).catch(err => {
+    console.error("Error recording portal visit:", err);
   });
 }
 
