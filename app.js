@@ -1060,6 +1060,7 @@ function refreshAllViews() {
   // checklist changes reach the agency side immediately, not just as a
   // side effect of the admin happening to save something.
   try { ensureClientPortalListeners(); } catch (e) {}
+  try { runStaleClientNudgeCheck(); } catch (e) {}
 
   // Toggle Sandbox Banner
   const sandboxName = "Quick Sandbox (One-Offs)";
@@ -2944,17 +2945,58 @@ function persistAdminNotifications() {
   });
 }
 
-function pushAdminNotification(type, message) {
+function pushAdminNotification(type, message, clientName) {
   adminNotifications.unshift({
     id: 'an_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
     type: type || 'info',
     message: message,
+    clientName: clientName || null,
     createdAt: new Date().toISOString(),
     read: false
   });
   if (adminNotifications.length > 30) adminNotifications.length = 30;
   persistAdminNotifications();
   renderAdminNotifications();
+}
+
+// Slow-moving signal, so this only needs to run occasionally rather than on
+// every refreshAllViews() call (which fires on nearly every save). Flags
+// clients who have something waiting on them (a pending approval) AND
+// haven't opened their portal in a while - the two together are what make
+// it worth a nudge, since a stale visit with nothing pending just means
+// there's nothing new to look at.
+let lastStaleNudgeCheckAt = 0;
+const STALE_NUDGE_CHECK_INTERVAL_MS = 60 * 60 * 1000; // re-scan at most hourly
+const STALE_NUDGE_DAYS_THRESHOLD = 7;
+const STALE_NUDGE_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000; // don't re-nudge same client within 3 days
+
+function runStaleClientNudgeCheck() {
+  const now = Date.now();
+  if (now - lastStaleNudgeCheckAt < STALE_NUDGE_CHECK_INTERVAL_MS) return;
+  lastStaleNudgeCheckAt = now;
+
+  Object.entries(clientsDb).forEach(([name, client]) => {
+    if (!client || !client.portalConfig || !client.portalConfig.magicToken) return;
+
+    const pendingCount = Array.isArray(client.pendingApprovals) ? client.pendingApprovals.length : 0;
+    if (pendingCount === 0) return;
+
+    const lastVisited = client.portalLastVisitedAt ? new Date(client.portalLastVisitedAt).getTime() : null;
+    const daysSinceVisit = lastVisited ? Math.floor((now - lastVisited) / 86400000) : null;
+    const isStale = daysSinceVisit === null || daysSinceVisit >= STALE_NUDGE_DAYS_THRESHOLD;
+    if (!isStale) return;
+
+    const alreadyNudged = adminNotifications.some(n =>
+      n.type === 'stale_client' &&
+      n.clientName === name &&
+      (now - new Date(n.createdAt).getTime()) < STALE_NUDGE_COOLDOWN_MS
+    );
+    if (alreadyNudged) return;
+
+    const visitPhrase = daysSinceVisit === null ? "never opened their portal" : `hasn't opened their portal in ${daysSinceVisit}d`;
+    const approvalPhrase = pendingCount === 1 ? "1 pending approval" : `${pendingCount} pending approvals`;
+    pushAdminNotification('stale_client', `${name} ${visitPhrase} and has ${approvalPhrase} waiting.`, name);
+  });
 }
 
 function adminNotifTimeAgo(isoString) {

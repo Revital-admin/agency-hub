@@ -578,6 +578,86 @@ body {
   transition: width 0.4s ease;
 }
 
+.engagement-stage-widget {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+}
+.engagement-stage-track {
+  display: flex;
+  align-items: center;
+}
+.engagement-stage-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.engagement-stage-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-border);
+  border: 2px solid var(--color-border);
+  box-sizing: border-box;
+}
+.engagement-stage-step.stage-done .engagement-stage-dot {
+  background: var(--color-secondary);
+  border-color: var(--color-secondary);
+}
+.engagement-stage-step.stage-current .engagement-stage-dot {
+  background: var(--color-bg);
+  border-color: var(--color-accent);
+}
+.engagement-stage-label {
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+.engagement-stage-step.stage-done .engagement-stage-label {
+  color: var(--color-text-secondary);
+}
+.engagement-stage-step.stage-current .engagement-stage-label {
+  color: var(--color-text);
+  font-weight: 600;
+}
+.engagement-stage-connector {
+  flex: 1 1 auto;
+  height: 2px;
+  background: var(--color-border);
+  margin: 0 6px 22px;
+}
+.engagement-stage-connector.stage-done {
+  background: var(--color-secondary);
+}
+
+.report-archive-filter-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.report-archive-filter-bar input[type="text"],
+.report-archive-filter-bar select {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  padding: 10px 12px;
+}
+.report-archive-filter-bar input[type="text"] {
+  flex: 1;
+}
+.report-archive-filter-bar input[type="text"]:focus,
+.report-archive-filter-bar select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
 /* Dashboard Mocks */
 .stats-grid {
   display: grid;

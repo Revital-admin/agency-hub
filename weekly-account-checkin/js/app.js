@@ -73,6 +73,10 @@ function saveCheckin() {
 
   if (!client.weeklyCheckins) client.weeklyCheckins = [];
 
+  // Snapshot the current latest rating before this save so a flip to Green
+  // can be detected afterward (used for the testimonial-ask nudge below).
+  const priorRating = client.weeklyCheckins.length ? client.weeklyCheckins[0].healthRating : null;
+
   // If a check-in already exists for this exact date, overwrite it instead
   // of creating a duplicate row (re-saving the same week updates it).
   const existingIdx = client.weeklyCheckins.findIndex(c => c.date === entry.date);
@@ -89,6 +93,15 @@ function saveCheckin() {
 
   if (window.parent.showBanner) {
     window.parent.showBanner('success', `Check-in saved for ${client.name} — Health: ${entry.healthRating}.`);
+  }
+
+  // Health just flipped to Green (only fires on the flip, not on every
+  // Green check-in in a row, and only when this save is the client's
+  // current/latest entry) - a good, low-effort moment to ask for a
+  // testimonial while the client is happy, rather than relying on memory.
+  const isLatestEntry = client.weeklyCheckins[0] && client.weeklyCheckins[0].date === entry.date;
+  if (isLatestEntry && entry.healthRating === 'Green' && priorRating !== 'Green' && window.parent.pushAdminNotification) {
+    window.parent.pushAdminNotification('testimonial_prompt', `${client.name}'s health just turned Green — good time to ask for a testimonial.`, client.name);
   }
 }
 

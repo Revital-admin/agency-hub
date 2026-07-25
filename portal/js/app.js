@@ -39,6 +39,24 @@ const notifBellBadge = document.getElementById("notifBellBadge");
 const notifDropdown = document.getElementById("notifDropdown");
 const notifList = document.getElementById("notifList");
 const notifMarkAllReadBtn = document.getElementById("notifMarkAllReadBtn");
+const reportArchiveFilterBar = document.getElementById("reportArchiveFilterBar");
+const reportArchiveSearchInput = document.getElementById("reportArchiveSearchInput");
+const reportArchiveSortSelect = document.getElementById("reportArchiveSortSelect");
+let reportArchiveSearchText = "";
+let reportArchiveSortOrder = "newest";
+
+if (reportArchiveSearchInput) {
+  reportArchiveSearchInput.addEventListener("input", (e) => {
+    reportArchiveSearchText = e.target.value || "";
+    renderReportArchive();
+  });
+}
+if (reportArchiveSortSelect) {
+  reportArchiveSortSelect.addEventListener("change", (e) => {
+    reportArchiveSortOrder = e.target.value || "newest";
+    renderReportArchive();
+  });
+}
 
 
 // Nav and Views
@@ -187,6 +205,7 @@ function renderPortal() {
     monthlyReportsEmbedWrapper.style.display = "none";
   }
 
+  renderEngagementStage(config.engagementStage);
   renderReportArchive();
   renderNotifications();
 
@@ -318,12 +337,36 @@ function renderReportArchive() {
   const reports = Array.isArray(clientData.reportArchive) ? clientData.reportArchive : [];
 
   if (reports.length === 0) {
+    if (reportArchiveFilterBar) reportArchiveFilterBar.style.display = "none";
     listEl.style.display = "block";
     listEl.innerHTML = '<p class="report-archive-empty" style="color:var(--color-text-secondary);">No reports have been published yet. Check back soon!</p>';
     return;
   }
 
-  [...reports].reverse().forEach((report) => {
+  // Search box only earns its keep once there's actually something to
+  // search through - a handful of reports is faster to just eyeball.
+  if (reportArchiveFilterBar) {
+    reportArchiveFilterBar.style.display = reports.length > 3 ? "flex" : "none";
+  }
+
+  const searchText = reportArchiveSearchText.trim().toLowerCase();
+  const filteredReports = !searchText ? reports : reports.filter(report => {
+    const haystack = [report.monthYear, report.notes, report.date, report.focus]
+      .filter(Boolean).join(" ").toLowerCase();
+    return haystack.includes(searchText);
+  });
+
+  if (filteredReports.length === 0) {
+    listEl.style.display = "block";
+    listEl.innerHTML = '<p class="report-archive-empty" style="color:var(--color-text-secondary);">No reports match your search.</p>';
+    return;
+  }
+
+  // reports is stored oldest-to-newest as entries are added, so reversing
+  // gives newest-first; "oldest first" is just the array as-is.
+  const orderedReports = reportArchiveSortOrder === "oldest" ? filteredReports : [...filteredReports].reverse();
+
+  orderedReports.forEach((report) => {
     const card = document.createElement("div");
     card.className = "report-card";
     card.style.background = "var(--color-bg-elevated)";
@@ -403,6 +446,58 @@ function showReportDetail(report) {
     ${report.wins ? `<div class="report-wins"><strong>Key wins this month</strong><p>${escapeHtml(report.wins)}</p></div>` : ""}
     ${platforms.length > 0 ? tableHtml : ""}
   `;
+}
+
+// Engagement-stage stepper: a coarse, admin-set "where are we overall"
+// indicator (set from client-portal-manager's "Engagement Stage" dropdown),
+// separate from the client checklist - the checklist is a list of specific
+// tasks, this is just "onboarding / strategy / production / review /
+// delivered" so a client doesn't have to ask "so what's happening now?"
+const ENGAGEMENT_STAGES = [
+  { key: "onboarding", label: "Onboarding" },
+  { key: "strategy", label: "Strategy" },
+  { key: "production", label: "Production" },
+  { key: "review", label: "Review" },
+  { key: "delivered", label: "Delivered" }
+];
+
+function renderEngagementStage(stageKey) {
+  const widget = document.getElementById("dashEngagementStageWidget");
+  const track = document.getElementById("dashEngagementStageTrack");
+  if (!widget || !track) return;
+
+  const currentIndex = ENGAGEMENT_STAGES.findIndex(s => s.key === stageKey);
+  if (currentIndex === -1) {
+    widget.style.display = "none";
+    return;
+  }
+
+  widget.style.display = "block";
+  track.innerHTML = "";
+
+  ENGAGEMENT_STAGES.forEach((stage, i) => {
+    const stepEl = document.createElement("div");
+    stepEl.className = "engagement-stage-step";
+    if (i < currentIndex) stepEl.classList.add("stage-done");
+    else if (i === currentIndex) stepEl.classList.add("stage-current");
+
+    const dot = document.createElement("span");
+    dot.className = "engagement-stage-dot";
+    const label = document.createElement("span");
+    label.className = "engagement-stage-label";
+    label.textContent = stage.label;
+
+    stepEl.appendChild(dot);
+    stepEl.appendChild(label);
+    track.appendChild(stepEl);
+
+    if (i < ENGAGEMENT_STAGES.length - 1) {
+      const connector = document.createElement("span");
+      connector.className = "engagement-stage-connector";
+      if (i < currentIndex) connector.classList.add("stage-done");
+      track.appendChild(connector);
+    }
+  });
 }
 
 function renderChecklist() {

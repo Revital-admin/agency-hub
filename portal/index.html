@@ -193,6 +193,10 @@ window.addEventListener('error', function(e) {
           <p>Here is a live snapshot of your performance.</p>
         </header>
 
+        <div id="dashEngagementStageWidget" class="engagement-stage-widget" style="display:none;">
+          <div id="dashEngagementStageTrack" class="engagement-stage-track"></div>
+        </div>
+
         <div id="dashOnboardingProgressWidget" class="onboarding-progress-widget" style="display:none;">
           <div class="onboarding-progress-top">
             <span id="dashOnboardingProgressLabel">Onboarding: 0 of 0 complete</span>
@@ -273,6 +277,14 @@ window.addEventListener('error', function(e) {
           <h2>Monthly Reports</h2>
           <p>Your monthly performance and results summaries.</p>
         </header>
+
+        <div id="reportArchiveFilterBar" class="report-archive-filter-bar" style="display:none;">
+          <input type="text" id="reportArchiveSearchInput" placeholder="Search reports...">
+          <select id="reportArchiveSortSelect">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+          </select>
+        </div>
 
         <div id="reportArchiveList" class="report-archive-list">
           <!-- Populated by JS -->

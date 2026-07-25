@@ -44,6 +44,7 @@ const btnEyedropperSec = document.getElementById("btnEyedropperSec");
 const btnEyedropperAccent = document.getElementById("btnEyedropperAccent");
 const syncFromBrandKitBtn = document.getElementById("syncFromBrandKitBtn");
 const showBillingInPortalInput = document.getElementById("showBillingInPortal");
+const engagementStageSelect = document.getElementById("engagementStageSelect");
 
 
 const inputs = {
@@ -103,6 +104,7 @@ function init() {
       secondaryColor: "#6366f1",
       accentColor: "#f59e0b",
       showBillingInPortal: false,
+      engagementStage: "onboarding",
       magicToken: generateSecureToken()
     };
     if (parentSave) parentSave();
@@ -146,6 +148,13 @@ function init() {
     showBillingInPortalInput.checked = !!config.showBillingInPortal;
     showBillingInPortalInput.addEventListener("change", (e) => {
       updateConfig("showBillingInPortal", e.target.checked);
+    });
+  }
+
+  if (engagementStageSelect) {
+    engagementStageSelect.value = config.engagementStage || "onboarding";
+    engagementStageSelect.addEventListener("change", (e) => {
+      updateConfig("engagementStage", e.target.value);
     });
   }
 
