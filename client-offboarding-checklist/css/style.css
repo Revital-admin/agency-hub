@@ -37,3 +37,16 @@
   color: var(--color-text-primary);
   resize: vertical;
 }
+
+/* "Reset Checklist" needs .btn for its padding/radius/layout
+   (btn-secondary-outline alone has no box model), but .btn's own
+   `border: 1px solid transparent` is declared after btn-secondary-outline
+   in the shared stylesheet, so it was winning the cascade and making the
+   outline invisible. Two-class selector beats both single-class rules
+   regardless of source order (same fix applied to Client Ad Account Log). */
+.btn.btn-secondary-outline {
+  border-color: var(--border-color);
+}
+.btn.btn-secondary-outline:hover {
+  border-color: var(--text-main);
+}
