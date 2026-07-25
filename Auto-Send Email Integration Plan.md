@@ -32,6 +32,18 @@ If Revital ever wants **bulk marketing sends** (a newsletter blast to all client
 
 **Why the vendor choice itself is low-risk:** the integration point is a single Worker route (`POST /api/send-email`, step 4 below) that the rest of the Hub calls generically. If Resend ever stops fitting, swapping providers later means rewriting that one server-side function — nothing else in the Hub or portal talks to the email provider directly. So the bigger future-proofing decision isn't really "which vendor" — it's keeping that one-route abstraction, which this plan already does.
 
+## Alternative considered: sending through Google Workspace instead
+
+Since Revital already pays for Google Workspace, it's worth asking whether that could send these emails instead of adding Resend. Short answer: technically yes, but it's the more complex and fragile option here, for reasons specific to Workers.
+
+Gmail's SMTP servers are out — same problem as SendGrid/Mailgun's SMTP option, Workers can't open a raw SMTP socket. The real option is the **Gmail API** (a REST API, so it can be called via `fetch()`), authenticated as a Workspace account via a **service account with domain-wide delegation**. That setup requires:
+- A Super Admin in the Google Workspace Admin Console authorizing the service account's client ID for the `gmail.send` scope (Security → API controls → Domain-wide delegation) — and as of recent Google security tightening, high-privilege grants like this may need a second Super Admin to approve it.
+- A service account JSON key stored as a Worker secret, plus hand-rolled JWT-signing code in the Worker to exchange it for an access token — Workers can't use Google's official Node client libraries, so this part is custom crypto code rather than an SDK call, which is meaningfully more fragile than sending one header with an API key.
+
+The upside: it's free (no per-email cost, since it rides the existing Workspace subscription) and sends as your real @revitalproductions.com address rather than a new subdomain. The downside: since Revital's actual volume comfortably fits inside Resend's free tier anyway, the "it's free" advantage doesn't translate into real savings — you'd be trading a much simpler integration (one API key) for a more complex, more fragile one (service account + JWT signing + admin approval step) to save $0. Gmail/Workspace's own send limit (roughly 2,000/day per account) is also not a differentiator either way — both options comfortably cover Revital's volume.
+
+**Recommendation stands: Resend**, specifically because the setup is simpler and more maintainable, not because it's cheaper (it isn't, meaningfully, at this volume).
+
 ## What integration actually involves
 
 1. **Sign up for Resend** (or whichever service you pick) — this step is yours to do, not something I can do on your behalf.
