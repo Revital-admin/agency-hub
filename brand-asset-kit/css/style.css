@@ -95,6 +95,25 @@
   gap: 24px;
 }
 
+/* ── Card outline ──
+   .card was never actually given a background/border anywhere in the
+   shared stylesheet chain, so every section rendered as plain floating
+   text with no visual box around it. Adding a real panel treatment here
+   (and the identical rule in Brand Guidelines Builder's stylesheet) so
+   both tools show matching bordered cards instead of an unboxed look. */
+.card {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+}
+/* .empty-state already carries its own (larger) padding - .card's rule
+   above would otherwise win on source order and shrink it, since both
+   are single-class selectors of equal specificity. */
+.card.empty-state {
+  padding: 64px 24px;
+}
+
 .color-picker {
   -webkit-appearance: none;
   border: none;
