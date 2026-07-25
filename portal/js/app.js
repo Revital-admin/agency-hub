@@ -378,7 +378,12 @@ function renderChecklist() {
   // top of internal data. This is just whatever the admin put here.
   const allItems = Array.isArray(clientData.clientChecklist) ? clientData.clientChecklist : [];
 
-  if (allItems.length === 0) return;
+  const progressWidget = document.getElementById("dashOnboardingProgressWidget");
+
+  if (allItems.length === 0) {
+    if (progressWidget) progressWidget.style.display = "none";
+    return;
+  }
 
   let completedCount = 0;
 
@@ -407,10 +412,27 @@ function renderChecklist() {
 
   // Once every item is checked off, the widget is no longer really an
   // "onboarding" list - swap the heading to just "Checklist".
+  const isComplete = allItems.length > 0 && completedCount === allItems.length;
   if (checklistHeading) {
-    checklistHeading.textContent = (allItems.length > 0 && completedCount === allItems.length)
-      ? "Checklist"
-      : "Onboarding Checklist";
+    checklistHeading.textContent = isComplete ? "Checklist" : "Onboarding Checklist";
+  }
+
+  // Dashboard progress bar - same completion math, surfaced on the main
+  // view so the client sees it without opening the sidebar. Hides itself
+  // once onboarding is fully complete rather than sitting at 100% forever.
+  if (progressWidget) {
+    if (isComplete) {
+      progressWidget.style.display = "none";
+    } else {
+      progressWidget.style.display = "block";
+      const pct = Math.round((completedCount / allItems.length) * 100);
+      const label = document.getElementById("dashOnboardingProgressLabel");
+      const pctEl = document.getElementById("dashOnboardingProgressPct");
+      const fill = document.getElementById("dashOnboardingProgressFill");
+      if (label) label.textContent = `Onboarding: ${completedCount} of ${allItems.length} complete`;
+      if (pctEl) pctEl.textContent = `${pct}%`;
+      if (fill) fill.style.width = `${pct}%`;
+    }
   }
 
   // Check Confetti

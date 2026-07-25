@@ -167,7 +167,17 @@ window.addEventListener('error', function(e) {
           <h2 id="welcomeHeader">Welcome back!</h2>
           <p>Here is a live snapshot of your performance.</p>
         </header>
-        
+
+        <div id="dashOnboardingProgressWidget" class="onboarding-progress-widget" style="display:none;">
+          <div class="onboarding-progress-top">
+            <span id="dashOnboardingProgressLabel">Onboarding: 0 of 0 complete</span>
+            <span id="dashOnboardingProgressPct">0%</span>
+          </div>
+          <div class="onboarding-progress-track">
+            <div id="dashOnboardingProgressFill" class="onboarding-progress-fill" style="width:0%;"></div>
+          </div>
+        </div>
+
         <div id="dashboardStatsPlaceholder" class="stats-grid">
           <div class="stat-card stat-card-placeholder">
             <h4>Live Performance Dashboard</h4>

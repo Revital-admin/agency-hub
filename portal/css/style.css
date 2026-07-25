@@ -394,6 +394,45 @@ body {
   color: var(--color-text-secondary);
 }
 
+/* Onboarding progress bar on the dashboard - mirrors the sidebar checklist
+   widget's completion state, but gives it visibility without opening the
+   sidebar list. Hidden entirely once the checklist is 100% complete (or
+   empty) so it doesn't linger after onboarding is done. */
+.onboarding-progress-widget {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+.onboarding-progress-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 0.9rem;
+}
+.onboarding-progress-top span:first-child {
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+.onboarding-progress-top span:last-child {
+  color: var(--color-secondary);
+  font-weight: 700;
+}
+.onboarding-progress-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--color-border);
+  overflow: hidden;
+}
+.onboarding-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(to right, var(--color-secondary), var(--color-accent));
+  transition: width 0.4s ease;
+}
+
 /* Dashboard Mocks */
 .stats-grid {
   display: grid;
