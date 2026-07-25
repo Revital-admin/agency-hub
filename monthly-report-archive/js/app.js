@@ -140,6 +140,10 @@ function saveReport() {
     dateAdded: new Date().toISOString()
   });
 
+  if (isEmbedded && window.parent.pushClientNotification) {
+    window.parent.pushClientNotification(clients[clientName], "report", `Your ${monthYear} report is now available in Monthly Reports.`);
+  }
+
   persist();
 
   // Reset form

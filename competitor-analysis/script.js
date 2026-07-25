@@ -313,6 +313,11 @@ function publishToClientPortal() {
 
   // Newest first.
   parentClient.reportArchive.unshift(snapshot);
+
+  if (window.parent.pushClientNotification) {
+    window.parent.pushClientNotification(parentClient, "report", `A new report${snapshot.date ? ` (${snapshot.date})` : ''} was published to your portal.`);
+  }
+
   window.parent.saveDatabase();
 
   showBanner('success', 'Report published! It now shows on the client\'s portal.');

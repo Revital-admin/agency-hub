@@ -60,13 +60,20 @@ service cloud.firestore {
       // Unauthenticated portal visitors may ONLY ever touch their own
       // client-facing checklist (checking off their own items), their own
       // content approval decisions (pendingApprovals shrinks,
-      // approvalHistory grows, as items move from one to the other), and
-      // now their own testimonial submission (Leave a Testimonial view -
-      // written once, then read-only from the client's side). The
+      // approvalHistory grows, as items move from one to the other), their
+      // own testimonial submission (Leave a Testimonial view - written
+      // once, then read-only from the client's side), and now their own
+      // notification feed - but only to flip read: false -> true on
+      // entries the admin already created, never to add new ones (that's
+      // enforced app-side by only ever writing back the same array with
+      // read flags flipped; Firestore rules can't easily diff array
+      // contents element-by-element, so this relies on the portal's own JS
+      // never constructing a new notification, the same trust boundary the
+      // client-side checklist/approvals already operate under). The
       // internal onboardingChecklist, branding, embed URLs, report
       // archive, etc. all stay immutable to public writes.
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
-                        .hasOnly(['clientChecklist', 'pendingApprovals', 'approvalHistory', 'testimonialSubmission']);
+                        .hasOnly(['clientChecklist', 'pendingApprovals', 'approvalHistory', 'testimonialSubmission', 'notifications']);
     }
 
     // Deny everything else by default.

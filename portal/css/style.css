@@ -116,10 +116,132 @@ body {
   font-family: var(--font-heading);
   font-size: 1.25rem;
   font-weight: 700;
-  margin-bottom: 32px;
+  margin-bottom: 0;
   background: linear-gradient(to right, var(--color-primary), var(--color-secondary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+.sidebar-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+.sidebar-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* Notification bell + dropdown - client-facing heads-up for new approvals
+   and newly published reports, without relying solely on email. */
+.notif-bell-btn {
+  position: relative;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.notif-bell-btn:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-secondary);
+}
+.notif-bell-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+}
+.notif-dropdown {
+  position: absolute;
+  top: 76px;
+  left: 24px;
+  right: 24px;
+  z-index: 60;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  max-height: 360px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.notif-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.notif-mark-read-btn {
+  background: none;
+  border: none;
+  color: var(--color-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0;
+}
+.notif-mark-read-btn:hover {
+  text-decoration: underline;
+}
+.notif-list {
+  overflow-y: auto;
+}
+.notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.notif-item:last-child {
+  border-bottom: none;
+}
+.notif-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.notif-item-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  margin-top: 5px;
+}
+.notif-item.read .notif-item-dot {
+  background: transparent;
+}
+.notif-item-body p {
+  margin: 0 0 4px 0;
+  color: var(--color-text-primary);
+}
+.notif-item.read .notif-item-body p {
+  color: var(--color-text-secondary);
+}
+.notif-item-time {
+  font-size: 0.72rem;
+  color: var(--color-text-secondary);
+}
+.notif-empty {
+  padding: 24px 14px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
 }
 
 .sidebar-nav {
@@ -651,6 +773,67 @@ body {
 .report-archive-empty {
   color: var(--color-text-secondary);
   font-size: 0.9rem;
+}
+
+/* ── Billing (read-only contract/invoice snapshot) ── */
+.billing-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+}
+.billing-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 20px;
+}
+.billing-card-label {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 8px;
+}
+.billing-card-value {
+  font-family: var(--font-heading);
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+.billing-card-sub {
+  margin-top: 4px;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+.billing-status-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.billing-status-pill.status-paid, .billing-status-pill.status-signed {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+.billing-status-pill.status-sent {
+  background: var(--color-secondary-glow);
+  color: var(--color-secondary);
+}
+.billing-status-pill.status-overdue {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+.billing-status-pill.status-not-sent {
+  background: var(--color-border);
+  color: var(--color-text-secondary);
+}
+.billing-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
 }
 
 .report-card {

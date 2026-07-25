@@ -215,6 +215,7 @@ function renderTable() {
       <td class="date-cell">${r.contractSignedDate || '--'}</td>
       <td><input type="date" class="renewal-date-input" data-id="${r.id}" value="${r.contractRenewalDate || ''}"></td>
       <td><select class="invoice-select" data-id="${r.id}">${optionsHtml(INVOICE_STATUSES, r.invoiceStatus)}</select></td>
+      <td><input type="text" class="amount-input" data-id="${r.id}" value="${(r.invoiceAmount || '').replace(/"/g, '&quot;')}" placeholder="$0.00"></td>
       <td><input type="date" class="due-date-input" data-id="${r.id}" value="${r.invoiceDueDate || ''}"></td>
       <td class="date-cell">${r.invoicePaidDate || '--'}</td>
       <td><input type="text" class="notes-input" data-id="${r.id}" value="${(r.notes || '').replace(/"/g, '&quot;')}" placeholder="Notes..."></td>
@@ -283,6 +284,15 @@ function wireRowListeners() {
       }
       await persist();
       renderTable();
+    });
+  });
+
+  document.querySelectorAll('.amount-input').forEach(inp => {
+    inp.addEventListener('change', async () => {
+      const r = findRecord(inp.getAttribute('data-id'));
+      if (!r) return;
+      r.invoiceAmount = inp.value.trim();
+      await persist();
     });
   });
 
@@ -357,6 +367,7 @@ async function addTrackedClient() {
     invoiceSentDate: '',
     invoiceDueDate: '',
     invoicePaidDate: '',
+    invoiceAmount: '',
     notes: ''
   });
 

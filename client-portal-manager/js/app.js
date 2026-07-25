@@ -43,6 +43,7 @@ const btnEyedropper = document.getElementById("btnEyedropper");
 const btnEyedropperSec = document.getElementById("btnEyedropperSec");
 const btnEyedropperAccent = document.getElementById("btnEyedropperAccent");
 const syncFromBrandKitBtn = document.getElementById("syncFromBrandKitBtn");
+const showBillingInPortalInput = document.getElementById("showBillingInPortal");
 
 
 const inputs = {
@@ -101,6 +102,7 @@ function init() {
       primaryColor: "#10b981",
       secondaryColor: "#6366f1",
       accentColor: "#f59e0b",
+      showBillingInPortal: false,
       magicToken: generateSecureToken()
     };
     if (parentSave) parentSave();
@@ -139,6 +141,13 @@ function init() {
   colorHexSecondaryText.textContent = config.secondaryColor || "#6366f1";
   accentColorInput.value = config.accentColor || "#f59e0b";
   colorHexAccentText.textContent = config.accentColor || "#f59e0b";
+
+  if (showBillingInPortalInput) {
+    showBillingInPortalInput.checked = !!config.showBillingInPortal;
+    showBillingInPortalInput.addEventListener("change", (e) => {
+      updateConfig("showBillingInPortal", e.target.checked);
+    });
+  }
 
   // Load Text Inputs
   // Load Logo
@@ -746,6 +755,13 @@ function initApprovalControls() {
       createdAt: new Date().toISOString()
     };
     client.pendingApprovals.push(entry);
+
+    // Let the client know via their portal's notification bell, in addition
+    // to the ready-to-send email built below.
+    if (window.parent.pushClientNotification) {
+      window.parent.pushClientNotification(client, "approval", `${title} is ready for your approval.`);
+    }
+
     if (parentSave) parentSave();
 
     titleEl.value = "";

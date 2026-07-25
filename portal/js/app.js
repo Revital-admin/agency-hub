@@ -34,6 +34,11 @@ const btnContentRequest = document.getElementById("btnContentRequest");
 const btnUploadFiles = document.getElementById("btnUploadFiles");
 const btnDriveFolder = document.getElementById("btnDriveFolder");
 const quickActionsWidget = document.getElementById("quickActionsWidget");
+const notifBellBtn = document.getElementById("notifBellBtn");
+const notifBellBadge = document.getElementById("notifBellBadge");
+const notifDropdown = document.getElementById("notifDropdown");
+const notifList = document.getElementById("notifList");
+const notifMarkAllReadBtn = document.getElementById("notifMarkAllReadBtn");
 
 
 // Nav and Views
@@ -166,6 +171,17 @@ function renderPortal() {
   }
 
   renderReportArchive();
+  renderNotifications();
+
+  const navBilling = document.getElementById("navBilling");
+  if (navBilling) {
+    if (config.showBillingInPortal && clientData.billingSummary) {
+      navBilling.style.display = "flex";
+      renderBillingSummary(clientData.billingSummary);
+    } else {
+      navBilling.style.display = "none";
+    }
+  }
 
   const analyticsEmbed = document.getElementById("analyticsEmbedContainer");
   const statsPlaceholder = document.getElementById("dashboardStatsPlaceholder");
@@ -458,6 +474,177 @@ function updateFirebaseChecklist() {
     clientChecklist: purifiedChecklist
   }, { merge: true }).catch(err => {
     console.error("Error updating checklist:", err);
+  });
+}
+
+// ── Billing (read-only) ──
+// Pulled from the Contract & Invoice Status Tracker via the hub's
+// syncPublicPortalDocs (see app.js's fetchBillingSummaries). Nothing here
+// is writable from the portal - no payment is ever collected in this view.
+const BILLING_STATUS_CLASSES = {
+  "Not Sent": "status-not-sent",
+  "Sent": "status-sent",
+  "Signed": "status-signed",
+  "Paid": "status-paid",
+  "Overdue": "status-overdue"
+};
+
+function billingPill(status) {
+  const cls = BILLING_STATUS_CLASSES[status] || "status-not-sent";
+  return `<span class="billing-status-pill ${cls}">${escapeHtml(status || "Not Sent")}</span>`;
+}
+
+function formatDateNice(dateStr) {
+  if (!dateStr) return "--";
+  const d = new Date(dateStr + "T00:00:00");
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function renderBillingSummary(summary) {
+  const grid = document.getElementById("billingSummaryGrid");
+  if (!grid) return;
+
+  if (!summary) {
+    grid.innerHTML = `<div class="billing-empty">No billing information on file yet.</div>`;
+    return;
+  }
+
+  grid.innerHTML = `
+    <div class="billing-card">
+      <div class="billing-card-label">Contract Status</div>
+      <div class="billing-card-value">${billingPill(summary.contractStatus)}</div>
+      ${summary.contractRenewalDate ? `<div class="billing-card-sub">Renews ${formatDateNice(summary.contractRenewalDate)}</div>` : ""}
+    </div>
+    <div class="billing-card">
+      <div class="billing-card-label">Invoice Status</div>
+      <div class="billing-card-value">${billingPill(summary.invoiceStatus)}</div>
+      ${summary.invoiceAmount ? `<div class="billing-card-sub">${escapeHtml(summary.invoiceAmount)}</div>` : ""}
+    </div>
+    <div class="billing-card">
+      <div class="billing-card-label">Invoice Due</div>
+      <div class="billing-card-value">${formatDateNice(summary.invoiceDueDate)}</div>
+    </div>
+    <div class="billing-card">
+      <div class="billing-card-label">Last Payment</div>
+      <div class="billing-card-value">${formatDateNice(summary.invoicePaidDate)}</div>
+    </div>
+  `;
+}
+
+// ── Notification Bell ──
+// The hub pushes an entry here (new approval request, new published
+// report) via pushClientNotification() in the parent app.js. The portal
+// only ever flips read: false -> true on entries that already exist - it
+// never invents new ones - matching the Firestore rule that allows public
+// writes to this field.
+function timeAgo(isoString) {
+  if (!isoString) return "";
+  const diffMs = Date.now() - new Date(isoString).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(isoString).toLocaleDateString();
+}
+
+function renderNotifications() {
+  if (!notifList || !notifBellBadge) return;
+
+  const items = Array.isArray(clientData.notifications) ? clientData.notifications : [];
+  const unreadCount = items.filter(n => !n.read).length;
+
+  if (unreadCount > 0) {
+    notifBellBadge.textContent = unreadCount > 9 ? "9+" : String(unreadCount);
+    notifBellBadge.style.display = "flex";
+  } else {
+    notifBellBadge.style.display = "none";
+  }
+
+  notifList.innerHTML = "";
+
+  if (items.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "notif-empty";
+    empty.textContent = "Nothing yet - you'll see updates here as work moves forward.";
+    notifList.appendChild(empty);
+    return;
+  }
+
+  items.forEach(item => {
+    const row = document.createElement("div");
+    row.className = "notif-item" + (item.read ? " read" : "");
+
+    const dot = document.createElement("span");
+    dot.className = "notif-item-dot";
+
+    const body = document.createElement("div");
+    body.className = "notif-item-body";
+    const p = document.createElement("p");
+    p.textContent = item.message || "";
+    const time = document.createElement("div");
+    time.className = "notif-item-time";
+    time.textContent = timeAgo(item.createdAt);
+    body.appendChild(p);
+    body.appendChild(time);
+
+    row.appendChild(dot);
+    row.appendChild(body);
+
+    row.addEventListener("click", () => {
+      if (!item.read) {
+        item.read = true;
+        renderNotifications();
+        updateFirebaseNotifications();
+      }
+    });
+
+    notifList.appendChild(row);
+  });
+}
+
+function updateFirebaseNotifications() {
+  const docRef = db.collection("clients").doc(clientToken);
+  const notifications = Array.isArray(clientData.notifications) ? clientData.notifications : [];
+  const purified = JSON.parse(JSON.stringify(notifications));
+
+  docRef.set({
+    notifications: purified
+  }, { merge: true }).catch(err => {
+    console.error("Error updating notifications:", err);
+  });
+}
+
+if (notifBellBtn && notifDropdown) {
+  notifBellBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    notifDropdown.style.display = notifDropdown.style.display === "none" ? "flex" : "none";
+  });
+  document.addEventListener("click", (e) => {
+    if (notifDropdown.style.display !== "none" && !notifDropdown.contains(e.target) && e.target !== notifBellBtn) {
+      notifDropdown.style.display = "none";
+    }
+  });
+}
+
+if (notifMarkAllReadBtn) {
+  notifMarkAllReadBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const items = Array.isArray(clientData.notifications) ? clientData.notifications : [];
+    let changed = false;
+    items.forEach(n => {
+      if (!n.read) {
+        n.read = true;
+        changed = true;
+      }
+    });
+    if (changed) {
+      renderNotifications();
+      updateFirebaseNotifications();
+    }
   });
 }
 

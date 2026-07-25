@@ -52,13 +52,31 @@ window.addEventListener('error', function(e) {
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <img id="brandLogo" src="" alt="Client Logo" style="display:none; max-width: 100%; max-height: 40px; margin-bottom: 32px;"><h1 id="brandName">Client Portal</h1>
+        <div class="sidebar-header-row">
+          <div class="sidebar-header-brand">
+            <img id="brandLogo" src="" alt="Client Logo" style="display:none; max-width: 140px; max-height: 40px;"><h1 id="brandName">Client Portal</h1>
+          </div>
+          <button id="notifBellBtn" class="notif-bell-btn" aria-label="Notifications">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+            <span id="notifBellBadge" class="nav-badge notif-bell-badge" style="display:none;">0</span>
+          </button>
+        </div>
         <button id="mobileCloseBtn" class="mobile-close-btn" aria-label="Close Navigation" style="display: none;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
+      </div>
+
+      <div id="notifDropdown" class="notif-dropdown" style="display:none;">
+        <div class="notif-dropdown-header">
+          <span>Notifications</span>
+          <button id="notifMarkAllReadBtn" class="notif-mark-read-btn" type="button">Mark all read</button>
+        </div>
+        <div id="notifList" class="notif-list">
+          <!-- Populated by JS -->
+        </div>
       </div>
 
       <nav class="sidebar-nav">
@@ -89,6 +107,10 @@ window.addEventListener('error', function(e) {
         <button class="nav-btn" data-target="view-monthlyreports" id="navMonthlyReports" style="display:none;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"></path><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"></path></svg>
           Monthly Reports
+        </button>
+        <button class="nav-btn" data-target="view-billing" id="navBilling" style="display:none;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
+          Billing
         </button>
         <button class="nav-btn" data-target="view-approvals" id="navApprovals" style="display:none;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
@@ -263,6 +285,18 @@ window.addEventListener('error', function(e) {
 
         <div id="monthlyReportsEmbedWrapper" class="iframe-wrapper full-height" style="display:none; margin-top: 32px;">
           <iframe id="monthlyReportsIframe" src="" frameborder="0"></iframe>
+        </div>
+      </section>
+
+      <!-- BILLING VIEW -->
+      <section id="view-billing" class="view-section">
+        <header class="view-header">
+          <h2>Billing</h2>
+          <p>A read-only snapshot of your contract and invoice status.</p>
+        </header>
+
+        <div id="billingSummaryGrid" class="billing-summary-grid">
+          <!-- Populated by JS -->
         </div>
       </section>
 

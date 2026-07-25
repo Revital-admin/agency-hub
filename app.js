@@ -2869,6 +2869,47 @@ function foldInTestimonialSubmission(target, publicData) {
   return true;
 }
 
+// Appends one entry to a client's notification feed (the bell icon on
+// their portal). Admin-only to create - called from wherever the hub
+// pushes something the client needs to know about (a new approval request,
+// a newly published report). The client can only ever mark entries read,
+// never add their own - see foldInNotificationReadState below and the
+// matching Firestore rule. Exposed on window (plain function declarations
+// do this automatically in a classic script) so tool iframes like Client
+// Portal Manager and Monthly Report Archive can call it via
+// window.parent.pushClientNotification(client, type, message).
+function pushClientNotification(client, type, message) {
+  if (!client) return;
+  if (!Array.isArray(client.notifications)) client.notifications = [];
+  client.notifications.unshift({
+    id: 'n_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    type: type || 'info',
+    message: message,
+    createdAt: new Date().toISOString(),
+    read: false
+  });
+  // Cap so this doesn't grow unbounded over a long client relationship.
+  if (client.notifications.length > 30) client.notifications.length = 30;
+}
+
+// Notifications are admin-authored only - the client can never create one,
+// only mark an existing one read. So the only thing that needs folding in
+// from the existing public doc before every save is which ones the client
+// has already read, the same one-directional "only ever flips one way"
+// pattern as foldInOnboardingChecked above (never un-reads something).
+function foldInNotificationReadState(targetNotifications, existingNotifications) {
+  if (!Array.isArray(targetNotifications) || !Array.isArray(existingNotifications)) return false;
+  const readIds = new Set(existingNotifications.filter(n => n.read).map(n => n.id));
+  let changed = false;
+  targetNotifications.forEach(n => {
+    if (readIds.has(n.id) && !n.read) {
+      n.read = true;
+      changed = true;
+    }
+  });
+  return changed;
+}
+
 function foldInApprovalDecisions(target, publicData) {
   if (!target || !publicData || !Array.isArray(publicData.approvalHistory)) return false;
   if (!Array.isArray(target.pendingApprovals)) target.pendingApprovals = [];
@@ -2888,6 +2929,36 @@ function foldInApprovalDecisions(target, publicData) {
   return changed;
 }
 
+// The Contract & Invoice Status Tracker deliberately keeps its own record
+// list at agency/contractInvoices rather than inside clientsDb (a contract
+// can exist before someone is a fully onboarded client - see that tool's
+// own comment header) - so the only way to surface a read-only billing
+// summary on a client's portal is a direct read of that collection here,
+// matched back to a client by name. One read per sync rather than a
+// standing listener, since this only needs to be current as of the next
+// save, not instantaneous.
+async function fetchBillingSummaries() {
+  const summaries = {};
+  try {
+    const snap = await window.firebaseDb.collection("agency").doc("contractInvoices").get();
+    const list = (snap.exists && snap.data().list) || [];
+    list.forEach(rec => {
+      if (!rec.clientName) return;
+      summaries[rec.clientName.toLowerCase()] = {
+        contractStatus: rec.contractStatus || "",
+        contractRenewalDate: rec.contractRenewalDate || "",
+        invoiceStatus: rec.invoiceStatus || "",
+        invoiceAmount: rec.invoiceAmount || "",
+        invoiceDueDate: rec.invoiceDueDate || "",
+        invoicePaidDate: rec.invoicePaidDate || ""
+      };
+    });
+  } catch (e) {
+    console.warn("Could not read contract/invoice records for billing summaries:", e);
+  }
+  return summaries;
+}
+
 async function syncPublicPortalDocs(dbSnapshot) {
   if (!window.firebaseDb || !window.firebaseDb.collection) return;
 
@@ -2895,11 +2966,14 @@ async function syncPublicPortalDocs(dbSnapshot) {
     ([, client]) => client && client.portalConfig && client.portalConfig.magicToken
   );
 
+  const billingSummaries = await fetchBillingSummaries();
+
   for (const [name, client] of entries) {
     const token = client.portalConfig.magicToken;
     const publicRef = window.firebaseDb.collection("clients").doc(token);
     const localChecklist = client.onboardingChecklist || client.onboarding || [];
     const localClientChecklist = client.clientChecklist || [];
+    const localNotifications = client.notifications || [];
     const approvalsWrapper = {
       pendingApprovals: client.pendingApprovals || [],
       approvalHistory: client.approvalHistory || []
@@ -2930,6 +3004,7 @@ async function syncPublicPortalDocs(dbSnapshot) {
         foldInOnboardingChecked(localChecklist, existingData.onboardingChecklist);
         foldInApprovalDecisions(approvalsWrapper, existingData);
         foldInTestimonialSubmission(client, existingData);
+        foldInNotificationReadState(localNotifications, existingData.notifications);
       }
     } catch (e) {
       console.warn("Could not read existing public portal doc for", name, e);
@@ -2949,7 +3024,16 @@ async function syncPublicPortalDocs(dbSnapshot) {
       // publishToClientPortal). Admin-only to create - clients never write
       // this field, so no fold-in-existing-progress step is needed here
       // the way there is for the two checklists above.
-      reportArchive: client.reportArchive || []
+      reportArchive: client.reportArchive || [],
+      // Bell-icon notification feed (new approval requests, new published
+      // reports). Admin-only to create; the client can only mark entries
+      // read (folded in above), never add their own.
+      notifications: localNotifications,
+      // Read-only billing snapshot pulled from the Contract & Invoice
+      // Status Tracker (see fetchBillingSummaries above). null if this
+      // client isn't tracked there under a matching name. The portal only
+      // shows this at all if portalConfig.showBillingInPortal is on.
+      billingSummary: billingSummaries[name.toLowerCase()] || null
     };
 
     publicRef.set(projection).catch(err => {
