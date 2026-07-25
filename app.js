@@ -2816,13 +2816,28 @@ function foldInOnboardingChecked(targetCategories, existingCategories) {
   return changed;
 }
 
-function foldInClientChecklistChecked(targetItems, existingItems) {
+// Keeps the admin's in-memory clientChecklist in sync with whatever the
+// client's own portal doc actually says, in both directions (checked and
+// unchecked). Used by ensureClientPortalListeners' onSnapshot handler
+// below, which fires because the client's portal doc just changed in
+// Firestore - so "existingItems" here is the freshest truth available.
+// (There used to also be a one-directional version of this run defensively
+// inside syncPublicPortalDocs, at save time, but it only ever pulled a
+// checked box IN from the portal, never matched an unchecked one - which
+// meant an account manager unchecking a box in Client Portal Manager and
+// saving would get silently reverted back to checked. Since this listener
+// already keeps clientsDb bidirectionally in sync continuously, that extra
+// fold at save time was both redundant and the actual source of that bug,
+// so it was removed rather than fixed in place.)
+function syncClientChecklistFromPortal(targetItems, existingItems) {
   if (!Array.isArray(targetItems) || !Array.isArray(existingItems)) return false;
-  const checkedIds = new Set(existingItems.filter(item => item.checked).map(item => item.id));
+  const existingCheckedById = new Map(existingItems.map(item => [item.id, !!item.checked]));
   let changed = false;
   targetItems.forEach(item => {
-    if (checkedIds.has(item.id) && !item.checked) {
-      item.checked = true;
+    if (!existingCheckedById.has(item.id)) return;
+    const existingChecked = existingCheckedById.get(item.id);
+    if (!!item.checked !== existingChecked) {
+      item.checked = existingChecked;
       changed = true;
     }
   });
@@ -2891,17 +2906,28 @@ async function syncPublicPortalDocs(dbSnapshot) {
     };
 
     try {
-      // Fold in any checklist progress (and approval decisions) the client
+      // Fold in onboarding progress and approval decisions the client
       // already made directly on the portal so this save doesn't stomp on
-      // it. (Pulling that progress into the real, live clientsDb so the
+      // them. (Pulling that progress into the real, live clientsDb so the
       // admin side actually SEES it is handled separately and continuously
       // by ensureClientPortalListeners below - not tied to whether the
       // admin happens to save something.)
+      //
+      // clientChecklist is deliberately NOT folded here (it used to be,
+      // one-directionally: only ever pulling a checked box in from the
+      // existing portal doc, never a match). That meant an account manager
+      // unchecking a box in Client Portal Manager and saving would get
+      // silently reverted back to checked right here, since the portal's
+      // existing doc still showed it checked from before. clientChecklist
+      // is kept in sync continuously and bidirectionally by
+      // ensureClientPortalListeners below instead, so by the time a save
+      // happens client.clientChecklist already reflects the latest state
+      // from both sides - the admin's own edit (made just now, in memory)
+      // should simply win here, not get folded against a stale snapshot.
       const existing = await publicRef.get();
       if (existing.exists) {
         const existingData = existing.data();
         foldInOnboardingChecked(localChecklist, existingData.onboardingChecklist);
-        foldInClientChecklistChecked(localClientChecklist, existingData.clientChecklist);
         foldInApprovalDecisions(approvalsWrapper, existingData);
         foldInTestimonialSubmission(client, existingData);
       }
@@ -2970,7 +2996,7 @@ function ensureClientPortalListeners() {
       if (!currentClient) return;
 
       const changedOnboarding = foldInOnboardingChecked(currentClient.onboardingChecklist, data.onboardingChecklist);
-      const changedClientChecklist = foldInClientChecklistChecked(currentClient.clientChecklist, data.clientChecklist);
+      const changedClientChecklist = syncClientChecklistFromPortal(currentClient.clientChecklist, data.clientChecklist);
       const changedApprovals = foldInApprovalDecisions(currentClient, data);
       const changedTestimonial = foldInTestimonialSubmission(currentClient, data);
 
