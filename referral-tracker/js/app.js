@@ -13,6 +13,8 @@ try {
   console.warn("CORS prevented parent access:", e);
 }
 
+const SANDBOX_NAME = "Quick Sandbox (One-Offs)";
+
 let referrals = [];
 
 function el(id) { return document.getElementById(id); }
@@ -88,6 +90,7 @@ function populateReferrerDatalist() {
   let clients = {};
   try { clients = window.parent.getAllClients() || {}; } catch (e) { clients = {}; }
   Object.keys(clients).sort().forEach(name => {
+    if (name === SANDBOX_NAME) return;
     const opt = document.createElement('option');
     opt.value = name;
     list.appendChild(opt);

@@ -21,6 +21,8 @@ try {
   console.warn("CORS prevented parent access:", e);
 }
 
+const SANDBOX_NAME = "Quick Sandbox (One-Offs)";
+
 let contractRecords = [];
 let revisionRecords = [];
 
@@ -67,7 +69,7 @@ function listenToRevisionLog() {
 
 function buildRows() {
   const clients = getClients();
-  return Object.keys(clients).map(name => {
+  return Object.keys(clients).filter(name => name !== SANDBOX_NAME).map(name => {
     const client = clients[name];
     const checkins = Array.isArray(client.weeklyCheckins) ? client.weeklyCheckins : [];
     const latestCheckin = checkins.length ? checkins[0] : null;

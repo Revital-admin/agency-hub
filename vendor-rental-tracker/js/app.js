@@ -20,6 +20,8 @@ try {
   console.warn("CORS prevented parent access:", e);
 }
 
+const SANDBOX_NAME = "Quick Sandbox (One-Offs)";
+
 let entries = [];
 let editingId = null;
 let docVersion = 0; // optimistic-concurrency guard, see persist() below
@@ -93,7 +95,7 @@ function getClients() {
 function populateDatalists() {
   const clientList = el('clientOptions');
   const clients = getClients();
-  clientList.innerHTML = Object.keys(clients).sort().map(name => `<option value="${name}">`).join('');
+  clientList.innerHTML = Object.keys(clients).filter(name => name !== SANDBOX_NAME).sort().map(name => `<option value="${name}">`).join('');
 
   const vendorList = el('vendorOptions');
   const vendorNames = [...new Set(entries.map(e => e.vendorName).filter(Boolean))].sort();

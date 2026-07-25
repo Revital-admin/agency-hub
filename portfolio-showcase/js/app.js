@@ -28,6 +28,8 @@ function getClients() {
   return {};
 }
 
+const SANDBOX_NAME = "Quick Sandbox (One-Offs)";
+
 let items = []; // portfolio-ready case studies, each with a clientName tacked on
 let selectedIds = new Set();
 
@@ -41,6 +43,7 @@ function collectPortfolioReadyCaseStudies() {
   const clients = getClients();
   const result = [];
   Object.keys(clients).forEach(clientName => {
+    if (clientName === SANDBOX_NAME) return;
     const client = clients[clientName];
     const caseStudies = client && Array.isArray(client.caseStudies) ? client.caseStudies : [];
     caseStudies.forEach(cs => {
