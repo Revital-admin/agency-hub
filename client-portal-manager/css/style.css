@@ -152,6 +152,7 @@ input[type="color"]::-webkit-color-swatch {
 /* Content Approvals */
 .approval-row {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
   gap: 10px;
@@ -159,6 +160,10 @@ input[type="color"]::-webkit-color-swatch {
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid var(--border-color);
   border-radius: 8px;
+}
+
+.approval-row-thread-wrap {
+  flex: 1 1 100%;
 }
 
 .approval-row-main strong {
@@ -181,6 +186,77 @@ input[type="color"]::-webkit-color-swatch {
 
 .approval-history-row {
   opacity: 0.85;
+}
+
+.approval-comment-thread {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.approval-comment {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px 12px;
+  max-width: 90%;
+}
+.approval-comment-client {
+  align-self: flex-start;
+}
+.approval-comment-admin {
+  align-self: flex-end;
+  border-color: var(--primary);
+}
+.approval-comment-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 3px;
+}
+.approval-comment-text {
+  font-size: 0.85rem;
+  color: var(--color-text);
+  overflow-wrap: break-word;
+}
+.approval-comment-empty {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+.approval-comment-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  margin-top: 4px;
+}
+.approval-comment-input {
+  flex: 1;
+  min-height: 40px;
+  max-height: 100px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--color-text);
+  font-size: 0.82rem;
+  padding: 8px 10px;
+  resize: vertical;
+}
+.approval-comment-send-btn {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.approval-comment-send-btn:hover {
+  opacity: 0.9;
 }
 
 .approval-remove-btn {

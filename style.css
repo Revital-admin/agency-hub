@@ -250,6 +250,71 @@ body {
   font-size: 0.85rem;
 }
 
+.admin-notif-draft-btn {
+  background: none;
+  border: 1px solid var(--border-color);
+  color: var(--primary);
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  margin-top: 4px;
+}
+.admin-notif-draft-btn:hover {
+  background: var(--bg-card);
+}
+.admin-notif-draft-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  margin-top: 8px;
+  cursor: default;
+}
+.admin-notif-draft-to {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  word-break: break-all;
+}
+.admin-notif-draft-input,
+.admin-notif-draft-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+}
+.admin-notif-draft-textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+.admin-notif-draft-actions {
+  display: flex;
+  gap: 8px;
+}
+.admin-notif-draft-copy-btn,
+.admin-notif-draft-mailto-btn {
+  background: none;
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  font-size: 0.75rem;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+.admin-notif-draft-copy-btn:hover,
+.admin-notif-draft-mailto-btn:hover {
+  background: var(--bg-sidebar);
+}
+
 .brand-logo-svg {
   color: var(--primary);
   filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.4));

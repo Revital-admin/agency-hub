@@ -219,6 +219,8 @@ function renderPortal() {
     }
   }
 
+  renderRenewalBanner(config.showBillingInPortal ? clientData.billingSummary : null);
+
   renderReferralSummary(clientData.referralSummary);
 
   const analyticsEmbed = document.getElementById("analyticsEmbedContainer");
@@ -627,6 +629,49 @@ function formatDateNice(dateStr) {
   const d = new Date(dateStr + "T00:00:00");
   if (isNaN(d.getTime())) return dateStr;
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+// Surfaces the contract renewal date as a visible dashboard banner rather
+// than only inside the Billing tab's table (see renderBillingSummary
+// below) - clients who never open Billing still see it coming. Only
+// applies when Billing visibility is turned on for this client (same gate
+// as the tab itself) and there's an actual signed renewal date on file.
+const RENEWAL_BANNER_WINDOW_DAYS = 30;
+
+function renderRenewalBanner(summary) {
+  const banner = document.getElementById("dashRenewalBanner");
+  if (!banner) return;
+
+  if (!summary || !summary.contractRenewalDate || summary.contractStatus !== "Signed") {
+    banner.style.display = "none";
+    return;
+  }
+
+  const renewalDate = new Date(summary.contractRenewalDate + "T00:00:00");
+  if (isNaN(renewalDate.getTime())) {
+    banner.style.display = "none";
+    return;
+  }
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const daysUntil = Math.round((renewalDate - today) / 86400000);
+
+  if (daysUntil > RENEWAL_BANNER_WINDOW_DAYS) {
+    banner.style.display = "none";
+    return;
+  }
+
+  let text;
+  if (daysUntil < 0) {
+    text = `Your contract renewal date (${formatDateNice(summary.contractRenewalDate)}) has passed - reach out to your account manager if you haven't heard from us.`;
+  } else if (daysUntil === 0) {
+    text = `Your contract renews today (${formatDateNice(summary.contractRenewalDate)}).`;
+  } else {
+    text = `Your contract renews in ${daysUntil} day${daysUntil === 1 ? "" : "s"} (${formatDateNice(summary.contractRenewalDate)}).`;
+  }
+
+  banner.textContent = text;
+  banner.style.display = "block";
 }
 
 function renderBillingSummary(summary) {
@@ -1056,6 +1101,67 @@ function wireThumbnailFallbacks(container) {
   });
 }
 
+// Back-and-forth thread on a pending approval, so a revision conversation
+// can happen in one place instead of spilling into email. Lives on the
+// entry itself as entry.comments = [{id, author, authorName, text,
+// createdAt}] - carried into approvalHistory once decided (see
+// decideApproval) so the full conversation stays visible afterward, just
+// without the ability to add more once it's no longer pending.
+function commentThreadHtml(entry, readOnly) {
+  const comments = Array.isArray(entry.comments) ? entry.comments : [];
+  const listHtml = comments.length
+    ? comments.map(c => `
+        <div class="approval-comment approval-comment-${c.author === 'client' ? 'client' : 'admin'}">
+          <div class="approval-comment-meta">
+            <span class="approval-comment-author">${escapeHtml(c.author === 'client' ? 'You' : (c.authorName || 'Revital team'))}</span>
+            <span class="approval-comment-time">${c.createdAt ? new Date(c.createdAt).toLocaleString() : ''}</span>
+          </div>
+          <div class="approval-comment-text">${escapeHtml(c.text || '')}</div>
+        </div>
+      `).join('')
+    : `<div class="approval-comment-empty">No comments yet.</div>`;
+
+  const inputHtml = readOnly ? '' : `
+    <div class="approval-comment-input-row">
+      <textarea class="approval-comment-input" placeholder="Add a comment..."></textarea>
+      <button type="button" class="approval-comment-send-btn">Send</button>
+    </div>
+  `;
+
+  return `<div class="approval-comment-thread">${listHtml}${inputHtml}</div>`;
+}
+
+function wireCommentThread(card, entry) {
+  const sendBtn = card.querySelector(".approval-comment-send-btn");
+  const input = card.querySelector(".approval-comment-input");
+  if (!sendBtn || !input) return;
+
+  sendBtn.addEventListener("click", () => {
+    const text = input.value.trim();
+    if (!text) return;
+    addApprovalComment(entry, text);
+  });
+}
+
+function addApprovalComment(entry, text) {
+  if (!Array.isArray(entry.comments)) entry.comments = [];
+  entry.comments.push({
+    id: 'cm_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    author: 'client',
+    text: text,
+    createdAt: new Date().toISOString()
+  });
+
+  renderApprovalsView();
+
+  const purifiedPending = JSON.parse(JSON.stringify(clientData.pendingApprovals || []));
+  db.collection("clients").doc(clientToken).set({
+    pendingApprovals: purifiedPending
+  }, { merge: true }).catch(err => {
+    console.error("Error adding approval comment:", err);
+  });
+}
+
 function renderApprovalsView() {
   const pendingContainer = document.getElementById("pendingApprovalsContainer");
   const historyContainer = document.getElementById("approvalHistoryContainer");
@@ -1104,6 +1210,7 @@ function renderApprovalsView() {
         </div>
         ${entry.previewLink ? `<a href="${escapeHtml(entry.previewLink)}" target="_blank" rel="noopener" class="approval-preview-link">View Preview &rarr;</a>` : ""}
         ${checklistHtml}
+        ${commentThreadHtml(entry)}
         <textarea class="approval-notes-input" placeholder="Notes (required if requesting corrections or a revision)"></textarea>
         <div class="approval-actions">
           <button type="button" class="btn-approval btn-approve" data-decision="approved">Approved</button>
@@ -1113,6 +1220,7 @@ function renderApprovalsView() {
       `;
 
       wireThumbnailFallbacks(card);
+      wireCommentThread(card, entry);
 
       card.querySelectorAll(".btn-approval").forEach(btn => {
         btn.addEventListener("click", () => {
@@ -1154,6 +1262,7 @@ function renderApprovalsView() {
             </div>
             <div class="approval-history-meta">${decisionLabel} &middot; ${escapeHtml(decidedDate)}</div>
             ${entry.notes ? `<div class="approval-history-notes">&ldquo;${escapeHtml(entry.notes)}&rdquo;</div>` : ""}
+            ${Array.isArray(entry.comments) && entry.comments.length > 0 ? commentThreadHtml(entry, true) : ""}
           </div>
         </div>
       `;
@@ -1172,6 +1281,7 @@ function decideApproval(entry, decision, notes) {
     title: entry.title,
     previewLink: entry.previewLink || "",
     thumbnailUrl: entry.thumbnailUrl || "",
+    comments: Array.isArray(entry.comments) ? entry.comments : [],
     decision: decision,
     notes: notes || "",
     decidedAt: new Date().toISOString()

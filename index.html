@@ -263,6 +263,12 @@
             </button>
           </li>
           <li>
+            <button class="nav-item-btn" data-tab="tab-qbr">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10"></path><path d="M12 20V4"></path><path d="M6 20v-6"></path></svg>
+              <span>QBR Generator</span>
+            </button>
+          </li>
+          <li>
             <button class="nav-item-btn" data-tab="tab-teamroster">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
               <span>Team Roster &amp; Capacity</span>
@@ -647,9 +653,13 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
           <span>Subscription Tracker</span>
         </button>
+        <button class="footer-btn btn-secondary-outline nav-item-btn" data-tab="tab-activitylog" id="activityLogFooterBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"></path><circle cx="12" cy="12" r="9"></circle></svg>
+          <span>Activity Log</span>
+        </button>
         <button id="exportDataBtn" class="footer-btn btn-secondary-outline">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          <span>Export All Data</span>
+          <span>Export Full Backup</span>
         </button>
         <button id="importDataBtn" class="footer-btn btn-secondary-outline">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -1487,6 +1497,11 @@
         <iframe src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
       </section>
 
+      <!-- ── QBR GENERATOR ── -->
+      <section id="tab-qbr" class="tab-section tab-fullbleed" style="width: 100%; height: 100vh; padding: 0;">
+        <iframe src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
+      </section>
+
       <!-- ── CASE STUDY BUILDER ── -->
       <section id="tab-casestudy" class="tab-section tab-fullbleed" style="width: 100%; height: 100vh; padding: 0;">
         <iframe src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
@@ -1504,6 +1519,11 @@
 
       <!-- ── SUBSCRIPTION & TOOL COST TRACKER ── -->
       <section id="tab-subscriptiontracker" class="tab-section tab-fullbleed" style="width: 100%; height: 100vh; padding: 0;">
+        <iframe src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
+      </section>
+
+      <!-- ── ACTIVITY LOG ── -->
+      <section id="tab-activitylog" class="tab-section tab-fullbleed" style="width: 100%; height: 100vh; padding: 0;">
         <iframe src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
       </section>
 

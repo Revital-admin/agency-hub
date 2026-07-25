@@ -113,6 +113,64 @@ function initAdminAuthGate() {
 // Written with merge:true so each login only touches that one person's
 // key rather than overwriting everyone else's last-seen data at once.
 // Purely informational (shown in Team Access Manager) - never gates access.
+// Every agency-wide Firestore doc referenced anywhere in the Hub, outside
+// of clientsDb's own (sharded) storage - kept as an explicit list rather
+// than discovered dynamically since Firestore has no "list all docs in a
+// collection" from client-side security rules here. Add new tools' agency
+// docs to this list so Export Full Backup actually captures them.
+const AGENCY_BACKUP_DOC_NAMES = [
+  "accessLoginLog", "activityLog", "adAccountLog", "adminActivityLog",
+  "adminNotifications", "callSheets", "changeOrders", "contractInvoiceLog",
+  "contractInvoices", "emailTemplates", "proposalFollowUps", "rawFootageLog",
+  "referrals", "releaseForms", "revisionFeedbackLog", "runOfShow",
+  "servicePricing", "sops", "subscriptionTracker", "teamAccess",
+  "teamActivity", "teamRoster", "vendorRentalTracker", "venueTechSpecs"
+];
+
+async function fetchAllAgencyDocsForBackup() {
+  const result = {};
+  if (!window.firebaseDb || !window.firebaseDb.collection) return result;
+
+  await Promise.all(AGENCY_BACKUP_DOC_NAMES.map(async (docName) => {
+    try {
+      const snap = await window.firebaseDb.collection("agency").doc(docName).get();
+      if (snap.exists) result[docName] = snap.data();
+    } catch (e) {
+      console.warn(`Could not read agency/${docName} for backup:`, e);
+    }
+  }));
+
+  return result;
+}
+
+// Agency-wide "who did what and when" log, lives in agency/adminActivityLog
+// as { list: [...] } - same flat-doc pattern as adminNotifications, but
+// re-reads the doc fresh on every call instead of keeping an in-memory
+// copy, since (unlike the notification bell) nothing in the parent Hub
+// renders this list - it's only viewed from the separate Activity Log
+// tool - so there's no local state to keep in sync, and re-reading avoids
+// clobbering entries logged from another open tab/session in between
+// calls. Callable from any iframe tool via window.parent.logAdminActivity.
+async function logAdminActivity(action, details) {
+  if (!window.firebaseDb || !window.firebaseDb.collection) return;
+  try {
+    const ref = window.firebaseDb.collection("agency").doc("adminActivityLog");
+    const snap = await ref.get();
+    const list = (snap.exists && snap.data().list) || [];
+    list.unshift({
+      id: 'act_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+      action: action,
+      details: details || "",
+      by: window.currentAdminEmail || "unknown",
+      createdAt: new Date().toISOString()
+    });
+    if (list.length > 300) list.length = 300;
+    await ref.set({ list: list });
+  } catch (e) {
+    console.warn("Could not log admin activity:", e);
+  }
+}
+
 function recordLastSeen(email) {
   if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseSetDoc || !email) return;
   try {
@@ -172,6 +230,13 @@ function applyTeamAccessRestrictions(allowedSections) {
   const subscriptionTrackerBtn = document.getElementById('subscriptionTrackerFooterBtn');
   if (subscriptionTrackerBtn) {
     subscriptionTrackerBtn.style.display = allowedSections ? 'none' : '';
+  }
+
+  // Activity Log shows who did what across every client - same
+  // admin/leadership-only gating as the rest of the footer tools.
+  const activityLogBtn = document.getElementById('activityLogFooterBtn');
+  if (activityLogBtn) {
+    activityLogBtn.style.display = allowedSections ? 'none' : '';
   }
 
   // If restrictions just hid whatever tab the user was looking at,
@@ -336,10 +401,12 @@ let iframeNeedsReload = {
   "tab-redflag": true,
   "tab-healthdashboard": true,
   "tab-changeorder": true,
+  "tab-qbr": true,
   "tab-casestudy": true,
   "tab-portfolioshowcase": true,
   "tab-emailtemplates": true,
   "tab-subscriptiontracker": true,
+  "tab-activitylog": true,
   "tab-teamroster": true,
   "tab-testimonialtracker": true,
   "tab-intakequalifier": true,
@@ -677,6 +744,7 @@ function createNewClient() {
   buildClientDropdown();
   refreshAllViews();
   showBanner("success", `Client workspace "${name}" initialized successfully!`);
+  logAdminActivity("Client created", name);
 }
 
 function renameActiveClient() {
@@ -736,16 +804,18 @@ function deleteActiveClient() {
   const confirmDelete = confirm(`Are you sure you want to permanently delete client profile "${activeClientName}"? All audits, checklists, and reports will be lost.`);
   if (!confirmDelete) return;
 
+  const deletedName = activeClientName;
   delete clientsDb[activeClientName];
   saveDatabase();
 
   // Switch to first remaining client
   activeClientName = Object.keys(clientsDb)[0];
   localStorage.setItem("REVITAL_HUB_ACTIVE_CLIENT", activeClientName);
-  
+
   buildClientDropdown();
   refreshAllViews();
   showBanner("success", "Client profile removed.");
+  logAdminActivity("Client deleted", deletedName);
 }
 
 function buildClientDropdown() {
@@ -894,6 +964,9 @@ function refreshIframeTab(tabId) {
     case "tab-changeorder":
       renderChangeOrderGenerator();
       break;
+    case "tab-qbr":
+      renderQbrGenerator();
+      break;
     case "tab-casestudy":
       renderCaseStudyBuilder();
       break;
@@ -905,6 +978,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-subscriptiontracker":
       renderSubscriptionTracker();
+      break;
+    case "tab-activitylog":
+      renderActivityLogTab();
       break;
     case "tab-teamroster":
       renderTeamRoster();
@@ -1815,6 +1891,11 @@ function renderChangeOrderGenerator() {
   setIframeAbsoluteSrc('#tab-changeorder iframe', "change-order-generator/index.html");
 }
 
+// ── QBR Generator Controller ──
+function renderQbrGenerator() {
+  setIframeAbsoluteSrc('#tab-qbr iframe', "qbr-generator/index.html");
+}
+
 // ── Case Study Builder Controller ──
 function renderCaseStudyBuilder() {
   setIframeAbsoluteSrc('#tab-casestudy iframe', "case-study-builder/index.html");
@@ -1833,6 +1914,11 @@ function renderEmailTemplateLibrary() {
 // ── Subscription & Tool Cost Tracker Controller ──
 function renderSubscriptionTracker() {
   setIframeAbsoluteSrc('#tab-subscriptiontracker iframe', "subscription-tracker/index.html");
+}
+
+// ── Activity Log Controller ──
+function renderActivityLogTab() {
+  setIframeAbsoluteSrc('#tab-activitylog iframe', "admin-activity-log/index.html");
 }
 
 // ── Team Roster & Capacity Controller ──
@@ -2120,15 +2206,34 @@ function initParentEventListeners() {
   // Sidebar Utilities: Export / Import JSON
   const exportDataBtn = document.getElementById("exportDataBtn");
   if (exportDataBtn) {
-    exportDataBtn.addEventListener("click", () => {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(clientsDb, null, 2));
-      const downloadAnchor = document.createElement("a");
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `Revital_Productions_Hub_${activeClientName.replace(/\s+/g, "_")}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-      showBanner("success", "Client workspaces exported successfully!");
+    exportDataBtn.addEventListener("click", async () => {
+      const originalLabel = exportDataBtn.innerHTML;
+      exportDataBtn.disabled = true;
+      exportDataBtn.textContent = "Exporting...";
+      try {
+        const agencyDocs = await fetchAllAgencyDocsForBackup();
+        const backup = {
+          exportedAt: new Date().toISOString(),
+          clientsDb: clientsDb,
+          agencyDocs: agencyDocs
+        };
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup, null, 2));
+        const downloadAnchor = document.createElement("a");
+        downloadAnchor.setAttribute("href", dataStr);
+        const dateStamp = new Date().toISOString().slice(0, 10);
+        downloadAnchor.setAttribute("download", `Revital_Productions_Full_Backup_${dateStamp}.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+        showBanner("success", "Full backup exported (all clients + agency-wide data)!");
+        logAdminActivity("Full backup exported", `${Object.keys(clientsDb).length} clients, ${Object.keys(agencyDocs).length} agency docs`);
+      } catch (e) {
+        console.error("Backup export failed:", e);
+        showBanner("error", "Backup export failed - check the console for details.");
+      } finally {
+        exportDataBtn.disabled = false;
+        exportDataBtn.innerHTML = originalLabel;
+      }
     });
   }
 
@@ -2218,24 +2323,52 @@ function initParentEventListeners() {
       if (!file) return;
 
       const reader = new FileReader();
-      reader.onload = function(evt) {
+      reader.onload = async function(evt) {
         try {
           const imported = JSON.parse(evt.target.result);
-          
+
           if (typeof imported !== 'object' || Array.isArray(imported)) {
             throw new Error("Invalid file structure. Must be a JSON object.");
           }
 
-          clientsDb = { ...clientsDb, ...imported };
+          // Export Full Backup (see exportDataBtn above) wraps client data
+          // as {exportedAt, clientsDb, agencyDocs} instead of the old flat
+          // {clientName: {...}} shape - detect which one this file is so
+          // older exported backups still import exactly as before.
+          const isFullBackupFormat = imported && typeof imported.clientsDb === 'object' && !Array.isArray(imported.clientsDb);
+          const importedClients = isFullBackupFormat ? imported.clientsDb : imported;
+
+          clientsDb = { ...clientsDb, ...importedClients };
           saveDatabase();
-          
-          activeClientName = Object.keys(imported)[0];
+
+          activeClientName = Object.keys(importedClients)[0];
           localStorage.setItem("REVITAL_HUB_ACTIVE_CLIENT", activeClientName);
-          
+
           buildClientDropdown();
           refreshAllViews();
-          showBanner("success", "Backups merged and imported successfully!");
+          showBanner("success", "Client workspaces merged and imported successfully!");
+          logAdminActivity("Backup imported", `${Object.keys(importedClients).length} client(s)`);
+
+          if (isFullBackupFormat && imported.agencyDocs && Object.keys(imported.agencyDocs).length > 0) {
+            const restoreAgencyData = confirm(
+              `This backup also includes agency-wide data (${Object.keys(imported.agencyDocs).length} docs - notifications, trackers, activity log, etc.) from ${imported.exportedAt || "an earlier export"}.\n\n` +
+              `Restore that too? This OVERWRITES the current live versions of each doc it includes. Choose Cancel to just keep the client workspaces you already imported above.`
+            );
+            if (restoreAgencyData && window.firebaseDb && window.firebaseDb.collection) {
+              try {
+                await Promise.all(Object.entries(imported.agencyDocs).map(([docName, data]) =>
+                  window.firebaseDb.collection("agency").doc(docName).set(data)
+                ));
+                showBanner("success", "Agency-wide data restored from backup.");
+                logAdminActivity("Agency data restored from backup", `${Object.keys(imported.agencyDocs).length} docs`);
+              } catch (restoreErr) {
+                console.error("Agency data restore failed:", restoreErr);
+                showBanner("error", "Client workspaces imported, but agency-wide data restore failed - check the console.");
+              }
+            }
+          }
         } catch (err) {
+          console.error("Import failed:", err);
           showBanner("error", "Failed to parse backup JSON. Verify file format.");
         }
       };
@@ -2286,20 +2419,20 @@ function fetchCloudflareProfile() {
       if (data && data.email && data.email !== 'Guest') {
         const userEmailEl = document.getElementById('userEmail');
         const userAvatarEl = document.getElementById('userAvatar');
-        
+
         // Extract username from email
         let displayName = data.email;
         if (data.email.includes('@')) {
           const username = data.email.split('@')[0];
           // Capitalize first letter
           displayName = username.charAt(0).toUpperCase() + username.slice(1);
-          
+
           // Force 'Ronald' to show as 'Admin'
           if (displayName.toLowerCase() === 'ronald') {
             displayName = 'Admin';
           }
         }
-        
+
         if (userEmailEl) userEmailEl.textContent = displayName;
         if (userAvatarEl) {
           userAvatarEl.textContent = displayName.charAt(0).toUpperCase();
@@ -2945,18 +3078,44 @@ function persistAdminNotifications() {
   });
 }
 
-function pushAdminNotification(type, message, clientName) {
+function pushAdminNotification(type, message, clientName, draftEmail) {
   adminNotifications.unshift({
     id: 'an_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
     type: type || 'info',
     message: message,
     clientName: clientName || null,
+    // Optional {to, subject, body} - the Hub has no email-sending backend
+    // anywhere (see Auto-Send Email Integration Plan.md), so this is only
+    // ever a pre-filled draft the admin reviews and sends themselves via
+    // mailto or their own inbox, same pattern as buildApprovalEmail in
+    // client-portal-manager.
+    draftEmail: draftEmail || null,
     createdAt: new Date().toISOString(),
     read: false
   });
   if (adminNotifications.length > 30) adminNotifications.length = 30;
   persistAdminNotifications();
   renderAdminNotifications();
+}
+
+// Builds a simple reminder-email draft for the stale-client nudge - never
+// sent automatically, just handed to renderAdminNotifications so the admin
+// can review/edit and send it themselves (mailto or copy/paste).
+function buildStaleNudgeDraftEmail(client, name, pendingCount) {
+  const config = client.portalConfig || {};
+  if (!config.clientContactEmail) return null;
+
+  const contactFirstName = (config.clientContactName || name).split(' ')[0];
+  const amFirstName = config.accountManagerName ? config.accountManagerName.split(' ')[0] : "our team";
+  const magicLink = config.magicToken
+    ? `${window.location.origin}/portal/index.html?c=${encodeURIComponent(name)}&t=${config.magicToken}`
+    : "";
+  const approvalPhrase = pendingCount === 1 ? "an approval" : `${pendingCount} approvals`;
+
+  const subject = `Quick follow-up - ${approvalPhrase} waiting on your review`;
+  const body = `Hi ${contactFirstName},\n\nJust a friendly nudge - you have ${approvalPhrase} waiting for your review in your client portal:\n${magicLink}\n\nLet us know if anything's unclear or you'd like to hop on a quick call.\n\nThanks,\n${amFirstName}`;
+
+  return { to: config.clientContactEmail, subject: subject, body: body };
 }
 
 // Slow-moving signal, so this only needs to run occasionally rather than on
@@ -2995,7 +3154,8 @@ function runStaleClientNudgeCheck() {
 
     const visitPhrase = daysSinceVisit === null ? "never opened their portal" : `hasn't opened their portal in ${daysSinceVisit}d`;
     const approvalPhrase = pendingCount === 1 ? "1 pending approval" : `${pendingCount} pending approvals`;
-    pushAdminNotification('stale_client', `${name} ${visitPhrase} and has ${approvalPhrase} waiting.`, name);
+    const draftEmail = buildStaleNudgeDraftEmail(client, name, pendingCount);
+    pushAdminNotification('stale_client', `${name} ${visitPhrase} and has ${approvalPhrase} waiting.`, name, draftEmail);
   });
 }
 
@@ -3051,6 +3211,27 @@ function renderAdminNotifications() {
     body.appendChild(p);
     body.appendChild(time);
 
+    // The Hub has no email-sending backend (see Auto-Send Email
+    // Integration Plan.md) - this only ever reveals a pre-filled draft for
+    // the admin to review, edit, and send themselves.
+    if (item.draftEmail) {
+      const draftBtn = document.createElement("button");
+      draftBtn.type = "button";
+      draftBtn.className = "admin-notif-draft-btn";
+      draftBtn.textContent = expandedDraftEmailIds.has(item.id) ? "Hide reminder email" : "Draft reminder email";
+      draftBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (expandedDraftEmailIds.has(item.id)) expandedDraftEmailIds.delete(item.id);
+        else expandedDraftEmailIds.add(item.id);
+        renderAdminNotifications();
+      });
+      body.appendChild(draftBtn);
+
+      if (expandedDraftEmailIds.has(item.id)) {
+        body.appendChild(buildDraftEmailPanel(item.draftEmail));
+      }
+    }
+
     row.appendChild(dot);
     row.appendChild(body);
 
@@ -3064,6 +3245,61 @@ function renderAdminNotifications() {
 
     list.appendChild(row);
   });
+}
+
+// Which stale-nudge notifications currently have their draft-email panel
+// expanded - only lives for this page session, doesn't need to persist.
+const expandedDraftEmailIds = new Set();
+
+function buildDraftEmailPanel(draftEmail) {
+  const panel = document.createElement("div");
+  panel.className = "admin-notif-draft-panel";
+  panel.addEventListener("click", (e) => e.stopPropagation());
+
+  const toRow = document.createElement("div");
+  toRow.className = "admin-notif-draft-to";
+  toRow.textContent = "To: " + (draftEmail.to || "(no contact email on file)");
+  panel.appendChild(toRow);
+
+  const subjectInput = document.createElement("input");
+  subjectInput.type = "text";
+  subjectInput.className = "admin-notif-draft-input";
+  subjectInput.value = draftEmail.subject || "";
+  panel.appendChild(subjectInput);
+
+  const bodyTextarea = document.createElement("textarea");
+  bodyTextarea.className = "admin-notif-draft-textarea";
+  bodyTextarea.value = draftEmail.body || "";
+  panel.appendChild(bodyTextarea);
+
+  const actions = document.createElement("div");
+  actions.className = "admin-notif-draft-actions";
+
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.className = "admin-notif-draft-copy-btn";
+  copyBtn.textContent = "Copy";
+  copyBtn.addEventListener("click", async () => {
+    const text = `To: ${draftEmail.to}\nSubject: ${subjectInput.value}\n\n${bodyTextarea.value}`;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        copyBtn.textContent = "Copied!";
+        setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+      }
+    } catch (e) { console.error("Copy failed:", e); }
+  });
+  actions.appendChild(copyBtn);
+
+  const mailtoLink = document.createElement("a");
+  mailtoLink.className = "admin-notif-draft-mailto-btn";
+  mailtoLink.textContent = "Open in email app";
+  mailtoLink.target = "_blank";
+  mailtoLink.href = `mailto:${encodeURIComponent(draftEmail.to || "")}?subject=${encodeURIComponent(subjectInput.value)}&body=${encodeURIComponent(bodyTextarea.value)}`;
+  actions.appendChild(mailtoLink);
+
+  panel.appendChild(actions);
+  return panel;
 }
 
 function initAdminNotifBell() {

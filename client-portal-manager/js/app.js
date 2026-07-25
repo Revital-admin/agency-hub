@@ -155,6 +155,9 @@ function init() {
     engagementStageSelect.value = config.engagementStage || "onboarding";
     engagementStageSelect.addEventListener("change", (e) => {
       updateConfig("engagementStage", e.target.value);
+      if (window.parent.logAdminActivity) {
+        window.parent.logAdminActivity("Engagement stage changed", `${client.name || client.id}: ${e.target.value}`);
+      }
     });
   }
 
@@ -669,6 +672,37 @@ function buildApprovalEmail(client, entry) {
   panel.style.display = "block";
 }
 
+// Same comment-thread shape as portal/js/app.js's commentThreadHtml -
+// entry.comments = [{id, author, authorName, text, createdAt}], carried
+// into approvalHistory once decided so the full back-and-forth stays
+// visible afterward (read-only at that point, see readOnly param below).
+// Kept as a separate near-duplicate implementation rather than a shared
+// file since this iframe and the portal iframe are two different
+// documents with no code-sharing mechanism between them currently.
+function adminCommentThreadHtml(entry, readOnly) {
+  const comments = Array.isArray(entry.comments) ? entry.comments : [];
+  const listHtml = comments.length
+    ? comments.map(c => `
+        <div class="approval-comment approval-comment-${c.author === 'client' ? 'client' : 'admin'}">
+          <div class="approval-comment-meta">
+            <span class="approval-comment-author">${escapeHtmlLocal(c.author === 'client' ? 'Client' : (c.authorName || 'Revital team'))}</span>
+            <span class="approval-comment-time">${c.createdAt ? new Date(c.createdAt).toLocaleString() : ''}</span>
+          </div>
+          <div class="approval-comment-text">${escapeHtmlLocal(c.text || '')}</div>
+        </div>
+      `).join('')
+    : `<div class="approval-comment-empty">No comments yet.</div>`;
+
+  const inputHtml = readOnly ? '' : `
+    <div class="approval-comment-input-row">
+      <textarea class="approval-comment-input" placeholder="Reply to the client..."></textarea>
+      <button type="button" class="approval-comment-send-btn">Send</button>
+    </div>
+  `;
+
+  return `<div class="approval-comment-thread">${listHtml}${inputHtml}</div>`;
+}
+
 function renderApprovals(client) {
   const pendingEl = document.getElementById("pendingApprovalsList");
   const historyEl = document.getElementById("approvalHistoryList");
@@ -693,8 +727,28 @@ function renderApprovals(client) {
           <div class="approval-row-meta">${escapeHtmlLocal(APPROVAL_TYPE_LABELS[entry.contentType] || "")} &middot; Awaiting client response</div>
         </div>
         <button type="button" class="client-checklist-remove approval-remove-btn" data-id="${escapeHtmlLocal(entry.id)}">Remove</button>
+        <div class="approval-row-thread-wrap">${adminCommentThreadHtml(entry)}</div>
       `;
       pendingEl.appendChild(row);
+
+      const sendBtn = row.querySelector(".approval-comment-send-btn");
+      const input = row.querySelector(".approval-comment-input");
+      if (sendBtn && input) {
+        sendBtn.addEventListener("click", () => {
+          const text = input.value.trim();
+          if (!text) return;
+          if (!Array.isArray(entry.comments)) entry.comments = [];
+          entry.comments.push({
+            id: generateSecureToken(8),
+            author: "admin",
+            authorName: (client.portalConfig && client.portalConfig.accountManagerName) || "Revital team",
+            text: text,
+            createdAt: new Date().toISOString()
+          });
+          if (parentSave) parentSave();
+          renderApprovals(client);
+        });
+      }
     });
     pendingEl.querySelectorAll(".approval-remove-btn").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -727,6 +781,7 @@ function renderApprovals(client) {
           <strong>${escapeHtmlLocal(entry.title)}</strong>
           <div class="approval-row-meta">${decisionLabel} &middot; ${escapeHtmlLocal(decidedDate)}</div>
           ${entry.notes ? `<div class="approval-notes">&ldquo;${escapeHtmlLocal(entry.notes)}&rdquo;</div>` : ""}
+          ${Array.isArray(entry.comments) && entry.comments.length > 0 ? adminCommentThreadHtml(entry, true) : ""}
         </div>
       `;
       historyEl.appendChild(row);
@@ -763,6 +818,7 @@ function initApprovalControls() {
       previewLink: linkEl.value.trim(),
       thumbnailUrl: thumbnailEl ? thumbnailEl.value.trim() : "",
       checklist: APPROVAL_CHECKLISTS[typeEl.value] || [],
+      comments: [],
       createdAt: new Date().toISOString()
     };
     client.pendingApprovals.push(entry);
@@ -771,6 +827,9 @@ function initApprovalControls() {
     // to the ready-to-send email built below.
     if (window.parent.pushClientNotification) {
       window.parent.pushClientNotification(client, "approval", `${title} is ready for your approval.`);
+    }
+    if (window.parent.logAdminActivity) {
+      window.parent.logAdminActivity("Approval sent", `${client.name || client.id}: "${title}"`);
     }
 
     if (parentSave) parentSave();
