@@ -426,9 +426,17 @@ function renderChecklist() {
     checklistContainer.appendChild(div);
   });
 
-  // Once every item is checked off, the widget is no longer really an
-  // "onboarding" list - swap the heading to just "Checklist".
+  // Once every item is checked off, hide the whole sidebar widget - a
+  // finished checklist sitting there forever just adds clutter once it's
+  // no longer something the client needs to act on. Re-appears
+  // automatically if anything gets unchecked later (admin edit, or the
+  // client unchecking something on their own), since this whole function
+  // re-runs on every live sync.
   const isComplete = allItems.length > 0 && completedCount === allItems.length;
+  const checklistWidget = document.getElementById("checklistWidget");
+  if (checklistWidget) {
+    checklistWidget.style.display = isComplete ? "none" : "";
+  }
   if (checklistHeading) {
     checklistHeading.textContent = isComplete ? "Checklist" : "Onboarding Checklist";
   }
