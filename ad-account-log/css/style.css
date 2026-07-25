@@ -88,3 +88,16 @@
 .row-actions button.remove-btn:hover { border-color: #ef4444; color: #ef4444; }
 
 .empty-state { text-align: center; padding: 40px 20px; color: var(--color-text-muted); font-size: 14px; }
+
+/* "+ Add Platform to This Entry" needs .btn for its padding/radius/layout
+   (btn-secondary-outline alone has no box model, same gap fixed on other
+   Hub buttons this session), but .btn's own `border: 1px solid transparent`
+   is declared after .btn-secondary-outline in the shared stylesheet, so it
+   was winning the cascade and making the outline invisible. Two-class
+   selector beats both single-class rules regardless of source order. */
+.btn.btn-secondary-outline {
+  border-color: var(--border-color);
+}
+.btn.btn-secondary-outline:hover {
+  border-color: var(--text-main);
+}
