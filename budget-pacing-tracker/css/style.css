@@ -88,15 +88,31 @@
 
 .tracker-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 24px;
+}
+
+/* A lone card left over on the last row (odd count) used to sit at
+   350px wide with a dead half-empty gap next to it. Let it stretch
+   across both columns instead so it's never floating half-width. */
+.tracker-list > .pacing-card:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 760px) {
+  .tracker-list {
+    grid-template-columns: 1fr;
+  }
+  .tracker-list > .pacing-card:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
 }
 
 .pacing-card {
   background: var(--color-surface-2);
   border: 1px solid var(--color-border);
   border-radius: 12px;
-  padding: 20px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;
