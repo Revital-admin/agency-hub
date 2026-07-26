@@ -28,6 +28,16 @@ export default {
       return handleSendEmail(request, env);
     }
 
+    if (url.pathname === "/api/contracts" && request.method === "POST") {
+      return handleContractUpload(request, env);
+    }
+
+    if (url.pathname.startsWith("/api/contracts/")) {
+      if (request.method === "GET") return handleContractGet(request, env);
+      if (request.method === "DELETE") return handleContractDelete(request, env);
+      return jsonResponse({ error: "Method not allowed" }, 405);
+    }
+
     // Everything else: serve the static site as before.
     return env.ASSETS.fetch(request);
   }
@@ -205,6 +215,113 @@ async function handleSendEmail(request, env) {
     console.error("Send-email request failed:", e);
     return jsonResponse({ error: "Request to Resend failed: " + e.message }, 500);
   }
+}
+
+// ── /api/contracts (upload) + /api/contracts/:key (fetch/delete) ──
+// Backs the Contract Template Library in the Contract & Invoice Tracker
+// (see contract-invoice-tracker/js/app.js) - lets contracts be added or
+// replaced from the Hub UI without a code change + redeploy, unlike the
+// original 6 templates which still live as static files under
+// /contracts/. Stored in an R2 bucket (binding: CONTRACTS_BUCKET, see
+// wrangler.toml) since these PDFs are too large to comfortably live as
+// base64 inside a Firestore document (Firestore's ~1MB doc ceiling) -
+// only small JSON metadata (label, which R2 key it maps to) lives in
+// Firestore, at agency/contractTemplates.
+//
+// Gated the same way as /api/send-email: only requests carrying a
+// Cloudflare-Access-authenticated @revitalproductions.com email are
+// allowed through. Defense-in-depth, not the only thing standing between
+// this route and the internet - hub.revitalproductions.com already sits
+// behind Cloudflare Access.
+const CONTRACTS_MAX_BYTES = 20 * 1024 * 1024; // generous ceiling for a handful-of-pages legal PDF
+
+function isContractRequestAuthorized(request) {
+  const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  return !!accessEmail && accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN);
+}
+
+async function handleContractUpload(request, env) {
+  if (!isContractRequestAuthorized(request)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  if (!env.CONTRACTS_BUCKET) {
+    return jsonResponse({ error: "Server missing CONTRACTS_BUCKET R2 binding - create the bucket (wrangler r2 bucket create revital-contracts) and redeploy" }, 500);
+  }
+
+  let form;
+  try {
+    form = await request.formData();
+  } catch (e) {
+    return jsonResponse({ error: "Expected multipart/form-data body with a 'file' field" }, 400);
+  }
+
+  const file = form.get("file");
+  if (!file || typeof file.arrayBuffer !== "function") {
+    return jsonResponse({ error: "Missing file" }, 400);
+  }
+  if (file.size > CONTRACTS_MAX_BYTES) {
+    return jsonResponse({ error: `File too large (${CONTRACTS_MAX_BYTES / (1024 * 1024)}MB limit)` }, 400);
+  }
+
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer.slice(0, 5));
+  // Verify the actual file content is a PDF (magic bytes "%PDF-") rather
+  // than trusting the client-supplied MIME type, which is trivially
+  // spoofable from the browser.
+  const header = String.fromCharCode(...bytes);
+  if (header !== "%PDF-") {
+    return jsonResponse({ error: "File does not look like a valid PDF" }, 400);
+  }
+
+  // Keys are always generated server-side (never client-supplied) so an
+  // upload can never target/overwrite an arbitrary existing key.
+  const key = `uploaded/${Date.now()}-${crypto.randomUUID()}.pdf`;
+  await env.CONTRACTS_BUCKET.put(key, buffer, {
+    httpMetadata: { contentType: "application/pdf" }
+  });
+
+  return jsonResponse({ success: true, key }, 200, { "Cache-Control": "no-store" });
+}
+
+function getContractKeyFromPath(request) {
+  const key = decodeURIComponent(new URL(request.url).pathname.slice("/api/contracts/".length));
+  if (!key || key.includes("..")) return null;
+  return key;
+}
+
+async function handleContractGet(request, env) {
+  if (!isContractRequestAuthorized(request)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  if (!env.CONTRACTS_BUCKET) {
+    return jsonResponse({ error: "Server missing CONTRACTS_BUCKET R2 binding" }, 500);
+  }
+  const key = getContractKeyFromPath(request);
+  if (!key) return jsonResponse({ error: "Invalid key" }, 400);
+
+  const obj = await env.CONTRACTS_BUCKET.get(key);
+  if (!obj) return jsonResponse({ error: "Not found" }, 404);
+
+  return new Response(obj.body, {
+    headers: {
+      "Content-Type": (obj.httpMetadata && obj.httpMetadata.contentType) || "application/pdf",
+      "Cache-Control": "private, max-age=300"
+    }
+  });
+}
+
+async function handleContractDelete(request, env) {
+  if (!isContractRequestAuthorized(request)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  if (!env.CONTRACTS_BUCKET) {
+    return jsonResponse({ error: "Server missing CONTRACTS_BUCKET R2 binding" }, 500);
+  }
+  const key = getContractKeyFromPath(request);
+  if (!key) return jsonResponse({ error: "Invalid key" }, 400);
+
+  await env.CONTRACTS_BUCKET.delete(key);
+  return jsonResponse({ success: true }, 200, { "Cache-Control": "no-store" });
 }
 
 function jsonResponse(body, status = 200, extraHeaders = {}) {

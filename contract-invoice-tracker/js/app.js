@@ -377,6 +377,224 @@ const CONTRACT_TEMPLATES = [
   { id: 'nda-independent', label: 'NDA (Independent Contract)', file: 'NDA - Independent Contract - Revital Productions.pdf' }
 ];
 
+function escapeHtmlLocal(str) {
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+
+/* ── Contract Template Library (uploaded contracts, on top of the 6
+   built-ins above) ──
+   The 6 CONTRACT_TEMPLATES above still live as static files under
+   /contracts/ - editing one means replacing the file in the codebase and
+   redeploying. Anything added here instead goes through /api/contracts
+   (see _worker.js), which stores the actual PDF in an R2 bucket and
+   returns a key; only that key + a label is saved to Firestore
+   (agency/contractTemplates), same optimistic-concurrency read-check-
+   write pattern as agency/contractInvoices above. This is what lets
+   contracts be added/replaced/removed from this screen directly, no
+   code change or redeploy required. */
+
+let contractLibrary = [];
+let contractLibraryDocVersion = 0;
+
+function getContractLibraryDocRef() {
+  if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb) return null;
+  return window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "contractTemplates");
+}
+
+async function loadContractLibrary() {
+  if (isEmbedded && window.parent.firebaseGetDoc) {
+    try {
+      const ref = getContractLibraryDocRef();
+      const snap = await window.parent.firebaseGetDoc(ref);
+      const data = snap && snap.exists ? snap.data() : null;
+      contractLibrary = (data && data.list) || [];
+      contractLibraryDocVersion = (data && data.version) || 0;
+    } catch (e) {
+      console.error("Couldn't load the contract template library:", e);
+      contractLibrary = [];
+    }
+  }
+  renderContractLibrary();
+  populateContractTemplateSelect();
+}
+
+async function persistContractLibrary() {
+  if (!isEmbedded || !window.parent.firebaseSetDocFromJSON || !window.parent.firebaseGetDoc) {
+    if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', "Can't save the contract library outside the Hub.");
+    return false;
+  }
+  try {
+    const ref = getContractLibraryDocRef();
+    const freshSnap = await window.parent.firebaseGetDoc(ref);
+    const freshData = freshSnap && freshSnap.exists ? freshSnap.data() : null;
+    const freshVersion = (freshData && freshData.version) || 0;
+    if (freshVersion !== contractLibraryDocVersion) {
+      if (window.parent.showBanner) {
+        window.parent.showBanner('error', "Someone else updated the contract library while you had it open. Reload to see their changes.");
+      }
+      return false;
+    }
+    contractLibraryDocVersion = freshVersion + 1;
+    await window.parent.firebaseSetDocFromJSON(ref, JSON.stringify({ list: contractLibrary, version: contractLibraryDocVersion }));
+    return true;
+  } catch (e) {
+    console.error("Couldn't save the contract template library:", e);
+    if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', "Couldn't save: " + e.message);
+    return false;
+  }
+}
+
+function setContractLibraryStatus(msg, isError) {
+  const elx = el('contractLibraryStatus');
+  if (!elx) return;
+  elx.textContent = msg;
+  elx.style.color = isError ? 'var(--color-error, #f68d5f)' : 'var(--color-success, #10b981)';
+}
+
+function renderContractLibrary() {
+  const list = el('contractLibraryList');
+  if (!list) return;
+  if (contractLibrary.length === 0) {
+    list.innerHTML = `<p style="font-size:13px;color:var(--color-text-muted);">No uploaded contracts yet — the 6 built-in templates are still available below in Send Contract.</p>`;
+    return;
+  }
+  list.innerHTML = contractLibrary.map(t => `
+    <div class="contract-library-row" data-id="${t.id}">
+      <div>
+        <div class="contract-library-name">${escapeHtmlLocal(t.label)}</div>
+        <div class="contract-library-meta">${escapeHtmlLocal(t.filename || '')} &middot; uploaded ${t.uploadedAt || '--'}</div>
+      </div>
+      <div class="contract-library-actions">
+        <label class="contract-replace-label">
+          Replace
+          <input type="file" accept="application/pdf" data-id="${t.id}" class="replace-contract-input" style="display:none;">
+        </label>
+        <button type="button" class="delete-contract-btn" data-id="${t.id}">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function uploadPdfToR2(file) {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch('/api/contracts', { method: 'POST', body: form });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) throw new Error(data.error || `Upload failed (${res.status})`);
+  return data.key;
+}
+
+function deleteR2Object(key) {
+  // Best-effort cleanup - if this fails, an orphaned object is left in
+  // R2, which costs a few cents of storage but breaks nothing, so it's
+  // not worth blocking or surfacing an error over.
+  fetch('/api/contracts/' + encodeURIComponent(key), { method: 'DELETE' }).catch(e => {
+    console.warn('Could not delete old contract file from storage (non-fatal):', e);
+  });
+}
+
+const newContractLabel = el('newContractLabel');
+const newContractFile = el('newContractFile');
+const uploadContractBtn = el('uploadContractBtn');
+
+if (uploadContractBtn) {
+  uploadContractBtn.addEventListener('click', async () => {
+    const label = newContractLabel.value.trim();
+    const file = newContractFile.files[0];
+    if (!label) { setContractLibraryStatus('Enter a name for this contract first.', true); return; }
+    if (!file) { setContractLibraryStatus('Choose a PDF file first.', true); return; }
+    if (file.type && file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      setContractLibraryStatus('Please choose a PDF file.', true);
+      return;
+    }
+
+    uploadContractBtn.disabled = true;
+    uploadContractBtn.textContent = 'Uploading...';
+    try {
+      const key = await uploadPdfToR2(file);
+      contractLibrary.push({ id: uid(), label, r2Key: key, filename: file.name, uploadedAt: todayStr() });
+      const ok = await persistContractLibrary();
+      if (!ok) { contractLibrary.pop(); throw new Error('Could not save — try again'); }
+      newContractLabel.value = '';
+      newContractFile.value = '';
+      renderContractLibrary();
+      populateContractTemplateSelect();
+      setContractLibraryStatus(`Added "${label}".`, false);
+    } catch (e) {
+      console.error('Contract upload failed:', e);
+      setContractLibraryStatus("Couldn't upload: " + e.message, true);
+    } finally {
+      uploadContractBtn.disabled = false;
+      uploadContractBtn.textContent = '+ Add Contract';
+    }
+  });
+}
+
+// Delegated listeners (not re-bound per render) for the Replace/Delete
+// controls, since renderContractLibrary() replaces the whole list's
+// innerHTML on every change.
+document.addEventListener('change', async (e) => {
+  if (!e.target.matches('.replace-contract-input')) return;
+  const id = e.target.getAttribute('data-id');
+  const file = e.target.files[0];
+  if (!file) return;
+  const entry = contractLibrary.find(t => t.id === id);
+  if (!entry) return;
+
+  setContractLibraryStatus(`Replacing "${entry.label}"...`, false);
+  const oldKey = entry.r2Key;
+  try {
+    const key = await uploadPdfToR2(file);
+    entry.r2Key = key;
+    entry.filename = file.name;
+    entry.uploadedAt = todayStr();
+    const ok = await persistContractLibrary();
+    if (!ok) throw new Error('Could not save — try again');
+    deleteR2Object(oldKey);
+    renderContractLibrary();
+    populateContractTemplateSelect();
+    setContractLibraryStatus(`Replaced "${entry.label}".`, false);
+  } catch (err) {
+    console.error('Contract replace failed:', err);
+    setContractLibraryStatus("Couldn't replace: " + err.message, true);
+  } finally {
+    e.target.value = '';
+  }
+});
+
+document.addEventListener('click', async (e) => {
+  if (!e.target.matches('.delete-contract-btn')) return;
+  const id = e.target.getAttribute('data-id');
+  const entry = contractLibrary.find(t => t.id === id);
+  if (!entry) return;
+  if (!confirm(`Delete "${entry.label}"? This can't be undone.`)) return;
+
+  const previous = contractLibrary;
+  contractLibrary = contractLibrary.filter(t => t.id !== id);
+  const ok = await persistContractLibrary();
+  if (!ok) { contractLibrary = previous; return; }
+  deleteR2Object(entry.r2Key);
+  renderContractLibrary();
+  populateContractTemplateSelect();
+});
+
+function resolveSelectedContractTemplate(value) {
+  if (!value) return null;
+  if (value.startsWith('builtin:')) {
+    const t = CONTRACT_TEMPLATES.find(x => x.id === value.slice('builtin:'.length));
+    if (!t) return null;
+    return { label: t.label, filename: t.file, fetchUrl: '../contracts/' + encodeURIComponent(t.file) };
+  }
+  if (value.startsWith('uploaded:')) {
+    const t = contractLibrary.find(x => x.id === value.slice('uploaded:'.length));
+    if (!t) return null;
+    return { label: t.label, filename: t.filename || (t.label + '.pdf'), fetchUrl: '/api/contracts/' + encodeURIComponent(t.r2Key) };
+  }
+  return null;
+}
+
 // Records here are tracked by free-text client name (see header comment -
 // a contract often goes out before someone is a full Client Workspace),
 // so look up the matching Client Workspace case-insensitively/trimmed
@@ -417,7 +635,11 @@ let currentContractContext = null; // { record, from }
 
 function populateContractTemplateSelect() {
   if (!sendContractTemplate) return;
-  sendContractTemplate.innerHTML = CONTRACT_TEMPLATES.map(t => `<option value="${t.id}">${t.label}</option>`).join('');
+  const builtIn = CONTRACT_TEMPLATES.map(t => `<option value="builtin:${t.id}">${escapeHtmlLocal(t.label)}</option>`).join('');
+  const uploaded = contractLibrary.map(t => `<option value="uploaded:${t.id}">${escapeHtmlLocal(t.label)}</option>`).join('');
+  sendContractTemplate.innerHTML =
+    `<optgroup label="Built-in Templates">${builtIn}</optgroup>` +
+    (contractLibrary.length ? `<optgroup label="Uploaded Templates">${uploaded}</optgroup>` : '');
 }
 
 function refreshSendContractMailto() {
@@ -485,7 +707,7 @@ async function openSendContractPanel(id) {
   const contactName = config.clientContactName || r.clientName;
 
   populateContractTemplateSelect();
-  const selectedTemplate = CONTRACT_TEMPLATES[0];
+  const selectedTemplate = resolveSelectedContractTemplate(sendContractTemplate.value) || { label: CONTRACT_TEMPLATES[0].label };
   const { subject, body } = await buildContractEmailText(r.clientName, contactName, selectedTemplate.label, amName);
 
   sendContractTo.value = config.clientContactEmail || '';
@@ -520,7 +742,8 @@ async function openSendContractPanel(id) {
 if (sendContractTemplate) {
   sendContractTemplate.addEventListener('change', async () => {
     if (!currentContractContext) return;
-    const t = CONTRACT_TEMPLATES.find(x => x.id === sendContractTemplate.value) || CONTRACT_TEMPLATES[0];
+    const t = resolveSelectedContractTemplate(sendContractTemplate.value);
+    if (!t) return;
     const { record, contactName, amName } = currentContractContext;
     const { subject, body } = await buildContractEmailText(record.clientName, contactName, t.label, amName);
     sendContractSubject.value = subject;
@@ -540,7 +763,14 @@ if (sendContractSendBtn) {
       return;
     }
 
-    const t = CONTRACT_TEMPLATES.find(x => x.id === sendContractTemplate.value) || CONTRACT_TEMPLATES[0];
+    const t = resolveSelectedContractTemplate(sendContractTemplate.value);
+    if (!t) {
+      if (sendContractStatus) {
+        sendContractStatus.textContent = 'Choose a contract template first.';
+        sendContractStatus.style.color = 'var(--color-error, #f68d5f)';
+      }
+      return;
+    }
     const { record } = currentContractContext;
 
     sendContractSendBtn.disabled = true;
@@ -548,7 +778,7 @@ if (sendContractSendBtn) {
     if (sendContractStatus) sendContractStatus.textContent = '';
 
     try {
-      const base64 = await fetchPdfAsBase64('../contracts/' + encodeURIComponent(t.file));
+      const base64 = await fetchPdfAsBase64(t.fetchUrl);
       if (!base64) throw new Error('Contract PDF produced no data');
 
       sendContractSendBtn.textContent = 'Sending...';
@@ -561,7 +791,7 @@ if (sendContractSendBtn) {
           subject: sendContractSubject.value,
           body: sendContractBody.value,
           from: currentContractContext.from,
-          attachments: [{ filename: t.file, content: base64 }]
+          attachments: [{ filename: t.filename, content: base64 }]
         })
       });
       const data = await res.json().catch(() => ({}));
@@ -654,6 +884,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadRecords();
   renderTable();
   initListeners();
+  await loadContractLibrary();
 
   // Same as the other trackers: the client-name autocomplete list is a
   // nice-to-have, not a blocker - but still worth backfilling once the

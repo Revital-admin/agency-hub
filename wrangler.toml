@@ -6,3 +6,19 @@ main = "_worker.js"
 [assets]
 directory = "."
 binding = "ASSETS"
+
+# Backs the Contract Template Library's upload/replace feature in the
+# Contract & Invoice Tracker (POST/GET/DELETE /api/contracts/* in
+# _worker.js) - stores uploaded contract PDFs so they can be added or
+# swapped from the Hub UI without a code change + redeploy. The 6
+# original contract templates stay as static files under /contracts/
+# (edited by replacing the file + redeploying, same as before); this
+# bucket is only for templates added/replaced through the new UI.
+#
+# One-time manual step required before this binding will resolve: create
+# the bucket with `wrangler r2 bucket create revital-contracts` (or via
+# the Cloudflare dashboard -> R2 -> Create bucket, same name) - deploy
+# will fail with a "bucket does not exist" error until that's done once.
+[[r2_buckets]]
+binding = "CONTRACTS_BUCKET"
+bucket_name = "revital-contracts"

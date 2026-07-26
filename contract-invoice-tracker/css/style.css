@@ -124,3 +124,46 @@
 .row-actions button.send-contract-btn:hover { border-color: #f68d5f; color: #f68d5f; box-shadow: 0 3px 8px rgba(246, 141, 95, 0.2); }
 
 .empty-state { text-align: center; padding: 40px 20px; color: var(--color-text-muted); font-size: 14px; }
+
+/* Contract Template Library (see contractLibraryCard in index.html) */
+.contract-library-header h2 { font-family: var(--font-display); font-size: 20px; font-weight: 600; color: var(--color-text-primary); }
+.contract-library-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.contract-library-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 6px);
+  flex-wrap: wrap;
+}
+.contract-library-name { font-weight: 600; color: var(--color-text-primary); font-size: 14px; }
+.contract-library-meta { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
+.contract-library-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.contract-library-actions button,
+.contract-library-actions label.contract-replace-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+.contract-library-actions button:hover,
+.contract-library-actions label.contract-replace-label:hover {
+  background: var(--color-surface-2);
+  border-color: var(--color-border-md);
+}
+.contract-library-actions .delete-contract-btn:hover { border-color: #ef4444; color: #ef4444; }
+.contract-library-add { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.contract-library-add input[type="text"] { flex: 1; min-width: 220px; }
