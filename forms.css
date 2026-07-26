@@ -49,13 +49,68 @@
 .form-group textarea::placeholder {
   color: var(--color-text-muted);
 }
-.form-group input:focus, 
-.form-group textarea:focus, 
-.form-group select:focus { 
-  outline: none; 
-  border-color: var(--color-accent); 
-  box-shadow: 0 0 0 3px var(--color-accent-dim); 
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-dim);
 }
+
+/* .form-control - a second, unrelated input-styling convention used by
+   several modules (Case Study Builder, Brand Asset Kit, Brand Guidelines
+   Builder, Mood Board Builder, QBR Generator, Meeting Notes Logger,
+   Budget Pacing Tracker, Monthly Report Archive, Admin Activity Log, and
+   more) for inputs/selects/textareas that live OUTSIDE a .form-group
+   wrapper (client-picker dropdowns, standalone fields). This was never
+   defined anywhere in the shared chain either - a few modules patched it
+   locally but only for one specific #id'd dropdown, leaving every other
+   .form-control field in that same module (and every field in modules
+   that never patched it at all) rendering as an unstyled native browser
+   input against the Hub's dark theme. Same visual treatment as
+   .form-group's inputs above so both conventions look identical. */
+.form-control {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-family: var(--font-body);
+  color: var(--color-text-primary);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.form-control::placeholder {
+  color: var(--color-text-muted);
+}
+.form-control:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-dim);
+}
+
+/* .form-actions - button-row wrapper used below a form (Save/Cancel,
+   etc.) across several modules. Only ever defined locally in Red Flag
+   Checklist and Testimonial Tracker's own stylesheets; every other
+   module using it (Case Study Builder, Mood Board Builder, and others)
+   had its buttons stacking on separate lines with no gap between them
+   instead of sitting in a row. */
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+/* .mt-2/.mt-3/.mt-4 - small spacing utilities layered on top of another
+   class (e.g. "form-actions mt-3") across several modules, never
+   defined anywhere shared. Matches the 8px-per-step spacing scale
+   already used elsewhere in this file. */
+.mt-2 { margin-top: 8px; }
+.mt-3 { margin-top: 16px; }
+.mt-4 { margin-top: 24px; }
 
 /* ── BUTTONS ──────────────────────────────────────────── */
 .btn-primary { 

@@ -1,3 +1,18 @@
+/* .container was never actually defined anywhere - not in this file, not
+   in the shared ../style.css it's linked alongside. <main class="container">
+   is this tool's entire page wrapper, so without this the whole on-screen
+   layout rendered edge-to-edge with no centering, max-width, or side
+   padding instead of matching every other tool's layout. Same values
+   already used identically by Client Renewal Tracker and Change Order
+   Generator's own .container rules. */
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+}
+
 .alert-box { background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: 6px; padding: 16px; display: flex; gap: 12px; font-size: 13px; color: var(--color-text-muted); margin-top: 30px; }
 .alert-box svg { color: #3b82f6; flex-shrink: 0; }
 

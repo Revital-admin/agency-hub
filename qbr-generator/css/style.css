@@ -118,6 +118,24 @@
   box-sizing: border-box;
 }
 
+/* .empty-state is used on the "Select a client" placeholder (see
+   #emptyState in index.html) but was never actually defined anywhere -
+   shared-components.css only styles .step-card itself (background/
+   border/radius), not the centered icon+heading+paragraph layout this
+   needs. Without this, the placeholder rendered as plain left-aligned
+   text inside the card instead of the centered empty-state look used
+   by every other tool with this same pattern (Case Study Builder,
+   Meeting Notes Logger, Mood Board Builder, and others). */
+.empty-state {
+  text-align: center;
+  padding: 64px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: var(--color-text-secondary);
+}
+
 .qbr-stats-row {
   display: flex;
   gap: 16px;

@@ -1,3 +1,20 @@
+/* .container was never actually defined anywhere - not in this file, not
+   in the shared ../style.css it's linked alongside. <main class="container">
+   wraps the brand bar and site header, but the .main-content.split-layout
+   div further down already has its own real width constraint (defined in
+   ../style.css) - so without this, the header/logo bar rendered flush to
+   the browser edges while the form/preview content below it was properly
+   centered, a visible mismatch within the same page. Same values already
+   used identically by Client Renewal Tracker and Change Order
+   Generator's own .container rules. */
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+}
+
 .form-section { margin-bottom: 32px; border-top: 1px solid var(--color-border); padding-top: 24px; }
 .form-section:first-of-type { border-top: none; padding-top: 0; }
 .form-section h3 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--color-text-muted); font-weight: 700; margin-bottom: 16px; }
