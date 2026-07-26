@@ -105,19 +105,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Export PDF
   document.getElementById('downloadPdfBtn').addEventListener('click', () => {
-    const element = document.getElementById('reportDocument');
+    // Was 'reportDocument' - no element in this tool has ever had that id
+    // (the live preview panel is #proposalReport, see index.html). That
+    // meant this always resolved to null, so html2pdf().from(null) either
+    // silently failed or threw depending on library version - Export PDF
+    // has been non-functional the whole time with no visible error.
+    const element = document.getElementById('proposalReport');
     const cName = clientNameIn.value || 'Client';
     const opt = {
       margin:       0.5,
-      filename:     `ROI_Projection_${cName.replace(/\\s+/g, '_')}.pdf`,
+      // Was /\\s+/g (an escaped-backslash-then-"s+" pattern, which only
+      // matches a literal backslash character - client names never
+      // contain one, so this never actually matched anything). Fixed to
+      // /\s+/g so spaces really do collapse to underscores, matching
+      // every other PDF-export tool's filename convention.
+      filename:     `ROI_Projection_${cName.replace(/\s+/g, '_')}.pdf`,
       image:        { type: 'jpeg', quality: 0.98 },
       html2canvas:  { scale: 2 },
       jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
     };
     if (typeof html2pdf === 'undefined') {
+      // pdfBtn/generateBtn/origText below were never declared anywhere in
+      // this file (leftover from copy-pasting this fallback block from a
+      // different tool) - referencing them would throw a ReferenceError
+      // right after the alert. The only real button here is
+      // downloadPdfBtn, which was never disabled in the first place, so
+      // there's nothing to re-enable.
       alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
-      if (pdfBtn) { pdfBtn.disabled = false; pdfBtn.innerHTML = origText || 'Download PDF'; }
-      if (generateBtn) { generateBtn.disabled = false; generateBtn.innerHTML = 'Download PDF'; }
       return;
     }
     html2pdf().set(opt).from(element).save();

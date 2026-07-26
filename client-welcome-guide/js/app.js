@@ -224,9 +224,14 @@ document.addEventListener('DOMContentLoaded', () => {
     generateBtn.disabled = true;
 
     if (typeof html2pdf === 'undefined') {
+      // pdfBtn/origText were never declared anywhere in this file (only
+      // generateBtn is) - referencing them threw a ReferenceError before
+      // ever reaching the generateBtn reset below, which meant the button
+      // stayed stuck on "Generating..." (disabled, from just above)
+      // whenever html2pdf failed to load, instead of resetting itself.
       alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
-      if (pdfBtn) { pdfBtn.disabled = false; pdfBtn.innerHTML = origText || 'Download PDF'; }
-      if (generateBtn) { generateBtn.disabled = false; generateBtn.innerHTML = 'Download PDF'; }
+      generateBtn.disabled = false;
+      generateBtn.innerHTML = 'Download PDF';
       return;
     }
 
