@@ -68,9 +68,22 @@ body {
 /* Dynamic Grid Background */
 .bg-grid {
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  /* Was inset:0 (full viewport). The sidebar is opaque and always covers
+     this anyway, but now that some iframe tools (Team Access, Subscription
+     Tracker, Activity Log, Service Pricing Admin) have a transparent body
+     that lets this grid show through, a grid line landed 1-2px off from
+     the sidebar's own border-right at certain zoom levels/DPRs - looked
+     like a stray double line "cutting into" the sidebar edge instead of a
+     clean single border. Starting the grid at the sidebar's own width
+     removes any chance of that seam, since the grid simply never renders
+     in the strip right next to the border. Reset to 0 on mobile below,
+     where the sidebar is an off-canvas overlay instead of a fixed column. */
+  left: 280px;
   background-size: 40px 40px;
-  background-image: 
+  background-image:
     linear-gradient(to right, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
   z-index: -2;
@@ -2312,6 +2325,14 @@ textarea {
     border-bottom: none;
     box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
     padding: 20px;
+  }
+
+  /* Sidebar is an off-canvas overlay here, not a fixed column taking up
+     its own space - main content runs the full width underneath it, so
+     the grid needs to cover the full width too instead of stopping at
+     280px like it does on desktop. */
+  .bg-grid {
+    left: 0;
   }
 
   .sidebar.open {
