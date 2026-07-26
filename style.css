@@ -789,21 +789,16 @@ body {
   background: rgba(255, 255, 255, 0.02);
 }
 
-/* Team Access lives in the footer alongside Export/Import/Delete, but
-   it's still a .nav-item-btn under the hood so tab-switching works.
-   Override the sidebar-list "active" styling (flush-left border,
-   asymmetric radius) so it doesn't look broken on a bordered footer
-   button - just a subtle highlight instead. */
-#teamAccessFooterBtn.active {
-  background: rgba(99, 102, 241, 0.15);
-  border-radius: var(--radius-sm);
-  border-left: none;
-  border-color: var(--primary);
-  color: var(--primary);
-}
-#teamAccessFooterBtn.active svg {
-  stroke: var(--primary);
-}
+/* Team Access used to have a special-cased .active override here
+   (border-left:none, different radius) so it wouldn't get the standard
+   flush-left accent border - the idea being that looked odd on a
+   bordered footer button. In practice its 3 siblings in the same Admin
+   panel (Service Pricing Admin, Subscription Tracker, Activity Log)
+   never got this override and just use the shared .nav-item-btn.active
+   styling like every other nav item - so Team Access was the one
+   inconsistent button, missing the accent line and sitting a few px to
+   the left of where its siblings' active state lands (no 3px border to
+   push its icon/text over). Removed so it now matches its siblings. */
 
 .btn-danger-outline {
   background: transparent;
