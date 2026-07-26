@@ -101,7 +101,10 @@ function saveCheckin() {
   // testimonial while the client is happy, rather than relying on memory.
   const isLatestEntry = client.weeklyCheckins[0] && client.weeklyCheckins[0].date === entry.date;
   if (isLatestEntry && entry.healthRating === 'Green' && priorRating !== 'Green' && window.parent.pushAdminNotification) {
-    window.parent.pushAdminNotification('testimonial_prompt', `${client.name}'s health just turned Green — good time to ask for a testimonial.`, client.name);
+    const draftEmail = window.parent.buildTestimonialAskDraftEmail
+      ? window.parent.buildTestimonialAskDraftEmail(client, client.name)
+      : null;
+    window.parent.pushAdminNotification('testimonial_prompt', `${client.name}'s health just turned Green — good time to ask for a testimonial.`, client.name, draftEmail);
   }
 }
 

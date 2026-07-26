@@ -612,10 +612,19 @@ function escapeHtmlLocal(str) {
   return div.innerHTML;
 }
 
-// Builds a ready-to-send email (not auto-sent - this app has no email
-// backend/API anywhere) notifying the client that something is waiting
-// on them, and drops it into the read-only-turned-editable panel so the
-// account manager can review, tweak, and send it from their own inbox.
+// The account manager's address for the currently-built approval email,
+// used by the Send button below - re-set every time buildApprovalEmail
+// runs. Real auto-send (see Auto-Send Email Integration Plan.md) posts to
+// the Worker's /api/send-email route, which requires a verified
+// @revitalproductions.com "from" address - if the client has no account
+// manager configured yet, this stays null and the Send button hides
+// itself, falling back to Copy/Open in Email App only.
+let currentApprovalEmailFrom = null;
+
+// Builds a ready-to-send email notifying the client that something is
+// waiting on them, and drops it into the editable panel so the account
+// manager can review, tweak, and either send it via Resend (Send button)
+// or fall back to Copy/mailto themselves.
 function buildApprovalEmail(client, entry) {
   const config = client.portalConfig || {};
   const clientFirstName = (config.clientContactName || client.name || "there").split(" ")[0];
@@ -653,6 +662,8 @@ function buildApprovalEmail(client, entry) {
   const bodyEl = document.getElementById("approvalEmailBody");
   const openBtn = document.getElementById("approvalEmailOpenBtn");
   const panel = document.getElementById("approvalEmailReady");
+  const sendBtn = document.getElementById("approvalEmailSendBtn");
+  const statusEl = document.getElementById("approvalEmailStatus");
   if (!toEl || !subjectEl || !bodyEl || !openBtn || !panel) return;
 
   toEl.value = config.clientContactEmail || "";
@@ -668,6 +679,13 @@ function buildApprovalEmail(client, entry) {
     el.removeEventListener("input", refreshMailto);
     el.addEventListener("input", refreshMailto);
   });
+
+  currentApprovalEmailFrom = (config.accountManagerEmail && config.accountManagerName)
+    ? `${config.accountManagerName} <${config.accountManagerEmail}>`
+    : null;
+  if (sendBtn) sendBtn.style.display = currentApprovalEmailFrom ? "inline-block" : "none";
+  if (statusEl) { statusEl.textContent = ""; statusEl.className = ""; }
+  if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = "Send"; }
 
   panel.style.display = "block";
 }
@@ -792,6 +810,7 @@ function renderApprovals(client) {
 function initApprovalControls() {
   const createBtn = document.getElementById("createApprovalBtn");
   const copyBtn = document.getElementById("approvalEmailCopyBtn");
+  const sendBtn = document.getElementById("approvalEmailSendBtn");
   if (!createBtn) return;
 
   createBtn.addEventListener("click", () => {
@@ -862,6 +881,51 @@ function initApprovalControls() {
       } catch (err) {
         console.error("Failed to copy approval email", err);
         alert("Failed to copy. Please manually select and copy the text.");
+      }
+    });
+  }
+
+  // Real auto-send via the Worker's /api/send-email route (Resend) - only
+  // ever offered when the client has an account manager configured (see
+  // currentApprovalEmailFrom above), same opt-in pattern as the
+  // stale-client nudge's Send button in the root Hub. Falls back to
+  // Copy/Open in Email App on any failure.
+  if (sendBtn) {
+    sendBtn.addEventListener("click", async () => {
+      if (!currentApprovalEmailFrom) return;
+      const client = getActiveClient();
+      const to = document.getElementById("approvalEmailTo").value;
+      const subject = document.getElementById("approvalEmailSubject").value;
+      const body = document.getElementById("approvalEmailBody").value;
+      const statusEl = document.getElementById("approvalEmailStatus");
+
+      sendBtn.disabled = true;
+      sendBtn.textContent = "Sending...";
+      if (statusEl) { statusEl.textContent = ""; statusEl.className = ""; }
+
+      try {
+        const res = await fetch("/api/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to, subject, body, from: currentApprovalEmailFrom })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || `Send failed (${res.status})`);
+        }
+        sendBtn.textContent = "Sent ✓";
+        if (statusEl) { statusEl.textContent = "Sent successfully."; statusEl.style.color = "var(--color-success, #10b981)"; }
+        if (client && window.parent.logAdminActivity) {
+          window.parent.logAdminActivity("Approval email sent", `${client.name || client.id}: "${subject}"`);
+        }
+      } catch (e) {
+        console.error("Send approval email failed:", e);
+        sendBtn.disabled = false;
+        sendBtn.textContent = "Send";
+        if (statusEl) {
+          statusEl.textContent = "Couldn't send automatically (" + e.message + ") - use Copy or \"Open in Email App\" instead.";
+          statusEl.style.color = "var(--color-error, #f68d5f)";
+        }
       }
     });
   }

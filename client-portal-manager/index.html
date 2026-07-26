@@ -300,10 +300,12 @@
           <label for="approvalEmailBody">Body</label>
           <textarea id="approvalEmailBody" rows="8"></textarea>
         </div>
-        <div style="display:flex; gap:8px;">
+        <div style="display:flex; gap:8px; flex-wrap: wrap; align-items: center;">
           <a href="#" id="approvalEmailOpenBtn" class="download-pdf-btn" style="padding: 10px 20px; text-decoration:none;" target="_blank" rel="noopener">Open in Email App</a>
           <button class="btn-secondary" id="approvalEmailCopyBtn" type="button" style="padding: 10px 20px;">Copy Text</button>
+          <button class="download-pdf-btn" id="approvalEmailSendBtn" type="button" style="padding: 10px 20px; display:none;">Send</button>
         </div>
+        <div id="approvalEmailStatus" style="font-size: 0.8rem; margin-top: 8px;"></div>
       </div>
 
       <div style="margin-top: 28px;">

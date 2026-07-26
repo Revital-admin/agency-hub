@@ -3133,6 +3133,36 @@ function buildStaleNudgeDraftEmail(client, name, pendingCount) {
   return draft;
 }
 
+// Builds the testimonial-ask draft email - triggered from
+// weekly-account-checkin/js/app.js the moment a client's health rating
+// flips to Green, since that's the best moment to ask while they're happy.
+// Exposed on window (implicit for a plain top-level function in a
+// non-module script) so that iframe can call
+// window.parent.buildTestimonialAskDraftEmail(client, name) the same way
+// it already calls window.parent.pushAdminNotification. Same
+// sendEnabled/from pattern as the stale-client nudge above - no account
+// manager configured means no Send button, Copy/mailto only.
+function buildTestimonialAskDraftEmail(client, name) {
+  const config = client.portalConfig || {};
+  if (!config.clientContactEmail) return null;
+
+  const contactFirstName = (config.clientContactName || name).split(' ')[0];
+  const amFirstName = config.accountManagerName ? config.accountManagerName.split(' ')[0] : "our team";
+  const magicLink = config.magicToken
+    ? `${window.location.origin}/portal/index.html?c=${encodeURIComponent(name)}&t=${config.magicToken}`
+    : "";
+
+  const subject = `Quick favor - would you share a testimonial?`;
+  const body = `Hi ${contactFirstName},\n\nThings have been going really well lately, and we'd love it if you had a minute to share a quick testimonial about working with us - it really helps other clients get a sense of what to expect.\n\nYou can leave one right from your client portal, under "Leave a Testimonial":\n${magicLink}\n\nNo pressure at all, and thank you either way for being a great client to work with!\n\nThanks,\n${amFirstName}`;
+
+  const draft = { to: config.clientContactEmail, subject: subject, body: body };
+  if (config.accountManagerEmail && config.accountManagerName) {
+    draft.from = `${config.accountManagerName} <${config.accountManagerEmail}>`;
+    draft.sendEnabled = true;
+  }
+  return draft;
+}
+
 // Templates in the Email Template Library are authored as simple <p>/<br>
 // HTML (see email-template-library/js/data.js), not full markup - a
 // lightweight regex swap to plain text is enough for a mailto body without
