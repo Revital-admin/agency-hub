@@ -38,6 +38,10 @@ export default {
       return jsonResponse({ error: "Method not allowed" }, 405);
     }
 
+    if (url.pathname === "/api/docusign/send-envelope") {
+      return handleDocusignSendEnvelope(request, env);
+    }
+
     // Everything else: serve the static site as before.
     return env.ASSETS.fetch(request);
   }
@@ -324,11 +328,157 @@ async function handleContractDelete(request, env) {
   return jsonResponse({ success: true }, 200, { "Cache-Control": "no-store" });
 }
 
+// ── /api/docusign/send-envelope ──
+// Creates and sends a Docusign envelope from a pre-built Template (see
+// the Contract & Invoice Tracker's DocuSign send option) instead of
+// emailing a flat PDF attachment - the signer gets Docusign's real
+// signing experience and a legally-binding e-signature, rather than a
+// print/sign/scan round trip.
+//
+// Auth: Docusign JWT Grant (server-to-server, no per-send login) - the
+// same RS256-signed-JWT approach as /api/mint-firebase-token above, just
+// pointed at Docusign's token endpoint instead of Google's. One-time
+// setup required in the Docusign account before this works:
+//   1. Create an Integration Key (Admin -> Apps and Keys -> Add App),
+//      generate an RSA keypair for it (Service Integration section).
+//   2. Grant consent once by visiting, in a browser:
+//      https://account-d.docusign.com/oauth/auth?response_type=code&scope=signature%20impersonation&client_id=YOUR_INTEGRATION_KEY&redirect_uri=YOUR_REGISTERED_REDIRECT_URI
+//      and clicking Allow.
+//   3. Set four secrets:
+//        wrangler secret put DOCUSIGN_INTEGRATION_KEY
+//        wrangler secret put DOCUSIGN_USER_ID          (API Username GUID, not the Account ID)
+//        wrangler secret put DOCUSIGN_ACCOUNT_ID
+//        wrangler secret put DOCUSIGN_PRIVATE_KEY      (the RSA private key from step 1, full PEM)
+//
+// NOTE: hardcoded to the sandbox/demo endpoints (account-d.docusign.com /
+// demo.docusign.net). Going to production means switching both hosts to
+// account.docusign.com and fetching the real per-account base_uri from
+// account.docusign.com/oauth/userinfo instead of assuming demo.docusign.net -
+// production accounts live on different regional hosts.
+const DOCUSIGN_AUTH_HOST = "account-d.docusign.com";
+const DOCUSIGN_API_BASE = "https://demo.docusign.net/restapi/v2.1";
+
+async function createDocusignJWT(env) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: "RS256", typ: "JWT" };
+  const payload = {
+    iss: env.DOCUSIGN_INTEGRATION_KEY,
+    sub: env.DOCUSIGN_USER_ID,
+    aud: DOCUSIGN_AUTH_HOST,
+    iat: now,
+    exp: now + 3600,
+    scope: "signature impersonation"
+  };
+
+  const unsigned = `${base64urlStr(JSON.stringify(header))}.${base64urlStr(JSON.stringify(payload))}`;
+  const key = await importPrivateKeyFlexible(env.DOCUSIGN_PRIVATE_KEY);
+  const signature = await crypto.subtle.sign(
+    { name: "RSASSA-PKCS1-v1_5" },
+    key,
+    new TextEncoder().encode(unsigned)
+  );
+  return `${unsigned}.${base64url(signature)}`;
+}
+
+async function getDocusignAccessToken(env) {
+  const assertion = await createDocusignJWT(env);
+  const res = await fetch(`https://${DOCUSIGN_AUTH_HOST}/oauth/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion
+    })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    let msg = data.error_description || data.error || `Docusign auth failed (${res.status})`;
+    if (data.error === "consent_required") {
+      msg += " - consent hasn't been granted yet; see the one-time consent URL in this file's header comment.";
+    }
+    throw new Error(msg);
+  }
+  return data.access_token;
+}
+
+async function handleDocusignSendEnvelope(request, env) {
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed" }, 405);
+  }
+  if (!isContractRequestAuthorized(request)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  if (!env.DOCUSIGN_INTEGRATION_KEY || !env.DOCUSIGN_USER_ID || !env.DOCUSIGN_PRIVATE_KEY || !env.DOCUSIGN_ACCOUNT_ID) {
+    return jsonResponse({ error: "Server missing Docusign secrets - set DOCUSIGN_INTEGRATION_KEY, DOCUSIGN_USER_ID, DOCUSIGN_ACCOUNT_ID, and DOCUSIGN_PRIVATE_KEY" }, 500);
+  }
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+
+  const { templateId, templateRoleName, signerName, signerEmail, emailSubject } = payload || {};
+  if (!templateId || !templateRoleName || !signerName || !signerEmail) {
+    return jsonResponse({ error: "templateId, templateRoleName, signerName, and signerEmail are all required" }, 400);
+  }
+
+  let accessToken;
+  try {
+    accessToken = await getDocusignAccessToken(env);
+  } catch (e) {
+    console.error("Docusign authentication failed:", e);
+    return jsonResponse({ error: "Docusign authentication failed: " + e.message }, 502);
+  }
+
+  const envelopeBody = {
+    templateId,
+    templateRoles: [{ roleName: templateRoleName, name: signerName, email: signerEmail }],
+    status: "sent",
+    emailSubject: emailSubject || "Please sign: your contract with Revital Productions"
+  };
+
+  try {
+    const dsRes = await fetch(`${DOCUSIGN_API_BASE}/accounts/${env.DOCUSIGN_ACCOUNT_ID}/envelopes`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(envelopeBody)
+    });
+    const dsData = await dsRes.json().catch(() => ({}));
+
+    if (!dsRes.ok) {
+      console.error("Docusign envelope creation failed:", dsRes.status, dsData);
+      return jsonResponse({ error: dsData.message || "Docusign API error", details: dsData }, 502);
+    }
+
+    return jsonResponse({ success: true, envelopeId: dsData.envelopeId, status: dsData.status }, 200, { "Cache-Control": "no-store" });
+  } catch (e) {
+    console.error("Docusign envelope request failed:", e);
+    return jsonResponse({ error: "Request to Docusign failed: " + e.message }, 500);
+  }
+}
+
 function jsonResponse(body, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json", ...extraHeaders }
   });
+}
+
+// ── Shared RS256 JWT-signing helpers (used by both the Firebase custom
+// token minter above and the Docusign JWT Grant above) ──
+function base64url(bytes) {
+  let binary = "";
+  const arr = new Uint8Array(bytes);
+  for (let i = 0; i < arr.length; i++) binary += String.fromCharCode(arr[i]);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function base64urlStr(str) {
+  return base64url(new TextEncoder().encode(str));
 }
 
 async function createFirebaseCustomToken(serviceAccount, email) {
@@ -345,40 +495,74 @@ async function createFirebaseCustomToken(serviceAccount, email) {
     claims: { email, admin: true }
   };
 
-  const encoder = new TextEncoder();
-
-  const base64url = (bytes) => {
-    let binary = "";
-    const arr = new Uint8Array(bytes);
-    for (let i = 0; i < arr.length; i++) binary += String.fromCharCode(arr[i]);
-    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  };
-  const base64urlStr = (str) => base64url(encoder.encode(str));
-
   const unsigned = `${base64urlStr(JSON.stringify(header))}.${base64urlStr(JSON.stringify(payload))}`;
 
-  const key = await importPrivateKey(serviceAccount.private_key);
+  const key = await importPrivateKeyFlexible(serviceAccount.private_key);
   const signature = await crypto.subtle.sign(
     { name: "RSASSA-PKCS1-v1_5" },
     key,
-    encoder.encode(unsigned)
+    new TextEncoder().encode(unsigned)
   );
 
   return `${unsigned}.${base64url(signature)}`;
 }
 
-async function importPrivateKey(pem) {
+// Imports a PEM RSA private key for RS256 signing. Accepts either PKCS8
+// ("-----BEGIN PRIVATE KEY-----", what Firebase service account keys use)
+// or traditional PKCS1 ("-----BEGIN RSA PRIVATE KEY-----", the format
+// Docusign's "Generate RSA" button produces) - Web Crypto's importKey
+// only understands PKCS8, so a PKCS1 key gets wrapped in the small fixed
+// DER header that turns it into a valid PKCS8 PrivateKeyInfo first.
+// (Verified against OpenSSL's own `pkcs8 -topk8` conversion - byte-for-byte
+// identical DER output.)
+async function importPrivateKeyFlexible(pem) {
+  const isPkcs1 = pem.includes("BEGIN RSA PRIVATE KEY");
+  const label = isPkcs1 ? "RSA PRIVATE KEY" : "PRIVATE KEY";
   const pemBody = pem
-    .replace(/-----BEGIN PRIVATE KEY-----/, "")
-    .replace(/-----END PRIVATE KEY-----/, "")
+    .replace(`-----BEGIN ${label}-----`, "")
+    .replace(`-----END ${label}-----`, "")
     .replace(/\s+/g, "");
-  const binaryDer = Uint8Array.from(atob(pemBody), (c) => c.charCodeAt(0));
+  const der = Uint8Array.from(atob(pemBody), (c) => c.charCodeAt(0));
+  const pkcs8Der = isPkcs1 ? pkcs1ToPkcs8Der(der) : der;
 
   return crypto.subtle.importKey(
     "pkcs8",
-    binaryDer.buffer,
+    pkcs8Der.buffer,
     { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
     false,
     ["sign"]
   );
+}
+
+function derLengthBytes(len) {
+  if (len < 128) return new Uint8Array([len]);
+  const bytes = [];
+  let n = len;
+  while (n > 0) { bytes.unshift(n & 0xff); n >>= 8; }
+  return new Uint8Array([0x80 | bytes.length, ...bytes]);
+}
+function concatBytes(...arrs) {
+  const total = arrs.reduce((s, a) => s + a.length, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const a of arrs) { out.set(a, off); off += a.length; }
+  return out;
+}
+function derSeq(tag, contentBuf) {
+  return concatBytes(new Uint8Array([tag]), derLengthBytes(contentBuf.length), contentBuf);
+}
+// Wraps a raw PKCS1 RSAPrivateKey DER blob in the minimal PKCS8
+// PrivateKeyInfo structure (version 0 + rsaEncryption AlgorithmIdentifier
+// + the PKCS1 bytes as an OCTET STRING) so Web Crypto's PKCS8-only
+// importKey can load it.
+function pkcs1ToPkcs8Der(pkcs1Der) {
+  const version = new Uint8Array([0x02, 0x01, 0x00]); // INTEGER 0
+  const algIdContent = concatBytes(
+    new Uint8Array([0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01]), // OID 1.2.840.113549.1.1.1 (rsaEncryption)
+    new Uint8Array([0x05, 0x00]) // NULL params
+  );
+  const algId = derSeq(0x30, algIdContent);
+  const privateKeyOctetString = derSeq(0x04, pkcs1Der);
+  const inner = concatBytes(version, algId, privateKeyOctetString);
+  return derSeq(0x30, inner);
 }
