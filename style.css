@@ -486,10 +486,14 @@ body {
      laptop window the whole 60-item nav list was collapsing to 0px
      height (scrollHeight 1470px, rendered height 0px), so it looked like
      the tool list had vanished and "Admin" sat directly under "Client
-     Workspace" with the Admin panel itself also cut off. This floor
-     guarantees the nav always keeps a visible, independently-scrollable
-     strip no matter how tall the footer gets. */
-  min-height: 160px;
+     Workspace" with the Admin panel itself also cut off. A 160px floor
+     technically fixed that (nav was reachable via its own scroll again),
+     but re-checked live afterward and 160px was so tight it only ever
+     showed one collapsed section (e.g. just "Agency Globals") before
+     cutting off mid-item - looked broken in a different way. Raised the
+     floor and tightened the footer's own cap (below) so nav gets the
+     lion's share of the sidebar instead of both fighting over scraps. */
+  min-height: 320px;
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
@@ -687,8 +691,13 @@ body {
      Service Pricing, Subscription Tracker, Activity Log, Export/Import,
      Delete Client) was eating so much of the sidebar's height that the
      entire tool nav list rendered at 0px on normal-sized windows. If the
-     panel itself doesn't fit in the cap, it scrolls internally instead. */
-  max-height: 42vh;
+     panel itself doesn't fit in the cap, it scrolls internally instead.
+     A 42vh cap was still generous enough to starve the nav down to its
+     160px floor on a normal-height window (confirmed live) - this is a
+     once-in-a-while utility panel, not the primary work area, so it gets
+     a smaller, fixed cap instead of a chunk of the viewport; nav (below)
+     gets a bigger floor and the leftover space. */
+  max-height: 260px;
   overflow-y: auto;
 }
 

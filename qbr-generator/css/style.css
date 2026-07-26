@@ -81,6 +81,29 @@
   flex-shrink: 0;
 }
 
+/* #clientSelect uses class="form-control", which (like .card elsewhere
+   in this tool) isn't a real defined class anywhere in vars.css/
+   shared-components.css/forms.css - the shared select styling
+   (forms.css) only targets selects inside .form-group, and this one
+   lives in .module-header-right instead, so it was rendering as a
+   plain unstyled browser-default white dropdown against the dark
+   theme. Styled to match forms.css's .form-group select look. */
+#clientSelect {
+  box-sizing: border-box;
+  padding: 10px 14px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-family: var(--font-body);
+  color: var(--color-text-primary);
+}
+#clientSelect:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-dim);
+}
+
 .module-body {
   margin: 0;
   padding: 0;
