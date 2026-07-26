@@ -3085,23 +3085,32 @@ function pushAdminNotification(type, message, clientName, draftEmail) {
     type: type || 'info',
     message: message,
     clientName: clientName || null,
-    // Optional {to, subject, body} - the Hub has no email-sending backend
-    // anywhere (see Auto-Send Email Integration Plan.md), so this is only
-    // ever a pre-filled draft the admin reviews and sends themselves via
-    // mailto or their own inbox, same pattern as buildApprovalEmail in
-    // client-portal-manager.
+    // Optional {to, subject, body, from?, sendEnabled?}. Most flows still
+    // only produce a pre-filled draft the admin reviews and sends
+    // themselves via mailto/copy (see Auto-Send Email Integration Plan.md)
+    // - same pattern as buildApprovalEmail in client-portal-manager. Drafts
+    // with sendEnabled:true (currently just the stale-client nudge, wired
+    // first per the plan's rollout order) also get a real "Send" button
+    // that calls /api/send-email server-side via Resend.
     draftEmail: draftEmail || null,
     createdAt: new Date().toISOString(),
-    read: false
+    read: false,
+    sent: false
   });
   if (adminNotifications.length > 30) adminNotifications.length = 30;
   persistAdminNotifications();
   renderAdminNotifications();
 }
 
-// Builds a simple reminder-email draft for the stale-client nudge - never
-// sent automatically, just handed to renderAdminNotifications so the admin
-// can review/edit and send it themselves (mailto or copy/paste).
+// Builds a reminder-email draft for the stale-client nudge. This is the
+// first flow wired to real auto-send (see Auto-Send Email Integration
+// Plan.md) - sendEnabled:true is what makes buildDraftEmailPanel() show a
+// real "Send" button instead of just Copy/mailto. "from" is the account
+// manager's own @revitalproductions.com address (root-domain Resend
+// verification lets us send as them directly), so replies land straight in
+// their inbox with no Reply-To trick needed. Falls back to no send button
+// at all if either the account manager's email or the client's contact
+// email is missing - Copy/mailto still work either way.
 function buildStaleNudgeDraftEmail(client, name, pendingCount) {
   const config = client.portalConfig || {};
   if (!config.clientContactEmail) return null;
@@ -3116,7 +3125,12 @@ function buildStaleNudgeDraftEmail(client, name, pendingCount) {
   const subject = `Quick follow-up - ${approvalPhrase} waiting on your review`;
   const body = `Hi ${contactFirstName},\n\nJust a friendly nudge - you have ${approvalPhrase} waiting for your review in your client portal:\n${magicLink}\n\nLet us know if anything's unclear or you'd like to hop on a quick call.\n\nThanks,\n${amFirstName}`;
 
-  return { to: config.clientContactEmail, subject: subject, body: body };
+  const draft = { to: config.clientContactEmail, subject: subject, body: body };
+  if (config.accountManagerEmail && config.accountManagerName) {
+    draft.from = `${config.accountManagerName} <${config.accountManagerEmail}>`;
+    draft.sendEnabled = true;
+  }
+  return draft;
 }
 
 // Templates in the Email Template Library are authored as simple <p>/<br>
@@ -3303,7 +3317,7 @@ function renderAdminNotifications() {
       body.appendChild(draftBtn);
 
       if (expandedDraftEmailIds.has(item.id)) {
-        body.appendChild(buildDraftEmailPanel(item.draftEmail));
+        body.appendChild(buildDraftEmailPanel(item.draftEmail, item));
       }
     }
 
@@ -3326,7 +3340,7 @@ function renderAdminNotifications() {
 // expanded - only lives for this page session, doesn't need to persist.
 const expandedDraftEmailIds = new Set();
 
-function buildDraftEmailPanel(draftEmail) {
+function buildDraftEmailPanel(draftEmail, item) {
   const panel = document.createElement("div");
   panel.className = "admin-notif-draft-panel";
   panel.addEventListener("click", (e) => e.stopPropagation());
@@ -3335,6 +3349,12 @@ function buildDraftEmailPanel(draftEmail) {
   toRow.className = "admin-notif-draft-to";
   toRow.textContent = "To: " + (draftEmail.to || "(no contact email on file)");
   panel.appendChild(toRow);
+  if (draftEmail.from) {
+    const fromRow = document.createElement("div");
+    fromRow.className = "admin-notif-draft-to";
+    fromRow.textContent = "From: " + draftEmail.from;
+    panel.appendChild(fromRow);
+  }
 
   const subjectInput = document.createElement("input");
   subjectInput.type = "text";
@@ -3372,6 +3392,61 @@ function buildDraftEmailPanel(draftEmail) {
   mailtoLink.target = "_blank";
   mailtoLink.href = `mailto:${encodeURIComponent(draftEmail.to || "")}?subject=${encodeURIComponent(subjectInput.value)}&body=${encodeURIComponent(bodyTextarea.value)}`;
   actions.appendChild(mailtoLink);
+
+  // Real auto-send, via the Worker's /api/send-email route (Resend) - only
+  // shown for drafts explicitly opted in with sendEnabled:true (currently
+  // just the stale-client nudge). Every other draft type still falls back
+  // to Copy/mailto only, per the plan's one-flow-at-a-time rollout.
+  if (draftEmail.sendEnabled && draftEmail.from) {
+    const sendBtn = document.createElement("button");
+    sendBtn.type = "button";
+    sendBtn.className = "admin-notif-draft-send-btn";
+    sendBtn.textContent = item && item.sent ? "Sent ✓" : "Send";
+    sendBtn.disabled = !!(item && item.sent);
+
+    const statusEl = document.createElement("div");
+    statusEl.className = "admin-notif-draft-status";
+
+    sendBtn.addEventListener("click", async () => {
+      sendBtn.disabled = true;
+      sendBtn.textContent = "Sending...";
+      statusEl.textContent = "";
+      try {
+        const res = await fetch("/api/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: draftEmail.to,
+            subject: subjectInput.value,
+            body: bodyTextarea.value,
+            from: draftEmail.from
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || `Send failed (${res.status})`);
+        }
+        sendBtn.textContent = "Sent ✓";
+        statusEl.textContent = "Sent successfully.";
+        statusEl.classList.add("success");
+        if (item) {
+          item.sent = true;
+          persistAdminNotifications();
+        }
+      } catch (e) {
+        console.error("Send email failed:", e);
+        sendBtn.disabled = false;
+        sendBtn.textContent = "Send";
+        statusEl.textContent = "Couldn't send automatically (" + e.message + ") - use Copy or \"Open in email app\" below instead.";
+        statusEl.classList.add("error");
+      }
+    });
+
+    actions.appendChild(sendBtn);
+    panel.appendChild(actions);
+    panel.appendChild(statusEl);
+    return panel;
+  }
 
   panel.appendChild(actions);
   return panel;

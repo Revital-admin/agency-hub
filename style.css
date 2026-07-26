@@ -314,6 +314,35 @@ body {
 .admin-notif-draft-mailto-btn:hover {
   background: var(--bg-sidebar);
 }
+.admin-notif-draft-send-btn {
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  margin-left: auto;
+}
+.admin-notif-draft-send-btn:hover {
+  background: var(--primary-hover);
+}
+.admin-notif-draft-send-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+.admin-notif-draft-status {
+  font-size: 0.72rem;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+.admin-notif-draft-status.success {
+  color: var(--success);
+}
+.admin-notif-draft-status.error {
+  color: var(--error);
+}
 
 .brand-logo-svg {
   color: var(--primary);
