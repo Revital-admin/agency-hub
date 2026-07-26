@@ -52,7 +52,14 @@
   margin: 0;
 }
 
-.module-header { align-items: flex-start; }
+.module-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
 .module-body {
   margin: 0;
   padding: 0;

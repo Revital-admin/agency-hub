@@ -60,7 +60,12 @@
 }
 
 .module-header {
+  display: flex;
+  justify-content: space-between;
   align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
 }
 
 .module-body {

@@ -45,7 +45,14 @@
 }
 .site-subtitle { font-size: 1rem; color: var(--text-muted); max-width: 800px; margin: 0; }
 
-.module-header { align-items: flex-start; }
+.module-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
 .module-body {
   margin: 0;
   padding: 0;
