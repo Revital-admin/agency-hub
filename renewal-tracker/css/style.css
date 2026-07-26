@@ -115,5 +115,31 @@
 }
 .row-actions button.renewed-btn:hover { border-color: #22c55e; color: #22c55e; box-shadow: 0 3px 8px rgba(34, 197, 94, 0.2); }
 .row-actions button.churned-btn:hover { border-color: #ef4444; color: #ef4444; box-shadow: 0 3px 8px rgba(239, 68, 68, 0.2); }
+.row-actions button.email-client-btn:hover { border-color: #3b82f6; color: #3b82f6; box-shadow: 0 3px 8px rgba(59, 130, 246, 0.2); }
 
 .empty-state { text-align: center; padding: 40px 20px; color: var(--color-text-muted); font-size: 14px; }
+
+/* ── Renewal Notice PDF (Email to Client) ──
+   Same .pdf-page pattern as Welcome Guide Gen / Intake Request Gen -
+   fixed 8.5x11in with overflow:hidden so html2canvas measures exactly
+   one page (see those tools' css for the full history of why). This is
+   a single, much simpler page than those multi-section guides, so it
+   only needs the shared page/title/h2 shell plus one info card. */
+.pdf-page {
+  width: 8.5in; height: 11in; overflow: hidden; background: #ffffff;
+  padding: 1in; box-sizing: border-box; position: relative;
+  flex-shrink: 0;
+  display: flex; flex-direction: column;
+  font-family: 'DM Sans', sans-serif;
+  color: #1e293b;
+}
+.pdf-logo { height: 40px; width: 115px; object-fit: contain; margin-bottom: 0.5in; }
+.pdf-title { font-size: 30px; font-weight: 800; letter-spacing: -1px; margin-bottom: 8px; }
+.pdf-subtitle { font-size: 16px; color: #64748b; margin-bottom: 0.4in; font-weight: 500; }
+.pdf-h2 { font-size: 14px; font-weight: 700; margin-top: 0.3in; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
+.renewal-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 24px; margin-bottom: 0.3in; }
+.renewal-info-item .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; margin-bottom: 4px; }
+.renewal-info-item .value { font-size: 18px; font-weight: 700; }
+.renewal-notes-box { font-size: 14px; color: #334155; line-height: 1.6; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px 20px; }
+.renewal-am-card { margin-top: auto; padding-top: 0.3in; border-top: 1px solid #e2e8f0; font-size: 13px; color: #64748b; }
+.renewal-am-card strong { color: #1e293b; }

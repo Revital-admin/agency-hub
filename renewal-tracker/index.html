@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="../style.css?v=1">
 <link rel="stylesheet" href="css/style.css?v=1">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
 <div class="bg-grid"></div>
@@ -15,6 +16,40 @@
 <div class="brand-bar">
 <div class="brand-logo-container"></div>
 </div>
+
+<!-- Email to Client panel - shared across every row's "Email" button (see
+     wireRowListeners' emailToClientBtn handler in js/app.js). Only one
+     client is ever being emailed at a time, so a single reused panel
+     (populated fresh per click) is simpler than one per row. Matches the
+     same To/Subject/Body/Copy/Open/Send layout used by Welcome Guide Gen
+     and Intake Request Gen. -->
+<div id="emailToClientPanel" style="display:none; max-width: 640px; margin: 0 auto 24px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md, 10px); padding: 20px; position: relative;">
+<button type="button" id="emailToClientCloseBtn" aria-label="Close" style="position: absolute; top: 14px; right: 14px; background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 4px;">&times;</button>
+<p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; padding-right: 24px;">Email ready to send (with a Renewal Notice PDF attached):</p>
+<div class="form-group">
+<label for="emailToClientTo">To</label>
+<input type="text" id="emailToClientTo">
+</div>
+<div class="form-group">
+<label for="emailToClientSubject">Subject</label>
+<input type="text" id="emailToClientSubject">
+</div>
+<div class="form-group">
+<label for="emailToClientBody">Body</label>
+<textarea id="emailToClientBody" rows="8"></textarea>
+</div>
+<div style="display:flex; gap:8px; flex-wrap: wrap; align-items: center;">
+<a href="#" id="emailToClientOpenBtn" class="download-pdf-btn" style="padding: 10px 20px; text-decoration:none;" target="_blank" rel="noopener">Open in Email App</a>
+<button class="btn-secondary" id="emailToClientCopyBtn" type="button" style="padding: 10px 20px;">Copy Text</button>
+<button class="download-pdf-btn" id="emailToClientSendBtn" type="button" style="padding: 10px 20px; display:none;">Send with PDF attached</button>
+</div>
+<div id="emailToClientStatus" style="font-size: 0.8rem; margin-top: 8px;"></div>
+</div>
+
+<!-- Detached container the Renewal Notice PDF is rendered into (never
+     shown on screen) - same pattern as pdfContainer in Welcome Guide
+     Gen / Intake Request Gen. -->
+<div id="pdfContainer" style="display:none;"></div>
 
 <header class="site-header">
 <div class="header-eyebrow">

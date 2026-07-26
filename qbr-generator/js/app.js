@@ -168,6 +168,59 @@ async function renderQbr() {
   ]);
 }
 
+// Builds the printable QBR container + html2pdf options for a given
+// client. Pulled out of generateQbrPdf so the Email to Client send flow
+// below can produce the exact same document (as a data URI instead of a
+// browser download) without duplicating this markup.
+function buildQbrPdfPayload(clientName) {
+  const container = document.createElement('div');
+  container.style.cssText = 'width: 8.5in; padding: 0.6in; font-family: Helvetica, Arial, sans-serif; color: #1a1a1a; background: #fff;';
+
+  const healthHtml = document.getElementById('healthTrendList').innerHTML;
+  const deliverablesSummaryHtml = document.getElementById('deliverablesSummary').innerHTML;
+  const deliverablesListHtml = document.getElementById('deliverablesList').innerHTML;
+  const referralsHtml = document.getElementById('referralsSummary').innerHTML;
+  const billingHtml = document.getElementById('billingSummaryBlock').innerHTML;
+  const revisionsHtml = document.getElementById('revisionsSummary').innerHTML;
+
+  // Reuse the already-rendered section markup but strip the dark-theme
+  // classes down to plain text - this document needs to print on white,
+  // same convention as the Change Order Generator's signable PDF.
+  const stripToText = (html) => html
+    .replace(/<span class="qbr-health-dot[^"]*"><\/span>/g, '')
+    .replace(/<[^>]+>/g, (tag) => tag.startsWith('</div') || tag.startsWith('<div') ? '\n' : ' ')
+    .replace(/\s+\n/g, '\n').trim();
+
+  container.innerHTML = `
+    <div style="border-bottom: 3px solid #6366f1; padding-bottom: 16px; margin-bottom: 24px;">
+      <div style="font-size: 11px; letter-spacing: 1.5px; color: #6366f1; font-weight: 700; text-transform: uppercase;">Revital Productions</div>
+      <h1 style="font-size: 26px; margin: 6px 0 0;">Quarterly Business Review</h1>
+      <p style="font-size: 13px; color: #555; margin: 4px 0 0;">${escapeHtml(clientName)} — ${new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</p>
+    </div>
+    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Client health trend</h3>
+    <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit; margin-bottom:18px;">${stripToText(healthHtml)}</pre>
+    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Deliverables &amp; approvals</h3>
+    <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit;">${stripToText(deliverablesSummaryHtml)}</pre>
+    <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit; margin-bottom:18px;">${stripToText(deliverablesListHtml)}</pre>
+    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Referrals</h3>
+    <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit; margin-bottom:18px;">${stripToText(referralsHtml)}</pre>
+    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Billing &amp; contract</h3>
+    <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit; margin-bottom:18px;">${stripToText(billingHtml)}</pre>
+    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Open revisions</h3>
+    <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit;">${stripToText(revisionsHtml)}</pre>
+  `;
+
+  const opt = {
+    margin: 0,
+    filename: `${clientName.replace(/\s+/g, '_')}_QBR_${new Date().toISOString().slice(0, 10)}.pdf`,
+    image: { type: 'jpeg', quality: 0.95 },
+    html2canvas: { scale: 2, letterRendering: true, useCORS: true },
+    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+  };
+
+  return { container, opt };
+}
+
 async function generateQbrPdf() {
   const clientName = currentClientName();
   const client = currentClient();
@@ -179,50 +232,7 @@ async function generateQbrPdf() {
   btn.textContent = "Generating...";
 
   try {
-    const container = document.createElement('div');
-    container.style.cssText = 'width: 8.5in; padding: 0.6in; font-family: Helvetica, Arial, sans-serif; color: #1a1a1a; background: #fff;';
-
-    const healthHtml = document.getElementById('healthTrendList').innerHTML;
-    const deliverablesSummaryHtml = document.getElementById('deliverablesSummary').innerHTML;
-    const deliverablesListHtml = document.getElementById('deliverablesList').innerHTML;
-    const referralsHtml = document.getElementById('referralsSummary').innerHTML;
-    const billingHtml = document.getElementById('billingSummaryBlock').innerHTML;
-    const revisionsHtml = document.getElementById('revisionsSummary').innerHTML;
-
-    // Reuse the already-rendered section markup but strip the dark-theme
-    // classes down to plain text - this document needs to print on white,
-    // same convention as the Change Order Generator's signable PDF.
-    const stripToText = (html) => html
-      .replace(/<span class="qbr-health-dot[^"]*"><\/span>/g, '')
-      .replace(/<[^>]+>/g, (tag) => tag.startsWith('</div') || tag.startsWith('<div') ? '\n' : ' ')
-      .replace(/\s+\n/g, '\n').trim();
-
-    container.innerHTML = `
-      <div style="border-bottom: 3px solid #6366f1; padding-bottom: 16px; margin-bottom: 24px;">
-        <div style="font-size: 11px; letter-spacing: 1.5px; color: #6366f1; font-weight: 700; text-transform: uppercase;">Revital Productions</div>
-        <h1 style="font-size: 26px; margin: 6px 0 0;">Quarterly Business Review</h1>
-        <p style="font-size: 13px; color: #555; margin: 4px 0 0;">${escapeHtml(clientName)} — ${new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</p>
-      </div>
-      <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Client health trend</h3>
-      <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit; margin-bottom:18px;">${stripToText(healthHtml)}</pre>
-      <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Deliverables &amp; approvals</h3>
-      <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit;">${stripToText(deliverablesSummaryHtml)}</pre>
-      <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit; margin-bottom:18px;">${stripToText(deliverablesListHtml)}</pre>
-      <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Referrals</h3>
-      <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit; margin-bottom:18px;">${stripToText(referralsHtml)}</pre>
-      <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Billing &amp; contract</h3>
-      <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit; margin-bottom:18px;">${stripToText(billingHtml)}</pre>
-      <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Open revisions</h3>
-      <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit;">${stripToText(revisionsHtml)}</pre>
-    `;
-
-    const opt = {
-      margin: 0,
-      filename: `${clientName.replace(/\s+/g, '_')}_QBR_${new Date().toISOString().slice(0, 10)}.pdf`,
-      image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: { scale: 2, letterRendering: true, useCORS: true },
-      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
+    const { container, opt } = buildQbrPdfPayload(clientName);
 
     if (typeof html2pdf !== 'undefined') {
       await html2pdf().set(opt).from(container).save();
@@ -241,9 +251,177 @@ async function generateQbrPdf() {
   }
 }
 
+/* ── Email to Client (real auto-send via Resend, PDF attached) ──
+   Same pattern as Welcome Guide Gen / Intake Request Gen's "Email to
+   Client" button: generate the PDF in-memory (reusing
+   buildQbrPdfPayload above) and POST it + the email fields to
+   /api/send-email, instead of triggering generateQbrPdf's browser
+   download. */
+
+const emailToClientPanel = document.getElementById('emailToClientPanel');
+const emailToClientTo = document.getElementById('emailToClientTo');
+const emailToClientSubject = document.getElementById('emailToClientSubject');
+const emailToClientBody = document.getElementById('emailToClientBody');
+const emailToClientOpenBtn = document.getElementById('emailToClientOpenBtn');
+const emailToClientCopyBtn = document.getElementById('emailToClientCopyBtn');
+const emailToClientSendBtn = document.getElementById('emailToClientSendBtn');
+const emailToClientStatus = document.getElementById('emailToClientStatus');
+const emailToClientCloseBtn = document.getElementById('emailToClientCloseBtn');
+const emailToClientBtn = document.getElementById('emailToClientBtn');
+
+let currentEmailToClientFrom = null;
+
+function refreshEmailToClientMailto() {
+  if (!emailToClientOpenBtn || !emailToClientTo) return;
+  emailToClientOpenBtn.href = `mailto:${encodeURIComponent(emailToClientTo.value)}?subject=${encodeURIComponent(emailToClientSubject.value)}&body=${encodeURIComponent(emailToClientBody.value)}`;
+}
+
+if (emailToClientCloseBtn) {
+  emailToClientCloseBtn.addEventListener('click', () => {
+    if (emailToClientPanel) emailToClientPanel.style.display = 'none';
+  });
+}
+
+[emailToClientTo, emailToClientSubject, emailToClientBody].forEach(elx => {
+  if (elx) elx.addEventListener('input', refreshEmailToClientMailto);
+});
+
+if (emailToClientCopyBtn) {
+  emailToClientCopyBtn.addEventListener('click', async () => {
+    const text = `To: ${emailToClientTo.value}\nSubject: ${emailToClientSubject.value}\n\n${emailToClientBody.value}`;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        emailToClientBody.select();
+        document.execCommand('copy');
+      }
+      const original = emailToClientCopyBtn.textContent;
+      emailToClientCopyBtn.textContent = 'Copied!';
+      setTimeout(() => { emailToClientCopyBtn.textContent = original; }, 2000);
+    } catch (err) {
+      console.error('Failed to copy QBR email', err);
+      alert('Failed to copy. Please manually select and copy the text.');
+    }
+  });
+}
+
+if (emailToClientBtn) {
+  emailToClientBtn.addEventListener('click', () => {
+    const clientName = currentClientName();
+    const client = currentClient();
+    if (!clientName || !client) {
+      alert('Select a client first.');
+      return;
+    }
+    const config = client.portalConfig || {};
+    if (!config.clientContactEmail) {
+      alert(`${clientName} has no Contact Email set in Client Portal Manager yet - add one before emailing the QBR.`);
+      return;
+    }
+
+    const amName = (config.accountManagerName || '').trim();
+    const amEmail = (config.accountManagerEmail || '').trim();
+    const contactName = config.clientContactName || clientName;
+    const period = new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+
+    emailToClientTo.value = config.clientContactEmail;
+    emailToClientSubject.value = `Your Quarterly Business Review — ${clientName}`;
+    emailToClientBody.value = `Hi ${contactName.split(' ')[0]},\n\nAttached is your Quarterly Business Review for ${period} - covering account health, deliverables, referrals, and billing/contract status.\n\nLet me know if you'd like to set up time to walk through it together.\n\nThanks,\n${amName || 'The Revital Productions team'}`;
+    refreshEmailToClientMailto();
+
+    currentEmailToClientFrom = (amEmail && amName) ? `${amName} <${amEmail}>` : null;
+    if (emailToClientSendBtn) {
+      emailToClientSendBtn.style.display = currentEmailToClientFrom ? 'inline-block' : 'none';
+      emailToClientSendBtn.disabled = false;
+      emailToClientSendBtn.textContent = 'Send with PDF attached';
+    }
+    if (emailToClientStatus) {
+      emailToClientStatus.textContent = currentEmailToClientFrom ? '' : `Add ${clientName}'s Account Manager Name + Email in Client Portal Manager to enable sending.`;
+      emailToClientStatus.style.color = 'var(--color-text-muted)';
+    }
+
+    if (emailToClientPanel) {
+      emailToClientPanel.style.display = 'block';
+      emailToClientPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  });
+}
+
+if (emailToClientSendBtn) {
+  emailToClientSendBtn.addEventListener('click', async () => {
+    if (!currentEmailToClientFrom) return;
+    if (typeof html2pdf === 'undefined') {
+      alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
+      return;
+    }
+
+    const clientName = currentClientName();
+    const client = currentClient();
+    if (!clientName || !client) return;
+
+    emailToClientSendBtn.disabled = true;
+    emailToClientSendBtn.textContent = 'Generating PDF...';
+    if (emailToClientStatus) emailToClientStatus.textContent = '';
+
+    try {
+      const { container, opt } = buildQbrPdfPayload(clientName);
+      const dataUri = await html2pdf().set(opt).from(container).outputPdf('datauristring');
+      const base64 = dataUri.slice(dataUri.indexOf(',') + 1);
+      if (!base64) throw new Error('PDF generation produced no data');
+
+      emailToClientSendBtn.textContent = 'Sending...';
+
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: emailToClientTo.value,
+          subject: emailToClientSubject.value,
+          body: emailToClientBody.value,
+          from: currentEmailToClientFrom,
+          attachments: [{ filename: opt.filename, content: base64 }]
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `Send failed (${res.status})`);
+      }
+
+      emailToClientSendBtn.textContent = 'Sent ✓';
+      if (emailToClientStatus) {
+        emailToClientStatus.textContent = 'Sent successfully with the QBR PDF attached.';
+        emailToClientStatus.style.color = 'var(--color-success, #22c55e)';
+      }
+      if (window.parent.logAdminActivity) {
+        window.parent.logAdminActivity('QBR emailed to client', clientName);
+      }
+      if (window.parent.showBanner) {
+        window.parent.showBanner('success', `QBR emailed to ${clientName}.`);
+      }
+    } catch (e) {
+      console.error('Send QBR email failed:', e);
+      emailToClientSendBtn.disabled = false;
+      emailToClientSendBtn.textContent = 'Send with PDF attached';
+      if (emailToClientStatus) {
+        emailToClientStatus.textContent = "Couldn't send automatically (" + e.message + ") - use Copy or \"Open in Email App\" instead.";
+        emailToClientStatus.style.color = 'var(--color-error, #ef4444)';
+      }
+    }
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   populateClientSelect();
-  el('clientSelect').addEventListener('change', renderQbr);
+  el('clientSelect').addEventListener('change', () => {
+    // The email panel's To/Subject/Body and the pending PDF are all
+    // scoped to whichever client was selected when it was opened -
+    // hide it on a client switch rather than risk sending the new
+    // client's QBR to the previous client's contact email (or vice
+    // versa) if the account manager forgets to reopen it.
+    if (emailToClientPanel) emailToClientPanel.style.display = 'none';
+    renderQbr();
+  });
   el('generatePdfBtn').addEventListener('click', generateQbrPdf);
   renderQbr();
 
