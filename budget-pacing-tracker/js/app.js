@@ -22,10 +22,6 @@ function persist() {
   if (isEmbedded) window.parent.saveDatabase();
 }
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function populateClientSelect() {
   const clients = getClients();
   const select = el('newClientSelect');

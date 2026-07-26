@@ -25,10 +25,6 @@ try {
 
 function el(id) { return document.getElementById(id); }
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function getRequestState() {
   if (!parentClient.testimonialRequest) {
     parentClient.testimonialRequest = { status: "Not Asked", askedDate: "", templateUsed: "", notes: "" };

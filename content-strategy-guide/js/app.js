@@ -525,20 +525,11 @@ function refreshStepHeader(card) {
 }
 
 /* ── PDF Generation ─────────────────────────────────────────── */
-
-function drawCheckmark(doc, x, y) {
-  doc.setDrawColor(16, 185, 129); // Success emerald green
-  doc.setLineWidth(1.5);
-  doc.line(x + 2, y + 6, x + 5, y + 9);
-  doc.line(x + 5, y + 9, x + 10, y + 3);
-}
-
-function drawCrossmark(doc, x, y) {
-  doc.setDrawColor(245, 115, 90); // Failed orange/red
-  doc.setLineWidth(1.5);
-  doc.line(x + 2, y + 3, x + 8, y + 9);
-  doc.line(x + 8, y + 3, x + 2, y + 9);
-}
+// (drawCheckmark/drawCrossmark, leftover helpers for drawing glyphs
+// directly onto a canvas-based jsPDF page, removed - this tool has
+// generated its PDF via html2pdf's HTML-to-canvas pipeline for a while
+// now and never called raw jsPDF drawing APIs, so these had zero
+// callers left.)
 
 // Global helper missing from original codebase
 if (typeof window.hexToRgba === 'undefined') {
