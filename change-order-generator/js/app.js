@@ -174,10 +174,11 @@ function removeEntry(id) {
 }
 
 // ── PDF Generation ──
-async function generateChangeOrderPdf(id) {
-  const entry = entries.find(e => e.id === id);
-  if (!entry) return;
-
+// Pulled the container/opt building out of generateChangeOrderPdf so the
+// Email to Client send flow below can produce the exact same signable
+// document (as a data URI instead of a browser download) without
+// duplicating this markup.
+function buildChangeOrderPdfPayload(entry) {
   const container = document.createElement('div');
   container.style.cssText = 'width: 8.5in; padding: 0.6in; font-family: Helvetica, Arial, sans-serif; color: #1a1a1a; background: #fff;';
   container.innerHTML = `
@@ -214,11 +215,190 @@ async function generateChangeOrderPdf(id) {
     jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
   };
 
+  return { container, opt };
+}
+
+async function generateChangeOrderPdf(id) {
+  const entry = entries.find(e => e.id === id);
+  if (!entry) return;
+
+  const { container, opt } = buildChangeOrderPdfPayload(entry);
+
   if (typeof html2pdf !== 'undefined') {
     await html2pdf().set(opt).from(container).save();
   } else if (window.parent.showBanner) {
     window.parent.showBanner('error', 'PDF library failed to load.');
   }
+}
+
+// clientName here is free text (typed against a <datalist>, not a locked
+// dropdown - see clientOptions in index.html), so it isn't guaranteed to
+// be an exact key into clientsDb the way it is in Renewal Tracker. Match
+// case-insensitively/trimmed instead of a direct bracket lookup, same
+// spirit as the agency-wide name-matching used for contractInvoices/
+// referrals elsewhere in the Hub.
+function findClientRecordByName(name) {
+  const clients = getClients();
+  const target = (name || '').trim().toLowerCase();
+  if (!target) return null;
+  const key = Object.keys(clients).find(k => k.trim().toLowerCase() === target);
+  return key ? clients[key] : null;
+}
+
+/* ── Email to Client (real auto-send via Resend, PDF attached) ──
+   Same pattern as Welcome Guide Gen / Intake Request Gen / Client
+   Renewal Tracker: generate the PDF in-memory (reusing
+   buildChangeOrderPdfPayload above) and POST it + the email fields to
+   /api/send-email, using this change order's own row instead of a
+   single active client. */
+
+const emailToClientPanel = document.getElementById('emailToClientPanel');
+const emailToClientTo = document.getElementById('emailToClientTo');
+const emailToClientSubject = document.getElementById('emailToClientSubject');
+const emailToClientBody = document.getElementById('emailToClientBody');
+const emailToClientOpenBtn = document.getElementById('emailToClientOpenBtn');
+const emailToClientCopyBtn = document.getElementById('emailToClientCopyBtn');
+const emailToClientSendBtn = document.getElementById('emailToClientSendBtn');
+const emailToClientStatus = document.getElementById('emailToClientStatus');
+const emailToClientCloseBtn = document.getElementById('emailToClientCloseBtn');
+
+let currentEmailContext = null; // { entry, from }
+
+function refreshEmailToClientMailto() {
+  if (!emailToClientOpenBtn || !emailToClientTo) return;
+  emailToClientOpenBtn.href = `mailto:${encodeURIComponent(emailToClientTo.value)}?subject=${encodeURIComponent(emailToClientSubject.value)}&body=${encodeURIComponent(emailToClientBody.value)}`;
+}
+
+if (emailToClientCloseBtn) {
+  emailToClientCloseBtn.addEventListener('click', () => {
+    if (emailToClientPanel) emailToClientPanel.style.display = 'none';
+  });
+}
+
+[emailToClientTo, emailToClientSubject, emailToClientBody].forEach(elx => {
+  if (elx) elx.addEventListener('input', refreshEmailToClientMailto);
+});
+
+if (emailToClientCopyBtn) {
+  emailToClientCopyBtn.addEventListener('click', async () => {
+    const text = `To: ${emailToClientTo.value}\nSubject: ${emailToClientSubject.value}\n\n${emailToClientBody.value}`;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        emailToClientBody.select();
+        document.execCommand('copy');
+      }
+      const original = emailToClientCopyBtn.textContent;
+      emailToClientCopyBtn.textContent = 'Copied!';
+      setTimeout(() => { emailToClientCopyBtn.textContent = original; }, 2000);
+    } catch (err) {
+      console.error('Failed to copy change order email', err);
+      alert('Failed to copy. Please manually select and copy the text.');
+    }
+  });
+}
+
+function openEmailToClientPanel(id) {
+  const entry = entries.find(e => e.id === id);
+  if (!entry) return;
+
+  const client = findClientRecordByName(entry.clientName);
+  const config = (client && client.portalConfig) || {};
+  if (!config.clientContactEmail) {
+    alert(`${entry.clientName} has no Contact Email set in Client Portal Manager yet (or the name here doesn't exactly match a client in the Hub) - add one before emailing this change order.`);
+    return;
+  }
+
+  const amName = (config.accountManagerName || '').trim();
+  const amEmail = (config.accountManagerEmail || '').trim();
+  const contactName = config.clientContactName || entry.clientName;
+
+  emailToClientTo.value = config.clientContactEmail;
+  emailToClientSubject.value = `Change Order for Sign-Off — ${entry.deliverableName}`;
+  emailToClientBody.value = `Hi ${contactName.split(' ')[0]},\n\nAttached is a change order covering a request that falls outside our current signed scope for ${entry.deliverableName}. It outlines what's changing, why, and the additional cost/timeline impact.\n\nCould you review, sign, and send it back when you get a chance? Happy to jump on a call first if that's easier.\n\nThanks,\n${amName || 'The Revital Productions team'}`;
+  refreshEmailToClientMailto();
+
+  currentEmailContext = {
+    entry,
+    from: (amEmail && amName) ? `${amName} <${amEmail}>` : null
+  };
+
+  if (emailToClientSendBtn) {
+    emailToClientSendBtn.style.display = currentEmailContext.from ? 'inline-block' : 'none';
+    emailToClientSendBtn.disabled = false;
+    emailToClientSendBtn.textContent = 'Send with PDF attached';
+  }
+  if (emailToClientStatus) {
+    emailToClientStatus.textContent = currentEmailContext.from ? '' : `Add ${entry.clientName}'s Account Manager Name + Email in Client Portal Manager to enable sending.`;
+    emailToClientStatus.style.color = 'var(--text-muted)';
+  }
+
+  if (emailToClientPanel) {
+    emailToClientPanel.style.display = 'block';
+    emailToClientPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+if (emailToClientSendBtn) {
+  emailToClientSendBtn.addEventListener('click', async () => {
+    if (!currentEmailContext || !currentEmailContext.from) return;
+    if (typeof html2pdf === 'undefined') {
+      alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
+      return;
+    }
+
+    emailToClientSendBtn.disabled = true;
+    emailToClientSendBtn.textContent = 'Generating PDF...';
+    if (emailToClientStatus) emailToClientStatus.textContent = '';
+
+    const { entry } = currentEmailContext;
+
+    try {
+      const { container, opt } = buildChangeOrderPdfPayload(entry);
+      const dataUri = await html2pdf().set(opt).from(container).outputPdf('datauristring');
+      const base64 = dataUri.slice(dataUri.indexOf(',') + 1);
+      if (!base64) throw new Error('PDF generation produced no data');
+
+      emailToClientSendBtn.textContent = 'Sending...';
+
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: emailToClientTo.value,
+          subject: emailToClientSubject.value,
+          body: emailToClientBody.value,
+          from: currentEmailContext.from,
+          attachments: [{ filename: opt.filename, content: base64 }]
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `Send failed (${res.status})`);
+      }
+
+      emailToClientSendBtn.textContent = 'Sent ✓';
+      if (emailToClientStatus) {
+        emailToClientStatus.textContent = 'Sent successfully with the Change Order PDF attached.';
+        emailToClientStatus.style.color = 'var(--color-success, #10b981)';
+      }
+      if (isEmbedded && window.parent.logAdminActivity) {
+        window.parent.logAdminActivity('Change order emailed to client', entry.clientName);
+      }
+      if (isEmbedded && window.parent.showBanner) {
+        window.parent.showBanner('success', `Change order emailed to ${entry.clientName}.`);
+      }
+    } catch (e) {
+      console.error('Send change order email failed:', e);
+      emailToClientSendBtn.disabled = false;
+      emailToClientSendBtn.textContent = 'Send with PDF attached';
+      if (emailToClientStatus) {
+        emailToClientStatus.textContent = "Couldn't send automatically (" + e.message + ") - use Copy or \"Open in Email App\" instead.";
+        emailToClientStatus.style.color = 'var(--color-error, #f68d5f)';
+      }
+    }
+  });
 }
 
 function statusTagClass(status) {
@@ -261,6 +441,7 @@ function renderTable() {
       <td>
         <div class="row-actions">
           <button class="pdf-btn btn-generate-pdf" data-id="${entry.id}">PDF</button>
+          <button class="email-client-btn" data-id="${entry.id}">Email Client</button>
           <button class="edit-btn" data-id="${entry.id}">Edit</button>
           <button class="remove-btn" data-id="${entry.id}">Remove</button>
         </div>
@@ -272,6 +453,7 @@ function renderTable() {
   document.querySelectorAll('.edit-btn').forEach(btn => btn.addEventListener('click', () => startEdit(btn.getAttribute('data-id'))));
   document.querySelectorAll('.remove-btn').forEach(btn => btn.addEventListener('click', () => removeEntry(btn.getAttribute('data-id'))));
   document.querySelectorAll('.pdf-btn').forEach(btn => btn.addEventListener('click', () => generateChangeOrderPdf(btn.getAttribute('data-id'))));
+  document.querySelectorAll('.email-client-btn').forEach(btn => btn.addEventListener('click', () => openEmailToClientPanel(btn.getAttribute('data-id'))));
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
