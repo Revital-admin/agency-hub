@@ -1,3 +1,100 @@
+/* ── Hub-native hero header (matches Brand Asset Kit / Mood Board /
+   Brand Guidelines and the rest of the Hub's core modules) ──
+   Missing until now - same gap as Activity Log: this tool never defined
+   its own .module-body/.module-container, so the on-screen editor page
+   fell back to unstyled browser defaults instead of the Hub's dark theme.
+   This is about the on-screen tool UI only - the exported QBR PDF itself
+   is intentionally light-themed (matches Change Order Generator's
+   signable-doc branding) and is untouched by this. Copied from
+   red-flag-checklist's css/style.css, the canonical version. */
+:root {
+  --primary: #6366f1;
+  --secondary: #a855f7;
+  --text-bright: #ffffff;
+  --text-muted: #94a3b8;
+  --font-heading: 'Space Grotesk', sans-serif;
+}
+
+.site-header {
+  margin-bottom: 0;
+}
+
+.header-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 100px;
+  padding: 4px 12px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--primary);
+  margin-bottom: 12px;
+}
+
+.header-eyebrow .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--primary);
+  box-shadow: 0 0 6px var(--primary);
+}
+
+.site-title {
+  font-family: var(--font-heading);
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--text-bright);
+  letter-spacing: -0.5px;
+  margin-bottom: 8px;
+}
+
+.site-title em {
+  font-style: normal;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.site-subtitle {
+  font-size: 1rem;
+  color: var(--text-muted);
+  max-width: 800px;
+  margin: 0;
+}
+
+.module-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.module-header-right {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.module-body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+}
+
+.module-container {
+  padding: 24px;
+  box-sizing: border-box;
+}
+
 .qbr-stats-row {
   display: flex;
   gap: 16px;
