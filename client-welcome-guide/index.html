@@ -27,8 +27,9 @@
       </div>
     </div>
 
-    <div id="emailToClientPanel" style="display:none; max-width: 640px; margin: 0 auto 24px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md, 10px); padding: 20px;">
-      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">Email ready to send (with the Welcome Guide PDF attached):</p>
+    <div id="emailToClientPanel" style="display:none; max-width: 640px; margin: 0 auto 24px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md, 10px); padding: 20px; position: relative;">
+      <button type="button" id="emailToClientCloseBtn" aria-label="Close" style="position: absolute; top: 14px; right: 14px; background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 4px;">&times;</button>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; padding-right: 24px;">Email ready to send (with the Welcome Guide PDF attached):</p>
       <div class="form-group">
         <label for="emailToClientTo">To</label>
         <input type="text" id="emailToClientTo">

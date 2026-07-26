@@ -192,6 +192,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const emailToClientCopyBtn = document.getElementById('emailToClientCopyBtn');
   const emailToClientSendBtn = document.getElementById('emailToClientSendBtn');
   const emailToClientStatus = document.getElementById('emailToClientStatus');
+  const emailToClientCloseBtn = document.getElementById('emailToClientCloseBtn');
+
+  if (emailToClientCloseBtn) {
+    emailToClientCloseBtn.addEventListener('click', () => {
+      if (emailToClientPanel) emailToClientPanel.style.display = 'none';
+    });
+  }
 
   let currentEmailToClientFrom = null;
 
