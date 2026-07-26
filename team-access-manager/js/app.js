@@ -13,17 +13,26 @@
 
 const SECTION_DEFS = [
   { key: "core", label: "Core" },
-  { key: "account-management", label: "Account Management" },
+  { key: "ad-accounts-access", label: "Ad Accounts & Access" },
+  { key: "reporting-health", label: "Reporting & Health" },
   { key: "production", label: "Production" },
   { key: "content-creation", label: "Content Creation" },
   { key: "account-ops", label: "Account Ops" },
   { key: "audits", label: "Audits" },
   { key: "strategy-competition", label: "Strategy & Competition" },
   { key: "sales-pipeline", label: "Sales Pipeline" },
-  { key: "client-retention", label: "Client Retention" },
-  { key: "social-proof", label: "Social Proof" },
+  { key: "retention-social-proof", label: "Retention & Social Proof" },
   { key: "agency-globals", label: "Agency Globals" }
 ];
+// NOTE (July 2026 sidebar reorg): "Account Management" was split into
+// "Ad Accounts & Access" (ad platform setup/budget/access logs) and
+// "Reporting & Health" (health dashboard, QBR, weekly check-ins, reports).
+// "Client Retention" and "Social Proof" were merged into one
+// "Retention & Social Proof" section. Anyone previously granted the old
+// "account-management", "client-retention", or "social-proof" keys in
+// Firestore (agency/teamAccess.users) needs to be re-checked below and
+// re-saved so they keep access to the tools that moved - the old keys no
+// longer match anything in the sidebar and will just silently grant nothing.
 
 // Role tiers — a quick-fill convenience for the section checkboxes below.
 // Picking a role auto-checks the sections that role would typically need;
@@ -38,27 +47,27 @@ const SECTION_DEFS = [
 const ROLE_TIERS = [
   {
     tier: "Full Access — Leadership",
-    sections: ["core", "account-management", "production", "content-creation", "account-ops", "audits", "strategy-competition", "sales-pipeline", "client-retention", "social-proof", "agency-globals"],
+    sections: ["core", "ad-accounts-access", "reporting-health", "production", "content-creation", "account-ops", "audits", "strategy-competition", "sales-pipeline", "retention-social-proof", "agency-globals"],
     roles: ["Founder / CEO", "Creative Director", "Executive Producer", "Chief Operating Officer (COO)", "Head of Strategy"]
   },
   {
     tier: "Sales & Business Development",
-    sections: ["sales-pipeline", "social-proof", "strategy-competition"],
+    sections: ["sales-pipeline", "retention-social-proof", "strategy-competition"],
     roles: ["Business Development Manager", "New Business Representative", "Sales Coordinator", "Partnerships Manager", "Proposal & Bids Specialist"]
   },
   {
     tier: "Account Management / Client Services",
-    sections: ["core", "account-management", "production", "content-creation", "account-ops", "client-retention", "social-proof"],
+    sections: ["core", "ad-accounts-access", "reporting-health", "production", "content-creation", "account-ops", "retention-social-proof"],
     roles: ["Producer", "Senior Producer", "Account Manager", "Account Coordinator", "Client Success Manager"]
   },
   {
     tier: "Digital Marketing",
-    sections: ["account-management", "content-creation", "account-ops", "audits", "strategy-competition"],
+    sections: ["ad-accounts-access", "reporting-health", "content-creation", "account-ops", "audits", "strategy-competition"],
     roles: ["Digital Marketing Strategist", "Social Media Manager", "Content Manager", "SEO Specialist", "Paid Ads Specialist", "Email Marketing Specialist", "Analytics / Reporting Specialist"]
   },
   {
     tier: "Operations & Admin",
-    sections: ["core", "account-management", "agency-globals"],
+    sections: ["core", "ad-accounts-access", "account-ops", "agency-globals"],
     roles: ["Studio Manager", "Operations Manager", "Executive Assistant", "Bookkeeper / Finance Manager", "HR Coordinator"]
   }
 ];
