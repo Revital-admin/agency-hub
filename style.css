@@ -109,6 +109,17 @@ body {
   top: 0;
   z-index: 100;
   flex-shrink: 0;
+  /* Safety net: .sidebar-nav already scrolls its own tool list and the
+     Admin footer panel is pinned below it via margin-top:auto, so under
+     normal conditions this never engages. But the Admin panel grew (Team
+     Access, Service Pricing, Subscription Tracker, Activity Log, Export/
+     Import, Delete Client all stacked full-width) to the point where, on
+     shorter windows, the total content can exceed 100vh with nothing left
+     for .sidebar-nav to shrink - which clipped the bottom of the Admin
+     panel with no way to reach it. Letting the whole sidebar scroll as a
+     fallback means it's always reachable instead of cut off. */
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .brand-section {
