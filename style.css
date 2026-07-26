@@ -155,8 +155,11 @@ body {
 .admin-notif-bell-btn {
   position: relative;
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  /* Bumped from 32px - under the ~44px touch-target size recommended for
+     anything tapped on a phone (staff do occasionally open the Hub on
+     mobile). Purely a sizing change, not a layout one. */
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2226,6 +2229,10 @@ textarea {
   align-items: center;
   justify-content: center;
   padding: 6px;
+  /* 24px icon + 6px padding each side = 36px rendered - bumped to the
+     ~44px touch-target size recommended for a mobile tap target. */
+  min-width: 44px;
+  min-height: 44px;
   border-radius: var(--radius-sm);
   transition: background var(--transition-fast);
 }
@@ -2252,11 +2259,15 @@ textarea {
 
 .mobile-close-btn {
   display: none;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: none;
   color: var(--text-muted);
   cursor: pointer;
   padding: 6px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: var(--radius-sm);
   transition: all var(--transition-fast);
 }
@@ -2303,7 +2314,7 @@ textarea {
   }
 
   .mobile-close-btn {
-    display: block;
+    display: flex;
   }
 
   .sidebar {

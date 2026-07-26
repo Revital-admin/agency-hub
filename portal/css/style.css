@@ -156,8 +156,10 @@ body {
 .notif-bell-btn {
   position: relative;
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  /* Bumped from 36px toward the ~44px touch-target size recommended for
+     a phone tap target - clients access this portal on mobile. */
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -794,6 +796,12 @@ body {
   align-items: center;
   justify-content: center;
   padding: 6px;
+  /* 24px/20px icon + 6px padding each side lands at 32-36px rendered -
+     bumped to the ~44px touch-target size recommended for a mobile tap
+     target. Clients use this portal on their phones, so this matters
+     more here than on most internal Hub tools. */
+  min-width: 44px;
+  min-height: 44px;
   border-radius: var(--radius-sm);
   transition: background var(--transition-fast);
 }
