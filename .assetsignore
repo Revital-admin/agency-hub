@@ -27,3 +27,27 @@ node_modules/**
 .env.*
 *.md
 .DS_Store
+
+# sops/ - the raw PDFs exported from ClickUp used to migrate content into
+# the SOP Wiki tool (see sop-wiki/js/data.js, which has its own copy of
+# this content as searchable text). Nothing in the app references this
+# folder anymore, so it's dead deploy weight - and unlike the Wiki tool
+# (gated behind Cloudflare Access + Hub sign-in), these were sitting here
+# as directly-fetchable static files with zero access control, including
+# genuinely sensitive ones (Cybersecurity Policy, Access & Login Log
+# Template, Client Communication Policy, and more).
+sops
+sops/**
+
+# One-off internal business documents that ended up at the repo root
+# (pricing drafts, contractor agreement templates, planning docs) -
+# never linked to or fetched by any tool, so there's no reason for these
+# to be reachable as static files either.
+*.docx
+*.xlsx
+Freelancer_Contractor_Agreement_Template.docx
+Revital_Service_Pricing_Draft.xlsx
+av_production_software_roadmap.pdf
+business_phase_roadmap.pdf
+where_to_log_what_hub_vs_clickup.pdf
+Media Storage & Review Tools.pdf
