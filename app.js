@@ -3195,14 +3195,16 @@ async function fetchEmailTemplateById(templateId) {
 // Fires once, right when a new client workspace is created (Day 1 of the
 // Client Onboarding SOP) - pulls the real Welcome Email (#8) and Intake
 // Form (#17) templates from the Email Template Library and substitutes
-// whatever client info exists so far. Contact name / account manager name
+// whatever client info exists so far. This is just a reference/reminder
+// copy for the notification bell - contact name / account manager name
 // are usually still blank at this exact moment (Client Portal Manager
-// hasn't been filled in yet for a brand-new client), so this falls back to
-// generic phrasing the admin can tighten up before sending - same as every
-// other draft-email feature in the Hub. Both PDFs (Welcome Guide, Intake
-// Form) still need to be attached by hand from the Welcome Guide / Intake
-// Request tools - a mailto link can't carry an attachment; real auto-send
-// (see Auto-Send Email Integration Plan.md) would attach them directly.
+// hasn't been filled in yet for a brand-new client), so it can't be the
+// real send. The real send (with the actual PDF attached, via Resend)
+// lives inside the Welcome Guide Gen / Intake Request Gen tools
+// themselves, as an "Email to Client" button - deliberately manual,
+// since whoever fills in those tools (account manager for Welcome, sales
+// or account manager for Intake) is the one who knows when it's actually
+// ready to go out, not a fixed timing rule.
 async function generateNewClientOnboardingEmails(client, name) {
   const config = client.portalConfig || {};
   const contactName = config.clientContactName || name;
@@ -3216,7 +3218,7 @@ async function generateNewClientOnboardingEmails(client, name) {
 
   if (welcomeTpl) {
     const filled = fillTemplateVars(welcomeTpl.content, { contactName, clientName: name, accountManagerName });
-    const body = templateHtmlToPlainText(filled) + "\n\n[Attach the Welcome Guide PDF - generate it from the Welcome Guide tool for this client]";
+    const body = templateHtmlToPlainText(filled) + "\n\n[Reference copy only - once this client's Account Manager info is filled in, use the \"Email to Client\" button inside the Welcome Guide Gen tool to send this with the real PDF attached.]";
     pushAdminNotification(
       'client_welcome_email',
       `Welcome email drafted for ${name}.`,
@@ -3227,7 +3229,7 @@ async function generateNewClientOnboardingEmails(client, name) {
 
   if (intakeTpl) {
     const filled = fillTemplateVars(intakeTpl.content, { contactName, clientName: name, accountManagerName });
-    const body = templateHtmlToPlainText(filled) + "\n\n[Attach the Client Onboarding Form PDF - generate it from the Intake Form tool for this client]";
+    const body = templateHtmlToPlainText(filled) + "\n\n[Reference copy only - once this client's Account Manager info is filled in, use the \"Email to Client\" button inside the Intake Request Gen tool to send this with the real PDF attached.]";
     pushAdminNotification(
       'client_intake_email',
       `Intake form email drafted for ${name}.`,

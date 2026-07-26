@@ -19,6 +19,32 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
         <span>Download PDF</span>
       </button>
+      <button class="download-pdf-btn" id="emailToClientBtn" aria-label="Email to Client" style="margin-left: 8px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22 6 12 13 2 6"></polyline></svg>
+        <span>Email to Client</span>
+      </button>
+    </div>
+
+    <div id="emailToClientPanel" style="display:none; max-width: 640px; margin: 0 auto 24px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md, 10px); padding: 20px;">
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">Email ready to send (with the Intake Form PDF attached):</p>
+      <div class="form-group">
+        <label for="emailToClientTo">To</label>
+        <input type="text" id="emailToClientTo">
+      </div>
+      <div class="form-group">
+        <label for="emailToClientSubject">Subject</label>
+        <input type="text" id="emailToClientSubject">
+      </div>
+      <div class="form-group">
+        <label for="emailToClientBody">Body</label>
+        <textarea id="emailToClientBody" rows="8"></textarea>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap: wrap; align-items: center;">
+        <a href="#" id="emailToClientOpenBtn" class="download-pdf-btn" style="padding: 10px 20px; text-decoration:none;" target="_blank" rel="noopener">Open in Email App</a>
+        <button class="btn-secondary" id="emailToClientCopyBtn" type="button" style="padding: 10px 20px;">Copy Text</button>
+        <button class="download-pdf-btn" id="emailToClientSendBtn" type="button" style="padding: 10px 20px; display:none;">Send with PDF attached</button>
+      </div>
+      <div id="emailToClientStatus" style="font-size: 0.8rem; margin-top: 8px;"></div>
     </div>
 
     <header class="site-header">

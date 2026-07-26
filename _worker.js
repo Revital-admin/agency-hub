@@ -129,10 +129,37 @@ async function handleSendEmail(request, env) {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
 
-  const { to, subject, body, from, replyTo } = payload || {};
+  const { to, subject, body, from, replyTo, attachments } = payload || {};
 
   if (!to || !subject || !body) {
     return jsonResponse({ error: "Missing required field: to, subject, and body are all required" }, 400);
+  }
+
+  // Optional PDF attachments (Welcome Guide / Intake Form emails) -
+  // [{filename, content}] where content is a base64 string with no
+  // "data:...;base64," prefix (the caller strips that before sending).
+  // Resend's attachments field takes exactly this shape, so this is just
+  // validation + pass-through, not any real transformation. Capped at a
+  // handful of small attachments - these are one-to-two-page PDFs, not
+  // arbitrary uploads, so a generous but real ceiling (10MB combined,
+  // base64-encoded) is here to stop a malformed/huge payload from being
+  // silently forwarded to Resend.
+  let validatedAttachments;
+  if (attachments !== undefined) {
+    if (!Array.isArray(attachments)) {
+      return jsonResponse({ error: '"attachments" must be an array' }, 400);
+    }
+    let totalBase64Length = 0;
+    for (const a of attachments) {
+      if (!a || typeof a.filename !== "string" || typeof a.content !== "string" || !a.filename || !a.content) {
+        return jsonResponse({ error: "Each attachment needs a non-empty filename and content (base64 string)" }, 400);
+      }
+      totalBase64Length += a.content.length;
+    }
+    if (totalBase64Length > 10 * 1024 * 1024) {
+      return jsonResponse({ error: "Attachments too large (10MB combined limit)" }, 400);
+    }
+    validatedAttachments = attachments.map(a => ({ filename: a.filename, content: a.content }));
   }
 
   // The "from" address is caller-supplied (e.g. the account manager's own
@@ -154,6 +181,7 @@ async function handleSendEmail(request, env) {
     text: body
   };
   if (replyTo) resendBody.reply_to = replyTo;
+  if (validatedAttachments) resendBody.attachments = validatedAttachments;
 
   try {
     const resendRes = await fetch("https://api.resend.com/emails", {

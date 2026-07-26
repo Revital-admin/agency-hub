@@ -176,4 +176,180 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initial render (before the auto-fill above resolves, so the preview
   // isn't blank while waiting).
   renderPreview();
+
+  // ── Email to Client (real auto-send via Resend, PDF attached) ──
+  // Manual button, not fired automatically at client creation - same
+  // reasoning as the Welcome Guide tool: the account manager fields and
+  // the client's contact email don't exist yet at creation time, so this
+  // has to be a deliberate step once whoever fills the form in (sales or
+  // the account manager) is actually done.
+  const emailToClientBtn = document.getElementById('emailToClientBtn');
+  const emailToClientPanel = document.getElementById('emailToClientPanel');
+  const emailToClientTo = document.getElementById('emailToClientTo');
+  const emailToClientSubject = document.getElementById('emailToClientSubject');
+  const emailToClientBody = document.getElementById('emailToClientBody');
+  const emailToClientOpenBtn = document.getElementById('emailToClientOpenBtn');
+  const emailToClientCopyBtn = document.getElementById('emailToClientCopyBtn');
+  const emailToClientSendBtn = document.getElementById('emailToClientSendBtn');
+  const emailToClientStatus = document.getElementById('emailToClientStatus');
+
+  let currentEmailToClientFrom = null;
+
+  function refreshEmailToClientMailto() {
+    if (!emailToClientOpenBtn || !emailToClientTo) return;
+    emailToClientOpenBtn.href = `mailto:${encodeURIComponent(emailToClientTo.value)}?subject=${encodeURIComponent(emailToClientSubject.value)}&body=${encodeURIComponent(emailToClientBody.value)}`;
+  }
+
+  if (emailToClientBtn) {
+    emailToClientBtn.addEventListener('click', async () => {
+      const client = getParentActiveClient();
+      if (!client) {
+        alert('No active client selected - open this tool from within a client workspace.');
+        return;
+      }
+      const config = client.portalConfig || {};
+      if (!config.clientContactEmail) {
+        alert("This client has no Contact Email set in Client Portal Manager yet - add one before emailing the intake form.");
+        return;
+      }
+
+      const amName = (document.getElementById('amName').value || '').trim();
+      const amEmail = (document.getElementById('amEmail').value || '').trim();
+      const clientName = (document.getElementById('clientName').value || '').trim() || client.name || 'there';
+      const contactName = config.clientContactName || clientName;
+
+      let subject = 'Your Onboarding Form — Revital Productions';
+      let body = `Hi ${contactName.split(' ')[0]},\n\nWelcome aboard! Please find your onboarding intake form attached - once we get it back we can build out your full plan.\n\nThanks,\n${amName || 'The Revital Productions team'}`;
+
+      if (window.parent.fetchEmailTemplateById && window.parent.fillTemplateVars && window.parent.templateHtmlToPlainText) {
+        try {
+          const tpl = await window.parent.fetchEmailTemplateById('tpl-intake-send-17');
+          if (tpl) {
+            const filled = window.parent.fillTemplateVars(tpl.content, {
+              contactName: contactName,
+              clientName: clientName,
+              accountManagerName: amName || 'the Revital Productions team'
+            });
+            subject = tpl.subjectLine || subject;
+            body = window.parent.templateHtmlToPlainText(filled);
+          }
+        } catch (e) {
+          console.warn('Could not load intake email template, using fallback text:', e);
+        }
+      }
+
+      emailToClientTo.value = config.clientContactEmail;
+      emailToClientSubject.value = subject;
+      emailToClientBody.value = body;
+      refreshEmailToClientMailto();
+
+      currentEmailToClientFrom = (amEmail && amName) ? `${amName} <${amEmail}>` : null;
+      if (emailToClientSendBtn) {
+        emailToClientSendBtn.style.display = currentEmailToClientFrom ? 'inline-block' : 'none';
+        emailToClientSendBtn.disabled = false;
+        emailToClientSendBtn.textContent = 'Send with PDF attached';
+      }
+      if (emailToClientStatus) {
+        emailToClientStatus.textContent = currentEmailToClientFrom ? '' : "Add this client's Account Manager Name + Email above to enable sending.";
+        emailToClientStatus.style.color = 'var(--text-muted)';
+      }
+
+      if (emailToClientPanel) {
+        emailToClientPanel.style.display = 'block';
+        emailToClientPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+  }
+
+  [emailToClientTo, emailToClientSubject, emailToClientBody].forEach(el => {
+    if (el) el.addEventListener('input', refreshEmailToClientMailto);
+  });
+
+  if (emailToClientCopyBtn) {
+    emailToClientCopyBtn.addEventListener('click', async () => {
+      const text = `To: ${emailToClientTo.value}\nSubject: ${emailToClientSubject.value}\n\n${emailToClientBody.value}`;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          emailToClientBody.select();
+          document.execCommand('copy');
+        }
+        const original = emailToClientCopyBtn.textContent;
+        emailToClientCopyBtn.textContent = 'Copied!';
+        setTimeout(() => { emailToClientCopyBtn.textContent = original; }, 2000);
+      } catch (err) {
+        console.error('Failed to copy intake email', err);
+        alert('Failed to copy. Please manually select and copy the text.');
+      }
+    });
+  }
+
+  if (emailToClientSendBtn) {
+    emailToClientSendBtn.addEventListener('click', async () => {
+      if (!currentEmailToClientFrom) return;
+      if (typeof html2pdf === 'undefined') {
+        alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
+        return;
+      }
+
+      emailToClientSendBtn.disabled = true;
+      emailToClientSendBtn.textContent = 'Generating PDF...';
+      if (emailToClientStatus) emailToClientStatus.textContent = '';
+
+      const clientNameForFile = ((document.getElementById('clientName').value || 'Client')).replace(/\s+/g, '_');
+      const opt = {
+        margin: 0,
+        filename: `Intake_Request_${clientNameForFile}.pdf`,
+        image: { type: 'jpeg', quality: 0.92 },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+      };
+
+      const exportContainer = document.createElement('div');
+      exportContainer.innerHTML = pdfContainer.innerHTML;
+
+      try {
+        const dataUri = await html2pdf().set(opt).from(exportContainer).outputPdf('datauristring');
+        const base64 = dataUri.slice(dataUri.indexOf(',') + 1);
+        if (!base64) throw new Error('PDF generation produced no data');
+
+        emailToClientSendBtn.textContent = 'Sending...';
+
+        const res = await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: emailToClientTo.value,
+            subject: emailToClientSubject.value,
+            body: emailToClientBody.value,
+            from: currentEmailToClientFrom,
+            attachments: [{ filename: opt.filename, content: base64 }]
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || `Send failed (${res.status})`);
+        }
+
+        emailToClientSendBtn.textContent = 'Sent ✓';
+        if (emailToClientStatus) {
+          emailToClientStatus.textContent = 'Sent successfully with the PDF attached.';
+          emailToClientStatus.style.color = 'var(--color-success, #10b981)';
+        }
+        const client = getParentActiveClient();
+        if (client && window.parent.logAdminActivity) {
+          window.parent.logAdminActivity('Intake form email sent', client.name || client.id);
+        }
+      } catch (e) {
+        console.error('Send intake email failed:', e);
+        emailToClientSendBtn.disabled = false;
+        emailToClientSendBtn.textContent = 'Send with PDF attached';
+        if (emailToClientStatus) {
+          emailToClientStatus.textContent = "Couldn't send automatically (" + e.message + ") - use Copy or \"Open in Email App\" instead.";
+          emailToClientStatus.style.color = 'var(--color-error, #f68d5f)';
+        }
+      }
+    });
+  }
 });
