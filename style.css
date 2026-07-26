@@ -480,7 +480,16 @@ body {
 /* Sidebar Nav Items */
 .sidebar-nav {
   flex: 1;
-  min-height: 0;
+  /* Was min-height:0, which lets a flex item shrink all the way to
+     nothing when siblings (workspace selector + the now 7-button Admin
+     footer) don't all fit in one viewport - confirmed live: on a normal
+     laptop window the whole 60-item nav list was collapsing to 0px
+     height (scrollHeight 1470px, rendered height 0px), so it looked like
+     the tool list had vanished and "Admin" sat directly under "Client
+     Workspace" with the Admin panel itself also cut off. This floor
+     guarantees the nav always keeps a visible, independently-scrollable
+     strip no matter how tall the footer gets. */
+  min-height: 160px;
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
@@ -672,6 +681,15 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* Capped so this box can never claim unlimited height and squeeze
+     .sidebar-nav's flex:1 region down toward its min-height floor -
+     confirmed live that without a cap, this 7-button panel (Team Access,
+     Service Pricing, Subscription Tracker, Activity Log, Export/Import,
+     Delete Client) was eating so much of the sidebar's height that the
+     entire tool nav list rendered at 0px on normal-sized windows. If the
+     panel itself doesn't fit in the cap, it scrolls internally instead. */
+  max-height: 42vh;
+  overflow-y: auto;
 }
 
 .sidebar-footer-label {
