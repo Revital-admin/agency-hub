@@ -674,7 +674,12 @@ body {
 }
 
 /* Sidebar Footer Options — visually a separate "admin bar", not a
-   continuation of the scrollable tool list above it. */
+   continuation of the scrollable tool list above it. Previously fixed-
+   height with its own scrollbar to stop it from squeezing .sidebar-nav
+   down to 0 - now collapsible instead (like the nav sections above it),
+   which solves the same space problem without a permanent scrollbar:
+   collapsed, it takes almost no height at all; expanded, it shows all 7
+   buttons in full, same as the nav sections' own collapse pattern. */
 .sidebar-footer {
   margin-top: auto;
   flex-shrink: 0;
@@ -684,21 +689,36 @@ body {
   padding: 12px;
   display: flex;
   flex-direction: column;
+}
+
+.sidebar-footer-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  /* Capped so this box can never claim unlimited height and squeeze
-     .sidebar-nav's flex:1 region down toward its min-height floor -
-     confirmed live that without a cap, this 7-button panel (Team Access,
-     Service Pricing, Subscription Tracker, Activity Log, Export/Import,
-     Delete Client) was eating so much of the sidebar's height that the
-     entire tool nav list rendered at 0px on normal-sized windows. If the
-     panel itself doesn't fit in the cap, it scrolls internally instead.
-     A 42vh cap was still generous enough to starve the nav down to its
-     160px floor on a normal-height window (confirmed live) - this is a
-     once-in-a-while utility panel, not the primary work area, so it gets
-     a smaller, fixed cap instead of a chunk of the viewport; nav (below)
-     gets a bigger floor and the leftover space. */
-  max-height: 260px;
-  overflow-y: auto;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0 2px 4px;
+  transition: color var(--transition-fast);
+}
+
+.sidebar-footer-toggle:hover .sidebar-footer-label {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.sidebar-footer-toggle .chevron {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.4);
+  /* transform only (no layout-affecting properties) so this never
+     nudges anything sideways - purely a vertical-content show/hide,
+     same as the nav-section chevrons above. */
+  transition: transform var(--transition-fast);
+}
+
+.sidebar-footer.collapsed .sidebar-footer-toggle .chevron {
+  transform: rotate(-90deg);
 }
 
 .sidebar-footer-label {
@@ -707,7 +727,27 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: rgba(255, 255, 255, 0.4);
-  padding: 0 2px 4px;
+}
+
+.sidebar-footer-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+  max-height: 600px;
+  /* Height-only transition, same easing as .nav-section-items - no
+     width/transform-x anywhere in this rule, so expanding/collapsing
+     can only ever grow or shrink vertically in place, never shift the
+     panel sideways. */
+  transition: max-height 0.25s ease, opacity 0.2s ease, margin-top 0.2s ease;
+  opacity: 1;
+  margin-top: 8px;
+}
+
+.sidebar-footer.collapsed .sidebar-footer-items {
+  max-height: 0;
+  opacity: 0;
+  margin-top: 0;
 }
 
 .footer-btn {

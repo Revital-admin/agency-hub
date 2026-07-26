@@ -271,6 +271,7 @@ function boot() {
   fetchCloudflareProfile();
   try { initTabNavigation(); } catch(e) { console.error("TabNav Error:", e); }
   try { initNavSectionToggles(); } catch(e) { console.error("NavSectionToggles Error:", e); }
+  try { initSidebarFooterToggle(); } catch(e) { console.error("SidebarFooterToggle Error:", e); }
   try { initMobileNavigation(); } catch(e) { console.error("MobileNav Error:", e); }
   try { initParentEventListeners(); } catch(e) { console.error("ParentListeners Error:", e); }
   try { initAdminNotifBell(); } catch(e) { console.error("AdminNotifBell Error:", e); }
@@ -1045,6 +1046,18 @@ function initTabNavigation() {
         }
       }
 
+      // Same idea for the Admin panel (Team Access, Service Pricing,
+      // Subscription Tracker, Activity Log) - it's a separate collapsible
+      // block, not a .nav-section, since it's exempt from the section-
+      // level Team Access restriction logic (see applyTeamAccessRestrictions).
+      const parentFooter = btn.closest(".sidebar-footer");
+      if (parentFooter && parentFooter.classList.contains("collapsed")) {
+        parentFooter.classList.remove("collapsed");
+        const footerToggleBtn = parentFooter.querySelector(".sidebar-footer-toggle");
+        if (footerToggleBtn) footerToggleBtn.setAttribute("aria-expanded", "true");
+        saveSidebarFooterCollapsed(false);
+      }
+
       sections.forEach(sec => {
         sec.classList.remove("active");
         if (sec.id === targetTab) {
@@ -1128,6 +1141,52 @@ function initNavSectionToggles() {
       }
       saveCollapsedNavSections(Array.from(current));
     });
+  });
+}
+
+// ── Collapsible Admin Panel (sidebar footer) ──
+// Same pattern as the nav sections above, but tracked separately since
+// the Admin panel isn't a .nav-section (it's deliberately exempt from
+// applyTeamAccessRestrictions' section-hiding loop - see that function's
+// comments - so reusing .nav-section here would risk hiding Export/
+// Import/Delete Client for restricted teammates, which must always stay
+// visible to everyone).
+const SIDEBAR_FOOTER_COLLAPSED_KEY = "REVITAL_HUB_ADMIN_PANEL_COLLAPSED";
+
+function getSidebarFooterCollapsed() {
+  try {
+    return localStorage.getItem(SIDEBAR_FOOTER_COLLAPSED_KEY) === "true";
+  } catch (e) {
+    return false;
+  }
+}
+
+function saveSidebarFooterCollapsed(isCollapsed) {
+  try {
+    localStorage.setItem(SIDEBAR_FOOTER_COLLAPSED_KEY, isCollapsed ? "true" : "false");
+  } catch (e) {}
+}
+
+function initSidebarFooterToggle() {
+  const footer = document.getElementById("sidebarFooterSection");
+  const toggleBtn = document.getElementById("sidebarFooterToggle");
+  if (!footer || !toggleBtn) return;
+
+  // Don't collapse it if the user is currently on one of its own tabs
+  // (Team Access, Service Pricing, Subscription Tracker, Activity Log),
+  // same reasoning as the nav sections - never hide where they already are.
+  const activeBtn = document.querySelector(".nav-item-btn.active");
+  const activeIsInFooter = !!(activeBtn && activeBtn.closest(".sidebar-footer"));
+
+  if (getSidebarFooterCollapsed() && !activeIsInFooter) {
+    footer.classList.add("collapsed");
+    toggleBtn.setAttribute("aria-expanded", "false");
+  }
+
+  toggleBtn.addEventListener("click", () => {
+    const isCollapsed = footer.classList.toggle("collapsed");
+    toggleBtn.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
+    saveSidebarFooterCollapsed(isCollapsed);
   });
 }
 
