@@ -146,6 +146,20 @@ window.addEventListener('error', function(e) {
         </div>
       </div>
 
+      <!-- Open Action Items Widget - syncs from the agency's Meeting Notes
+           Logger (see meeting-notes-logger's "Action Items (Syncs to
+           Client Portal)" field). renderActionItems() in js/app.js was
+           already being called, but this markup never existed, so the
+           function's getElementById lookups silently returned null and
+           it did nothing - action items were captured on the agency
+           side but never actually reached the client. -->
+      <div class="sidebar-widget" id="actionItemsWidget" style="display:none;">
+        <h3>Open Action Items</h3>
+        <div id="actionItemsList" class="action-items-list">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
       <!-- Quick Actions Widget -->
       <div class="sidebar-widget" id="quickActionsWidget" style="display:none;">
         <h3>Quick Actions</h3>

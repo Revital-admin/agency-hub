@@ -55,6 +55,15 @@ async function persist() {
       // straight to a Firestore call bound to the parent page - pass a
       // JSON string instead so the parent parses it in its own realm.
       await window.parent.firebaseSetDocFromJSON(ref, JSON.stringify({ list: referrals }));
+      // agency/referrals lives outside clientsDb (see header comment), so
+      // saving here never goes through the parent's own saveDatabase() -
+      // which is what actually pushes fresh referralSummary data out to
+      // each client's public portal doc (see syncPublicPortalDocs and
+      // fetchReferralSummaries in the parent Hub's app.js). Without this
+      // call, a client's "My Referrals" tab would only pick up a referral
+      // logged here the next time the admin happened to save something
+      // unrelated elsewhere in the Hub - could be hours or days later.
+      if (window.parent.saveDatabase) window.parent.saveDatabase();
       return true;
     } catch (e) {
       console.error("Couldn't save referrals to the cloud:", e);

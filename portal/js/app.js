@@ -1314,7 +1314,25 @@ function renderActionItems() {
   const list = document.getElementById("actionItemsList");
   if (!container || !list) return;
 
-  const items = Array.isArray(clientData.openActionItems) ? clientData.openActionItems : [];
+  // clientData.openActionItems never existed as a field anywhere - the
+  // Hub's Meeting Notes Logger only ever writes to clientData.meetingNotes
+  // ([{id, date, title, summary, actionItems: [{id, text, completed}]}]),
+  // it never separately maintained a flattened "open items" list. Compute
+  // it here instead of expecting the Hub to keep a redundant copy in sync -
+  // this also means completing an item in Meeting Notes Logger correctly
+  // drops it from here without any extra write path.
+  const meetings = Array.isArray(clientData.meetingNotes) ? clientData.meetingNotes : [];
+  const items = [];
+  meetings.forEach(m => {
+    (m.actionItems || []).forEach(ai => {
+      if (!ai.completed) {
+        items.push({ text: ai.text, meetingDate: m.date || m.title || "" });
+      }
+    });
+  });
+  // Most recently logged meeting's open items first.
+  items.sort((a, b) => (b.meetingDate || "").localeCompare(a.meetingDate || ""));
+
   if (items.length === 0) {
     container.style.display = "none";
     return;

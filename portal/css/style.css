@@ -325,6 +325,12 @@ body {
   gap: 10px;
 }
 
+.action-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .check-item {
   display: flex;
   align-items: flex-start;
