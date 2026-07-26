@@ -231,6 +231,7 @@ function renderTable() {
       <td><input type="text" class="notes-input" data-id="${r.id}" value="${(r.notes || '').replace(/"/g, '&quot;')}" placeholder="Notes..."></td>
       <td>
         <div class="row-actions">
+          <button class="send-contract-btn" data-id="${r.id}">Send Contract</button>
           <button class="reset-btn" data-id="${r.id}">Reset for New Cycle</button>
           <button class="delete-btn" data-id="${r.id}">Delete</button>
         </div>
@@ -321,6 +322,9 @@ function wireRowListeners() {
   document.querySelectorAll('.delete-btn').forEach(btn => {
     btn.addEventListener('click', () => deleteRecord(btn.getAttribute('data-id')));
   });
+  document.querySelectorAll('.send-contract-btn').forEach(btn => {
+    btn.addEventListener('click', () => openSendContractPanel(btn.getAttribute('data-id')));
+  });
 }
 
 async function resetCycle(id) {
@@ -352,6 +356,250 @@ async function deleteRecord(id) {
     records = previous;
   }
   renderTable();
+}
+
+/* ── Send Contract (real auto-send via Resend, original PDF attached) ──
+   Deliberately different from the html2pdf-based Email-to-Client flows
+   elsewhere in the Hub (Renewal Tracker, QBR Generator, Change Order
+   Generator): these contract PDFs are pre-built legal documents with
+   their own letterhead/signature-block design, stored as-is in
+   /contracts, and must be sent byte-for-byte unchanged rather than
+   regenerated from an HTML template - so this fetches the real file and
+   base64-encodes it directly instead of rendering a pdfContainer through
+   html2pdf. */
+
+const CONTRACT_TEMPLATES = [
+  { id: 'msa', label: 'Master Service Agreement', file: 'Master Service Agreement - Revital Productions.pdf' },
+  { id: 'independent-contractor', label: 'Independent Contractor Agreement', file: 'Independent Contractor Agreement - Revital Productions.pdf' },
+  { id: 'creative-services', label: 'Creative Services Agreement', file: 'Creative Services Agreement - Revital Productions.pdf' },
+  { id: 'social-media-growth', label: 'Social Media Growth Agreement', file: 'Social Media Growth Agreement - Revital Productions.pdf' },
+  { id: 'nda-msa', label: 'NDA (Tied to MSA)', file: 'NDA - Tied To MSA - Revital Productions.pdf' },
+  { id: 'nda-independent', label: 'NDA (Independent Contract)', file: 'NDA - Independent Contract - Revital Productions.pdf' }
+];
+
+// Records here are tracked by free-text client name (see header comment -
+// a contract often goes out before someone is a full Client Workspace),
+// so look up the matching Client Workspace case-insensitively/trimmed
+// rather than a direct bracket lookup, same as Change Order Generator.
+function findClientRecordByName(name) {
+  if (!isEmbedded || typeof window.parent.getAllClients !== 'function') return null;
+  let clients = {};
+  try { clients = window.parent.getAllClients() || {}; } catch (e) { return null; }
+  const target = (name || '').trim().toLowerCase();
+  const key = Object.keys(clients).find(k => k.trim().toLowerCase() === target);
+  return key ? clients[key] : null;
+}
+
+async function fetchPdfAsBase64(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Couldn't load ${url} (${res.status})`);
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = () => reject(reader.error || new Error('Failed to read PDF'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+const sendContractPanel = el('sendContractPanel');
+const sendContractTemplate = el('sendContractTemplate');
+const sendContractTo = el('sendContractTo');
+const sendContractSubject = el('sendContractSubject');
+const sendContractBody = el('sendContractBody');
+const sendContractOpenBtn = el('sendContractOpenBtn');
+const sendContractCopyBtn = el('sendContractCopyBtn');
+const sendContractSendBtn = el('sendContractSendBtn');
+const sendContractStatus = el('sendContractStatus');
+const sendContractCloseBtn = el('sendContractCloseBtn');
+
+let currentContractContext = null; // { record, from }
+
+function populateContractTemplateSelect() {
+  if (!sendContractTemplate) return;
+  sendContractTemplate.innerHTML = CONTRACT_TEMPLATES.map(t => `<option value="${t.id}">${t.label}</option>`).join('');
+}
+
+function refreshSendContractMailto() {
+  if (!sendContractOpenBtn || !sendContractTo) return;
+  sendContractOpenBtn.href = `mailto:${encodeURIComponent(sendContractTo.value)}?subject=${encodeURIComponent(sendContractSubject.value)}&body=${encodeURIComponent(sendContractBody.value)}`;
+}
+
+if (sendContractCloseBtn) {
+  sendContractCloseBtn.addEventListener('click', () => {
+    if (sendContractPanel) sendContractPanel.style.display = 'none';
+  });
+}
+
+[sendContractTo, sendContractSubject, sendContractBody].forEach(elx => {
+  if (elx) elx.addEventListener('input', refreshSendContractMailto);
+});
+
+if (sendContractCopyBtn) {
+  sendContractCopyBtn.addEventListener('click', async () => {
+    const text = `To: ${sendContractTo.value}\nSubject: ${sendContractSubject.value}\n\n${sendContractBody.value}`;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        sendContractBody.select();
+        document.execCommand('copy');
+      }
+      const original = sendContractCopyBtn.textContent;
+      sendContractCopyBtn.textContent = 'Copied!';
+      setTimeout(() => { sendContractCopyBtn.textContent = original; }, 2000);
+    } catch (err) {
+      console.error('Failed to copy contract email', err);
+      alert('Failed to copy. Please manually select and copy the text.');
+    }
+  });
+}
+
+async function buildContractEmailText(clientName, contactName, contractLabel, amName) {
+  let subject = `Your Contract with Revital Productions — ${clientName}`;
+  let body = `Hi ${(contactName || clientName).split(' ')[0]},\n\nAttached is your ${contractLabel} for ${clientName} — please review, sign, and return at your earliest convenience.\n\nIf anything in the agreement needs clarifying, just reply here and I'm happy to walk through it.\n\nThanks,\n${amName || 'The Revital Productions team'}`;
+
+  if (isEmbedded && window.parent.fetchEmailTemplateById && window.parent.fillTemplateVars && window.parent.templateHtmlToPlainText) {
+    try {
+      const tpl = await window.parent.fetchEmailTemplateById('tpl-contract-send-21');
+      if (tpl) {
+        const vars = { contactName: contactName || clientName, clientName, contractName: contractLabel, accountManagerName: amName || 'The Revital Productions team' };
+        subject = window.parent.fillTemplateVars(tpl.subjectLine || subject, vars);
+        body = window.parent.templateHtmlToPlainText(window.parent.fillTemplateVars(tpl.content, vars));
+      }
+    } catch (e) {
+      console.warn('Could not load contract email template, using fallback text:', e);
+    }
+  }
+  return { subject, body };
+}
+
+async function openSendContractPanel(id) {
+  const r = findRecord(id);
+  if (!r) return;
+
+  const client = findClientRecordByName(r.clientName);
+  const config = (client && client.portalConfig) || {};
+  const amName = (config.accountManagerName || '').trim();
+  const amEmail = (config.accountManagerEmail || '').trim();
+  const contactName = config.clientContactName || r.clientName;
+
+  populateContractTemplateSelect();
+  const selectedTemplate = CONTRACT_TEMPLATES[0];
+  const { subject, body } = await buildContractEmailText(r.clientName, contactName, selectedTemplate.label, amName);
+
+  sendContractTo.value = config.clientContactEmail || '';
+  sendContractSubject.value = subject;
+  sendContractBody.value = body;
+  refreshSendContractMailto();
+
+  currentContractContext = {
+    record: r,
+    contactName,
+    amName,
+    from: (amEmail && amName) ? `${amName} <${amEmail}>` : null
+  };
+
+  if (sendContractStatus) {
+    sendContractStatus.textContent = currentContractContext.from
+      ? (config.clientContactEmail ? '' : `No Contact Email on file for ${r.clientName} yet — enter one above before sending.`)
+      : `Add ${r.clientName}'s Account Manager Name + Email in Client Portal Manager to enable sending.`;
+    sendContractStatus.style.color = 'var(--text-muted)';
+  }
+  if (sendContractSendBtn) {
+    sendContractSendBtn.disabled = !currentContractContext.from;
+    sendContractSendBtn.textContent = 'Send with PDF attached';
+  }
+
+  if (sendContractPanel) {
+    sendContractPanel.style.display = 'block';
+    sendContractPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+if (sendContractTemplate) {
+  sendContractTemplate.addEventListener('change', async () => {
+    if (!currentContractContext) return;
+    const t = CONTRACT_TEMPLATES.find(x => x.id === sendContractTemplate.value) || CONTRACT_TEMPLATES[0];
+    const { record, contactName, amName } = currentContractContext;
+    const { subject, body } = await buildContractEmailText(record.clientName, contactName, t.label, amName);
+    sendContractSubject.value = subject;
+    sendContractBody.value = body;
+    refreshSendContractMailto();
+  });
+}
+
+if (sendContractSendBtn) {
+  sendContractSendBtn.addEventListener('click', async () => {
+    if (!currentContractContext || !currentContractContext.from) return;
+    if (!sendContractTo.value.trim()) {
+      if (sendContractStatus) {
+        sendContractStatus.textContent = 'Enter a recipient email address first.';
+        sendContractStatus.style.color = 'var(--color-error, #f68d5f)';
+      }
+      return;
+    }
+
+    const t = CONTRACT_TEMPLATES.find(x => x.id === sendContractTemplate.value) || CONTRACT_TEMPLATES[0];
+    const { record } = currentContractContext;
+
+    sendContractSendBtn.disabled = true;
+    sendContractSendBtn.textContent = 'Loading contract...';
+    if (sendContractStatus) sendContractStatus.textContent = '';
+
+    try {
+      const base64 = await fetchPdfAsBase64('../contracts/' + encodeURIComponent(t.file));
+      if (!base64) throw new Error('Contract PDF produced no data');
+
+      sendContractSendBtn.textContent = 'Sending...';
+
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: sendContractTo.value,
+          subject: sendContractSubject.value,
+          body: sendContractBody.value,
+          from: currentContractContext.from,
+          attachments: [{ filename: t.file, content: base64 }]
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `Send failed (${res.status})`);
+      }
+
+      sendContractSendBtn.textContent = 'Sent ✓';
+      if (sendContractStatus) {
+        sendContractStatus.textContent = `Sent successfully with ${t.label} attached.`;
+        sendContractStatus.style.color = 'var(--color-success, #10b981)';
+      }
+
+      // Reflect the send in the tracker itself, same as flipping the
+      // Contract status dropdown by hand.
+      if (record.contractStatus === 'Not Sent') {
+        record.contractStatus = 'Sent';
+        record.contractSentDate = record.contractSentDate || todayStr();
+        await persist();
+        renderTable();
+      }
+
+      if (isEmbedded && window.parent.logAdminActivity) {
+        window.parent.logAdminActivity('Contract sent for signature', record.clientName);
+      }
+      if (isEmbedded && window.parent.showBanner) {
+        window.parent.showBanner('success', `${t.label} emailed to ${record.clientName}.`);
+      }
+    } catch (e) {
+      console.error('Send contract email failed:', e);
+      sendContractSendBtn.disabled = false;
+      sendContractSendBtn.textContent = 'Send with PDF attached';
+      if (sendContractStatus) {
+        sendContractStatus.textContent = "Couldn't send automatically (" + e.message + ") - use Copy or \"Open in Email App\" instead.";
+        sendContractStatus.style.color = 'var(--color-error, #f68d5f)';
+      }
+    }
+  });
 }
 
 async function addTrackedClient() {

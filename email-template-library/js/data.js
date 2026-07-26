@@ -258,5 +258,15 @@ const EMAIL_TEMPLATES = [
     format: "html",
     date: "2026-07-21",
     content: "<p>Hi {{contactName}},</p><p>We've really loved working with {{clientName}} and the results we've seen together. We put together in-depth case studies for our best client partnerships — it's great exposure for your brand too since it gets your company featured in our marketing.</p><p>Would you be open to sharing a few sentences about your experience? I've set up a quick spot in your client portal under \"Leave a Testimonial\" where you can type it directly whenever's convenient — takes less than five minutes.</p><p>No pressure at all, and thank you again for the trust.</p>"
+  },
+  {
+    id: "tpl-contract-send-21",
+    category: "Contracts",
+    templateNumber: "#21",
+    title: "Contract Sent for Signature",
+    subjectLine: "Your Contract with Revital Productions — {{clientName}}",
+    format: "html",
+    date: "2026-07-26",
+    content: "<p>Hi {{contactName}},</p><p>Attached is your {{contractName}} for {{clientName}} — please review, sign, and return at your earliest convenience.</p><p>If anything in the agreement needs clarifying, just reply here and I'm happy to walk through it.</p><p>Thanks,<br>{{accountManagerName}}</p>"
   }
 ];

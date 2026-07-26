@@ -121,5 +121,6 @@
 .row-actions button.paid-btn:hover { border-color: #22c55e; color: #22c55e; box-shadow: 0 3px 8px rgba(34, 197, 94, 0.2); }
 .row-actions button.reset-btn:hover { border-color: #ef4444; color: #ef4444; box-shadow: 0 3px 8px rgba(239, 68, 68, 0.2); }
 .row-actions button.delete-btn:hover { border-color: #ef4444; color: #ef4444; box-shadow: 0 3px 8px rgba(239, 68, 68, 0.2); }
+.row-actions button.send-contract-btn:hover { border-color: #f68d5f; color: #f68d5f; box-shadow: 0 3px 8px rgba(246, 141, 95, 0.2); }
 
 .empty-state { text-align: center; padding: 40px 20px; color: var(--color-text-muted); font-size: 14px; }
