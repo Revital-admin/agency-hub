@@ -5,7 +5,7 @@
      - client.weeklyCheckins[0] (clientsDb, via getAllClients()) for
        Health rating + last check-in date - same data the per-client
        Dashboard's "Client Health" card already reads.
-     - agency/contractInvoiceLog for contractRenewalDate per client.
+     - agency/contractInvoices for contractRenewalDate per client.
      - agency/revisionFeedbackLog for open (unresolved) revision counts
        per client.
    Nothing here writes anywhere - it's a lens over data owned by those
@@ -49,7 +49,14 @@ function getClients() {
 
 function listenToContractLog() {
   if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb || !window.parent.firebaseOnSnapshot) return;
-  const ref = window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "contractInvoiceLog");
+  // Was pointed at "contractInvoiceLog", a doc name nothing in the Hub ever
+  // writes to - Contract & Invoice Tracker (and everything else that reads
+  // this data: fetchBillingSummaries in the parent app.js, QBR Generator)
+  // all use "contractInvoices". That mismatch meant contractRecords was
+  // always empty, so every row's Renewal column silently showed "--" and
+  // the "Renewals Due" summary count was always 0, no matter how many
+  // renewals were actually coming up.
+  const ref = window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "contractInvoices");
   window.parent.firebaseOnSnapshot(ref, (docSnap) => {
     const data = docSnap && docSnap.exists ? docSnap.data() : null;
     contractRecords = (data && data.list) || [];

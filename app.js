@@ -120,7 +120,10 @@ function initAdminAuthGate() {
 // docs to this list so Export Full Backup actually captures them.
 const AGENCY_BACKUP_DOC_NAMES = [
   "accessLoginLog", "activityLog", "adAccountLog", "adminActivityLog",
-  "adminNotifications", "callSheets", "changeOrders", "contractInvoiceLog",
+  "adminNotifications", "callSheets", "changeOrders",
+  // "contractInvoiceLog" removed - it was never a real doc anything writes
+  // to (see agency-health-dashboard/js/app.js fix, same date); the actual
+  // one every tool reads/writes is "contractInvoices" below.
   "contractInvoices", "emailTemplates", "proposalFollowUps", "rawFootageLog",
   "referrals", "releaseForms", "revisionFeedbackLog", "runOfShow",
   "servicePricing", "sops", "subscriptionTracker", "teamAccess",
