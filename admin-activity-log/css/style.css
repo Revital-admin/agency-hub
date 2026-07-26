@@ -79,7 +79,13 @@
 .module-body {
   margin: 0;
   padding: 0;
-  background: var(--color-surface);
+  /* Was var(--color-surface) - an opaque fill that hid the Hub's shared
+     .bg-grid/.bg-glow ambient background, leaving this tool looking flat
+     next to Service Pricing Admin (another Admin-panel tool that
+     deliberately lets the parent's background show through). .step-card
+     elements below already have their own opaque background, so this
+     only affects the empty space around them. */
+  background: transparent;
   color: var(--color-text-primary);
   font-family: 'Inter', sans-serif;
   min-height: 100vh;

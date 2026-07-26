@@ -1,3 +1,13 @@
+/* ../style.css's generic `body{background-color:var(--bg-main)}` paints
+   this iframe fully opaque. Removed this tool's own local .bg-grid div
+   (index.html) and made body transparent instead, so the Hub's shared
+   .bg-grid + .bg-glow show through - matches Service Pricing Admin
+   (another Admin-panel tool) instead of a flat solid fill with its own
+   separate, slightly-misaligned grid copy layered on top. */
+body {
+  background: transparent;
+}
+
 .container-wide { max-width: 1320px; }
 .container { position: relative; z-index: 1; margin: 0 auto; padding: 3rem 1.5rem 4rem; }
 

@@ -1,3 +1,13 @@
+/* ../style.css's generic `body{background-color:var(--bg-main)}` paints
+   this iframe fully opaque, hiding the Hub's own ambient .bg-grid/.bg-glow
+   that Service Pricing Admin (a sibling tool in the same Admin panel)
+   deliberately lets show through - made every other Admin tool look flat
+   next to it. Card/table backgrounds below are already opaque on their
+   own (.step-card etc.), so this only affects the empty space around them. */
+body {
+  background: transparent;
+}
+
 .form-status {
   display: inline-block;
   margin-left: 12px;
