@@ -477,10 +477,11 @@ function renderContractLibrary() {
   list.innerHTML = contractLibrary.map(t => `
     <div class="contract-library-row" data-id="${t.id}">
       <div>
-        <div class="contract-library-name">${escapeHtmlLocal(t.label)}</div>
+        <div class="contract-library-name">${escapeHtmlLocal(t.label)}${t.needsAnchorReview ? '<span class="contract-needs-review-badge">Needs Review</span>' : ''}</div>
         <div class="contract-library-meta">${escapeHtmlLocal(t.filename || '')} &middot; uploaded ${t.uploadedAt || '--'}</div>
       </div>
       <div class="contract-library-actions">
+        ${t.needsAnchorReview ? `<button type="button" class="review-anchor-btn" data-id="${t.id}">Review</button>` : ''}
         <label class="contract-replace-label">
           Replace
           <input type="file" accept="application/pdf" data-id="${t.id}" class="replace-contract-input" style="display:none;">
@@ -500,6 +501,18 @@ async function uploadPdfToR2(file) {
   return data.key;
 }
 
+// Same as uploadPdfToR2 but for bytes we've already processed in-memory
+// (the anchor-tagged version) rather than the raw File object.
+async function uploadBytesToR2(bytes, filename) {
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const form = new FormData();
+  form.append('file', blob, filename);
+  const res = await fetch('/api/contracts', { method: 'POST', body: form });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) throw new Error(data.error || `Upload failed (${res.status})`);
+  return data.key;
+}
+
 function deleteR2Object(key) {
   // Best-effort cleanup - if this fails, an orphaned object is left in
   // R2, which costs a few cents of storage but breaks nothing, so it's
@@ -507,6 +520,94 @@ function deleteR2Object(key) {
   fetch('/api/contracts/' + encodeURIComponent(key), { method: 'DELETE' }).catch(e => {
     console.warn('Could not delete old contract file from storage (non-fatal):', e);
   });
+}
+
+/* ── Auto-detect + bake DocuSign anchor tags on upload/replace ──
+   Every contract seen so far follows the same signature-block layout:
+   the Client (or "Individual"/Model/Property Owner/etc.) signs in the
+   LEFT column, Revital Productions signs in the RIGHT column, and the
+   Client's column usually has one extra row (Title/Company), so its
+   Date line sits lower on the page than Revital's. detectClientAnchors
+   scans a PDF's text positions (via pdf.js) looking for that pattern on
+   the LAST page it appears on (the signature block is always the final
+   section) and returns the exact coordinates if found. bakeAnchorsAtDetection
+   then stamps real, invisible [[SIG_CLIENT]]/[[DATE_CLIENT]] text at
+   those coordinates via pdf-lib - the same anchor strings the 6
+   built-ins and every other template use, read by
+   handleDocusignSendEnvelope in _worker.js.
+
+   This is a heuristic, not a guarantee - an unusually laid-out document
+   could get the wrong result, which is exactly why a newly-tagged entry
+   is marked needsAnchorReview instead of being made DocuSign-eligible
+   immediately (see the review panel below). If detection fails outright
+   (pattern not found), the document is just uploaded as a normal flat
+   PDF, same as before this feature existed. */
+
+let pdfjsWorkerConfigured = false;
+function ensurePdfjsWorker() {
+  if (pdfjsWorkerConfigured) return;
+  const lib = window.pdfjsLib || window['pdfjs-dist/build/pdf'];
+  if (lib && lib.GlobalWorkerOptions) {
+    lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    pdfjsWorkerConfigured = true;
+  }
+}
+
+async function detectClientAnchors(bytes) {
+  ensurePdfjsWorker();
+  const lib = window.pdfjsLib || window['pdfjs-dist/build/pdf'];
+  if (!lib) return null;
+  // .slice() - pdf.js's worker transport can transfer/detach the buffer
+  // backing a Uint8Array passed as `data`, which would corrupt the
+  // caller's original `bytes` before it gets used again for baking.
+  const doc = await lib.getDocument({ data: bytes.slice() }).promise;
+
+  for (let p = doc.numPages; p >= 1; p--) {
+    const page = await doc.getPage(p);
+    const content = await page.getTextContent();
+    const items = content.items
+      .filter(it => it.str && it.str.trim())
+      .map(it => ({ str: it.str.trim(), x: it.transform[4], y: it.transform[5] }));
+
+    const sigItems = items.filter(it => it.str === 'Signature');
+    const dateItems = items.filter(it => it.str === 'Date');
+    if (sigItems.length < 2 || dateItems.length < 2) continue;
+
+    sigItems.sort((a, b) => a.x - b.x);
+    const clientSig = sigItems[0];
+    const midX = (sigItems[0].x + sigItems[sigItems.length - 1].x) / 2;
+
+    // Same column as the client's Signature, and below it on the page
+    // (smaller y = lower, since PDF y increases upward) - among those,
+    // the LOWEST one, since the client's block usually runs one row
+    // longer than Revital's.
+    const leftDates = dateItems.filter(d => d.x < midX && d.y < clientSig.y);
+    if (!leftDates.length) continue;
+    leftDates.sort((a, b) => a.y - b.y);
+    const clientDate = leftDates[0];
+
+    return {
+      page: p - 1, // 0-indexed, matches pdf-lib's getPages()
+      sigX: clientSig.x,
+      sigY: clientSig.y,
+      dateX: clientDate.x,
+      dateY: clientDate.y
+    };
+  }
+  return null;
+}
+
+async function bakeAnchorsAtDetection(bytes, detection) {
+  const { PDFDocument, StandardFonts, rgb } = PDFLib;
+  const pdfDoc = await PDFDocument.load(bytes);
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const page = pdfDoc.getPages()[detection.page];
+  const place = (text, x, y) => {
+    page.drawText(text, { x, y, size: 1, font, color: rgb(1, 1, 1), opacity: 0 });
+  };
+  place('[[SIG_CLIENT]]', detection.sigX, detection.sigY);
+  place('[[DATE_CLIENT]]', detection.dateX, detection.dateY);
+  return await pdfDoc.save();
 }
 
 const newContractLabel = el('newContractLabel');
@@ -535,10 +636,32 @@ if (uploadContractBtn) {
     }
 
     uploadContractBtn.disabled = true;
-    uploadContractBtn.textContent = 'Uploading...';
+    uploadContractBtn.textContent = 'Analyzing...';
     try {
-      const key = await uploadPdfToR2(file);
-      contractLibrary.push({ id: uid(), label, r2Key: key, filename: file.name, uploadedAt: todayStr() });
+      const origBytes = new Uint8Array(await file.arrayBuffer());
+      let detection = null;
+      let uploadBytes = origBytes;
+      try {
+        detection = await detectClientAnchors(origBytes);
+        if (detection) uploadBytes = await bakeAnchorsAtDetection(origBytes, detection);
+      } catch (detErr) {
+        console.warn('DocuSign anchor auto-detection failed (non-fatal - uploading as a flat PDF):', detErr);
+        detection = null;
+        uploadBytes = origBytes;
+      }
+
+      uploadContractBtn.textContent = 'Uploading...';
+      const key = await uploadBytesToR2(uploadBytes, file.name);
+      contractLibrary.push({
+        id: uid(),
+        label,
+        r2Key: key,
+        filename: file.name,
+        uploadedAt: todayStr(),
+        docusignAnchorTags: false,
+        needsAnchorReview: !!detection,
+        anchorDetection: detection || null
+      });
       const ok = await persistContractLibrary();
       if (!ok) { contractLibrary.pop(); throw new Error('Could not save — try again'); }
       newContractLabel.value = '';
@@ -546,7 +669,12 @@ if (uploadContractBtn) {
       refreshNewContractFileName();
       renderContractLibrary();
       populateContractTemplateSelect();
-      setContractLibraryStatus(`Added "${label}".`, false);
+      setContractLibraryStatus(
+        detection
+          ? `Added "${label}" — DocuSign signature/date lines auto-detected. Click Review to confirm placement before it's sendable via DocuSign.`
+          : `Added "${label}". Couldn't auto-detect signature lines for DocuSign, so it's a flat PDF only for now — let me know if you want it DocuSign-enabled and I'll wire it up by hand.`,
+        false
+      );
     } catch (e) {
       console.error('Contract upload failed:', e);
       setContractLibraryStatus("Couldn't upload: " + e.message, true);
@@ -571,16 +699,38 @@ document.addEventListener('change', async (e) => {
   setContractLibraryStatus(`Replacing "${entry.label}"...`, false);
   const oldKey = entry.r2Key;
   try {
-    const key = await uploadPdfToR2(file);
+    const origBytes = new Uint8Array(await file.arrayBuffer());
+    let detection = null;
+    let uploadBytes = origBytes;
+    try {
+      detection = await detectClientAnchors(origBytes);
+      if (detection) uploadBytes = await bakeAnchorsAtDetection(origBytes, detection);
+    } catch (detErr) {
+      console.warn('DocuSign anchor auto-detection failed on replace (non-fatal):', detErr);
+      detection = null;
+      uploadBytes = origBytes;
+    }
+
+    const key = await uploadBytesToR2(uploadBytes, file.name);
     entry.r2Key = key;
     entry.filename = file.name;
     entry.uploadedAt = todayStr();
+    // The old file's DocuSign approval doesn't carry over to a
+    // different file - re-detect and require review again.
+    entry.docusignAnchorTags = false;
+    entry.needsAnchorReview = !!detection;
+    entry.anchorDetection = detection || null;
     const ok = await persistContractLibrary();
     if (!ok) throw new Error('Could not save — try again');
     deleteR2Object(oldKey);
     renderContractLibrary();
     populateContractTemplateSelect();
-    setContractLibraryStatus(`Replaced "${entry.label}".`, false);
+    setContractLibraryStatus(
+      detection
+        ? `Replaced "${entry.label}" — DocuSign signature/date lines auto-detected. Click Review to confirm placement before it's sendable via DocuSign.`
+        : `Replaced "${entry.label}". Couldn't auto-detect signature lines for DocuSign this time — it's a flat PDF only for now.`,
+      false
+    );
   } catch (err) {
     console.error('Contract replace failed:', err);
     setContractLibraryStatus("Couldn't replace: " + err.message, true);
@@ -604,6 +754,161 @@ document.addEventListener('click', async (e) => {
   renderContractLibrary();
   populateContractTemplateSelect();
 });
+
+/* ── Anchor review panel ──
+   Renders the detected page (via pdf.js, straight from the actual
+   uploaded/tagged file in R2) with a marker circle at exactly the
+   coordinates the invisible [[SIG_CLIENT]]/[[DATE_CLIENT]] tags were
+   placed - a human can then confirm or reject the auto-detection before
+   it becomes usable in Send Contract's DocuSign flow. */
+
+const anchorReviewPanel = el('anchorReviewPanel');
+const anchorReviewLabel = el('anchorReviewLabel');
+const anchorReviewCanvas = el('anchorReviewCanvas');
+const anchorReviewCloseBtn = el('anchorReviewCloseBtn');
+const anchorReviewApproveBtn = el('anchorReviewApproveBtn');
+const anchorReviewRejectBtn = el('anchorReviewRejectBtn');
+const anchorReviewStatus = el('anchorReviewStatus');
+let currentAnchorReviewId = null;
+
+if (anchorReviewCloseBtn) {
+  anchorReviewCloseBtn.addEventListener('click', () => {
+    if (anchorReviewPanel) anchorReviewPanel.style.display = 'none';
+    currentAnchorReviewId = null;
+  });
+}
+
+async function openAnchorReview(entry) {
+  currentAnchorReviewId = entry.id;
+  if (anchorReviewLabel) anchorReviewLabel.textContent = entry.label;
+  if (anchorReviewStatus) anchorReviewStatus.textContent = '';
+  if (anchorReviewPanel) {
+    anchorReviewPanel.style.display = 'block';
+    anchorReviewPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  if (anchorReviewApproveBtn) { anchorReviewApproveBtn.disabled = true; anchorReviewApproveBtn.textContent = 'Loading preview...'; }
+  if (anchorReviewRejectBtn) anchorReviewRejectBtn.disabled = true;
+
+  try {
+    const detection = entry.anchorDetection;
+    if (!detection) throw new Error('No detection data saved for this document.');
+
+    const res = await fetch('/api/contracts/' + encodeURIComponent(entry.r2Key));
+    if (!res.ok) throw new Error(`Couldn't load the file (${res.status})`);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+
+    ensurePdfjsWorker();
+    const lib = window.pdfjsLib || window['pdfjs-dist/build/pdf'];
+    const doc = await lib.getDocument({ data: bytes }).promise;
+    const page = await doc.getPage(detection.page + 1);
+    const scale = 1.4;
+    const viewport = page.getViewport({ scale });
+    anchorReviewCanvas.width = viewport.width;
+    anchorReviewCanvas.height = viewport.height;
+    const ctx = anchorReviewCanvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+
+    // detection.sigX/sigY/dateX/dateY are unscaled PDF points (bottom-left
+    // origin) - convert to this canvas's pixel space (top-left origin,
+    // scaled) to draw the markers in the right spot.
+    const toCanvas = (x, y) => ({ cx: x * scale, cy: viewport.height - (y * scale) });
+    const sigPt = toCanvas(detection.sigX, detection.sigY);
+    const datePt = toCanvas(detection.dateX, detection.dateY);
+
+    const drawMarker = (pt, color) => {
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = color;
+      ctx.beginPath();
+      ctx.arc(pt.cx, pt.cy, 10, 0, Math.PI * 2);
+      ctx.stroke();
+    };
+    drawMarker(sigPt, '#f68d5f');
+    drawMarker(datePt, '#6366f1');
+
+    if (anchorReviewApproveBtn) { anchorReviewApproveBtn.disabled = false; anchorReviewApproveBtn.textContent = 'Looks correct — enable for DocuSign'; }
+    if (anchorReviewRejectBtn) anchorReviewRejectBtn.disabled = false;
+  } catch (e) {
+    console.error('Could not render the anchor review preview:', e);
+    if (anchorReviewStatus) {
+      anchorReviewStatus.textContent = "Couldn't load the preview: " + e.message;
+      anchorReviewStatus.style.color = 'var(--color-error, #f68d5f)';
+    }
+    if (anchorReviewRejectBtn) anchorReviewRejectBtn.disabled = false;
+  }
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.matches('.review-anchor-btn')) return;
+  const id = e.target.getAttribute('data-id');
+  const entry = contractLibrary.find(t => t.id === id);
+  if (!entry) return;
+  openAnchorReview(entry);
+});
+
+if (anchorReviewApproveBtn) {
+  anchorReviewApproveBtn.addEventListener('click', async () => {
+    if (!currentAnchorReviewId) return;
+    const entry = contractLibrary.find(t => t.id === currentAnchorReviewId);
+    if (!entry) return;
+    anchorReviewApproveBtn.disabled = true;
+    if (anchorReviewRejectBtn) anchorReviewRejectBtn.disabled = true;
+    try {
+      entry.docusignAnchorTags = true;
+      entry.needsAnchorReview = false;
+      const ok = await persistContractLibrary();
+      if (!ok) throw new Error('Could not save — try again');
+      renderContractLibrary();
+      populateContractTemplateSelect();
+      if (anchorReviewPanel) anchorReviewPanel.style.display = 'none';
+      currentAnchorReviewId = null;
+      setContractLibraryStatus(`"${entry.label}" is now enabled for DocuSign.`, false);
+    } catch (err) {
+      entry.docusignAnchorTags = false;
+      entry.needsAnchorReview = true;
+      if (anchorReviewStatus) {
+        anchorReviewStatus.textContent = "Couldn't save: " + err.message;
+        anchorReviewStatus.style.color = 'var(--color-error, #f68d5f)';
+      }
+    } finally {
+      anchorReviewApproveBtn.disabled = false;
+      if (anchorReviewRejectBtn) anchorReviewRejectBtn.disabled = false;
+    }
+  });
+}
+
+if (anchorReviewRejectBtn) {
+  anchorReviewRejectBtn.addEventListener('click', async () => {
+    if (!currentAnchorReviewId) return;
+    const entry = contractLibrary.find(t => t.id === currentAnchorReviewId);
+    if (!entry) return;
+    if (anchorReviewApproveBtn) anchorReviewApproveBtn.disabled = true;
+    anchorReviewRejectBtn.disabled = true;
+    try {
+      // The invisible tags stay baked into the file either way (they're
+      // harmless), but with needsAnchorReview/docusignAnchorTags both
+      // false the document just behaves as a normal flat-PDF-only
+      // attachment going forward - the Review button won't show again.
+      entry.needsAnchorReview = false;
+      entry.docusignAnchorTags = false;
+      const ok = await persistContractLibrary();
+      if (!ok) throw new Error('Could not save — try again');
+      renderContractLibrary();
+      populateContractTemplateSelect();
+      if (anchorReviewPanel) anchorReviewPanel.style.display = 'none';
+      currentAnchorReviewId = null;
+      setContractLibraryStatus(`"${entry.label}" kept as a flat PDF only (not DocuSign-enabled).`, false);
+    } catch (err) {
+      entry.needsAnchorReview = true;
+      if (anchorReviewStatus) {
+        anchorReviewStatus.textContent = "Couldn't save: " + err.message;
+        anchorReviewStatus.style.color = 'var(--color-error, #f68d5f)';
+      }
+    } finally {
+      if (anchorReviewApproveBtn) anchorReviewApproveBtn.disabled = false;
+      anchorReviewRejectBtn.disabled = false;
+    }
+  });
+}
 
 function resolveSelectedContractTemplate(value) {
   if (!value) return null;

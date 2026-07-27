@@ -233,6 +233,30 @@
   border-color: var(--color-border-md);
 }
 .contract-library-actions .delete-contract-btn:hover { border-color: #ef4444; color: #ef4444; }
+/* "Needs Review" badge - shown on a contract whose DocuSign anchor tags
+   were auto-detected but not yet confirmed (see needsAnchorReview,
+   js/app.js). It isn't selectable in Send Contract's DocuSign flow until
+   someone approves it via the Review button/anchorReviewPanel. */
+.contract-needs-review-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(246, 141, 95, 0.15);
+  color: #f68d5f;
+  border: 1px solid rgba(246, 141, 95, 0.35);
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.contract-library-actions .review-anchor-btn {
+  background: rgba(246, 141, 95, 0.12);
+  border-color: rgba(246, 141, 95, 0.4);
+  color: #f68d5f;
+}
+.contract-library-actions .review-anchor-btn:hover { background: rgba(246, 141, 95, 0.2); }
 .contract-library-add { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .contract-library-add input[type="text"] { flex: 1; min-width: 220px; }
 /* Native <input type="file"> can't be restyled directly (it's an OS

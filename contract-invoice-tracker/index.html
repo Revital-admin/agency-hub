@@ -5,8 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Contract & Invoice Status Tracker</title>
 <link rel="stylesheet" href="../style.css?v=2">
-<link rel="stylesheet" href="css/style.css?v=9">
+<link rel="stylesheet" href="css/style.css?v=10">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+<!-- pdf.js: reads text positions out of a newly uploaded/replaced contract
+     so we can auto-detect where the Client's Signature/Date lines are.
+     pdf-lib: bakes the invisible [[SIG_CLIENT]]/[[DATE_CLIENT]] DocuSign
+     anchor tags at those detected coordinates, and renders the review
+     panel's preview canvas. See detectClientAnchors/bakeAnchorsAtDetection
+     in js/app.js. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 </head>
 <body>
 <div class="bg-grid"></div>
@@ -95,6 +103,27 @@ Choose File
 <div id="contractLibraryStatus" style="font-size: 0.8rem; margin-top: 8px;"></div>
 </div>
 
+<!-- Anchor review panel - shown after a new/replaced upload gets its
+     DocuSign [[SIG_CLIENT]]/[[DATE_CLIENT]] tags auto-detected and baked
+     in (see detectClientAnchors/bakeAnchorsAtDetection in js/app.js). The
+     document is NOT eligible for DocuSign until this is approved here -
+     the canvas renders the detected page with markers over where the
+     tags landed, so a bad auto-detection can be caught before anything
+     ever gets sent to a real client for signature. -->
+<div id="anchorReviewPanel" style="display:none; max-width: 720px; margin: 0 auto 24px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md, 10px); padding: 20px; position: relative;">
+<button type="button" id="anchorReviewCloseBtn" aria-label="Close" style="position: absolute; top: 14px; right: 14px; background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 4px;">&times;</button>
+<p style="font-size: 0.85rem; margin-bottom: 4px; padding-right: 24px;">Reviewing DocuSign placement for "<strong id="anchorReviewLabel"></strong>"</p>
+<p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">The <span style="color:#f68d5f; font-weight:600;">red circle</span> should sit on the Client's <strong>Signature</strong> line and the <span style="color:#6366f1; font-weight:600;">blue circle</span> on the Client's <strong>Date</strong> line. If either looks wrong (or missing), reject it — the document still works fine as a flat PDF attachment either way.</p>
+<div id="anchorReviewCanvasWrap" style="overflow:auto; max-height: 60vh; border: 1px solid var(--border-color); border-radius: 6px; background:#fff;">
+<canvas id="anchorReviewCanvas"></canvas>
+</div>
+<div style="display:flex; gap:8px; flex-wrap: wrap; align-items: center; margin-top: 14px;">
+<button class="download-pdf-btn" id="anchorReviewApproveBtn" type="button" style="padding: 10px 20px;">Looks correct — enable for DocuSign</button>
+<button class="btn-secondary" id="anchorReviewRejectBtn" type="button" style="padding: 10px 20px;">Not correct — keep as flat PDF only</button>
+</div>
+<div id="anchorReviewStatus" style="font-size: 0.8rem; margin-top: 8px;"></div>
+</div>
+
 <div class="step-card tracker-controls">
 <div class="tracker-controls-row">
 <input type="text" id="newClientName" placeholder="Client / company name..." list="trackerClientOptions">
@@ -132,6 +161,6 @@ Choose File
 </div>
 </main>
 
-<script src="js/app.js?v=13"></script>
+<script src="js/app.js?v=14"></script>
 </body>
 </html>
