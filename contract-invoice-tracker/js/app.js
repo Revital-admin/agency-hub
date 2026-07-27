@@ -372,13 +372,22 @@ async function deleteRecord(id) {
 // that have an actual Docusign Template built for them (see the Docusign
 // send button below, which only appears when these are present). Every
 // entry still works as a plain flat-PDF-attachment send either way.
+// docusignAnchorTags: true means the PDF has invisible "[[SIG_CLIENT]]" /
+// "[[DATE_CLIENT]]" text baked into the Client signature block (all 6, as
+// of this session), letting it be combined with any other anchor-tagged
+// document into a single Docusign envelope. MSA additionally has a real
+// Docusign Template (docusignTemplateId/docusignRoleName) - that solo
+// path is used only when MSA is the *only* document checked; anything
+// else (MSA plus others, or any other document alone) goes through the
+// combined-envelope anchor-tag path instead. See handleDocusignSendEnvelope
+// in _worker.js.
 const CONTRACT_TEMPLATES = [
-  { id: 'msa', label: 'Master Service Agreement', file: 'Master Service Agreement - Revital Productions.pdf', docusignTemplateId: '9021581d-1a78-4dc4-8400-288845f74dfa', docusignRoleName: 'Client' },
-  { id: 'independent-contractor', label: 'Independent Contractor Agreement', file: 'Independent Contractor Agreement - Revital Productions.pdf' },
-  { id: 'creative-services', label: 'Creative Services Agreement', file: 'Creative Services Agreement - Revital Productions.pdf' },
-  { id: 'social-media-growth', label: 'Social Media Growth Agreement', file: 'Social Media Growth Agreement - Revital Productions.pdf' },
-  { id: 'nda-msa', label: 'NDA (Tied to MSA)', file: 'NDA - Tied To MSA - Revital Productions.pdf' },
-  { id: 'nda-independent', label: 'NDA (Independent Contract)', file: 'NDA - Independent Contract - Revital Productions.pdf' }
+  { id: 'msa', label: 'Master Service Agreement', file: 'Master Service Agreement - Revital Productions.pdf', docusignTemplateId: '9021581d-1a78-4dc4-8400-288845f74dfa', docusignRoleName: 'Client', docusignAnchorTags: true },
+  { id: 'independent-contractor', label: 'Independent Contractor Agreement', file: 'Independent Contractor Agreement - Revital Productions.pdf', docusignAnchorTags: true },
+  { id: 'creative-services', label: 'Creative Services Agreement', file: 'Creative Services Agreement - Revital Productions.pdf', docusignAnchorTags: true },
+  { id: 'social-media-growth', label: 'Social Media Growth Agreement', file: 'Social Media Growth Agreement - Revital Productions.pdf', docusignAnchorTags: true },
+  { id: 'nda-msa', label: 'NDA (Tied to MSA)', file: 'NDA - Tied To MSA - Revital Productions.pdf', docusignAnchorTags: true },
+  { id: 'nda-independent', label: 'NDA (Independent Contract)', file: 'NDA - Independent Contract - Revital Productions.pdf', docusignAnchorTags: true }
 ];
 
 function escapeHtmlLocal(str) {
@@ -605,7 +614,8 @@ function resolveSelectedContractTemplate(value) {
       filename: t.file,
       fetchUrl: '../contracts/' + encodeURIComponent(t.file),
       docusignTemplateId: t.docusignTemplateId || null,
-      docusignRoleName: t.docusignRoleName || null
+      docusignRoleName: t.docusignRoleName || null,
+      docusignAnchorTags: !!t.docusignAnchorTags
     };
   }
   if (value.startsWith('uploaded:')) {
@@ -615,6 +625,7 @@ function resolveSelectedContractTemplate(value) {
       label: t.label,
       filename: t.filename || (t.label + '.pdf'),
       fetchUrl: '/api/contracts/' + encodeURIComponent(t.r2Key),
+      docusignAnchorTags: false,
       docusignTemplateId: null,
       docusignRoleName: null
     };
@@ -670,14 +681,20 @@ function getSelectedContractTemplates() {
     .filter(Boolean);
 }
 
-// Docusign envelopes are tied to exactly one Template ID, so the Docusign
-// button only ever makes sense when a single, Docusign-enabled template is
-// checked - as soon as a second box is checked (or none are), it hides and
-// only the flat-PDF-attachment send remains available.
+// Two ways the Docusign button can become available:
+//  1) MSA checked alone - uses its real Docusign Template (proven, unchanged
+//     since it first shipped).
+//  2) Any checked document(s) that all have anchor tags baked in - combined
+//     into one envelope via the anchor-tag path (see _worker.js). Uploaded
+//     library documents never have guaranteed anchor tags, so mixing one in
+//     disqualifies the whole selection and hides the button (flat-PDF email
+//     attachment is still available for those either way).
 function updateDocusignButtonVisibility() {
   if (!sendContractDocusignBtn) return;
   const templates = getSelectedContractTemplates();
-  const hasDocusign = templates.length === 1 && !!(templates[0].docusignTemplateId && templates[0].docusignRoleName);
+  const soloMsa = templates.length === 1 && !!(templates[0].docusignTemplateId && templates[0].docusignRoleName);
+  const allAnchorEligible = templates.length > 0 && templates.every(t => t.docusignAnchorTags);
+  const hasDocusign = soloMsa || allAnchorEligible;
   sendContractDocusignBtn.style.display = hasDocusign ? 'flex' : 'none';
   sendContractDocusignBtn.disabled = false;
   sendContractDocusignBtn.textContent = 'Send for E-Signature (DocuSign)';
@@ -917,8 +934,12 @@ if (sendContractSendBtn) {
 }
 
 // Sends a real Docusign envelope for e-signature instead of a flat PDF
-// attachment - only available for templates with a docusignTemplateId
-// (see CONTRACT_TEMPLATES + updateDocusignButtonVisibility above).
+// attachment. Two paths (see updateDocusignButtonVisibility above):
+//  - MSA checked alone: the existing Docusign-Template-based send.
+//  - Any other selection where every checked document has anchor tags:
+//    fetch each PDF, send them all as one combined envelope so the client
+//    signs everything in one session (see handleDocusignSendEnvelope in
+//    _worker.js for how the anchor tags get turned into tabs).
 if (sendContractDocusignBtn) {
   sendContractDocusignBtn.addEventListener('click', async () => {
     if (!currentContractContext) return;
@@ -930,27 +951,53 @@ if (sendContractDocusignBtn) {
       return;
     }
 
-    const selected = getSelectedContractTemplates();
-    const t = selected.length === 1 ? selected[0] : null;
-    if (!t || !t.docusignTemplateId || !t.docusignRoleName) return;
+    const templates = getSelectedContractTemplates();
+    if (!templates.length) return;
+    const soloMsa = templates.length === 1 && !!(templates[0].docusignTemplateId && templates[0].docusignRoleName);
+    const allAnchorEligible = templates.every(t => t.docusignAnchorTags);
+    if (!soloMsa && !allAnchorEligible) return;
+
     const { record, contactName } = currentContractContext;
+    const labelList = templates.map(t => t.label).join(', ');
 
     sendContractDocusignBtn.disabled = true;
-    sendContractDocusignBtn.textContent = 'Sending for signature...';
+    sendContractDocusignBtn.textContent = templates.length > 1 ? 'Preparing documents...' : 'Sending for signature...';
     if (sendContractStatus) sendContractStatus.textContent = '';
 
     try {
-      const res = await fetch('/api/docusign/send-envelope', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          templateId: t.docusignTemplateId,
-          templateRoleName: t.docusignRoleName,
-          signerName: contactName || record.clientName,
-          signerEmail: sendContractTo.value,
-          emailSubject: sendContractSubject.value
-        })
-      });
+      let res;
+      if (soloMsa) {
+        res = await fetch('/api/docusign/send-envelope', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            templateId: templates[0].docusignTemplateId,
+            templateRoleName: templates[0].docusignRoleName,
+            signerName: contactName || record.clientName,
+            signerEmail: sendContractTo.value,
+            emailSubject: sendContractSubject.value
+          })
+        });
+      } else {
+        const documents = await Promise.all(templates.map(async (t) => {
+          const base64 = await fetchPdfAsBase64(t.fetchUrl);
+          if (!base64) throw new Error(`${t.label} produced no data`);
+          return { name: t.filename, base64 };
+        }));
+
+        sendContractDocusignBtn.textContent = 'Sending for signature...';
+        res = await fetch('/api/docusign/send-envelope', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            documents,
+            signerName: contactName || record.clientName,
+            signerEmail: sendContractTo.value,
+            emailSubject: sendContractSubject.value
+          })
+        });
+      }
+
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
         throw new Error(data.error || `Send failed (${res.status})`);
@@ -958,7 +1005,7 @@ if (sendContractDocusignBtn) {
 
       sendContractDocusignBtn.textContent = 'Sent ✓';
       if (sendContractStatus) {
-        sendContractStatus.textContent = `Sent for e-signature via Docusign (envelope ${data.envelopeId}).`;
+        sendContractStatus.textContent = `Sent for e-signature via Docusign (envelope ${data.envelopeId}) - ${labelList}.`;
         sendContractStatus.style.color = 'var(--color-success, #10b981)';
       }
 
@@ -974,7 +1021,7 @@ if (sendContractDocusignBtn) {
         window.parent.logAdminActivity('Contract sent for e-signature (Docusign)', record.clientName);
       }
       if (isEmbedded && window.parent.showBanner) {
-        window.parent.showBanner('success', `${t.label} sent to ${record.clientName} for e-signature via Docusign.`);
+        window.parent.showBanner('success', `${labelList} sent to ${record.clientName} for e-signature via Docusign.`);
       }
     } catch (e) {
       console.error('Docusign envelope send failed:', e);

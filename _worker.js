@@ -419,9 +419,9 @@ async function handleDocusignSendEnvelope(request, env) {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
 
-  const { templateId, templateRoleName, signerName, signerEmail, emailSubject } = payload || {};
-  if (!templateId || !templateRoleName || !signerName || !signerEmail) {
-    return jsonResponse({ error: "templateId, templateRoleName, signerName, and signerEmail are all required" }, 400);
+  const { templateId, templateRoleName, signerName, signerEmail, emailSubject, documents } = payload || {};
+  if (!signerName || !signerEmail) {
+    return jsonResponse({ error: "signerName and signerEmail are required" }, 400);
   }
 
   let accessToken;
@@ -432,12 +432,68 @@ async function handleDocusignSendEnvelope(request, env) {
     return jsonResponse({ error: "Docusign authentication failed: " + e.message }, 502);
   }
 
-  const envelopeBody = {
-    templateId,
-    templateRoles: [{ roleName: templateRoleName, name: signerName, email: signerEmail }],
-    status: "sent",
-    emailSubject: emailSubject || "Please sign: your contract with Revital Productions"
-  };
+  let envelopeBody;
+
+  // Combined-envelope mode: two or more documents (or a single non-template
+  // document) go out for signature in one envelope/one signing session.
+  // Each of the 6 built-in contracts (and the SOW Generator's output) has
+  // an invisible "[[SIG_CLIENT]]" / "[[DATE_CLIENT]]" anchor string baked
+  // into its Client signature block (see contracts/*.pdf and the SOW
+  // Generator's PDF post-processing step) - DocuSign finds every
+  // occurrence of an anchor string across *all* documents in the envelope
+  // for a given tab definition when no documentId/pageNumber scopes it, so
+  // one signHereTabs + one dateSignedTabs entry covers any number of
+  // combined documents without per-document coordinates.
+  if (Array.isArray(documents)) {
+    if (!documents.length) {
+      return jsonResponse({ error: "documents must contain at least one document" }, 400);
+    }
+    let totalBase64Length = 0;
+    for (const d of documents) {
+      if (!d || typeof d.name !== "string" || typeof d.base64 !== "string" || !d.name || !d.base64) {
+        return jsonResponse({ error: "Each document needs a non-empty name and base64 content" }, 400);
+      }
+      totalBase64Length += d.base64.length;
+    }
+    if (totalBase64Length > 25 * 1024 * 1024) {
+      return jsonResponse({ error: "Combined documents too large (25MB combined limit)" }, 400);
+    }
+
+    envelopeBody = {
+      emailSubject: emailSubject || "Please sign: your contract with Revital Productions",
+      documents: documents.map((d, i) => ({
+        documentId: String(i + 1),
+        name: d.name,
+        fileExtension: "pdf",
+        documentBase64: d.base64
+      })),
+      recipients: {
+        signers: [{
+          recipientId: "1",
+          routingOrder: "1",
+          name: signerName,
+          email: signerEmail,
+          tabs: {
+            signHereTabs: [{ anchorString: "[[SIG_CLIENT]]", anchorUnits: "pixels", anchorXOffset: "0", anchorYOffset: "-6", anchorIgnoreIfNotPresent: "true" }],
+            dateSignedTabs: [{ anchorString: "[[DATE_CLIENT]]", anchorUnits: "pixels", anchorXOffset: "0", anchorYOffset: "-6", anchorIgnoreIfNotPresent: "true" }]
+          }
+        }]
+      },
+      status: "sent"
+    };
+  } else {
+    // Solo Docusign-Template send (currently just the MSA) - unchanged
+    // from the original single-document implementation.
+    if (!templateId || !templateRoleName) {
+      return jsonResponse({ error: "templateId and templateRoleName are required when not sending combined documents" }, 400);
+    }
+    envelopeBody = {
+      templateId,
+      templateRoles: [{ roleName: templateRoleName, name: signerName, email: signerEmail }],
+      status: "sent",
+      emailSubject: emailSubject || "Please sign: your contract with Revital Productions"
+    };
+  }
 
   try {
     const dsRes = await fetch(`${DOCUSIGN_API_BASE}/accounts/${env.DOCUSIGN_ACCOUNT_ID}/envelopes`, {
