@@ -2887,10 +2887,37 @@ textarea {
   font-size: 14px; 
   transition: transform var(--transition), box-shadow var(--transition), opacity var(--transition); 
 }
-.btn-primary:hover { 
-  transform: translateY(-1px); 
-  box-shadow: 0 4px 12px var(--color-accent-dim); 
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px var(--color-accent-dim);
   opacity: 0.9;
+}
+
+/* .btn-secondary alone (without the dashboard's base .btn class - see
+   line ~1278) was falling back to an under-styled, cramped look on
+   every generator tool page (SOW Generator, Contract & Invoice Tracker,
+   etc.) since only .btn-primary had a self-contained rule down here.
+   This mirrors .btn-primary's box model (padding/radius/font/sizing)
+   with a muted/outlined treatment instead of the solid accent fill. */
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  padding: 10px 20px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  transition: background var(--transition), border-color var(--transition);
+}
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--color-border-md);
 }
 
 /* ── PANELS & CARDS (For Generators) ──────────────────────────────────────────── */
