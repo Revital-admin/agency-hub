@@ -368,8 +368,12 @@ async function deleteRecord(id) {
    base64-encodes it directly instead of rendering a pdfContainer through
    html2pdf. */
 
+// docusignTemplateId/docusignRoleName are optional - only set on templates
+// that have an actual Docusign Template built for them (see the Docusign
+// send button below, which only appears when these are present). Every
+// entry still works as a plain flat-PDF-attachment send either way.
 const CONTRACT_TEMPLATES = [
-  { id: 'msa', label: 'Master Service Agreement', file: 'Master Service Agreement - Revital Productions.pdf' },
+  { id: 'msa', label: 'Master Service Agreement', file: 'Master Service Agreement - Revital Productions.pdf', docusignTemplateId: '9021581d-1a78-4dc4-8400-288845f74dfa', docusignRoleName: 'Client' },
   { id: 'independent-contractor', label: 'Independent Contractor Agreement', file: 'Independent Contractor Agreement - Revital Productions.pdf' },
   { id: 'creative-services', label: 'Creative Services Agreement', file: 'Creative Services Agreement - Revital Productions.pdf' },
   { id: 'social-media-growth', label: 'Social Media Growth Agreement', file: 'Social Media Growth Agreement - Revital Productions.pdf' },
@@ -585,12 +589,24 @@ function resolveSelectedContractTemplate(value) {
   if (value.startsWith('builtin:')) {
     const t = CONTRACT_TEMPLATES.find(x => x.id === value.slice('builtin:'.length));
     if (!t) return null;
-    return { label: t.label, filename: t.file, fetchUrl: '../contracts/' + encodeURIComponent(t.file) };
+    return {
+      label: t.label,
+      filename: t.file,
+      fetchUrl: '../contracts/' + encodeURIComponent(t.file),
+      docusignTemplateId: t.docusignTemplateId || null,
+      docusignRoleName: t.docusignRoleName || null
+    };
   }
   if (value.startsWith('uploaded:')) {
     const t = contractLibrary.find(x => x.id === value.slice('uploaded:'.length));
     if (!t) return null;
-    return { label: t.label, filename: t.filename || (t.label + '.pdf'), fetchUrl: '/api/contracts/' + encodeURIComponent(t.r2Key) };
+    return {
+      label: t.label,
+      filename: t.filename || (t.label + '.pdf'),
+      fetchUrl: '/api/contracts/' + encodeURIComponent(t.r2Key),
+      docusignTemplateId: null,
+      docusignRoleName: null
+    };
   }
   return null;
 }
@@ -628,8 +644,21 @@ const sendContractBody = el('sendContractBody');
 const sendContractOpenBtn = el('sendContractOpenBtn');
 const sendContractCopyBtn = el('sendContractCopyBtn');
 const sendContractSendBtn = el('sendContractSendBtn');
+const sendContractDocusignBtn = el('sendContractDocusignBtn');
 const sendContractStatus = el('sendContractStatus');
 const sendContractCloseBtn = el('sendContractCloseBtn');
+
+// Shows the Docusign button only for templates that actually have a
+// Docusign Template built (see docusignTemplateId in CONTRACT_TEMPLATES) -
+// every other template only ever gets the flat-PDF-attachment send.
+function updateDocusignButtonVisibility() {
+  if (!sendContractDocusignBtn) return;
+  const t = resolveSelectedContractTemplate(sendContractTemplate.value);
+  const hasDocusign = !!(t && t.docusignTemplateId && t.docusignRoleName);
+  sendContractDocusignBtn.style.display = hasDocusign ? 'flex' : 'none';
+  sendContractDocusignBtn.disabled = false;
+  sendContractDocusignBtn.textContent = 'Send for E-Signature (DocuSign)';
+}
 
 let currentContractContext = null; // { record, from }
 
@@ -732,6 +761,7 @@ async function openSendContractPanel(id) {
     sendContractSendBtn.disabled = !currentContractContext.from;
     sendContractSendBtn.textContent = 'Send with PDF attached';
   }
+  updateDocusignButtonVisibility();
 
   if (sendContractPanel) {
     sendContractPanel.style.display = 'block';
@@ -749,6 +779,7 @@ if (sendContractTemplate) {
     sendContractSubject.value = subject;
     sendContractBody.value = body;
     refreshSendContractMailto();
+    updateDocusignButtonVisibility();
   });
 }
 
@@ -826,6 +857,77 @@ if (sendContractSendBtn) {
       sendContractSendBtn.textContent = 'Send with PDF attached';
       if (sendContractStatus) {
         sendContractStatus.textContent = "Couldn't send automatically (" + e.message + ") - use Copy or \"Open in Email App\" instead.";
+        sendContractStatus.style.color = 'var(--color-error, #f68d5f)';
+      }
+    }
+  });
+}
+
+// Sends a real Docusign envelope for e-signature instead of a flat PDF
+// attachment - only available for templates with a docusignTemplateId
+// (see CONTRACT_TEMPLATES + updateDocusignButtonVisibility above).
+if (sendContractDocusignBtn) {
+  sendContractDocusignBtn.addEventListener('click', async () => {
+    if (!currentContractContext) return;
+    if (!sendContractTo.value.trim()) {
+      if (sendContractStatus) {
+        sendContractStatus.textContent = 'Enter a recipient email address first.';
+        sendContractStatus.style.color = 'var(--color-error, #f68d5f)';
+      }
+      return;
+    }
+
+    const t = resolveSelectedContractTemplate(sendContractTemplate.value);
+    if (!t || !t.docusignTemplateId || !t.docusignRoleName) return;
+    const { record, contactName } = currentContractContext;
+
+    sendContractDocusignBtn.disabled = true;
+    sendContractDocusignBtn.textContent = 'Sending for signature...';
+    if (sendContractStatus) sendContractStatus.textContent = '';
+
+    try {
+      const res = await fetch('/api/docusign/send-envelope', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          templateId: t.docusignTemplateId,
+          templateRoleName: t.docusignRoleName,
+          signerName: contactName || record.clientName,
+          signerEmail: sendContractTo.value,
+          emailSubject: sendContractSubject.value
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `Send failed (${res.status})`);
+      }
+
+      sendContractDocusignBtn.textContent = 'Sent ✓';
+      if (sendContractStatus) {
+        sendContractStatus.textContent = `Sent for e-signature via Docusign (envelope ${data.envelopeId}).`;
+        sendContractStatus.style.color = 'var(--color-success, #10b981)';
+      }
+
+      // Same tracker-status reflection as the flat-PDF send path.
+      if (record.contractStatus === 'Not Sent') {
+        record.contractStatus = 'Sent';
+        record.contractSentDate = record.contractSentDate || todayStr();
+        await persist();
+        renderTable();
+      }
+
+      if (isEmbedded && window.parent.logAdminActivity) {
+        window.parent.logAdminActivity('Contract sent for e-signature (Docusign)', record.clientName);
+      }
+      if (isEmbedded && window.parent.showBanner) {
+        window.parent.showBanner('success', `${t.label} sent to ${record.clientName} for e-signature via Docusign.`);
+      }
+    } catch (e) {
+      console.error('Docusign envelope send failed:', e);
+      sendContractDocusignBtn.disabled = false;
+      sendContractDocusignBtn.textContent = 'Send for E-Signature (DocuSign)';
+      if (sendContractStatus) {
+        sendContractStatus.textContent = "Couldn't send via Docusign (" + e.message + ") - try \"Send with PDF attached\" instead.";
         sendContractStatus.style.color = 'var(--color-error, #f68d5f)';
       }
     }
