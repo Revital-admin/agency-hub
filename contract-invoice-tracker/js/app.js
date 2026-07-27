@@ -372,23 +372,16 @@ async function deleteRecord(id) {
 // that have an actual Docusign Template built for them (see the Docusign
 // send button below, which only appears when these are present). Every
 // entry still works as a plain flat-PDF-attachment send either way.
-// docusignAnchorTags: true means the PDF has invisible "[[SIG_CLIENT]]" /
-// "[[DATE_CLIENT]]" text baked into the Client signature block (all 6, as
-// of this session), letting it be combined with any other anchor-tagged
-// document into a single Docusign envelope. MSA additionally has a real
-// Docusign Template (docusignTemplateId/docusignRoleName) - that solo
-// path is used only when MSA is the *only* document checked; anything
-// else (MSA plus others, or any other document alone) goes through the
-// combined-envelope anchor-tag path instead. See handleDocusignSendEnvelope
-// in _worker.js.
-const CONTRACT_TEMPLATES = [
-  { id: 'msa', label: 'Master Service Agreement', file: 'Master Service Agreement - Revital Productions.pdf', docusignTemplateId: '9021581d-1a78-4dc4-8400-288845f74dfa', docusignRoleName: 'Client', docusignAnchorTags: true },
-  { id: 'independent-contractor', label: 'Independent Contractor Agreement', file: 'Independent Contractor Agreement - Revital Productions.pdf', docusignAnchorTags: true },
-  { id: 'creative-services', label: 'Creative Services Agreement', file: 'Creative Services Agreement - Revital Productions.pdf', docusignAnchorTags: true },
-  { id: 'social-media-growth', label: 'Social Media Growth Agreement', file: 'Social Media Growth Agreement - Revital Productions.pdf', docusignAnchorTags: true },
-  { id: 'nda-msa', label: 'NDA (Tied to MSA)', file: 'NDA - Tied To MSA - Revital Productions.pdf', docusignAnchorTags: true },
-  { id: 'nda-independent', label: 'NDA (Independent Contract)', file: 'NDA - Independent Contract - Revital Productions.pdf', docusignAnchorTags: true }
-];
+// All 6 of the originally-hardcoded contract templates now live in the
+// same self-service Contract Template Library as everything else
+// (uploaded/replaceable without a redeploy - see contractLibrary below) -
+// this array is intentionally empty and kept only so any code that still
+// references CONTRACT_TEMPLATES (e.g. a default selection) degrades
+// gracefully instead of throwing. docusignAnchorTags/docusignTemplateId/
+// docusignRoleName now live as metadata on the library entry itself (see
+// agency/contractTemplates in Firestore) and are read in
+// resolveSelectedContractTemplate's 'uploaded:' branch below.
+const CONTRACT_TEMPLATES = [];
 
 function escapeHtmlLocal(str) {
   const div = document.createElement('div');
@@ -396,17 +389,16 @@ function escapeHtmlLocal(str) {
   return div.innerHTML;
 }
 
-/* ── Contract Template Library (uploaded contracts, on top of the 6
-   built-ins above) ──
-   The 6 CONTRACT_TEMPLATES above still live as static files under
-   /contracts/ - editing one means replacing the file in the codebase and
-   redeploying. Anything added here instead goes through /api/contracts
-   (see _worker.js), which stores the actual PDF in an R2 bucket and
-   returns a key; only that key + a label is saved to Firestore
-   (agency/contractTemplates), same optimistic-concurrency read-check-
-   write pattern as agency/contractInvoices above. This is what lets
-   contracts be added/replaced/removed from this screen directly, no
-   code change or redeploy required. */
+/* ── Contract Template Library ──
+   Every contract template (including the original 6) lives here now -
+   added/replaced/removed straight from this screen, no code change or
+   redeploy required. Uploads go through /api/contracts (see _worker.js),
+   which stores the actual PDF in an R2 bucket and returns a key; only
+   that key + a label (+ optional Docusign metadata - docusignAnchorTags/
+   docusignTemplateId/docusignRoleName, see resolveSelectedContractTemplate
+   below) is saved to Firestore (agency/contractTemplates), same
+   optimistic-concurrency read-check-write pattern as
+   agency/contractInvoices above. */
 
 let contractLibrary = [];
 let contractLibraryDocVersion = 0;
@@ -625,9 +617,15 @@ function resolveSelectedContractTemplate(value) {
       label: t.label,
       filename: t.filename || (t.label + '.pdf'),
       fetchUrl: '/api/contracts/' + encodeURIComponent(t.r2Key),
-      docusignAnchorTags: false,
-      docusignTemplateId: null,
-      docusignRoleName: null
+      // Most uploaded documents are arbitrary PDFs with no guaranteed
+      // anchor text, so this defaults to false/null - but a handful
+      // (the 6 migrated from the old hardcoded list, see the
+      // Firestore agency/contractTemplates doc) carry this metadata
+      // from when they were uploaded, preserving both the Docusign
+      // combined-envelope eligibility and MSA's solo Template send.
+      docusignAnchorTags: !!t.docusignAnchorTags,
+      docusignTemplateId: t.docusignTemplateId || null,
+      docusignRoleName: t.docusignRoleName || null
     };
   }
   return null;
@@ -710,11 +708,19 @@ function contractChecklistRowHtml(value, label, selectedValues) {
 function populateContractTemplateChecklist(defaultSelectedValues) {
   if (!sendContractTemplateList) return;
   const selectedValues = new Set(defaultSelectedValues || []);
+  // CONTRACT_TEMPLATES is intentionally empty now (see its declaration
+  // above) - every template, including the original 6, lives in
+  // contractLibrary. Kept as a no-op map so nothing breaks if it's ever
+  // reintroduced for a one-off case.
   const builtIn = CONTRACT_TEMPLATES.map(t => contractChecklistRowHtml(`builtin:${t.id}`, t.label, selectedValues)).join('');
   const uploaded = contractLibrary.map(t => contractChecklistRowHtml(`uploaded:${t.id}`, t.label, selectedValues)).join('');
+  if (!contractLibrary.length && !CONTRACT_TEMPLATES.length) {
+    sendContractTemplateList.innerHTML = '<div class="contract-attach-group-label">No contract templates yet - add one in the Contract Template Library above.</div>';
+    return;
+  }
   sendContractTemplateList.innerHTML =
-    `<div class="contract-attach-group-label">Built-in Templates</div>${builtIn}` +
-    (contractLibrary.length ? `<div class="contract-attach-group-label">Uploaded Templates</div>${uploaded}` : '');
+    (CONTRACT_TEMPLATES.length ? `<div class="contract-attach-group-label">Built-in Templates</div>${builtIn}` : '') +
+    (contractLibrary.length ? `<div class="contract-attach-group-label">Contract Templates</div>${uploaded}` : '');
 }
 
 // Re-renders the checklist (e.g. after an upload/replace/delete in the
@@ -800,9 +806,16 @@ async function openSendContractPanel(id) {
   const amEmail = (config.accountManagerEmail || '').trim();
   const contactName = config.clientContactName || r.clientName;
 
-  populateContractTemplateChecklist([`builtin:${CONTRACT_TEMPLATES[0].id}`]);
+  // Default to the first available template (built-in list first, then
+  // the Contract Template Library) rather than assuming index 0 of either
+  // array exists - CONTRACT_TEMPLATES is normally empty now.
+  const defaultValue = CONTRACT_TEMPLATES.length
+    ? `builtin:${CONTRACT_TEMPLATES[0].id}`
+    : (contractLibrary.length ? `uploaded:${contractLibrary[0].id}` : null);
+  populateContractTemplateChecklist(defaultValue ? [defaultValue] : []);
   const selectedLabels = getSelectedContractTemplates().map(t => t.label);
-  const { subject, body } = await buildContractEmailText(r.clientName, contactName, selectedLabels.length ? selectedLabels : [CONTRACT_TEMPLATES[0].label], amName);
+  const fallbackLabel = CONTRACT_TEMPLATES[0] ? CONTRACT_TEMPLATES[0].label : (contractLibrary[0] ? contractLibrary[0].label : 'contract');
+  const { subject, body } = await buildContractEmailText(r.clientName, contactName, selectedLabels.length ? selectedLabels : [fallbackLabel], amName);
 
   sendContractTo.value = config.clientContactEmail || '';
   sendContractSubject.value = subject;
@@ -840,7 +853,8 @@ if (sendContractTemplateList) {
     if (!currentContractContext) return;
     const templates = getSelectedContractTemplates();
     const { record, contactName, amName } = currentContractContext;
-    const labels = templates.length ? templates.map(t => t.label) : [CONTRACT_TEMPLATES[0].label];
+    const fallbackLabel = CONTRACT_TEMPLATES[0] ? CONTRACT_TEMPLATES[0].label : (contractLibrary[0] ? contractLibrary[0].label : 'contract');
+    const labels = templates.length ? templates.map(t => t.label) : [fallbackLabel];
     const { subject, body } = await buildContractEmailText(record.clientName, contactName, labels, amName);
     sendContractSubject.value = subject;
     sendContractBody.value = body;
