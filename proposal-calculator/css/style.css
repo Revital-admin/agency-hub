@@ -17,7 +17,30 @@
   --color-text-secondary: #94a3b8;
   --color-accent: #6366f1; /* Indigo */
   --color-accent-money: #10b981; /* Teal for money */
-  
+
+  /* These names were referenced throughout this file and index.html
+     (var(--warning), var(--text-title), var(--text-bright), var(--primary),
+     var(--color-brand-secondary), var(--color-brand-primary), var(--text-secondary))
+     but never actually defined here - this page doesn't link the
+     shared ../style.css (where --warning/--text-title/--primary DO
+     exist) at all, it only ever had its own local variables. Any CSS
+     property using one of these with no fallback was silently
+     invalid: border/background properties (not inherited) fell back
+     to fully transparent/none, and color properties (inherited) just
+     picked up whatever color the parent happened to have. That's why
+     the "Download PDF" button had no background, the Admin Controls
+     panel had no border, and the margin/hard-costs warning numbers
+     weren't actually amber. Defining them locally fixes all of that
+     without needing to link the shared file (whose own --color-accent
+     etc. would conflict with this tool's intentional indigo scheme). */
+  --warning: #fb923c;
+  --text-title: #ffffff;
+  --text-bright: #ffffff;
+  --primary: var(--color-accent);
+  --text-secondary: var(--color-text-secondary);
+  --color-brand-primary: var(--color-accent);
+  --color-brand-secondary: #f68d5f; /* Coral - distinct from the indigo Copy button */
+
   --font-heading: 'Space Grotesk', sans-serif;
   --font-body: 'Plus Jakarta Sans', -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
