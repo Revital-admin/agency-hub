@@ -610,6 +610,28 @@ async function bakeAnchorsAtDetection(bytes, detection) {
   return await pdfDoc.save();
 }
 
+// Contract Template Library panel is hidden by default (see
+// contractLibraryTrigger/contractLibraryCard in index.html) - opened
+// on demand via "Manage Contract Templates" instead of always showing
+// the full list of templates on the page.
+const openContractLibraryBtn = el('openContractLibraryBtn');
+const contractLibraryCloseBtn = el('contractLibraryCloseBtn');
+const contractLibraryCard = el('contractLibraryCard');
+
+if (openContractLibraryBtn) {
+  openContractLibraryBtn.addEventListener('click', () => {
+    if (contractLibraryCard) {
+      contractLibraryCard.style.display = 'block';
+      contractLibraryCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  });
+}
+if (contractLibraryCloseBtn) {
+  contractLibraryCloseBtn.addEventListener('click', () => {
+    if (contractLibraryCard) contractLibraryCard.style.display = 'none';
+  });
+}
+
 const newContractLabel = el('newContractLabel');
 const newContractFile = el('newContractFile');
 const newContractFileName = el('newContractFileName');

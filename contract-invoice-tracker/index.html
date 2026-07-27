@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Contract & Invoice Status Tracker</title>
 <link rel="stylesheet" href="../style.css?v=2">
-<link rel="stylesheet" href="css/style.css?v=10">
+<link rel="stylesheet" href="css/style.css?v=11">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
 <!-- pdf.js: reads text positions out of a newly uploaded/replaced contract
      so we can auto-detect where the Client's Signature/Date lines are.
@@ -84,8 +84,22 @@
      built-in templates that still live as static files. Uploaded files
      are stored in R2 (see /api/contracts/* in _worker.js); this list is
      just the metadata (label + which file it points to), stored at
-     agency/contractTemplates. -->
-<div class="step-card" id="contractLibraryCard">
+     agency/contractTemplates.
+
+     Collapsed behind a "Manage Contract Templates" trigger by default -
+     the full list of templates was cluttering the page every time it
+     grew, and it's only needed occasionally (adding a new one, or
+     replacing one with an updated version), not on every visit. -->
+<div class="step-card" id="contractLibraryTrigger">
+<div class="contract-library-header">
+<h2>Contract Template Library</h2>
+<p style="font-size: 0.8rem; color: var(--color-text-muted); margin-top: 4px;">Add, replace, or remove the contract PDFs available in "Send Contract" below.</p>
+</div>
+<button id="openContractLibraryBtn" class="btn-secondary" type="button">Manage Contract Templates</button>
+</div>
+
+<div class="step-card" id="contractLibraryCard" style="display:none; position: relative;">
+<button type="button" id="contractLibraryCloseBtn" aria-label="Close" style="position: absolute; top: 20px; right: 20px; background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 4px;">&times;</button>
 <div class="contract-library-header">
 <h2>Contract Template Library</h2>
 <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-top: 4px;">These show up in the "Send Contract" panel below. The 6 built-in templates are edited by replacing the file in the codebase; anything added here can be replaced or removed directly, no redeploy needed.</p>
@@ -161,6 +175,6 @@ Choose File
 </div>
 </main>
 
-<script src="js/app.js?v=14"></script>
+<script src="js/app.js?v=15"></script>
 </body>
 </html>

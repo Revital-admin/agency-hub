@@ -194,6 +194,8 @@
 .contract-attach-row input[type="checkbox"] { width: auto; margin: 0; }
 
 /* Contract Template Library (see contractLibraryCard in index.html) */
+#contractLibraryTrigger .contract-library-header { margin-bottom: 14px; }
+#contractLibraryTrigger #openContractLibraryBtn { padding: 10px 18px; }
 .contract-library-header h2 { font-family: var(--font-display); font-size: 20px; font-weight: 600; color: var(--color-text-primary); }
 .contract-library-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
 .contract-library-row {
