@@ -5,26 +5,26 @@
 
 /* ── CSS Variables ──────────────────────────────────────────── */
 :root {
-  --color-bg:         #0a0a0c;
-  --color-surface:    #131316;
-  --color-surface-2:  #1b1b20;
-  --color-border:     rgba(255,255,255,0.06);
-  --color-border-md:  rgba(255,255,255,0.11);
+  --color-bg:         #0f0f0d;
+  --color-surface:    #1a1a17;
+  --color-surface-2:  #222220;
+  --color-border:     rgba(255,255,255,0.07);
+  --color-border-md:  rgba(255,255,255,0.12);
 
-  --color-text-primary:   #f3f0e9;
-  --color-text-secondary: #8e8b82;
-  --color-text-muted:     #575652;
+  --color-text-primary:   #f0ede6;
+  --color-text-secondary: #8a887f;
+  --color-text-muted:     #555450;
 
-  --color-accent:     #c084fc;
-  --color-accent-dim: rgba(192,132,252,0.12);
-  --color-accent-glow:rgba(192,132,252,0.05);
+  --color-accent:     #f68d5f;
+  --color-accent-dim: rgba(246, 141, 95, 0.12);
+  --color-accent-glow:rgba(246, 141, 95, 0.05);
 
   --color-warning:    #fb923c;
   --color-success:    #4ade80;
   --color-info:       #38bdf8;
 
   /* Step palette — one colour per step */
-  --step-1: #c084fc;
+  --step-1: #f68d5f;
   --step-2: #818cf8;
   --step-3: #38bdf8;
   --step-4: #2dd4bf;
@@ -117,13 +117,13 @@ body {
   cursor: pointer;
   letter-spacing: 0.03em;
   transition: all var(--transition);
-  box-shadow: 0 0 12px rgba(192, 132, 252, 0.05);
+  box-shadow: 0 0 12px rgba(246, 141, 95, 0.05);
 }
 
 .download-pdf-btn:hover {
   background: var(--color-accent);
   color: var(--color-bg);
-  box-shadow: 0 0 16px rgba(192, 132, 252, 0.2);
+  box-shadow: 0 0 16px rgba(246, 141, 95, 0.2);
   transform: translateY(-1px);
 }
 
@@ -247,7 +247,7 @@ body {
 }
 
 .score-card.accent {
-  border-color: rgba(192,132,252,0.25);
+  border-color: rgba(246, 141, 95, 0.25);
   background: var(--color-accent-glow);
 }
 
@@ -298,7 +298,7 @@ body {
 .progress-fill {
   height: 100%;
   border-radius: 100px;
-  background: linear-gradient(90deg, var(--color-accent) 0%, #d4f77a 100%);
+  background: linear-gradient(90deg, var(--color-accent) 0%, #ffb088 100%);
   width: 0%;
   transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
 }
@@ -617,7 +617,7 @@ body {
 .sub-notes-input:focus {
   background: rgba(255, 255, 255, 0.12);
   border-color: var(--color-accent);
-  box-shadow: 0 0 10px rgba(192, 132, 252, 0.25), inset 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 0 10px rgba(246, 141, 95, 0.25), inset 0 1px 2px rgba(0, 0, 0, 0.2);
   min-height: 60px;
 }
 
@@ -668,6 +668,6 @@ body {
 }
 
 .sub-item:has(.sub-checkbox:checked) {
-  background: rgba(244, 114, 182, 0.05);
+  background: rgba(246, 141, 95, 0.05);
   border-color: var(--color-accent);
 }

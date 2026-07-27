@@ -5,31 +5,31 @@
 
 /* ── CSS Variables ──────────────────────────────────────────── */
 :root {
-  --color-bg:         #0a0c0a;
-  --color-surface:    #131613;
-  --color-surface-2:  #1b201b;
-  --color-border:     rgba(255,255,255,0.06);
-  --color-border-md:  rgba(255,255,255,0.11);
+  --color-bg:         #0f0f0d;
+  --color-surface:    #1a1a17;
+  --color-surface-2:  #222220;
+  --color-border:     rgba(255,255,255,0.07);
+  --color-border-md:  rgba(255,255,255,0.12);
 
-  --color-text-primary:   #f0eef3;
-  --color-text-secondary: #8b8e8b;
-  --color-text-muted:     #565756;
+  --color-text-primary:   #f0ede6;
+  --color-text-secondary: #8a887f;
+  --color-text-muted:     #555450;
 
-  --color-accent:     #f59e0b;
-  --color-accent-dim: rgba(245,158,11,0.12);
-  --color-accent-glow:rgba(245,158,11,0.05);
+  --color-accent:     #f68d5f;
+  --color-accent-dim: rgba(246, 141, 95, 0.12);
+  --color-accent-glow:rgba(246, 141, 95, 0.05);
 
   --color-warning:    #fb923c;
   --color-success:    #4ade80;
   --color-info:       #38bdf8;
 
   /* Step palette — one colour per step */
-  --step-1: #10b981;
+  --step-1: #f68d5f;
   --step-2: #0d9488;
   --step-3: #3b82f6;
   --step-4: #8b5cf6;
-  --step-5: #ec4899;
-  --step-6: #f59e0b;
+  --step-5: #f68d5f;
+  --step-6: #f68d5f;
   --step-7: #f97316;
   --step-8: #64748b;
 
@@ -117,13 +117,13 @@ body {
   cursor: pointer;
   letter-spacing: 0.03em;
   transition: all var(--transition);
-  box-shadow: 0 0 12px rgba(245, 158, 11, 0.05);
+  box-shadow: 0 0 12px rgba(246, 141, 95, 0.05);
 }
 
 .download-pdf-btn:hover {
   background: var(--color-accent);
   color: var(--color-bg);
-  box-shadow: 0 0 16px rgba(245, 158, 11, 0.2);
+  box-shadow: 0 0 16px rgba(246, 141, 95, 0.2);
   transform: translateY(-1px);
 }
 
@@ -247,7 +247,7 @@ body {
 }
 
 .score-card.accent {
-  border-color: rgba(245,158,11,0.25);
+  border-color: rgba(246, 141, 95, 0.25);
   background: var(--color-accent-glow);
 }
 
@@ -296,7 +296,7 @@ body {
 .progress-fill {
   height: 100%;
   border-radius: 100px;
-  background: linear-gradient(90deg, var(--color-accent) 0%, #a3e635 100%);
+  background: linear-gradient(90deg, var(--color-accent) 0%, #ffb088 100%);
   width: 0%;
   transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
 }
@@ -390,7 +390,7 @@ body {
 }
 
 .step-card.done-card {
-  border-color: rgba(245,158,11,0.25);
+  border-color: rgba(246, 141, 95, 0.25);
 }
 
 @keyframes fadeSlideIn {
@@ -638,7 +638,7 @@ body {
   outline: none;
   border-color: var(--color-accent);
   background: rgba(25, 25, 30, 0.95);
-  box-shadow: 0 0 12px rgba(245, 158, 11, 0.08); /* Amber glow */
+  box-shadow: 0 0 12px rgba(246, 141, 95, 0.08); /* Amber glow */
 }
 
 .form-row {
@@ -736,7 +736,7 @@ body {
 
 .checkbox-item:has(input[type="checkbox"]:checked) {
   border-color: var(--color-accent);
-  background: rgba(244, 114, 182, 0.05); /* Accent tint */
+  background: rgba(246, 141, 95, 0.05); /* Accent tint */
 }
 
 /* ── Dynamic Checkbox Fix ── */

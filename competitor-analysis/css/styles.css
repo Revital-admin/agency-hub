@@ -15,19 +15,19 @@
   --color-text-secondary: #8a887f;
   --color-text-muted:     #555450;
 
-  --color-accent:     #b8f04a; /* Lime green */
-  --color-accent-dim: rgba(184,240,74,0.12);
-  --color-accent-glow:rgba(184,240,74,0.06);
+  --color-accent:     #f68d5f;
+  --color-accent-dim: rgba(246,141,95,0.12);
+  --color-accent-glow:rgba(246,141,95,0.06);
 
   --color-warning:    #f0a84a;
   --color-success:    #4af0a0;
   --color-info:       #4aaaf0;
 
   /* Compatibility overrides for JS */
-  --purple-50:  rgba(184,240,74,0.06);
-  --purple-200: rgba(184,240,74,0.25);
-  --purple-600: #b8f04a;
-  --purple-800: #d4f77a;
+  --purple-50:  rgba(246,141,95,0.06);
+  --purple-200: rgba(246,141,95,0.25);
+  --purple-600: #f68d5f;
+  --purple-800: #ffb088;
 
   --radius-sm:  6px;
   --radius-md:  10px;
@@ -122,13 +122,13 @@ body {
   cursor: pointer;
   letter-spacing: 0.03em;
   transition: all var(--transition);
-  box-shadow: 0 0 12px rgba(184, 240, 74, 0.05);
+  box-shadow: 0 0 12px rgba(246, 141, 95, 0.05);
 }
 
 .download-pdf-btn:hover {
   background: var(--color-accent);
   color: var(--color-bg);
-  box-shadow: 0 0 16px rgba(184, 240, 74, 0.2);
+  box-shadow: 0 0 16px rgba(246, 141, 95, 0.2);
   transform: translateY(-1px);
 }
 
@@ -409,7 +409,7 @@ body {
 .star:hover,
 .star.on {
   color: var(--color-accent);
-  text-shadow: 0 0 8px rgba(184, 240, 74, 0.4);
+  text-shadow: 0 0 8px rgba(246, 141, 95, 0.4);
 }
 
 .score-bar {
@@ -547,14 +547,14 @@ body {
 /* ── Takeaway / Insight Box ──────────────────────────────────── */
 .insight-box {
   background: var(--color-accent-glow);
-  border: 1px solid rgba(184, 240, 74, 0.25);
+  border: 1px solid rgba(246, 141, 95, 0.25);
   border-radius: var(--radius-xl);
   padding: 14px 18px;
   font-size: 14px;
   color: var(--color-text-primary);
   line-height: 1.65;
   margin-bottom: 1.5rem;
-  box-shadow: 0 0 16px rgba(184, 240, 74, 0.02);
+  box-shadow: 0 0 16px rgba(246, 141, 95, 0.02);
 }
 
 .insight-box strong {
@@ -606,13 +606,13 @@ body {
   border-color: var(--color-accent);
   background: var(--color-accent-glow);
   color: var(--color-accent);
-  box-shadow: 0 0 12px rgba(184, 240, 74, 0.05);
+  box-shadow: 0 0 12px rgba(246, 141, 95, 0.05);
 }
 
 .btn-primary:hover {
   background: var(--color-accent);
   color: var(--color-bg);
-  box-shadow: 0 0 16px rgba(184, 240, 74, 0.2);
+  box-shadow: 0 0 16px rgba(246, 141, 95, 0.2);
   transform: translateY(-1px);
 }
 
