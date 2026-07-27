@@ -164,6 +164,35 @@
 
 .empty-state { text-align: center; padding: 40px 20px; color: var(--color-text-muted); font-size: 14px; }
 
+/* Send Contract panel's contract picker - a checklist instead of a single
+   <select> so more than one document (e.g. an MSA plus its tied NDA) can
+   be attached to the same email in one send. */
+.contract-attach-list {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 6px 4px;
+}
+.contract-attach-group-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  padding: 6px 8px 4px;
+}
+.contract-attach-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.contract-attach-row:hover { background: rgba(255, 255, 255, 0.04); }
+.contract-attach-row input[type="checkbox"] { width: auto; margin: 0; }
+
 /* Contract Template Library (see contractLibraryCard in index.html) */
 .contract-library-header h2 { font-family: var(--font-display); font-size: 20px; font-weight: 600; color: var(--color-text-primary); }
 .contract-library-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }

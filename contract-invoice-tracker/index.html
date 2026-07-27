@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Contract & Invoice Status Tracker</title>
 <link rel="stylesheet" href="../style.css?v=2">
-<link rel="stylesheet" href="css/style.css?v=8">
+<link rel="stylesheet" href="css/style.css?v=9">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
 </head>
 <body>
@@ -28,8 +28,8 @@
 <button type="button" id="sendContractCloseBtn" aria-label="Close" style="position: absolute; top: 14px; right: 14px; background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 4px;">&times;</button>
 <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; padding-right: 24px;">Send a contract for signature (the original PDF is attached as-is, styling preserved):</p>
 <div class="form-group">
-<label for="sendContractTemplate">Contract</label>
-<select id="sendContractTemplate"></select>
+<label>Contract(s) to Attach</label>
+<div id="sendContractTemplateList" class="contract-attach-list"></div>
 </div>
 <div class="form-group">
 <label for="sendContractTo">To</label>
@@ -132,6 +132,6 @@ Choose File
 </div>
 </main>
 
-<script src="js/app.js?v=9"></script>
+<script src="js/app.js?v=10"></script>
 </body>
 </html>

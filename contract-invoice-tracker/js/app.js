@@ -648,7 +648,7 @@ async function fetchPdfAsBase64(url) {
 }
 
 const sendContractPanel = el('sendContractPanel');
-const sendContractTemplate = el('sendContractTemplate');
+const sendContractTemplateList = el('sendContractTemplateList');
 const sendContractTo = el('sendContractTo');
 const sendContractSubject = el('sendContractSubject');
 const sendContractBody = el('sendContractBody');
@@ -659,13 +659,25 @@ const sendContractDocusignBtn = el('sendContractDocusignBtn');
 const sendContractStatus = el('sendContractStatus');
 const sendContractCloseBtn = el('sendContractCloseBtn');
 
-// Shows the Docusign button only for templates that actually have a
-// Docusign Template built (see docusignTemplateId in CONTRACT_TEMPLATES) -
-// every other template only ever gets the flat-PDF-attachment send.
+// Reads whichever checkboxes are currently ticked in the contract
+// checklist and resolves each into a full template object (built-in or
+// uploaded) - this is what lets more than one document be attached to a
+// single send, instead of only ever picking one from a dropdown.
+function getSelectedContractTemplates() {
+  if (!sendContractTemplateList) return [];
+  return Array.from(sendContractTemplateList.querySelectorAll('.contract-attach-checkbox:checked'))
+    .map(cb => resolveSelectedContractTemplate(cb.value))
+    .filter(Boolean);
+}
+
+// Docusign envelopes are tied to exactly one Template ID, so the Docusign
+// button only ever makes sense when a single, Docusign-enabled template is
+// checked - as soon as a second box is checked (or none are), it hides and
+// only the flat-PDF-attachment send remains available.
 function updateDocusignButtonVisibility() {
   if (!sendContractDocusignBtn) return;
-  const t = resolveSelectedContractTemplate(sendContractTemplate.value);
-  const hasDocusign = !!(t && t.docusignTemplateId && t.docusignRoleName);
+  const templates = getSelectedContractTemplates();
+  const hasDocusign = templates.length === 1 && !!(templates[0].docusignTemplateId && templates[0].docusignRoleName);
   sendContractDocusignBtn.style.display = hasDocusign ? 'flex' : 'none';
   sendContractDocusignBtn.disabled = false;
   sendContractDocusignBtn.textContent = 'Send for E-Signature (DocuSign)';
@@ -673,13 +685,29 @@ function updateDocusignButtonVisibility() {
 
 let currentContractContext = null; // { record, from }
 
+function contractChecklistRowHtml(value, label, selectedValues) {
+  const checked = selectedValues.has(value) ? ' checked' : '';
+  return `<label class="contract-attach-row"><input type="checkbox" class="contract-attach-checkbox" value="${value}"${checked}><span>${escapeHtmlLocal(label)}</span></label>`;
+}
+
+function populateContractTemplateChecklist(defaultSelectedValues) {
+  if (!sendContractTemplateList) return;
+  const selectedValues = new Set(defaultSelectedValues || []);
+  const builtIn = CONTRACT_TEMPLATES.map(t => contractChecklistRowHtml(`builtin:${t.id}`, t.label, selectedValues)).join('');
+  const uploaded = contractLibrary.map(t => contractChecklistRowHtml(`uploaded:${t.id}`, t.label, selectedValues)).join('');
+  sendContractTemplateList.innerHTML =
+    `<div class="contract-attach-group-label">Built-in Templates</div>${builtIn}` +
+    (contractLibrary.length ? `<div class="contract-attach-group-label">Uploaded Templates</div>${uploaded}` : '');
+}
+
+// Re-renders the checklist (e.g. after an upload/replace/delete in the
+// Contract Template Library changes what's available) without losing
+// whatever the user already had checked in an open Send Contract panel.
 function populateContractTemplateSelect() {
-  if (!sendContractTemplate) return;
-  const builtIn = CONTRACT_TEMPLATES.map(t => `<option value="builtin:${t.id}">${escapeHtmlLocal(t.label)}</option>`).join('');
-  const uploaded = contractLibrary.map(t => `<option value="uploaded:${t.id}">${escapeHtmlLocal(t.label)}</option>`).join('');
-  sendContractTemplate.innerHTML =
-    `<optgroup label="Built-in Templates">${builtIn}</optgroup>` +
-    (contractLibrary.length ? `<optgroup label="Uploaded Templates">${uploaded}</optgroup>` : '');
+  const stillCheckedValues = sendContractTemplateList
+    ? Array.from(sendContractTemplateList.querySelectorAll('.contract-attach-checkbox:checked')).map(cb => cb.value)
+    : [];
+  populateContractTemplateChecklist(stillCheckedValues);
 }
 
 function refreshSendContractMailto() {
@@ -717,15 +745,24 @@ if (sendContractCopyBtn) {
   });
 }
 
-async function buildContractEmailText(clientName, contactName, contractLabel, amName) {
-  let subject = `Your Contract with Revital Productions — ${clientName}`;
-  let body = `Hi ${(contactName || clientName).split(' ')[0]},\n\nAttached is your ${contractLabel} for ${clientName} — please review, sign, and return at your earliest convenience.\n\nIf anything in the agreement needs clarifying, just reply here and I'm happy to walk through it.\n\nThanks,\n${amName || 'The Revital Productions team'}`;
+// contractLabels may be a single string (back-compat) or an array - an
+// array of more than one produces "X, Y and Z" phrasing plus "is"/"are"
+// agreement, since Send Contract can now attach multiple documents at once.
+async function buildContractEmailText(clientName, contactName, contractLabels, amName) {
+  const labels = Array.isArray(contractLabels) ? contractLabels : [contractLabels];
+  const isPlural = labels.length > 1;
+  const docPhrase = labels.length <= 1
+    ? (labels[0] || '')
+    : labels.slice(0, -1).join(', ') + ' and ' + labels[labels.length - 1];
+
+  let subject = `Your Contract${isPlural ? 's' : ''} with Revital Productions — ${clientName}`;
+  let body = `Hi ${(contactName || clientName).split(' ')[0]},\n\nAttached ${isPlural ? 'are' : 'is'} your ${docPhrase} for ${clientName} — please review, sign, and return at your earliest convenience.\n\nIf anything in the agreement needs clarifying, just reply here and I'm happy to walk through it.\n\nThanks,\n${amName || 'The Revital Productions team'}`;
 
   if (isEmbedded && window.parent.fetchEmailTemplateById && window.parent.fillTemplateVars && window.parent.templateHtmlToPlainText) {
     try {
       const tpl = await window.parent.fetchEmailTemplateById('tpl-contract-send-21');
       if (tpl) {
-        const vars = { contactName: contactName || clientName, clientName, contractName: contractLabel, accountManagerName: amName || 'The Revital Productions team' };
+        const vars = { contactName: contactName || clientName, clientName, contractName: docPhrase, accountManagerName: amName || 'The Revital Productions team' };
         subject = window.parent.fillTemplateVars(tpl.subjectLine || subject, vars);
         body = window.parent.templateHtmlToPlainText(window.parent.fillTemplateVars(tpl.content, vars));
       }
@@ -746,9 +783,9 @@ async function openSendContractPanel(id) {
   const amEmail = (config.accountManagerEmail || '').trim();
   const contactName = config.clientContactName || r.clientName;
 
-  populateContractTemplateSelect();
-  const selectedTemplate = resolveSelectedContractTemplate(sendContractTemplate.value) || { label: CONTRACT_TEMPLATES[0].label };
-  const { subject, body } = await buildContractEmailText(r.clientName, contactName, selectedTemplate.label, amName);
+  populateContractTemplateChecklist([`builtin:${CONTRACT_TEMPLATES[0].id}`]);
+  const selectedLabels = getSelectedContractTemplates().map(t => t.label);
+  const { subject, body } = await buildContractEmailText(r.clientName, contactName, selectedLabels.length ? selectedLabels : [CONTRACT_TEMPLATES[0].label], amName);
 
   sendContractTo.value = config.clientContactEmail || '';
   sendContractSubject.value = subject;
@@ -780,13 +817,14 @@ async function openSendContractPanel(id) {
   }
 }
 
-if (sendContractTemplate) {
-  sendContractTemplate.addEventListener('change', async () => {
+if (sendContractTemplateList) {
+  sendContractTemplateList.addEventListener('change', async (e) => {
+    if (!e.target.classList || !e.target.classList.contains('contract-attach-checkbox')) return;
     if (!currentContractContext) return;
-    const t = resolveSelectedContractTemplate(sendContractTemplate.value);
-    if (!t) return;
+    const templates = getSelectedContractTemplates();
     const { record, contactName, amName } = currentContractContext;
-    const { subject, body } = await buildContractEmailText(record.clientName, contactName, t.label, amName);
+    const labels = templates.length ? templates.map(t => t.label) : [CONTRACT_TEMPLATES[0].label];
+    const { subject, body } = await buildContractEmailText(record.clientName, contactName, labels, amName);
     sendContractSubject.value = subject;
     sendContractBody.value = body;
     refreshSendContractMailto();
@@ -805,23 +843,27 @@ if (sendContractSendBtn) {
       return;
     }
 
-    const t = resolveSelectedContractTemplate(sendContractTemplate.value);
-    if (!t) {
+    const templates = getSelectedContractTemplates();
+    if (!templates.length) {
       if (sendContractStatus) {
-        sendContractStatus.textContent = 'Choose a contract template first.';
+        sendContractStatus.textContent = 'Choose at least one contract to attach.';
         sendContractStatus.style.color = 'var(--color-error, #f68d5f)';
       }
       return;
     }
     const { record } = currentContractContext;
+    const labelList = templates.map(t => t.label).join(', ');
 
     sendContractSendBtn.disabled = true;
-    sendContractSendBtn.textContent = 'Loading contract...';
+    sendContractSendBtn.textContent = templates.length > 1 ? 'Loading contracts...' : 'Loading contract...';
     if (sendContractStatus) sendContractStatus.textContent = '';
 
     try {
-      const base64 = await fetchPdfAsBase64(t.fetchUrl);
-      if (!base64) throw new Error('Contract PDF produced no data');
+      const attachments = await Promise.all(templates.map(async (t) => {
+        const base64 = await fetchPdfAsBase64(t.fetchUrl);
+        if (!base64) throw new Error(`${t.label} produced no data`);
+        return { filename: t.filename, content: base64 };
+      }));
 
       sendContractSendBtn.textContent = 'Sending...';
 
@@ -833,7 +875,7 @@ if (sendContractSendBtn) {
           subject: sendContractSubject.value,
           body: sendContractBody.value,
           from: currentContractContext.from,
-          attachments: [{ filename: t.filename, content: base64 }]
+          attachments
         })
       });
       const data = await res.json().catch(() => ({}));
@@ -843,7 +885,7 @@ if (sendContractSendBtn) {
 
       sendContractSendBtn.textContent = 'Sent ✓';
       if (sendContractStatus) {
-        sendContractStatus.textContent = `Sent successfully with ${t.label} attached.`;
+        sendContractStatus.textContent = `Sent successfully with ${labelList} attached.`;
         sendContractStatus.style.color = 'var(--color-success, #10b981)';
       }
 
@@ -860,7 +902,7 @@ if (sendContractSendBtn) {
         window.parent.logAdminActivity('Contract sent for signature', record.clientName);
       }
       if (isEmbedded && window.parent.showBanner) {
-        window.parent.showBanner('success', `${t.label} emailed to ${record.clientName}.`);
+        window.parent.showBanner('success', `${labelList} emailed to ${record.clientName}.`);
       }
     } catch (e) {
       console.error('Send contract email failed:', e);
@@ -888,7 +930,8 @@ if (sendContractDocusignBtn) {
       return;
     }
 
-    const t = resolveSelectedContractTemplate(sendContractTemplate.value);
+    const selected = getSelectedContractTemplates();
+    const t = selected.length === 1 ? selected[0] : null;
     if (!t || !t.docusignTemplateId || !t.docusignRoleName) return;
     const { record, contactName } = currentContractContext;
 
