@@ -451,11 +451,20 @@ async function persistContractLibrary() {
   }
 }
 
+let contractLibraryStatusTimer = null;
+
 function setContractLibraryStatus(msg, isError) {
   const elx = el('contractLibraryStatus');
   if (!elx) return;
   elx.textContent = msg;
   elx.style.color = isError ? 'var(--color-error, #f68d5f)' : 'var(--color-success, #10b981)';
+
+  if (contractLibraryStatusTimer) clearTimeout(contractLibraryStatusTimer);
+  if (msg) {
+    contractLibraryStatusTimer = setTimeout(() => {
+      if (elx.textContent === msg) elx.textContent = '';
+    }, 60000);
+  }
 }
 
 function renderContractLibrary() {
