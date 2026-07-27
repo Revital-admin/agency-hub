@@ -224,6 +224,7 @@ body {
 .audit-target-input:focus {
   border-color: var(--color-accent);
   background: var(--color-surface-2);
+  box-shadow: 0 0 0 3px var(--color-accent-dim);
 }
 
 /* ── Score Section ──────────────────────────────────────────── */
