@@ -92,6 +92,24 @@
 .tracker-table tr.urgency-red { border-left: 3px solid #ef4444; background: rgba(239, 68, 68, 0.06); }
 .tracker-table tr.urgency-closed { opacity: 0.55; }
 
+/* Actions is the last of 11 columns, so on most screens it only shows up
+   after scrolling the table right - and that scroll was hard to discover
+   even with a visible scrollbar. Pinning the column to the right edge of
+   the scroll area means Send Contract / Reset / Delete are visible at all
+   times, no scrolling required, regardless of how wide the rest of the
+   table gets. */
+.tracker-table th:last-child,
+.tracker-table td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  box-shadow: -6px 0 10px -4px rgba(0, 0, 0, 0.35);
+}
+.tracker-table th:last-child { background: var(--color-surface-2); z-index: 3; }
+.tracker-table td:last-child { background: var(--color-surface); }
+.tracker-table tr.urgency-yellow td:last-child { background: #222016; }
+.tracker-table tr.urgency-red td:last-child { background: #271d1a; }
+
 .tracker-table select,
 .tracker-table input[type="text"],
 .tracker-table input[type="date"] {
