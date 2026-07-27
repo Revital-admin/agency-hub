@@ -2,6 +2,16 @@
   position: relative;
   z-index: 1;
   max-width: 1100px;
+  /* This page's <body> is display:flex (shared root style.css, used for
+     layering .bg-grid behind the content), which makes .container a flex
+     item. Flex items default to min-width:auto (shrink-to-content), so
+     without this, embedding this page in a narrower iframe (like the
+     dashboard's tool panel, next to the sidebar) couldn't shrink below
+     ~1320px (its own max-width) even when the iframe itself was only
+     ~1100px wide - pushing the summary bar, table, and Actions column
+     off past the visible edge with no way to scroll back to them.
+     min-width:0 lets it actually shrink to whatever space it's given. */
+  min-width: 0;
   margin: 0 auto;
   padding: 3rem 1.5rem 4rem;
 }
