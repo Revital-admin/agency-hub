@@ -501,7 +501,17 @@ function deleteR2Object(key) {
 
 const newContractLabel = el('newContractLabel');
 const newContractFile = el('newContractFile');
+const newContractFileName = el('newContractFileName');
 const uploadContractBtn = el('uploadContractBtn');
+
+function refreshNewContractFileName() {
+  if (!newContractFileName) return;
+  const file = newContractFile.files[0];
+  newContractFileName.textContent = file ? file.name : 'No file chosen';
+}
+if (newContractFile) {
+  newContractFile.addEventListener('change', refreshNewContractFileName);
+}
 
 if (uploadContractBtn) {
   uploadContractBtn.addEventListener('click', async () => {
@@ -523,6 +533,7 @@ if (uploadContractBtn) {
       if (!ok) { contractLibrary.pop(); throw new Error('Could not save — try again'); }
       newContractLabel.value = '';
       newContractFile.value = '';
+      refreshNewContractFileName();
       renderContractLibrary();
       populateContractTemplateSelect();
       setContractLibraryStatus(`Added "${label}".`, false);

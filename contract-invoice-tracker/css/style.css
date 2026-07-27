@@ -167,3 +167,30 @@
 .contract-library-actions .delete-contract-btn:hover { border-color: #ef4444; color: #ef4444; }
 .contract-library-add { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .contract-library-add input[type="text"] { flex: 1; min-width: 220px; }
+/* Native <input type="file"> can't be restyled directly (it's an OS
+   widget, not a themeable element) - hidden and paired with a styled
+   label acting as the visible trigger instead, same technique as the
+   Replace button in each library row (.contract-replace-label above),
+   so this "Choose File" control matches the dark theme instead of
+   rendering as a stock light-gray OS button. */
+.contract-file-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+.contract-file-label:hover {
+  background: var(--color-surface-2);
+  border-color: var(--color-border-md);
+}
+.contract-file-name { font-size: 12px; color: var(--color-text-muted); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
