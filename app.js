@@ -418,6 +418,7 @@ let iframeNeedsReload = {
   "tab-packagerecommend": true,
   "tab-followuptracker": true,
   "tab-contractinvoice": true,
+  "tab-sowgenerator": true,
   "tab-referraltracker": true,
   "tab-renewaltracker": true,
   "tab-offboarding": true,
@@ -908,6 +909,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-contractinvoice":
       renderContractInvoiceTracker();
+      break;
+    case "tab-sowgenerator":
+      renderSowGenerator();
       break;
     case "tab-referraltracker":
       renderReferralTracker();
@@ -1852,6 +1856,11 @@ function renderRoiProjector() {
 // ── Contract & Invoice Status Tracker Controller ──
 function renderContractInvoiceTracker() {
   setIframeAbsoluteSrc('#tab-contractinvoice iframe', "contract-invoice-tracker/index.html");
+}
+
+// ── SOW Generator Controller ──
+function renderSowGenerator() {
+  setIframeAbsoluteSrc('#tab-sowgenerator iframe', "sow-generator/index.html");
 }
 
 // ── Referral Tracker Controller ──
