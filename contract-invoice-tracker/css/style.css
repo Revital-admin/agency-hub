@@ -55,7 +55,18 @@
 }
 
 .table-card { padding: 0; overflow: hidden; }
-.tracker-table-wrap { overflow-x: auto; }
+/* 11 columns (Client through Actions) don't fit most viewports at once,
+   so horizontal scroll here is unavoidable - but macOS/Chrome's default
+   scrollbar auto-hides until you're actively scrolling, so there was no
+   visible cue that Notes/Actions weren't just the end of the table.
+   Forcing a persistent, visibly-styled scrollbar (instead of the
+   OS-default overlay one) makes "there's more to the right" obvious at
+   a glance. */
+.tracker-table-wrap { overflow-x: auto; scrollbar-width: auto; }
+.tracker-table-wrap::-webkit-scrollbar { height: 10px; }
+.tracker-table-wrap::-webkit-scrollbar-track { background: var(--color-surface-2); }
+.tracker-table-wrap::-webkit-scrollbar-thumb { background: var(--color-border-md); border-radius: 5px; }
+.tracker-table-wrap::-webkit-scrollbar-thumb:hover { background: var(--color-accent); }
 .tracker-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tracker-table th {
   text-align: left;
