@@ -89,14 +89,14 @@ const STEPS = [
 ];
 
 const STEP_COLORS = [
-  '#f5735a', // Step 1
-  '#4aaaf0', // Step 2
-  '#6fde8e', // Step 3
-  '#f0c34a', // Step 4
-  '#c97af5', // Step 5
-  '#4af0c3', // Step 6
-  '#f57ac9', // Step 7
-  '#a0a09a', // Step 8
+  '#b5502f',
+  '#c06342',
+  '#ca7655',
+  '#d58968',
+  '#df9b7a',
+  '#eaae8d',
+  '#f4c1a0',
+  '#ffd4b3',
 ];
 
 const METRIC_LABELS = {
