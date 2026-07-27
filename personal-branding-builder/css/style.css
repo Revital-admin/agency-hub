@@ -23,17 +23,20 @@
   --color-success:    #4ade80;
   --color-info:       #38bdf8;
 
-  /* Step palette — one colour per step */
-  --step-1: #f68d5f;
-  --step-2: #0d9488;
-  --step-3: #3b82f6;
-  --step-4: #8b5cf6;
-  --step-5: #f68d5f;
-  --step-6: #f68d5f;
-  --step-7: #f97316;
-  --step-8: #64748b;
-  --step-9: #0ea5e9;
-  --step-10: #f43f5e;
+  /* Step palette — a single coral tonal ramp (deep to light) instead of
+     an unrelated rainbow, so numbered steps still read as distinct
+     but feel like one branded family rather than a random template
+     palette. */
+  --step-1: #b5502f;
+  --step-2: #bd5f3e;
+  --step-3: #c56d4c;
+  --step-4: #ce7c5b;
+  --step-5: #d68b6a;
+  --step-6: #de9978;
+  --step-7: #e6a887;
+  --step-8: #efb796;
+  --step-9: #f7c5a4;
+  --step-10: #ffd4b3;
 
   --radius-sm:  6px;
   --radius-md:  10px;

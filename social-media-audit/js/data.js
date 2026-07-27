@@ -5,14 +5,14 @@
    ============================================================ */
 
 const STEP_COLORS = [
-  '#f472b6', // Step 1 — Pink
-  '#ec4899', // Step 2 — Dark Pink
-  '#fb7185', // Step 3 — Rose
-  '#f43f5e', // Step 4 — Dark Rose
-  '#c084fc', // Step 5 — Purple (IG specific)
-  '#818cf8', // Step 6 — Indigo (TikTok specific)
-  '#3b82f6', // Step 7 — Blue (LinkedIn specific)
-  '#64748b', // Step 8 — Slate (Analytics specific)
+  '#b5502f',
+  '#c06342',
+  '#ca7655',
+  '#d58968',
+  '#df9b7a',
+  '#eaae8d',
+  '#f4c1a0',
+  '#ffd4b3',
 ];
 
 /* ----------------------------------------------------------------
