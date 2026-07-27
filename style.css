@@ -818,6 +818,15 @@ body {
 /* ── Main Content Area ── */
 .main-content {
   flex: 1;
+  /* Flex items default to min-width:auto (shrink-to-content), not 0 - so
+     without this, a wide embedded tool (e.g. the Contract & Invoice
+     Tracker's 11-column table) can force this whole column, and therefore
+     the entire dashboard body, wider than the viewport with no way to
+     scroll back to what's cut off. min-width:0 lets this column shrink to
+     the space actually available next to the sidebar; any tool that's
+     still too wide for that space scrolls *within its own iframe*
+     instead (which is how those tools are already built to handle it). */
+  min-width: 0;
   padding: 40px;
   max-width: 1200px;
   width: 100%;
