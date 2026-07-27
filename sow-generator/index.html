@@ -8,6 +8,10 @@
 <link rel="stylesheet" href="css/style.css?v=1">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<!-- pdf-lib: bakes invisible [[SIG_CLIENT]]/[[DATE_CLIENT]] DocuSign anchor
+     text onto the generated PDF's signature page after html2pdf renders it
+     (html2pdf's output has no real text layer of its own - see js/app.js). -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 </head>
 <body>
 <div class="bg-grid"></div>
@@ -88,10 +92,18 @@
 <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top: 8px;">
 <button id="downloadPdfBtn" class="btn-primary">Download SOW PDF</button>
 <button id="openEmailBtn" class="btn-secondary">Email to Client</button>
+<!-- Bakes invisible DocuSign anchor tags onto the signature page, then
+     uploads the SOW into the same Contract Template Library used by the
+     Contract & Invoice Tracker's Send Contract panel - from there it can
+     be sent for e-signature alone or combined with the MSA/other
+     templates in one envelope (see resolveSelectedContractTemplate in
+     contract-invoice-tracker/js/app.js). -->
+<button id="addToLibraryBtn" class="btn-secondary">Add to Contract Library (E-Signature)</button>
 </div>
+<div id="addToLibraryStatus" style="font-size: 0.8rem; margin-top: 8px;"></div>
 </div>
 
 </main>
-<script src="js/app.js?v=1"></script>
+<script src="js/app.js?v=2"></script>
 </body>
 </html>

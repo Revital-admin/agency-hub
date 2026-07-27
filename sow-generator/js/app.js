@@ -101,8 +101,17 @@ function validateForm(entry) {
 }
 
 // ── Signature block (shared by both formats) ──
+// Wrapped in its own page-break-before:always div so it always lands as
+// a fresh, predictable page - the #clientSigLine/#clientDateLine ids let
+// generateSowPdfBytes() measure exactly where "Signature" and "Date"
+// render for the Client column (via getBoundingClientRect, relative to
+// #sowSignaturePage's own top-left) and bake real invisible
+// [[SIG_CLIENT]]/[[DATE_CLIENT]] DocuSign anchor text at those precise
+// coordinates after html2pdf rasterizes the page - see
+// measureSignatureAnchors/bakeSignatureAnchors below.
 function signatureBlockHtml(entry) {
   return `
+    <div id="sowSignaturePage" style="page-break-before: always; margin:0; padding:0;">
     <h2 style="font-size: 16px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px; margin: 28px 0 14px;">SIGNATURES</h2>
     <p style="font-size: 12px; line-height: 1.6; margin-bottom: 20px;">By signing below, both parties agree to the scope, fees, and terms outlined in this Statement of Work and the attached Proposal (Exhibit A).</p>
     <div style="display:flex; gap:40px; margin-bottom: 26px;">
@@ -115,15 +124,16 @@ function signatureBlockHtml(entry) {
       </div>
       <div style="flex:1;">
         <div style="font-weight:700; font-size:12px; margin-bottom:10px;">Client</div>
-        <div style="border-top:1px solid #1a1a1a; padding-top:4px; font-size:11px; margin-bottom:14px;">Signature</div>
+        <div id="clientSigLine" style="border-top:1px solid #1a1a1a; padding-top:4px; font-size:11px; margin-bottom:14px;">Signature</div>
         <div style="border-top:1px solid #1a1a1a; padding-top:4px; font-size:11px; margin-bottom:14px;">Printed Name</div>
         <div style="border-top:1px solid #1a1a1a; padding-top:4px; font-size:11px; margin-bottom:14px;">Title</div>
         <div style="border-top:1px solid #1a1a1a; padding-top:4px; font-size:11px; margin-bottom:14px;">Company: ${entry.clientName}</div>
-        <div style="border-top:1px solid #1a1a1a; padding-top:4px; font-size:11px;">Date</div>
+        <div id="clientDateLine" style="border-top:1px solid #1a1a1a; padding-top:4px; font-size:11px;">Date</div>
       </div>
     </div>
     <h2 style="font-size: 15px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px; margin: 20px 0 8px;">EXHIBIT A — PROPOSAL</h2>
     <p style="font-size: 12px; line-height: 1.6; color:#555;">Attach the Proposal PDF generated from the Hub Proposal Calculator, dated ${fmtDate(entry.proposalDate)}.</p>
+    </div>
   `;
 }
 
@@ -321,6 +331,101 @@ function buildSowPdfPayload(entry) {
   return { container, opt };
 }
 
+/* ── DocuSign anchor tag baking ──
+   html2pdf/html2canvas rasterizes the whole page into an image, so the
+   PDF it produces has no real, searchable text layer at all - DocuSign's
+   anchorString tabs can't match against pixels. To fix that, we measure
+   exactly where the Client "Signature"/"Date" lines land on the (always
+   page-break-forced) signature page BEFORE rendering, generate the flat
+   PDF as normal, then use pdf-lib to stamp real (invisible) text at those
+   coordinates on the finished PDF's last page. Same anchor strings
+   ([[SIG_CLIENT]] / [[DATE_CLIENT]]) as the 6 built-in contract
+   templates, so the Contract & Invoice Tracker's combined-envelope
+   DocuSign flow treats a library-added SOW exactly like any other. */
+
+const PX_TO_PT = 0.75; // CSS reference: 96px = 1in, PDF points: 72pt = 1in
+
+async function measureSignatureAnchors(container) {
+  // getBoundingClientRect() only returns real values once an element is
+  // part of the document's layout tree, so attach off-screen first. The
+  // container's own width is a fixed `8.5in` (not viewport-relative), so
+  // this produces identical geometry to whatever html2canvas renders.
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'position:absolute; left:-99999px; top:0; visibility:hidden;';
+  wrapper.appendChild(container);
+  document.body.appendChild(wrapper);
+
+  let offsets = null;
+  try {
+    const pageBreakEl = container.querySelector('#sowSignaturePage');
+    const sigEl = container.querySelector('#clientSigLine');
+    const dateEl = container.querySelector('#clientDateLine');
+    if (pageBreakEl && sigEl && dateEl) {
+      const pageRect = pageBreakEl.getBoundingClientRect();
+      const sigRect = sigEl.getBoundingClientRect();
+      const dateRect = dateEl.getBoundingClientRect();
+      offsets = {
+        sigXPt: (sigRect.left - pageRect.left) * PX_TO_PT,
+        sigYPt: (sigRect.top - pageRect.top) * PX_TO_PT,
+        dateXPt: (dateRect.left - pageRect.left) * PX_TO_PT,
+        dateYPt: (dateRect.top - pageRect.top) * PX_TO_PT
+      };
+    }
+  } finally {
+    wrapper.removeChild(container);
+    document.body.removeChild(wrapper);
+  }
+  return offsets;
+}
+
+async function bakeSignatureAnchors(pdfBytes, offsets) {
+  if (!offsets || typeof PDFLib === 'undefined') return pdfBytes; // degrades to a plain flat PDF
+  try {
+    const { PDFDocument, StandardFonts, rgb } = PDFLib;
+    const pdfDoc = await PDFDocument.load(pdfBytes);
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const pages = pdfDoc.getPages();
+    const lastPage = pages[pages.length - 1]; // signature page is always last (forced page-break, nothing follows it)
+    const { height: pageHeightPt } = lastPage.getSize();
+    const place = (text, xPt, yFromTopPt) => {
+      lastPage.drawText(text, {
+        x: Math.max(xPt, 0),
+        y: Math.max(pageHeightPt - yFromTopPt - 9, 0), // -9 nudges onto the label's line itself
+        size: 1,
+        font,
+        color: rgb(1, 1, 1), // white
+        opacity: 0            // and fully transparent - belt and suspenders
+      });
+    };
+    place('[[SIG_CLIENT]]', offsets.sigXPt, offsets.sigYPt);
+    place('[[DATE_CLIENT]]', offsets.dateXPt, offsets.dateYPt);
+    return await pdfDoc.save();
+  } catch (e) {
+    console.error('Could not embed DocuSign anchor tags in SOW PDF (non-fatal - flat PDF still works):', e);
+    return pdfBytes;
+  }
+}
+
+// Single source of truth for generating the SOW's final PDF bytes -
+// used by Download, Email to Client, and Add to Contract Library alike,
+// so all three always produce the exact same (anchor-tagged) file.
+async function generateSowPdfBytes(entry) {
+  const { container, opt } = buildSowPdfPayload(entry);
+  const offsets = await measureSignatureAnchors(container);
+  const arrayBuffer = await html2pdf().set(opt).from(container).outputPdf('arraybuffer');
+  const bytes = await bakeSignatureAnchors(new Uint8Array(arrayBuffer), offsets);
+  return { bytes, filename: opt.filename };
+}
+
+function bytesToBase64(bytes) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
 async function downloadSowPdf() {
   const entry = gatherForm();
   const err = validateForm(entry);
@@ -333,8 +438,16 @@ async function downloadSowPdf() {
     alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
     return;
   }
-  const { container, opt } = buildSowPdfPayload(entry);
-  await html2pdf().set(opt).from(container).save();
+  const { bytes, filename } = await generateSowPdfBytes(entry);
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 const downloadPdfBtn = el('downloadPdfBtn');
@@ -470,9 +583,8 @@ if (emailToClientSendBtn) {
     const { entry } = currentEmailContext;
 
     try {
-      const { container, opt } = buildSowPdfPayload(entry);
-      const dataUri = await html2pdf().set(opt).from(container).outputPdf('datauristring');
-      const base64 = dataUri.slice(dataUri.indexOf(',') + 1);
+      const { bytes, filename } = await generateSowPdfBytes(entry);
+      const base64 = bytesToBase64(bytes);
       if (!base64) throw new Error('PDF generation produced no data');
 
       emailToClientSendBtn.textContent = 'Sending...';
@@ -485,7 +597,7 @@ if (emailToClientSendBtn) {
           subject: emailToClientSubject.value,
           body: emailToClientBody.value,
           from: currentEmailContext.from,
-          attachments: [{ filename: opt.filename, content: base64 }]
+          attachments: [{ filename, content: base64 }]
         })
       });
       const data = await res.json().catch(() => ({}));
@@ -512,6 +624,123 @@ if (emailToClientSendBtn) {
         emailToClientStatus.textContent = "Couldn't send automatically (" + e.message + ") - use Copy or \"Open in Email App\" instead.";
         emailToClientStatus.style.color = 'var(--color-error, #f68d5f)';
       }
+    }
+  });
+}
+
+/* ── Add to Contract Template Library (for DocuSign e-signature) ──
+   Bakes the anchor-tagged PDF (same generateSowPdfBytes() used by
+   Download/Email above), uploads it to R2 via the same /api/contracts
+   route the Contract & Invoice Tracker's own upload form uses, then adds
+   an entry to agency/contractTemplates in Firestore with
+   docusignAnchorTags: true. From that point on it behaves exactly like
+   any other library contract - selectable, replaceable, deletable, and
+   combinable with the MSA/other templates in one DocuSign envelope from
+   the tracker's Send Contract panel. */
+
+function sowUid() {
+  return 'sow-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+}
+
+async function uploadSowPdfToR2(bytes, filename) {
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const form = new FormData();
+  form.append('file', blob, filename);
+  const res = await fetch('/api/contracts', { method: 'POST', body: form });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) throw new Error(data.error || `Upload failed (${res.status})`);
+  return data.key;
+}
+
+function getContractLibraryDocRef() {
+  if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb) return null;
+  return window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "contractTemplates");
+}
+
+async function addSowToContractLibrary(entry, bytes, filename) {
+  if (!isEmbedded || !window.parent.firebaseGetDoc || !window.parent.firebaseSetDocFromJSON) {
+    throw new Error("Can't reach the Contract Template Library outside the Hub.");
+  }
+  const ref = getContractLibraryDocRef();
+  const key = await uploadSowPdfToR2(bytes, filename);
+
+  // Re-read right before writing (rather than trusting a version read at
+  // the start) so a concurrent edit made in the Contract & Invoice
+  // Tracker while this upload was in flight isn't clobbered.
+  const snap = await window.parent.firebaseGetDoc(ref);
+  const data = snap && snap.exists ? snap.data() : null;
+  const list = (data && data.list) || [];
+  const version = (data && data.version) || 0;
+
+  const label = `${entry.clientName} SOW (${entry.format === 'short' ? 'Short Form' : 'Full'})`;
+  list.push({
+    id: sowUid(),
+    label,
+    r2Key: key,
+    filename,
+    uploadedAt: todayStr(),
+    docusignAnchorTags: true
+  });
+
+  await window.parent.firebaseSetDocFromJSON(ref, JSON.stringify({ list, version: version + 1 }));
+  return label;
+}
+
+let addToLibraryStatusTimer = null;
+function setAddToLibraryStatus(msg, isError) {
+  const elx = el('addToLibraryStatus');
+  if (!elx) return;
+  elx.textContent = msg;
+  elx.style.color = isError ? 'var(--color-error, #f68d5f)' : 'var(--color-success, #10b981)';
+  if (addToLibraryStatusTimer) clearTimeout(addToLibraryStatusTimer);
+  if (msg) {
+    addToLibraryStatusTimer = setTimeout(() => {
+      if (elx.textContent === msg) elx.textContent = '';
+    }, 60000);
+  }
+}
+
+const addToLibraryBtn = el('addToLibraryBtn');
+if (addToLibraryBtn) {
+  addToLibraryBtn.addEventListener('click', async () => {
+    const entry = gatherForm();
+    const err = validateForm(entry);
+    if (err) {
+      if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', err);
+      else alert(err);
+      return;
+    }
+    if (typeof html2pdf === 'undefined') {
+      alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
+      return;
+    }
+    if (typeof PDFLib === 'undefined') {
+      alert('The DocuSign anchor library failed to load. Please check your internet connection or disable ad-blockers.');
+      return;
+    }
+    if (!isEmbedded) {
+      setAddToLibraryStatus("Open this tool from inside the Hub dashboard to add to the Contract Template Library.", true);
+      return;
+    }
+
+    const original = addToLibraryBtn.textContent;
+    addToLibraryBtn.disabled = true;
+    addToLibraryBtn.textContent = 'Generating PDF...';
+    setAddToLibraryStatus('', false);
+
+    try {
+      const { bytes, filename } = await generateSowPdfBytes(entry);
+      addToLibraryBtn.textContent = 'Uploading...';
+      const label = await addSowToContractLibrary(entry, bytes, filename);
+      setAddToLibraryStatus(`Added "${label}" to the Contract Template Library — it's now selectable (and combinable with the MSA/other templates) in Send Contract's DocuSign flow.`, false);
+      if (window.parent.logAdminActivity) window.parent.logAdminActivity('SOW added to Contract Template Library', entry.clientName);
+      if (window.parent.showBanner) window.parent.showBanner('success', `Added "${label}" to the Contract Template Library.`);
+    } catch (e) {
+      console.error('Add SOW to Contract Library failed:', e);
+      setAddToLibraryStatus("Couldn't add to the library: " + e.message, true);
+    } finally {
+      addToLibraryBtn.disabled = false;
+      addToLibraryBtn.textContent = original;
     }
   });
 }
