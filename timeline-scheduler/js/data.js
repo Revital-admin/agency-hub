@@ -210,6 +210,24 @@ const DEFAULT_TEMPLATES = [
       { order: 8, name: "First performance checkpoint", offsetDays: 45 },
     ],
   },
+  {
+    id: "website-redesign-ux-overhaul",
+    name: "Website Redesign / UX Overhaul",
+    description: "For improving an existing site (not a ground-up build) - audit through relaunch.",
+    builtIn: true,
+    phases: [
+      { order: 1,  name: "Run the UX/UI Audit on the existing site", offsetDays: 0 },
+      { order: 2,  name: "Review findings and prioritize issues", offsetDays: 3 },
+      { order: 3,  name: "Define redesign scope and goals", offsetDays: 5 },
+      { order: 4,  name: "Build updated wireframes for affected pages", offsetDays: 9 },
+      { order: 5,  name: "Design revisions and style updates", offsetDays: 14 },
+      { order: 6,  name: "Client review and revision round(s)", offsetDays: 19 },
+      { order: 7,  name: "Implement updates in Framer", offsetDays: 24 },
+      { order: 8,  name: "QA and cross-device testing", offsetDays: 28 },
+      { order: 9,  name: "Relaunch updated pages", offsetDays: 30 },
+      { order: 10, name: "Post-relaunch performance check", offsetDays: 37 },
+    ],
+  },
 ];
 
 /* ── One-time migration seeds for clients that already had real progress
