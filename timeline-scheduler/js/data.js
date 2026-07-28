@@ -178,6 +178,38 @@ const DEFAULT_TEMPLATES = [
       { order: 9,  name: "Promote across social and email channels", offsetDays: 24 },
     ],
   },
+  {
+    id: "content-strategy-overhaul",
+    name: "Content Strategy Overhaul",
+    description: "A one-time strategy engagement - audit through a finalized strategy doc, handed off for production.",
+    builtIn: true,
+    phases: [
+      { order: 1, name: "Audit current content and channels", offsetDays: 0 },
+      { order: 2, name: "Competitive and market review", offsetDays: 3 },
+      { order: 3, name: "Stakeholder interviews and goals alignment", offsetDays: 5 },
+      { order: 4, name: "Build the content strategy document", offsetDays: 10 },
+      { order: 5, name: "Internal review", offsetDays: 13 },
+      { order: 6, name: "Present strategy to client", offsetDays: 16 },
+      { order: 7, name: "Incorporate feedback and finalize", offsetDays: 19 },
+      { order: 8, name: "Hand off to content production", offsetDays: 21 },
+    ],
+  },
+  {
+    id: "personal-branding-project",
+    name: "Personal Branding Project",
+    description: "For individual personal-brand clients - discovery through a live posting cadence.",
+    builtIn: true,
+    phases: [
+      { order: 1, name: "Personal brand discovery session (goals, voice, audience)", offsetDays: 0 },
+      { order: 2, name: "Define content pillars and brand positioning", offsetDays: 4 },
+      { order: 3, name: "Build out the Personal Branding Builder profile", offsetDays: 8 },
+      { order: 4, name: "Draft the first batch of personal brand content", offsetDays: 13 },
+      { order: 5, name: "Client review and revisions", offsetDays: 17 },
+      { order: 6, name: "Publish the first batch of content", offsetDays: 19 },
+      { order: 7, name: "Set up the ongoing posting cadence", offsetDays: 20 },
+      { order: 8, name: "First performance checkpoint", offsetDays: 45 },
+    ],
+  },
 ];
 
 /* ── One-time migration seeds for clients that already had real progress
