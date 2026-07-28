@@ -228,6 +228,21 @@ const DEFAULT_TEMPLATES = [
       { order: 10, name: "Post-relaunch performance check", offsetDays: 37 },
     ],
   },
+  {
+    id: "blog-content-batch",
+    name: "Blog / Website Content Batch",
+    description: "For producing a batch of blog/website content on its own - no SEO audit or strategy work bundled in, unlike SEO/Content Campaign. Reapply for each new batch.",
+    builtIn: true,
+    phases: [
+      { order: 1, name: "Outline topics and content brief for this batch", offsetDays: 0 },
+      { order: 2, name: "Draft the content", offsetDays: 4 },
+      { order: 3, name: "Internal review and edit", offsetDays: 7 },
+      { order: 4, name: "Light on-page SEO pass (titles, meta, links)", offsetDays: 8 },
+      { order: 5, name: "Client review and approval", offsetDays: 11 },
+      { order: 6, name: "Publish", offsetDays: 13 },
+      { order: 7, name: "Promote across social and email channels", offsetDays: 14 },
+    ],
+  },
 ];
 
 /* ── One-time migration seeds for clients that already had real progress
