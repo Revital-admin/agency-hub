@@ -457,14 +457,16 @@ function renderPhases(timeline) {
 
   container.innerHTML = phases.map((phase, idx) => {
     const status = computeStatus(phase);
-    const subItemsHtml = (phase.subItems && phase.subItems.length) ? `
+    const subItemsHtml = phase.subItems ? `
       <div class="phase-subitems">
         ${phase.subItems.map((si, siIdx) => `
-          <label class="phase-subitem ${si.checked ? 'checked' : ''}">
+          <div class="phase-subitem ${si.checked ? 'checked' : ''}">
             <input type="checkbox" data-order="${phase.order}" data-subidx="${siIdx}" class="subitem-checkbox" ${si.checked ? 'checked' : ''}>
-            <span>${escapeHtml(si.label)}</span>
-          </label>
+            <input type="text" class="subitem-label-input" data-order="${phase.order}" data-subidx="${siIdx}" value="${escapeHtml(si.label)}" placeholder="Page name">
+            <button type="button" class="subitem-remove-btn" data-order="${phase.order}" data-subidx="${siIdx}" aria-label="Remove page">&times;</button>
+          </div>
         `).join('')}
+        <button type="button" class="subitem-add-btn" data-order="${phase.order}">+ Add page</button>
       </div>
     ` : '';
 
@@ -547,6 +549,40 @@ function wirePhaseEvents(timeline) {
       const si = phase.subItems[Number(cb.dataset.subidx)];
       if (!si) return;
       si.checked = cb.checked;
+      persistClient();
+      renderPhases(timeline);
+      renderSummary(timeline);
+    });
+  });
+
+  container.querySelectorAll('.subitem-label-input').forEach(input => {
+    input.addEventListener('change', () => {
+      const phase = timeline.phases.find(p => p.order == input.dataset.order);
+      if (!phase || !phase.subItems) return;
+      const si = phase.subItems[Number(input.dataset.subidx)];
+      if (!si) return;
+      si.label = input.value.trim() || si.label;
+      persistClient();
+    });
+  });
+
+  container.querySelectorAll('.subitem-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const phase = timeline.phases.find(p => p.order == btn.dataset.order);
+      if (!phase || !phase.subItems) return;
+      phase.subItems.splice(Number(btn.dataset.subidx), 1);
+      persistClient();
+      renderPhases(timeline);
+      renderSummary(timeline);
+    });
+  });
+
+  container.querySelectorAll('.subitem-add-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const phase = timeline.phases.find(p => p.order == btn.dataset.order);
+      if (!phase) return;
+      if (!phase.subItems) phase.subItems = [];
+      phase.subItems.push({ label: 'New Page', checked: false });
       persistClient();
       renderPhases(timeline);
       renderSummary(timeline);

@@ -313,8 +313,49 @@
 
 .phase-subitems { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--color-border); display: flex; flex-direction: column; gap: 6px; }
 .phase-subitem { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--color-text-secondary); }
-.phase-subitem input[type="checkbox"] { accent-color: var(--color-accent); cursor: pointer; }
-.phase-subitem.checked span { text-decoration: line-through; color: var(--color-text-muted); }
+.phase-subitem input[type="checkbox"] { accent-color: var(--color-accent); cursor: pointer; flex-shrink: 0; }
+.phase-subitem.checked .subitem-label-input { text-decoration: line-through; color: var(--color-text-muted); }
+.subitem-label-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 4px 8px;
+  outline: none;
+  transition: all var(--transition);
+}
+.subitem-label-input:hover { border-color: var(--color-border); }
+.subitem-label-input:focus { border-color: var(--color-accent); background: var(--color-surface-2); box-shadow: 0 0 0 3px var(--color-accent-dim); }
+.subitem-remove-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  transition: all var(--transition);
+}
+.subitem-remove-btn:hover { color: #ef4444; background: rgba(239, 68, 68, 0.08); }
+.subitem-add-btn {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 8px;
+  margin-top: 2px;
+  transition: color var(--transition);
+}
+.subitem-add-btn:hover { color: var(--color-accent); }
 
 .phase-remove-btn {
   background: transparent;
