@@ -356,6 +356,24 @@
   transition: color var(--transition);
 }
 .subitem-add-btn:hover { color: var(--color-accent); }
+.subitem-init-btn {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border);
+  background: transparent;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: color var(--transition);
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+.subitem-init-btn:hover { color: var(--color-accent); }
 
 .phase-remove-btn {
   background: transparent;

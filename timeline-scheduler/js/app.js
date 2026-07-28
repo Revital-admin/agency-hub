@@ -450,12 +450,11 @@ function renderPhases(timeline) {
   const container = document.getElementById('phasesList');
   const phases = [...(timeline.phases || [])].sort((a, b) => a.order - b.order);
 
-  if (!phases.length) {
-    container.innerHTML = '';
-    return;
-  }
+  const emptyStateHtml = phases.length ? '' : `
+    <p style="font-size:13px; color: var(--color-text-muted); margin-bottom: 12px;">No phases on this timeline yet.</p>
+  `;
 
-  container.innerHTML = phases.map((phase, idx) => {
+  container.innerHTML = emptyStateHtml + phases.map((phase, idx) => {
     const status = computeStatus(phase);
     const subItemsHtml = phase.subItems ? `
       <div class="phase-subitems">
@@ -468,7 +467,9 @@ function renderPhases(timeline) {
         `).join('')}
         <button type="button" class="subitem-add-btn" data-order="${phase.order}">+ Add page</button>
       </div>
-    ` : '';
+    ` : `
+      <button type="button" class="subitem-init-btn" data-order="${phase.order}">+ Add a sub-checklist</button>
+    `;
 
     return `
     <div class="phase-card status-${status}" data-order="${phase.order}">
@@ -583,6 +584,17 @@ function wirePhaseEvents(timeline) {
       if (!phase) return;
       if (!phase.subItems) phase.subItems = [];
       phase.subItems.push({ label: 'New Page', checked: false });
+      persistClient();
+      renderPhases(timeline);
+      renderSummary(timeline);
+    });
+  });
+
+  container.querySelectorAll('.subitem-init-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const phase = timeline.phases.find(p => p.order == btn.dataset.order);
+      if (!phase) return;
+      phase.subItems = [{ label: 'New Page', checked: false }];
       persistClient();
       renderPhases(timeline);
       renderSummary(timeline);
@@ -797,13 +809,17 @@ function wireStaticEvents() {
     if (!timeline) return;
     markTimelineComplete(timeline);
     const nextTemplateId = timeline.templateId;
-    persistClient();
-    if (nextTemplateId && findTemplate(nextTemplateId)) {
+    const canRestart = nextTemplateId && findTemplate(nextTemplateId);
+    if (canRestart) {
       startNewTimeline(client, nextTemplateId);
     }
     persistClient();
     renderAll();
-    showBanner('success', 'Started the next cycle.');
+    if (canRestart) {
+      showBanner('success', 'Started the next cycle.');
+    } else {
+      showBanner('error', 'This timeline is marked complete, but its template no longer exists, so a new cycle couldn\'t be started automatically. Use "+ New Timeline" to pick one manually.');
+    }
   });
 
   document.getElementById('newTimelineCloseBtn').addEventListener('click', () => {
