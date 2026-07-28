@@ -190,7 +190,7 @@
 .template-editor-actions { display: flex; gap: 8px; margin-top: 12px; }
 
 /* ── Phases timeline ── */
-.phases-list { position: relative; }
+.phases-list { position: relative; margin-bottom: 32px; }
 .phase-card {
   display: flex;
   gap: 16px;
