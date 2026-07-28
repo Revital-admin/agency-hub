@@ -1,10 +1,14 @@
 /* ============================================================
    TIMELINE SCHEDULER — APP LOGIC
-   Client-scoped project timeline: phases, target/actual dates,
-   status, notes, sub-items. Backed by the hub's clientsDb (per
-   client) plus an agency-level shared Template Library (Firestore
-   doc "agency/timelineTemplates", same optimistic-concurrency
-   pattern as Contract & Invoice Tracker's "agency/contractTemplates").
+   Client-scoped project timelines: phases, target/actual dates,
+   status, notes, sub-items. A client can hold MULTIPLE timelines
+   (client.timelines: [...]) - concurrent workstreams (e.g. a Website
+   Build and a Paid Ads launch running at once) or a history of
+   finished ones (e.g. successive monthly Blog Content Batch cycles).
+   Backed by the hub's clientsDb (per client) plus an agency-level
+   shared Template Library (Firestore doc "agency/timelineTemplates",
+   same optimistic-concurrency pattern as Contract & Invoice Tracker's
+   "agency/contractTemplates").
    ============================================================ */
 
 const isEmbedded = window.parent && window.parent !== window;
@@ -12,6 +16,7 @@ const isEmbedded = window.parent && window.parent !== window;
 let templateLibrary = [];       // agency-level custom templates (in addition to DEFAULT_TEMPLATES)
 let templateLibraryDocVersion = 0;
 let editingTemplateId = null;   // set when the template editor is open for an existing template
+let selectedTimelineId = null;  // which of the client's timelines is currently shown (in-memory only)
 
 /* ---------- helpers ---------- */
 
@@ -37,6 +42,10 @@ function formatDateShort(iso) {
   const d = new Date(iso + 'T00:00:00');
   if (isNaN(d.getTime())) return '—';
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function genId() {
+  return 'tl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
 }
 
 function allTemplates() {
@@ -87,7 +96,6 @@ async function loadTemplateLibrary() {
     }
   }
   renderTemplateLibrary();
-  renderTemplatePicker();
 }
 
 async function persistTemplateLibrary() {
@@ -134,7 +142,7 @@ function templatePhasesToText(phases) {
   return (phases || []).map(p => `${p.name} | ${p.offsetDays}`).join('\n');
 }
 
-/* ---------- Template Library UI ---------- */
+/* ---------- Template Library UI (manage the templates themselves) ---------- */
 
 function renderTemplateLibrary() {
   const list = document.getElementById('templateLibraryList');
@@ -230,7 +238,6 @@ async function saveTemplateFromEditor() {
     showBanner('success', 'Template saved.');
     closeTemplateEditor();
     renderTemplateLibrary();
-    renderTemplatePicker();
   }
 }
 
@@ -243,64 +250,103 @@ async function deleteTemplate(templateId) {
   if (ok) {
     showBanner('success', 'Template deleted.');
     renderTemplateLibrary();
-    renderTemplatePicker();
   }
 }
 
-/* ---------- client timeline shape + migration ---------- */
+/* ---------- client timelines: model, migration, lifecycle ---------- */
 
-function ensureTimelineShape(client) {
-  if (!client.timeline) {
-    client.timeline = { templateId: null, projectStartDate: null, phases: [] };
-    maybeSeedMigratedClient(client);
-  }
-  return client.timeline;
+function buildTimelineFromTemplate(template, opts) {
+  opts = opts || {};
+  const doneThroughOrder = opts.doneThroughOrder || 0;
+  return {
+    id: genId(),
+    templateId: template.id,
+    templateName: template.name,
+    projectStartDate: null,
+    phases: template.phases.map(p => ({
+      order: p.order,
+      name: p.name,
+      offsetDays: p.offsetDays,
+      status: p.order <= doneThroughOrder ? 'done' : 'not-started',
+      targetDate: null,
+      actualDate: null,
+      overridden: false,
+      notes: '',
+      subItems: (p.subItems || []).map(label => ({ label, checked: p.order <= doneThroughOrder })),
+    })),
+    status: 'active',
+    createdAt: todayISO(),
+    completedAt: null,
+  };
 }
 
 function maybeSeedMigratedClient(client) {
-  const clientName = (isEmbedded && window.parent.getAllClients)
-    ? Object.keys(window.parent.getAllClients() || {}).find(name => window.parent.getAllClients()[name] === client)
-    : null;
-
-  const activeClientName = window.__timelineActiveClientName || clientName;
-  const seed = activeClientName ? MIGRATION_SEEDS[activeClientName] : null;
+  const seed = window.__timelineActiveClientName ? MIGRATION_SEEDS[window.__timelineActiveClientName] : null;
   if (!seed) return;
-
   const template = findTemplate(seed.templateId);
   if (!template) return;
-
-  client.timeline.templateId = template.id;
-  client.timeline.phases = template.phases.map(p => ({
-    order: p.order,
-    name: p.name,
-    offsetDays: p.offsetDays,
-    status: p.order <= seed.doneThroughOrder ? 'done' : 'not-started',
-    targetDate: null,
-    actualDate: null,
-    overridden: false,
-    notes: '',
-    subItems: (p.subItems || []).map(label => ({ label, checked: p.order <= seed.doneThroughOrder })),
-  }));
+  client.timelines.push(buildTimelineFromTemplate(template, { doneThroughOrder: seed.doneThroughOrder }));
 }
 
-function applyTemplateToClient(client, templateId) {
-  const template = findTemplate(templateId);
-  if (!template) return;
-  client.timeline.templateId = template.id;
-  client.timeline.phases = template.phases.map(p => ({
-    order: p.order,
-    name: p.name,
-    offsetDays: p.offsetDays,
-    status: 'not-started',
-    targetDate: null,
-    actualDate: null,
-    overridden: false,
-    notes: '',
-    subItems: (p.subItems || []).map(label => ({ label, checked: false })),
-  }));
-  if (client.timeline.projectStartDate) {
-    recalculateDates(client.timeline, client.timeline.projectStartDate);
+// Ensures client.timelines exists, migrating the old single-timeline shape
+// (client.timeline = {...}) into the new array shape the first time a
+// client is opened post-upgrade, and seeding brand-new named clients once.
+function ensureTimelinesArray(client) {
+  if (Array.isArray(client.timelines)) return client.timelines;
+
+  client.timelines = [];
+
+  if (client.timeline && client.timeline.phases && client.timeline.phases.length) {
+    const old = client.timeline;
+    const allDone = old.phases.every(p => p.status === 'done');
+    const oldTemplate = findTemplate(old.templateId);
+    client.timelines.push({
+      id: genId(),
+      templateId: old.templateId || null,
+      templateName: oldTemplate ? oldTemplate.name : 'Migrated Timeline',
+      projectStartDate: old.projectStartDate || null,
+      phases: old.phases,
+      status: allDone ? 'completed' : 'active',
+      createdAt: todayISO(),
+      completedAt: allDone ? todayISO() : null,
+    });
+    delete client.timeline;
+  } else if (!client.timelinesInitialized) {
+    maybeSeedMigratedClient(client);
   }
+
+  client.timelinesInitialized = true;
+  return client.timelines;
+}
+
+function sortedTimelinesForTabs(timelines) {
+  const active = timelines.filter(t => t.status === 'active')
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  const completed = timelines.filter(t => t.status !== 'active')
+    .sort((a, b) => (b.completedAt || b.createdAt || '').localeCompare(a.completedAt || a.createdAt || ''));
+  return [...active, ...completed];
+}
+
+function getSelectedTimeline(client) {
+  const timelines = ensureTimelinesArray(client);
+  if (!timelines.length) return null;
+  let tl = timelines.find(t => t.id === selectedTimelineId);
+  if (!tl) {
+    const ordered = sortedTimelinesForTabs(timelines);
+    tl = ordered[0];
+    selectedTimelineId = tl.id;
+  }
+  return tl;
+}
+
+function startNewTimeline(client, templateId) {
+  const template = findTemplate(templateId);
+  if (!template) return null;
+  const timelines = ensureTimelinesArray(client);
+  const tl = buildTimelineFromTemplate(template);
+  timelines.push(tl);
+  selectedTimelineId = tl.id;
+  return tl;
 }
 
 function recalculateDates(timeline, startDateISO) {
@@ -321,6 +367,38 @@ function computeStatus(phase) {
   return 'not-started';
 }
 
+function renderTimelineTabs(client) {
+  const card = document.getElementById('timelineTabsCard');
+  const row = document.getElementById('timelineTabsRow');
+  const timelines = client.timelines;
+
+  if (!timelines.length) {
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = 'block';
+
+  const ordered = sortedTimelinesForTabs(timelines);
+  const selected = getSelectedTimeline(client);
+
+  row.innerHTML = ordered.map(t => `
+    <button type="button" class="timeline-tab status-${t.status} ${selected && t.id === selected.id ? 'active' : ''}" data-id="${t.id}">
+      <span class="tab-status-dot"></span>
+      <span>${escapeHtml(t.templateName || 'Custom')} · ${formatDateShort(t.createdAt)}</span>
+    </button>
+  `).join('') + `
+    <button type="button" class="timeline-tab-add" id="tabsAddTimelineBtn">+ New Timeline</button>
+  `;
+
+  row.querySelectorAll('.timeline-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      selectedTimelineId = btn.dataset.id;
+      renderAll();
+    });
+  });
+  document.getElementById('tabsAddTimelineBtn').addEventListener('click', openNewTimelineModal);
+}
+
 function renderSummary(timeline) {
   const phases = timeline.phases || [];
   const total = phases.length;
@@ -329,7 +407,7 @@ function renderSummary(timeline) {
     .filter(p => p.status !== 'done')
     .sort((a, b) => a.order - b.order)[0];
   const overdueCount = phases.filter(p => p.status !== 'done' && p.targetDate && p.targetDate < todayISO()).length;
-  const launchPhase = [...phases].reverse().find(p => /launch/i.test(p.name)) || phases[phases.length - 1];
+  const launchPhase = [...phases].reverse().find(p => /launch|publish|deliver|relaunch/i.test(p.name)) || phases[phases.length - 1];
 
   document.getElementById('statPhasesDone').textContent = `${done}/${total}`;
   document.getElementById('statNextUp').textContent = nextUp ? nextUp.name : '—';
@@ -479,24 +557,8 @@ function wirePhaseEvents(timeline) {
   }
 }
 
-function renderTemplatePicker() {
-  const client = getClient();
-  const noTimelineCard = document.getElementById('noTimelineCard');
-  const switchTrigger = document.getElementById('switchTemplateTrigger');
-  if (!client) return;
-  const timeline = ensureTimelineShape(client);
-  const hasPhases = timeline.phases && timeline.phases.length > 0;
-
-  noTimelineCard.style.display = hasPhases ? 'none' : 'block';
-  switchTrigger.style.display = hasPhases ? 'block' : 'none';
-
-  if (hasPhases) {
-    const current = findTemplate(timeline.templateId);
-    document.getElementById('currentTemplateName').textContent = current ? current.name : 'Custom / Manually Built';
-    return;
-  }
-
-  const list = document.getElementById('templatePickerList');
+function renderTemplatePickerInto(listElId, onPick) {
+  const list = document.getElementById(listElId);
   const templates = allTemplates();
   list.innerHTML = templates.map(t => `
     <div class="template-picker-row">
@@ -506,72 +568,92 @@ function renderTemplatePicker() {
       </div>
       <div style="display:flex; align-items:center; gap:12px;">
         <span class="template-picker-count">${t.phases.length} phases</span>
-        <button type="button" class="btn-primary apply-template-btn" data-id="${t.id}">Use This Template</button>
+        <button type="button" class="btn-primary pick-template-btn" data-id="${t.id}">Use This Template</button>
       </div>
     </div>
   `).join('');
 
-  list.querySelectorAll('.apply-template-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const c = getClient();
-      if (!c) return;
-      applyTemplateToClient(c, btn.dataset.id);
-      persistClient();
-      renderAll();
-    });
+  list.querySelectorAll('.pick-template-btn').forEach(btn => {
+    btn.addEventListener('click', () => onPick(btn.dataset.id));
   });
 }
 
-function renderSwitchTemplateList() {
-  const client = getClient();
-  if (!client) return;
-  const timeline = ensureTimelineShape(client);
-  const list = document.getElementById('switchTemplateList');
-  const templates = allTemplates();
-
-  list.innerHTML = templates.map(t => `
-    <div class="template-picker-row">
-      <div>
-        <div class="template-picker-name">${escapeHtml(t.name)}${t.id === timeline.templateId ? ' <span style="font-weight:400; color: var(--color-text-muted); font-size:11px;">(current)</span>' : ''}</div>
-        <div class="template-picker-desc">${escapeHtml(t.description || '')}</div>
-      </div>
-      <div style="display:flex; align-items:center; gap:12px;">
-        <span class="template-picker-count">${t.phases.length} phases</span>
-        <button type="button" class="btn-primary switch-template-btn" data-id="${t.id}" ${t.id === timeline.templateId ? 'disabled' : ''}>Switch to This</button>
-      </div>
-    </div>
-  `).join('');
-
-  list.querySelectorAll('.switch-template-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const t = findTemplate(btn.dataset.id);
-      if (!t) return;
-      if (!confirm(`Switch to "${t.name}"? This replaces every phase currently on this client's timeline - existing statuses, dates, and notes will be lost.`)) return;
-      const c = getClient();
-      if (!c) return;
-      applyTemplateToClient(c, t.id);
-      persistClient();
-      document.getElementById('switchTemplateCard').style.display = 'none';
-      renderAll();
-      showBanner('success', `Switched to "${t.name}".`);
-    });
+function openNewTimelineModal() {
+  renderTemplatePickerInto('newTimelineList', (templateId) => {
+    const client = getClient();
+    if (!client) return;
+    startNewTimeline(client, templateId);
+    persistClient();
+    document.getElementById('newTimelineCard').style.display = 'none';
+    renderAll();
   });
+  document.getElementById('newTimelineCard').style.display = 'block';
+}
+
+/* ---------- timeline lifecycle actions ---------- */
+
+function markTimelineComplete(timeline) {
+  timeline.status = 'completed';
+  timeline.completedAt = todayISO();
+}
+
+function reopenTimeline(timeline) {
+  timeline.status = 'active';
+  timeline.completedAt = null;
+}
+
+function deleteTimelineById(client, timelineId) {
+  client.timelines = client.timelines.filter(t => t.id !== timelineId);
+  if (selectedTimelineId === timelineId) selectedTimelineId = null;
 }
 
 function renderAll() {
   const client = getClient();
   if (!client) return;
-  const timeline = ensureTimelineShape(client);
+  ensureTimelinesArray(client);
 
   const nameEl = document.getElementById('timelineClientName');
   if (nameEl) {
     nameEl.textContent = window.__timelineActiveClientName ? `Client: ${window.__timelineActiveClientName}` : '';
   }
 
+  renderTimelineTabs(client);
+
+  const noTimelineCard = document.getElementById('noTimelineCard');
+  const detailWrap = document.getElementById('timelineDetailWrap');
+  const hasTimelines = client.timelines.length > 0;
+
+  noTimelineCard.style.display = hasTimelines ? 'none' : 'block';
+  detailWrap.style.display = hasTimelines ? 'block' : 'none';
+
+  if (!hasTimelines) {
+    renderTemplatePickerInto('templatePickerList', (templateId) => {
+      startNewTimeline(client, templateId);
+      persistClient();
+      renderAll();
+    });
+    return;
+  }
+
+  const timeline = getSelectedTimeline(client);
+
   const startInput = document.getElementById('projectStartDate');
   if (startInput) startInput.value = timeline.projectStartDate || '';
 
-  renderTemplatePicker();
+  const markCompleteBtn = document.getElementById('markCompleteBtn');
+  const reopenBtn = document.getElementById('reopenTimelineBtn');
+  if (timeline.status === 'completed') {
+    markCompleteBtn.style.display = 'none';
+    reopenBtn.style.display = 'inline-flex';
+  } else {
+    markCompleteBtn.style.display = 'inline-flex';
+    reopenBtn.style.display = 'none';
+  }
+
+  const allDone = timeline.phases.length > 0 && timeline.phases.every(p => p.status === 'done');
+  const banner = document.getElementById('cycleCompleteBanner');
+  banner.style.display = (allDone && timeline.status === 'active') ? 'block' : 'none';
+
   renderSummary(timeline);
   renderPhases(timeline);
 }
@@ -582,7 +664,8 @@ function wireStaticEvents() {
   document.getElementById('recalculateBtn').addEventListener('click', () => {
     const client = getClient();
     if (!client) return;
-    const timeline = ensureTimelineShape(client);
+    const timeline = getSelectedTimeline(client);
+    if (!timeline) return;
     const startDate = document.getElementById('projectStartDate').value;
     if (!startDate) {
       showBanner('error', 'Pick a Project Start Date first.');
@@ -600,9 +683,64 @@ function wireStaticEvents() {
   document.getElementById('projectStartDate').addEventListener('change', () => {
     const client = getClient();
     if (!client) return;
-    const timeline = ensureTimelineShape(client);
+    const timeline = getSelectedTimeline(client);
+    if (!timeline) return;
     timeline.projectStartDate = document.getElementById('projectStartDate').value || null;
     persistClient();
+  });
+
+  document.getElementById('markCompleteBtn').addEventListener('click', () => {
+    const client = getClient();
+    if (!client) return;
+    const timeline = getSelectedTimeline(client);
+    if (!timeline) return;
+    markTimelineComplete(timeline);
+    persistClient();
+    renderAll();
+    showBanner('success', 'Timeline marked complete.');
+  });
+
+  document.getElementById('reopenTimelineBtn').addEventListener('click', () => {
+    const client = getClient();
+    if (!client) return;
+    const timeline = getSelectedTimeline(client);
+    if (!timeline) return;
+    reopenTimeline(timeline);
+    persistClient();
+    renderAll();
+    showBanner('success', 'Timeline reopened.');
+  });
+
+  document.getElementById('deleteTimelineBtn').addEventListener('click', () => {
+    const client = getClient();
+    if (!client) return;
+    const timeline = getSelectedTimeline(client);
+    if (!timeline) return;
+    if (!confirm(`Delete the "${timeline.templateName || 'this'}" timeline? This can't be undone.`)) return;
+    deleteTimelineById(client, timeline.id);
+    persistClient();
+    renderAll();
+    showBanner('success', 'Timeline deleted.');
+  });
+
+  document.getElementById('startNextCycleBtn').addEventListener('click', () => {
+    const client = getClient();
+    if (!client) return;
+    const timeline = getSelectedTimeline(client);
+    if (!timeline) return;
+    markTimelineComplete(timeline);
+    const nextTemplateId = timeline.templateId;
+    persistClient();
+    if (nextTemplateId && findTemplate(nextTemplateId)) {
+      startNewTimeline(client, nextTemplateId);
+    }
+    persistClient();
+    renderAll();
+    showBanner('success', 'Started the next cycle.');
+  });
+
+  document.getElementById('newTimelineCloseBtn').addEventListener('click', () => {
+    document.getElementById('newTimelineCard').style.display = 'none';
   });
 
   document.getElementById('openTemplateLibraryBtn').addEventListener('click', () => {
@@ -616,14 +754,6 @@ function wireStaticEvents() {
   document.getElementById('newTemplateBtn').addEventListener('click', () => openTemplateEditor(null));
   document.getElementById('saveTemplateBtn').addEventListener('click', saveTemplateFromEditor);
   document.getElementById('cancelTemplateBtn').addEventListener('click', closeTemplateEditor);
-
-  document.getElementById('openSwitchTemplateBtn').addEventListener('click', () => {
-    renderSwitchTemplateList();
-    document.getElementById('switchTemplateCard').style.display = 'block';
-  });
-  document.getElementById('switchTemplateCloseBtn').addEventListener('click', () => {
-    document.getElementById('switchTemplateCard').style.display = 'none';
-  });
 }
 
 /* ---------- init ---------- */

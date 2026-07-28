@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Timeline Scheduler</title>
 <link rel="stylesheet" href="../style.css?v=8">
-<link rel="stylesheet" href="css/style.css?v=1">
+<link rel="stylesheet" href="css/style.css?v=2">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
 </head>
 <body>
@@ -26,70 +26,97 @@
   <div id="timelineClientName" class="timeline-client-name">Loading client…</div>
 </header>
 
-<!-- Progress summary -->
-<div class="step-card timeline-summary-card">
-  <div class="timeline-summary-row">
-    <div class="timeline-summary-stat">
-      <div class="timeline-stat-value" id="statPhasesDone">0/0</div>
-      <div class="timeline-stat-label">Phases Complete</div>
-    </div>
-    <div class="timeline-summary-stat">
-      <div class="timeline-stat-value" id="statNextUp">—</div>
-      <div class="timeline-stat-label">Next Up</div>
-    </div>
-    <div class="timeline-summary-stat">
-      <div class="timeline-stat-value timeline-stat-warning" id="statOverdue">0</div>
-      <div class="timeline-stat-label">Overdue</div>
-    </div>
-    <div class="timeline-summary-stat">
-      <div class="timeline-stat-value" id="statLaunchDate">—</div>
-      <div class="timeline-stat-label">Target Launch</div>
-    </div>
-  </div>
-  <div class="progress-bar-track"><div class="progress-bar-fill" id="timelineProgressFill" style="width:0%;"></div></div>
-</div>
-
-<!-- Project Start Date -->
-<div class="step-card">
-  <div class="panel-header">
-    <h2>Project Start Date</h2>
-    <p>Separate from any individual "kickoff" phase - this is the anchor every phase's default target date is calculated from. Change it any time to shift every phase that hasn't been manually moved.</p>
-  </div>
-  <div class="timeline-startdate-row">
-    <div class="form-group" style="margin-bottom:0;">
-      <label for="projectStartDate">Project Start Date</label>
-      <input type="date" id="projectStartDate">
-    </div>
-    <button id="recalculateBtn" class="btn-secondary" type="button">Recalculate Dates From Start</button>
-  </div>
-  <div id="startDateStatus" class="timeline-inline-status"></div>
-</div>
-
-<!-- No template applied yet state -->
+<!-- No timelines at all yet -->
 <div class="step-card" id="noTimelineCard" style="display:none;">
   <div class="panel-header">
     <h2>No Timeline Yet</h2>
-    <p>Pick a template to generate this client's phase list. You can edit, add, or remove phases afterward - this just sets the starting point.</p>
+    <p>Pick a template to generate this client's first phase list. You can edit, add, or remove phases afterward - this just sets the starting point.</p>
   </div>
   <div id="templatePickerList" class="template-picker-list"></div>
 </div>
 
-<!-- Switch Template (once a timeline already exists) -->
-<div class="step-card" id="switchTemplateTrigger" style="display:none;">
-  <div class="panel-header">
-    <h2>Template: <span id="currentTemplateName">—</span></h2>
-    <p>Need a different project type for this client? Switching replaces the current phase list - existing statuses, dates, and notes on this client's phases will be lost.</p>
-  </div>
-  <button id="openSwitchTemplateBtn" class="btn-secondary" type="button">Switch Template</button>
+<!-- Timeline tabs (one client can have multiple - concurrent workstreams,
+     or a history of finished ones like monthly content cycles) -->
+<div class="step-card timeline-tabs-card" id="timelineTabsCard" style="display:none;">
+  <div class="timeline-tabs-row" id="timelineTabsRow"></div>
 </div>
 
-<div class="step-card" id="switchTemplateCard" style="display:none; position: relative;">
-  <button type="button" id="switchTemplateCloseBtn" aria-label="Close" class="panel-close-btn">&times;</button>
+<!-- New Timeline picker (adds another, non-destructively) -->
+<div class="step-card" id="newTimelineCard" style="display:none; position: relative;">
+  <button type="button" id="newTimelineCloseBtn" aria-label="Close" class="panel-close-btn">&times;</button>
   <div class="panel-header">
-    <h2>Switch Template</h2>
-    <p>Choose a new template for this client. This replaces every phase currently on their timeline and can't be undone.</p>
+    <h2>Start a New Timeline</h2>
+    <p>Adds another timeline for this client alongside any existing ones - nothing already on the board gets touched.</p>
   </div>
-  <div id="switchTemplateList" class="template-picker-list"></div>
+  <div id="newTimelineList" class="template-picker-list"></div>
+</div>
+
+<div id="timelineDetailWrap" style="display:none;">
+
+  <!-- Progress summary -->
+  <div class="step-card timeline-summary-card">
+    <div class="timeline-summary-row">
+      <div class="timeline-summary-stat">
+        <div class="timeline-stat-value" id="statPhasesDone">0/0</div>
+        <div class="timeline-stat-label">Phases Complete</div>
+      </div>
+      <div class="timeline-summary-stat">
+        <div class="timeline-stat-value" id="statNextUp">—</div>
+        <div class="timeline-stat-label">Next Up</div>
+      </div>
+      <div class="timeline-summary-stat">
+        <div class="timeline-stat-value timeline-stat-warning" id="statOverdue">0</div>
+        <div class="timeline-stat-label">Overdue</div>
+      </div>
+      <div class="timeline-summary-stat">
+        <div class="timeline-stat-value" id="statLaunchDate">—</div>
+        <div class="timeline-stat-label">Target Launch</div>
+      </div>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="timelineProgressFill" style="width:0%;"></div></div>
+  </div>
+
+  <!-- Project Start Date -->
+  <div class="step-card">
+    <div class="panel-header">
+      <h2>Project Start Date</h2>
+      <p>Separate from any individual "kickoff" phase - this is the anchor every phase's default target date is calculated from. Change it any time to shift every phase that hasn't been manually moved.</p>
+    </div>
+    <div class="timeline-startdate-row">
+      <div class="form-group" style="margin-bottom:0;">
+        <label for="projectStartDate">Project Start Date</label>
+        <input type="date" id="projectStartDate">
+      </div>
+      <button id="recalculateBtn" class="btn-secondary" type="button">Recalculate Dates From Start</button>
+    </div>
+    <div id="startDateStatus" class="timeline-inline-status"></div>
+  </div>
+
+  <!-- Start Next Cycle banner (shows when every phase on this timeline is done) -->
+  <div class="step-card cycle-complete-banner" id="cycleCompleteBanner" style="display:none;">
+    <div class="panel-header">
+      <h2>All phases complete</h2>
+      <p>This timeline is finished. If this is recurring work (like a monthly content batch), start the next cycle with the same template - it archives this one and creates a fresh copy with a new start date.</p>
+    </div>
+    <button id="startNextCycleBtn" class="btn-primary" type="button">Start Next Cycle</button>
+  </div>
+
+  <!-- Timeline lifecycle actions -->
+  <div class="step-card">
+    <div class="panel-header">
+      <h2>This Timeline</h2>
+      <p>Mark it done when the work wraps up, reopen it if something comes back up, or remove it if it was created by mistake.</p>
+    </div>
+    <div class="timeline-actions-row">
+      <button id="markCompleteBtn" class="btn-secondary" type="button">Mark Timeline Complete</button>
+      <button id="reopenTimelineBtn" class="btn-secondary" type="button" style="display:none;">Reopen Timeline</button>
+      <button id="deleteTimelineBtn" class="btn-secondary" type="button">Delete This Timeline</button>
+    </div>
+  </div>
+
+  <!-- Phase list -->
+  <div id="phasesList" class="phases-list"></div>
+
 </div>
 
 <!-- Template Library -->
@@ -138,6 +165,6 @@ Conduct the official client kickoff | 8"></textarea>
 </main>
 
 <script src="js/data.js?v=6"></script>
-<script src="js/app.js?v=2"></script>
+<script src="js/app.js?v=3"></script>
 </body>
 </html>
