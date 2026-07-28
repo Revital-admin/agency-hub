@@ -398,6 +398,7 @@ let iframeNeedsReload = {
   "tab-paidads": true,
   "tab-emailstrategy": true,
   "tab-campaignlaunch": true,
+  "tab-timeline": true,
   "tab-roiprojector": true,
   "tab-sopwiki": true,
   "tab-proposal": true,
@@ -891,6 +892,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-campaignlaunch":
       renderCampaignLaunchChecklist();
+      break;
+    case "tab-timeline":
+      renderTimelineScheduler();
       break;
     case "tab-intakequalifier":
       renderIntakeQualifier();
@@ -1816,6 +1820,11 @@ function renderEmailStrategyAudit() {
 // ── Campaign Launch Checklist Controller ──
 function renderCampaignLaunchChecklist() {
   setIframeAbsoluteSrc('#tab-campaignlaunch iframe', "campaign-launch-checklist/index.html");
+}
+
+// ── Timeline Scheduler Controller ──
+function renderTimelineScheduler() {
+  setIframeAbsoluteSrc('#tab-timeline iframe', "timeline-scheduler/index.html");
 }
 
 // ── Client Intake Pre-Qualifier Controller ──

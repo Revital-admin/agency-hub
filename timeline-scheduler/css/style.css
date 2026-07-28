@@ -1,0 +1,283 @@
+/* Timeline Scheduler - tool-specific styles.
+   Relies entirely on the shared ../style.css GENERATOR TOOLS design
+   system (--color-*, .step-card, .form-group, .btn-primary/-secondary,
+   .header-eyebrow, .site-title, etc.) for everything else. */
+
+.timeline-client-name {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-top: 8px;
+}
+
+/* ── Summary card ── */
+.timeline-summary-card { padding: 20px 24px; }
+.timeline-summary-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.timeline-summary-stat { flex: 1; min-width: 130px; }
+.timeline-stat-value {
+  font-family: var(--font-display);
+  font-size: 26px;
+  color: var(--color-accent);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.timeline-stat-value.timeline-stat-warning { color: #ef4444; }
+.timeline-stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+.progress-bar-track {
+  height: 6px;
+  border-radius: 100px;
+  background: var(--color-surface-2);
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 100px;
+  background: linear-gradient(90deg, var(--color-accent) 0%, #ffb088 100%);
+  transition: width 0.3s ease;
+}
+
+/* ── Project start date row ── */
+.timeline-startdate-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.timeline-startdate-row .form-group { flex: 1; min-width: 200px; }
+.timeline-inline-status { font-size: 12px; color: var(--color-text-muted); margin-top: 10px; }
+.timeline-inline-status.success { color: #4ade80; }
+
+/* ── Template picker (first-time setup) ── */
+.template-picker-list { display: flex; flex-direction: column; gap: 10px; }
+.template-picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  flex-wrap: wrap;
+}
+.template-picker-name { font-weight: 600; color: var(--color-text-primary); font-size: 14px; }
+.template-picker-desc { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
+.template-picker-count { font-size: 11px; color: var(--color-text-muted); font-family: var(--font-mono); }
+
+/* ── Template Library (reuses contract-library-* naming/conventions from
+   Contract & Invoice Tracker for consistency across "manage X library"
+   panels) ── */
+.contract-library-header { margin-bottom: 14px; }
+.contract-library-header h2 { font-family: var(--font-display); font-size: 20px; font-weight: 600; color: var(--color-text-primary); }
+.contract-library-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.contract-library-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  flex-wrap: wrap;
+}
+.contract-library-name { font-weight: 600; color: var(--color-text-primary); font-size: 14px; }
+.contract-library-meta { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
+.contract-library-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.contract-library-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+.contract-library-actions button:hover { background: var(--color-surface-2); border-color: var(--color-border-md); }
+.contract-library-actions .delete-template-btn:hover { border-color: #ef4444; color: #ef4444; }
+
+.panel-close-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.template-editor {
+  border-top: 1px dashed var(--color-border);
+  padding-top: 16px;
+  margin-bottom: 16px;
+}
+.template-phases-textarea {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  margin-top: 8px;
+  resize: vertical;
+}
+.template-editor-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+/* ── Phases timeline ── */
+.phases-list { position: relative; }
+.phase-card {
+  display: flex;
+  gap: 16px;
+  position: relative;
+  padding-bottom: 20px;
+}
+/* Connecting vertical line between phase badges, like a real timeline */
+.phase-card:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 19px;
+  top: 40px;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-border);
+}
+.phase-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--color-surface-2);
+  border: 2px solid var(--color-border-md);
+  color: var(--color-text-secondary);
+  z-index: 1;
+}
+.phase-card.status-done .phase-badge {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #1a1108;
+}
+.phase-card.status-in-progress .phase-badge {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.phase-body {
+  flex: 1;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+}
+.phase-card.status-overdue .phase-body { border-color: rgba(239, 68, 68, 0.35); }
+.phase-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.phase-name {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+.phase-card.status-done .phase-name { color: var(--color-text-secondary); text-decoration: line-through; text-decoration-color: var(--color-border-md); }
+.phase-overdue-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+.phase-controls-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.phase-controls-row select,
+.phase-controls-row input[type="date"] {
+  padding: 8px 10px;
+  font-size: 13px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+}
+.phase-date-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  margin-right: 4px;
+}
+.phase-overridden-tag {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+.phase-notes-input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+  outline: none;
+}
+.phase-notes-input:focus { border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-dim); }
+
+.phase-subitems { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--color-border); display: flex; flex-direction: column; gap: 6px; }
+.phase-subitem { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--color-text-secondary); }
+.phase-subitem input[type="checkbox"] { accent-color: var(--color-accent); cursor: pointer; }
+.phase-subitem.checked span { text-decoration: line-through; color: var(--color-text-muted); }
+
+.phase-remove-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition);
+}
+.phase-remove-btn:hover { color: #ef4444; background: rgba(239, 68, 68, 0.08); }
+
+.add-phase-row { display: flex; justify-content: center; margin-top: 4px; padding-left: 56px; }

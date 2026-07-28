@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timeline Scheduler</title>
+<link rel="stylesheet" href="../style.css?v=8">
+<link rel="stylesheet" href="css/style.css?v=1">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<main class="container container-wide">
+<div class="brand-bar">
+  <div class="brand-logo-container"></div>
+</div>
+
+<header class="site-header">
+  <div class="header-eyebrow">
+    <span class="dot"></span>
+    <span>Project Management</span>
+  </div>
+  <h1 class="site-title">Timeline <em>Scheduler</em></h1>
+  <p class="site-subtitle">The client's real project schedule - phases, target dates, and progress. Replaces the numbered checklist that used to live in the ClickUp Campaign Briefs list.</p>
+  <div id="timelineClientName" class="timeline-client-name">Loading client…</div>
+</header>
+
+<!-- Progress summary -->
+<div class="step-card timeline-summary-card">
+  <div class="timeline-summary-row">
+    <div class="timeline-summary-stat">
+      <div class="timeline-stat-value" id="statPhasesDone">0/0</div>
+      <div class="timeline-stat-label">Phases Complete</div>
+    </div>
+    <div class="timeline-summary-stat">
+      <div class="timeline-stat-value" id="statNextUp">—</div>
+      <div class="timeline-stat-label">Next Up</div>
+    </div>
+    <div class="timeline-summary-stat">
+      <div class="timeline-stat-value timeline-stat-warning" id="statOverdue">0</div>
+      <div class="timeline-stat-label">Overdue</div>
+    </div>
+    <div class="timeline-summary-stat">
+      <div class="timeline-stat-value" id="statLaunchDate">—</div>
+      <div class="timeline-stat-label">Target Launch</div>
+    </div>
+  </div>
+  <div class="progress-bar-track"><div class="progress-bar-fill" id="timelineProgressFill" style="width:0%;"></div></div>
+</div>
+
+<!-- Project Start Date -->
+<div class="step-card">
+  <div class="panel-header">
+    <h2>Project Start Date</h2>
+    <p>Separate from any individual "kickoff" phase - this is the anchor every phase's default target date is calculated from. Change it any time to shift every phase that hasn't been manually moved.</p>
+  </div>
+  <div class="timeline-startdate-row">
+    <div class="form-group" style="margin-bottom:0;">
+      <label for="projectStartDate">Project Start Date</label>
+      <input type="date" id="projectStartDate">
+    </div>
+    <button id="recalculateBtn" class="btn-secondary" type="button">Recalculate Dates From Start</button>
+  </div>
+  <div id="startDateStatus" class="timeline-inline-status"></div>
+</div>
+
+<!-- No template applied yet state -->
+<div class="step-card" id="noTimelineCard" style="display:none;">
+  <div class="panel-header">
+    <h2>No Timeline Yet</h2>
+    <p>Pick a template to generate this client's phase list. You can edit, add, or remove phases afterward - this just sets the starting point.</p>
+  </div>
+  <div id="templatePickerList" class="template-picker-list"></div>
+</div>
+
+<!-- Template Library -->
+<div class="step-card" id="templateLibraryTrigger">
+  <div class="contract-library-header">
+    <h2>Timeline Template Library</h2>
+    <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-top: 4px;">Manage the phase templates available above (Website Build, and any others you add).</p>
+  </div>
+  <button id="openTemplateLibraryBtn" class="btn-secondary" type="button">Manage Templates</button>
+</div>
+
+<div class="step-card" id="templateLibraryCard" style="display:none; position: relative;">
+  <button type="button" id="templateLibraryCloseBtn" aria-label="Close" class="panel-close-btn">&times;</button>
+  <div class="contract-library-header">
+    <h2>Timeline Template Library</h2>
+    <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-top: 4px;">Each template is a reusable phase sequence with default day-offsets from the Project Start Date. Applying a template to a client doesn't affect other clients or the template itself.</p>
+  </div>
+  <div id="templateLibraryList" class="contract-library-list"></div>
+
+  <div class="template-editor" id="templateEditor" style="display:none;">
+    <div class="form-group">
+      <label for="templateNameInput">Template Name</label>
+      <input type="text" id="templateNameInput" placeholder="e.g. Website Build, Retainer Onboarding">
+    </div>
+    <div class="form-group">
+      <label for="templateDescInput">Description</label>
+      <input type="text" id="templateDescInput" placeholder="Short description shown when picking this template">
+    </div>
+    <label style="font-size:12px; color: var(--color-text-muted); text-transform:uppercase; letter-spacing:0.05em; font-family: var(--font-mono);">Phases (one per line: name, then optional "| offset in days" - e.g. "Kickoff call | 7")</label>
+    <textarea id="templatePhasesInput" rows="14" class="template-phases-textarea" placeholder="Review contract, proposal, and SOW | 0
+Assign account manager and project team | 1
+Conduct the official client kickoff | 8"></textarea>
+    <div class="template-editor-actions">
+      <button id="saveTemplateBtn" class="btn-primary" type="button">Save Template</button>
+      <button id="cancelTemplateBtn" class="btn-secondary" type="button">Cancel</button>
+    </div>
+  </div>
+
+  <button id="newTemplateBtn" class="btn-primary" type="button">+ New Template</button>
+  <div id="templateLibraryStatus" style="font-size: 0.8rem; margin-top: 8px;"></div>
+</div>
+
+<!-- Phase list -->
+<div id="phasesList" class="phases-list"></div>
+
+</main>
+
+<script src="js/data.js?v=1"></script>
+<script src="js/app.js?v=1"></script>
+</body>
+</html>
