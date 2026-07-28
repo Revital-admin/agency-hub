@@ -482,12 +482,19 @@ function wirePhaseEvents(timeline) {
 function renderTemplatePicker() {
   const client = getClient();
   const noTimelineCard = document.getElementById('noTimelineCard');
+  const switchTrigger = document.getElementById('switchTemplateTrigger');
   if (!client) return;
   const timeline = ensureTimelineShape(client);
   const hasPhases = timeline.phases && timeline.phases.length > 0;
 
   noTimelineCard.style.display = hasPhases ? 'none' : 'block';
-  if (hasPhases) return;
+  switchTrigger.style.display = hasPhases ? 'block' : 'none';
+
+  if (hasPhases) {
+    const current = findTemplate(timeline.templateId);
+    document.getElementById('currentTemplateName').textContent = current ? current.name : 'Custom / Manually Built';
+    return;
+  }
 
   const list = document.getElementById('templatePickerList');
   const templates = allTemplates();
@@ -511,6 +518,42 @@ function renderTemplatePicker() {
       applyTemplateToClient(c, btn.dataset.id);
       persistClient();
       renderAll();
+    });
+  });
+}
+
+function renderSwitchTemplateList() {
+  const client = getClient();
+  if (!client) return;
+  const timeline = ensureTimelineShape(client);
+  const list = document.getElementById('switchTemplateList');
+  const templates = allTemplates();
+
+  list.innerHTML = templates.map(t => `
+    <div class="template-picker-row">
+      <div>
+        <div class="template-picker-name">${escapeHtml(t.name)}${t.id === timeline.templateId ? ' <span style="font-weight:400; color: var(--color-text-muted); font-size:11px;">(current)</span>' : ''}</div>
+        <div class="template-picker-desc">${escapeHtml(t.description || '')}</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span class="template-picker-count">${t.phases.length} phases</span>
+        <button type="button" class="btn-primary switch-template-btn" data-id="${t.id}" ${t.id === timeline.templateId ? 'disabled' : ''}>Switch to This</button>
+      </div>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.switch-template-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = findTemplate(btn.dataset.id);
+      if (!t) return;
+      if (!confirm(`Switch to "${t.name}"? This replaces every phase currently on this client's timeline - existing statuses, dates, and notes will be lost.`)) return;
+      const c = getClient();
+      if (!c) return;
+      applyTemplateToClient(c, t.id);
+      persistClient();
+      document.getElementById('switchTemplateCard').style.display = 'none';
+      renderAll();
+      showBanner('success', `Switched to "${t.name}".`);
     });
   });
 }
@@ -573,6 +616,14 @@ function wireStaticEvents() {
   document.getElementById('newTemplateBtn').addEventListener('click', () => openTemplateEditor(null));
   document.getElementById('saveTemplateBtn').addEventListener('click', saveTemplateFromEditor);
   document.getElementById('cancelTemplateBtn').addEventListener('click', closeTemplateEditor);
+
+  document.getElementById('openSwitchTemplateBtn').addEventListener('click', () => {
+    renderSwitchTemplateList();
+    document.getElementById('switchTemplateCard').style.display = 'block';
+  });
+  document.getElementById('switchTemplateCloseBtn').addEventListener('click', () => {
+    document.getElementById('switchTemplateCard').style.display = 'none';
+  });
 }
 
 /* ---------- init ---------- */

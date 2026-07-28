@@ -74,6 +74,24 @@
   <div id="templatePickerList" class="template-picker-list"></div>
 </div>
 
+<!-- Switch Template (once a timeline already exists) -->
+<div class="step-card" id="switchTemplateTrigger" style="display:none;">
+  <div class="panel-header">
+    <h2>Template: <span id="currentTemplateName">—</span></h2>
+    <p>Need a different project type for this client? Switching replaces the current phase list - existing statuses, dates, and notes on this client's phases will be lost.</p>
+  </div>
+  <button id="openSwitchTemplateBtn" class="btn-secondary" type="button">Switch Template</button>
+</div>
+
+<div class="step-card" id="switchTemplateCard" style="display:none; position: relative;">
+  <button type="button" id="switchTemplateCloseBtn" aria-label="Close" class="panel-close-btn">&times;</button>
+  <div class="panel-header">
+    <h2>Switch Template</h2>
+    <p>Choose a new template for this client. This replaces every phase currently on their timeline and can't be undone.</p>
+  </div>
+  <div id="switchTemplateList" class="template-picker-list"></div>
+</div>
+
 <!-- Template Library -->
 <div class="step-card" id="templateLibraryTrigger">
   <div class="contract-library-header">
@@ -119,7 +137,7 @@ Conduct the official client kickoff | 8"></textarea>
 
 </main>
 
-<script src="js/data.js?v=1"></script>
-<script src="js/app.js?v=1"></script>
+<script src="js/data.js?v=2"></script>
+<script src="js/app.js?v=2"></script>
 </body>
 </html>
