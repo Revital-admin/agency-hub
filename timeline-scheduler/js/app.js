@@ -280,6 +280,34 @@ function buildTimelineFromTemplate(template, opts) {
   };
 }
 
+// Phases that used to open every template (contract/proposal/SOW review,
+// and the various "assign X and project team" steps) before they were
+// removed as duplicate work already tracked in Client Onboarding. Templates
+// only affect timelines going forward - anything already applied has these
+// baked in as a snapshot - so this strips them out of existing client data
+// wherever they're found. Safe to run on every load: once a client's
+// timelines are clean it's a no-op.
+const LEGACY_ADMIN_PHASE_NAMES = new Set([
+  "Review contract, proposal, and SOW",
+  "Assign account manager and project team",
+  "Assign production team and project lead",
+  "Assign account manager and media buyer",
+  "Assign strategist and project team",
+  "Assign creative lead and project team",
+  "Assign social strategist and project team",
+  "Assign writer and project lead",
+]);
+
+function stripLegacyAdminPhases(client) {
+  let changed = false;
+  (client.timelines || []).forEach(tl => {
+    const before = tl.phases.length;
+    tl.phases = tl.phases.filter(p => !LEGACY_ADMIN_PHASE_NAMES.has(p.name));
+    if (tl.phases.length !== before) changed = true;
+  });
+  return changed;
+}
+
 function maybeSeedMigratedClient(client) {
   const seed = window.__timelineActiveClientName ? MIGRATION_SEEDS[window.__timelineActiveClientName] : null;
   if (!seed) return;
@@ -611,6 +639,9 @@ function renderAll() {
   const client = getClient();
   if (!client) return;
   ensureTimelinesArray(client);
+  if (stripLegacyAdminPhases(client)) {
+    persistClient();
+  }
 
   const nameEl = document.getElementById('timelineClientName');
   if (nameEl) {
