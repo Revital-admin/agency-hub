@@ -24,6 +24,64 @@ let editingId = null;
 let docVersion = 0; // optimistic-concurrency guard, see persist() below
 let isRestrictedUser = false;
 
+// Live caseload data, keyed by lowercased email, built by the parent's
+// getAccountManagerCapacitySnapshot() (see app.js) - matches Account
+// Manager roster entries against every client's real
+// portalConfig.accountManagerEmail assignment. Only meaningful for role
+// === "Account Manager"; every other role has no equivalent per-client
+// assignment field in this data model, so they keep the manually-typed
+// currentClientCount instead (see getEffectiveLoad below).
+let amCapacitySnapshot = {};
+// Which row (by member id) currently has its assigned-client list
+// expanded open - see toggleClientExpand/renderTable.
+let expandedRosterId = null;
+
+async function refreshCapacitySnapshot() {
+  if (isEmbedded && window.parent.getAccountManagerCapacitySnapshot) {
+    try {
+      amCapacitySnapshot = await window.parent.getAccountManagerCapacitySnapshot();
+    } catch (e) {
+      console.warn("Couldn't refresh the account-manager capacity snapshot:", e);
+      amCapacitySnapshot = {};
+    }
+  } else {
+    amCapacitySnapshot = {};
+  }
+}
+
+// Returns the number that should actually drive the capacity bar/bucket
+// for this member, live-computed for Account Managers (real assigned
+// clients) or falling back to the manually-typed count for every other
+// role. { clientNames: null } means "not live" - Team Roster's stale-
+// data caption only applies to the manual branch.
+function getEffectiveLoad(entry) {
+  const max = parseInt(entry.maxClientCount) || 0;
+  if (entry.role === "Account Manager") {
+    const email = (entry.email || "").trim().toLowerCase();
+    if (email) {
+      const rec = amCapacitySnapshot[email];
+      const clientNames = rec ? rec.clientNames : [];
+      return { current: clientNames.length, max, isLive: true, clientNames };
+    }
+  }
+  return { current: parseInt(entry.currentClientCount) || 0, max, isLive: false, clientNames: null };
+}
+
+function daysAgoLabel(isoDateStr) {
+  if (!isoDateStr) return "";
+  const then = new Date(isoDateStr).getTime();
+  if (Number.isNaN(then)) return "";
+  const days = Math.floor((Date.now() - then) / 86400000);
+  if (days <= 0) return "updated today";
+  if (days === 1) return "updated 1 day ago";
+  return `updated ${days} days ago`;
+}
+
+function toggleClientExpand(id) {
+  expandedRosterId = expandedRosterId === id ? null : id;
+  renderTable();
+}
+
 function el(id) { return document.getElementById(id); }
 
 function getDocRef() {
@@ -730,6 +788,17 @@ async function performSendAgreement() {
 
 const FORM_FIELDS = ['memberName', 'role', 'employmentType', 'email', 'currentClientCount', 'maxClientCount', 'notes'];
 
+// Account Managers' load is live-computed (see getEffectiveLoad) - the
+// manual "Current Client Load" field is meaningless for them, so hide it
+// and explain why instead of leaving a number nobody should touch.
+function updateCurrentClientCountVisibility() {
+  const isAM = el('role').value === 'Account Manager';
+  const group = el('currentClientCountGroup');
+  const note = el('liveLoadNote');
+  if (group) group.style.display = isAM ? 'none' : '';
+  if (note) note.style.display = isAM ? '' : 'none';
+}
+
 function resetForm() {
   editingId = null;
   el('memberName').value = '';
@@ -743,10 +812,17 @@ function resetForm() {
   el('saveMemberBtn').textContent = 'Add Team Member';
   el('cancelEditBtn').style.display = 'none';
   el('formCard').style.display = 'none';
+  updateCurrentClientCountVisibility();
 }
 
-function gatherForm() {
-  const entry = { id: editingId || uid() };
+// Merges onto `base` (the previous entry, when editing) rather than
+// building a bare object from FORM_FIELDS alone - the old version
+// replaced the whole entry on every save, which silently wiped out
+// fields the form doesn't show (agreementStatus/agreementSentDate/
+// agreementEnvelopeId from Send Agreement, manualCurrentClientCountUpdatedAt
+// below) any time someone edited a contractor's info afterward.
+function gatherForm(base) {
+  const entry = { ...(base || {}), id: editingId || uid() };
   FORM_FIELDS.forEach(id => {
     const field = el(id);
     if (id === 'currentClientCount' || id === 'maxClientCount') {
@@ -765,7 +841,16 @@ function saveMember() {
     return;
   }
 
-  const entry = gatherForm();
+  const prev = editingId ? members.find(m => m.id === editingId) : null;
+  const entry = gatherForm(prev);
+
+  // Stamp when the manually-typed load actually changed, so non-AM rows
+  // (no live data source) can show "updated X days ago" - a fresh add
+  // or an untouched number on edit doesn't reset the clock.
+  if (!prev || (parseInt(prev.currentClientCount) || 0) !== entry.currentClientCount) {
+    entry.manualCurrentClientCountUpdatedAt = todayStr();
+  }
+
   if (editingId) {
     const idx = members.findIndex(m => m.id === editingId);
     if (idx >= 0) members[idx] = entry;
@@ -773,8 +858,11 @@ function saveMember() {
     members.unshift(entry);
   }
 
-  persist().then(ok => {
+  persist().then(async ok => {
     if (!ok) return;
+    // Role/email edits change who matches which client, so re-pull the
+    // live snapshot before re-rendering rather than waiting for a reload.
+    await refreshCapacitySnapshot();
     resetForm();
     renderTable();
     if (window.parent.showBanner) window.parent.showBanner('success', `Saved ${name}.`);
@@ -790,6 +878,7 @@ function startEdit(id) {
   el('saveMemberBtn').textContent = 'Update Team Member';
   el('cancelEditBtn').style.display = 'inline-block';
   el('formCard').style.display = 'block';
+  updateCurrentClientCountVisibility();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -798,16 +887,15 @@ function removeMember(id) {
   if (!entry) return;
   if (!confirm(`Remove ${entry.memberName} from the roster?`)) return;
   members = members.filter(m => m.id !== id);
-  persist().then(ok => {
+  persist().then(async ok => {
     if (!ok) return;
+    await refreshCapacitySnapshot();
     if (editingId === id) resetForm();
     renderTable();
   });
 }
 
-function capacityInfo(entry) {
-  const current = parseInt(entry.currentClientCount) || 0;
-  const max = parseInt(entry.maxClientCount) || 0;
+function capacityInfo(current, max) {
   if (max <= 0) return { label: '—', cls: 'capacity-unknown' };
   if (current >= max) return { label: 'At Capacity', cls: 'capacity-full' };
   if (current >= max * 0.8) return { label: 'Near Capacity', cls: 'capacity-near' };
@@ -823,7 +911,8 @@ function escapeHtml(str) {
 function updateSummary() {
   let hasRoom = 0, nearCapacity = 0, atCapacity = 0;
   members.forEach(m => {
-    const info = capacityInfo(m);
+    const load = getEffectiveLoad(m);
+    const info = capacityInfo(load.current, load.max);
     if (info.cls === 'capacity-room') hasRoom++;
     else if (info.cls === 'capacity-near') nearCapacity++;
     else if (info.cls === 'capacity-full') atCapacity++;
@@ -847,20 +936,25 @@ function renderTable() {
   el('emptyState').style.display = rows.length === 0 ? 'block' : 'none';
 
   tbody.innerHTML = rows.map(m => {
-    const info = capacityInfo(m);
-    const current = parseInt(m.currentClientCount) || 0;
-    const max = parseInt(m.maxClientCount) || 0;
+    const load = getEffectiveLoad(m);
+    const info = capacityInfo(load.current, load.max);
+    const current = load.current;
+    const max = load.max;
     const loadText = max > 0 ? `${current} / ${max}` : (current || '—');
     const percent = max > 0 ? Math.min(100, Math.round((current / max) * 100)) : 0;
     const barFillClass = info.cls === 'capacity-unknown' ? '' : info.cls;
+    const staleCaption = (!load.isLive && m.manualCurrentClientCountUpdatedAt)
+      ? `<div style="font-size:0.68rem; color:var(--text-muted); margin-top:2px;">${daysAgoLabel(m.manualCurrentClientCountUpdatedAt)}</div>`
+      : '';
     const loadCell = max > 0
       ? `<div class="capacity-bar-cell">
            <div class="capacity-bar-wrap" title="${percent}% of capacity">
              <div class="capacity-bar-fill ${barFillClass}" style="width:${percent}%;"></div>
            </div>
            <span class="capacity-bar-label">${loadText}</span>
+           ${staleCaption}
          </div>`
-      : loadText;
+      : loadText + staleCaption;
     const isContractor = m.employmentType === 'Contractor';
     let agreementCell = '—';
     if (isContractor) {
@@ -870,12 +964,18 @@ function renderTable() {
         agreementCell = `<span class="section-tag capacity-unknown">Not Sent</span>`;
       }
     }
-    return `<tr>
+    // Only live (Account Manager) rows have a real assigned-client list
+    // behind them worth expanding - manually-tracked roles have no
+    // client-name data to show, so their tag isn't clickable.
+    const capacityCell = load.isLive
+      ? `<span class="section-tag ${info.cls} roster-capacity-toggle" data-id="${m.id}" style="cursor:pointer;" title="Click to see assigned clients">${info.label} ${expandedRosterId === m.id ? '▴' : '▾'}</span>`
+      : `<span class="section-tag ${info.cls}">${info.label}</span>`;
+    let rowHtml = `<tr>
       <td class="client-cell">${escapeHtml(m.memberName)}</td>
       <td>${escapeHtml(m.role)}${isContractor ? ' <span class="section-tag" style="margin-left:4px;">Contractor</span>' : ''}</td>
       <td>${escapeHtml(m.employmentType)}</td>
       <td>${loadCell}</td>
-      <td><span class="section-tag ${info.cls}">${info.label}</span></td>
+      <td>${capacityCell}</td>
       <td>${agreementCell}</td>
       <td>${escapeHtml(m.notes) || '—'}</td>
       <td class="roster-actions-cell" style="display:${isRestrictedUser ? 'none' : ''};">
@@ -886,11 +986,19 @@ function renderTable() {
         </div>
       </td>
     </tr>`;
+    if (load.isLive && expandedRosterId === m.id) {
+      const names = load.clientNames.length
+        ? load.clientNames.map(escapeHtml).join(', ')
+        : 'No clients assigned yet.';
+      rowHtml += `<tr class="roster-expand-row"><td colspan="8" style="padding:6px 14px 12px; font-size:0.8rem; color:var(--text-muted);"><strong>Assigned clients:</strong> ${names}</td></tr>`;
+    }
+    return rowHtml;
   }).join('');
 
   tbody.querySelectorAll('.edit-btn').forEach(btn => btn.addEventListener('click', () => startEdit(btn.getAttribute('data-id'))));
   tbody.querySelectorAll('.remove-btn').forEach(btn => btn.addEventListener('click', () => removeMember(btn.getAttribute('data-id'))));
   tbody.querySelectorAll('.send-agreement-btn').forEach(btn => btn.addEventListener('click', () => openSendAgreementPanel(btn.getAttribute('data-id'))));
+  tbody.querySelectorAll('.roster-capacity-toggle').forEach(tag => tag.addEventListener('click', () => toggleClientExpand(tag.getAttribute('data-id'))));
 }
 
 // Same partial gate as Email Template Library/SOP Wiki: everyone can view
@@ -922,7 +1030,7 @@ function applyEditPermission() {
 document.addEventListener('DOMContentLoaded', async () => {
   applyEditPermission();
   resetForm();
-  await loadMembers();
+  await Promise.all([loadMembers(), refreshCapacitySnapshot()]);
   renderTable();
 
   el('newMemberBtn').addEventListener('click', () => {
@@ -932,6 +1040,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   el('saveMemberBtn').addEventListener('click', saveMember);
   el('cancelEditBtn').addEventListener('click', resetForm);
+  el('role').addEventListener('change', updateCurrentClientCountVisibility);
   el('filterInput').addEventListener('input', renderTable);
 
   const sendAgreementCloseBtn = el('sendAgreementCloseBtn');

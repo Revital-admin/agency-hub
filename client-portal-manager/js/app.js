@@ -26,6 +26,63 @@ try {
   console.log("CORS blocked parent access");
 }
 
+// Non-blocking capacity heads-up: if the email typed into Account
+// Manager below matches a Team Roster & Capacity entry (role ===
+// "Account Manager") who's already Near/At Capacity, say so - doesn't
+// stop saving, just avoids assigning a new client to someone stretched
+// thin without at least a warning. Snapshot built once on load (see
+// getAccountManagerCapacitySnapshot in the parent Hub's app.js, shared
+// with Team Roster's own live-load display) and re-pulled on blur so a
+// roster change elsewhere is picked up without a full reload.
+let amCapacitySnapshot = {};
+
+async function refreshAmCapacitySnapshot() {
+  try {
+    if (window.parent.getAccountManagerCapacitySnapshot) {
+      amCapacitySnapshot = await window.parent.getAccountManagerCapacitySnapshot();
+    }
+  } catch (e) {
+    console.warn("Couldn't load the account-manager capacity snapshot:", e);
+    amCapacitySnapshot = {};
+  }
+}
+
+// Same 3-way bucket as Team Roster & Capacity's capacityInfo() - kept as
+// its own tiny copy here rather than routed through window.parent, since
+// it's a stable one-line threshold rule, not the kind of multi-step
+// logic (like the version-guard save pattern) worth consolidating across
+// an iframe boundary.
+function amCapacityBucket(current, max) {
+  if (max <= 0) return null;
+  if (current >= max) return "At Capacity";
+  if (current >= max * 0.8) return "Near Capacity";
+  return null;
+}
+
+function checkAmCapacityWarning() {
+  const warningEl = document.getElementById("accountManagerCapacityWarning");
+  const emailInput = document.getElementById("accountManagerEmail");
+  if (!warningEl || !emailInput) return;
+
+  const email = (emailInput.value || "").trim().toLowerCase();
+  const rec = email ? amCapacitySnapshot[email] : null;
+  if (!rec) {
+    warningEl.style.display = "none";
+    return;
+  }
+
+  const max = parseInt(rec.member.maxClientCount) || 0;
+  const current = rec.clientNames.length;
+  const bucket = amCapacityBucket(current, max);
+  if (!bucket) {
+    warningEl.style.display = "none";
+    return;
+  }
+
+  warningEl.textContent = `Heads up: ${rec.member.memberName} is already ${bucket} (${current}/${max} clients in Team Roster).`;
+  warningEl.style.display = "block";
+}
+
 // DOM Elements
 const magicLinkInput = document.getElementById("magicLink");
 const copyLinkBtn = document.getElementById("copyLinkBtn");
@@ -245,9 +302,12 @@ function init() {
       inputs[key].value = config[key] || "";
       inputs[key].addEventListener("input", (e) => {
         updateConfig(key, e.target.value);
+        if (key === "accountManagerEmail") checkAmCapacityWarning();
       });
     }
   });
+
+  refreshAmCapacitySnapshot().then(checkAmCapacityWarning);
 
   // Event Listeners for autosave
   primaryColorInput.addEventListener("input", (e) => {

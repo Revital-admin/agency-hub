@@ -234,6 +234,10 @@
         <div class="form-group">
           <label for="accountManagerEmail">Email</label>
           <input type="email" id="accountManagerEmail" placeholder="jane@revitalproductions.com">
+          <!-- Non-blocking heads-up if this email matches someone in Team
+               Roster & Capacity who's already Near/At Capacity - see
+               checkAmCapacityWarning in js/app.js. Doesn't stop saving. -->
+          <p id="accountManagerCapacityWarning" style="display:none; font-size:0.78rem; color:#f68d5f; margin-top:4px;"></p>
         </div>
         <div class="form-group">
           <label for="accountManagerPhone">Phone / Text</label>
@@ -321,6 +325,6 @@
 
   </main>
 
-  <script src="js/app.js?v=61"></script>
+  <script src="js/app.js?v=62"></script>
 </body>
 </html>

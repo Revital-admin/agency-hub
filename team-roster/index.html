@@ -130,7 +130,8 @@
 </select>
 </div>
 <div class="form-group"><label for="email">Email</label><input type="email" id="email" placeholder="name@revitalproductions.com"></div>
-<div class="form-group"><label for="currentClientCount">Current Client Load</label><input type="number" id="currentClientCount" min="0" step="1" placeholder="0"></div>
+<div class="form-group" id="currentClientCountGroup"><label for="currentClientCount">Current Client Load</label><input type="number" id="currentClientCount" min="0" step="1" placeholder="0"></div>
+<div class="form-group" id="liveLoadNote" style="display:none;"><label>Current Client Load</label><p style="font-size:0.78rem; color:var(--text-muted); margin:0; padding-top:8px;">Calculated automatically from clients whose account manager email matches this person - no manual entry needed.</p></div>
 <div class="form-group"><label for="maxClientCount">Max Capacity</label><input type="number" id="maxClientCount" min="0" step="1" placeholder="0"></div>
 </div>
 <div class="form-group"><label for="notes">Notes</label><textarea id="notes" rows="2" placeholder="Specialties, availability notes, time off coming up..."></textarea></div>
@@ -170,6 +171,6 @@
 </div>
 
 </main>
-<script src="js/app.js?v=3"></script>
+<script src="js/app.js?v=4"></script>
 </body>
 </html>

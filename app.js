@@ -2193,6 +2193,53 @@ async function saveVersionedAgencyDoc({ docRef, currentVersion, buildPayload }) 
   }
 }
 
+// ── Account Manager Capacity Snapshot ──
+// Team Roster & Capacity used to rely entirely on a manually-typed
+// "current client count" per person, which drifts stale the moment
+// someone's caseload actually changes. Every client already carries a
+// real assignment though - portalConfig.accountManagerEmail (set in
+// Client Portal Manager, used to sign welcome/portal emails) - so for
+// anyone whose role is literally "Account Manager" we can compute their
+// real live caseload instead of trusting a stale number. Non-AM roles
+// (Video Editor, Designer, etc.) have no equivalent per-client
+// assignment field in this data model, so they still fall back to the
+// manual count in Team Roster's own render logic.
+//
+// Returns a map keyed by lowercased AM email -> { member, clientNames }.
+// Used by both Team Roster (to render live load + the expandable client
+// list) and Client Portal Manager (to warn if the AM you just typed in
+// is already stretched thin) - built once, shared, rather than
+// duplicating the match-by-email loop in both tools.
+async function getAccountManagerCapacitySnapshot() {
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return {};
+  try {
+    const ref = window.firebaseDoc(window.firebaseDb, "agency", "teamRoster");
+    const snap = await window.firebaseGetDoc(ref);
+    const data = snap && snap.exists ? snap.data() : null;
+    const members = (data && data.list) || [];
+    const clients = getAllClients() || {};
+
+    const byEmail = {};
+    members.forEach(m => {
+      if (m.role !== "Account Manager") return;
+      const email = (m.email || "").trim().toLowerCase();
+      if (!email) return;
+      byEmail[email] = { member: m, clientNames: [] };
+    });
+
+    Object.keys(clients).forEach(clientName => {
+      const client = clients[clientName];
+      const amEmail = ((client.portalConfig && client.portalConfig.accountManagerEmail) || "").trim().toLowerCase();
+      if (amEmail && byEmail[amEmail]) byEmail[amEmail].clientNames.push(clientName);
+    });
+
+    return byEmail;
+  } catch (e) {
+    console.warn("Couldn't build the account-manager capacity snapshot:", e);
+    return {};
+  }
+}
+
 // ── Mobile Drawer Navigation ──
 function initMobileNavigation() {
   const mobileMenuBtn = document.getElementById("mobileMenuBtn");
