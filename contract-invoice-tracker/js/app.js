@@ -1199,6 +1199,7 @@ const sendContractTo = el('sendContractTo');
 const sendContractSubject = el('sendContractSubject');
 const sendContractBody = el('sendContractBody');
 const sendContractOpenBtn = el('sendContractOpenBtn');
+const sendContractGmailBtn = el('sendContractGmailBtn');
 const sendContractCopyBtn = el('sendContractCopyBtn');
 const sendContractSendBtn = el('sendContractSendBtn');
 const sendContractDocusignBtn = el('sendContractDocusignBtn');
@@ -1272,8 +1273,26 @@ function populateContractTemplateSelect() {
 }
 
 function refreshSendContractMailto() {
-  if (!sendContractOpenBtn || !sendContractTo) return;
-  sendContractOpenBtn.href = `mailto:${encodeURIComponent(sendContractTo.value)}?subject=${encodeURIComponent(sendContractSubject.value)}&body=${encodeURIComponent(sendContractBody.value)}`;
+  if (!sendContractTo) return;
+  if (sendContractOpenBtn) {
+    sendContractOpenBtn.href = `mailto:${encodeURIComponent(sendContractTo.value)}?subject=${encodeURIComponent(sendContractSubject.value)}&body=${encodeURIComponent(sendContractBody.value)}`;
+  }
+  if (sendContractGmailBtn) {
+    // Gmail's web compose URL - opens the Gmail web app (or the Gmail
+    // app, if it's set as the OS/browser handler for these links) with
+    // the To/Subject/Body pre-filled, instead of whatever the OS default
+    // mail app happens to be. Like mailto, this can't pre-attach the PDF -
+    // that still has to be attached manually, or sent via the "Send with
+    // PDF attached" button instead.
+    const params = new URLSearchParams({
+      view: 'cm',
+      fs: '1',
+      to: sendContractTo.value,
+      su: sendContractSubject.value,
+      body: sendContractBody.value,
+    });
+    sendContractGmailBtn.href = `https://mail.google.com/mail/?${params.toString()}`;
+  }
 }
 
 if (sendContractCloseBtn) {
