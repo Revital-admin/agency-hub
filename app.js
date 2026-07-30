@@ -2141,6 +2141,58 @@ function showBanner(type, message) {
   }, 4000);
 }
 
+// ── Shared optimistic-concurrency save for agency-wide list/library docs ──
+// Used by every tool that keeps one shared (non-per-client) doc in
+// Firestore under agency/* with its own version counter - Access & Login
+// Log, Ad Account Log, the Contract Template Library, Email Template
+// Library, Service Pricing, and over a dozen others each had a
+// byte-for-byte copy of this exact read-compare-write guard before it was
+// consolidated here (each one's own "someone else updated this while you
+// had it open" bug class, now fixed in one place instead of ~18).
+//
+// Deliberately returns a plain result object rather than showing a
+// banner itself - some callers show the parent's banner, others (like
+// Email Template Library) surface their own toast/rollback UI instead,
+// so presentation stays the caller's call.
+//
+// docRef: a Firestore doc ref (from window.parent.firebaseDoc(...) -
+//   already a parent-realm object regardless of which tool constructed
+//   it, so no cross-realm issue there).
+// currentVersion: the version number the caller last loaded/saved.
+// buildPayload(nextVersion): returns the full object to write (e.g.
+//   {list: entries, version: nextVersion} or {prices: overrides, version:
+//   nextVersion}) - built in the CALLER's realm, which is fine because
+//   it's immediately JSON.stringify'd below (a generic property walk,
+//   unlike an SDK's instanceof-style type check, works the same
+//   regardless of which realm constructed the object).
+//
+// Resolves to {ok:true, version} on success, or {ok:false, reason:
+// 'conflict'|'error', error?} - callers should store `version` back into
+// their own version variable on success.
+async function saveVersionedAgencyDoc({ docRef, currentVersion, buildPayload }) {
+  try {
+    const freshSnap = await window.firebaseGetDoc(docRef);
+    const freshData = freshSnap && freshSnap.exists ? freshSnap.data() : null;
+    const freshVersion = (freshData && freshData.version) || 0;
+
+    if (freshVersion !== currentVersion) {
+      return { ok: false, reason: "conflict", freshVersion };
+    }
+
+    const nextVersion = freshVersion + 1;
+    // buildPayload runs in whichever tool's iframe defined it, so the
+    // object it returns is realm-foreign here - route through
+    // firebaseSetDocFromJSON (stringify -> parse back in THIS realm)
+    // rather than docRef.set() directly, same reasoning as every existing
+    // cross-iframe Firestore write in the Hub.
+    const payload = buildPayload(nextVersion);
+    await window.firebaseSetDocFromJSON(docRef, JSON.stringify(payload));
+    return { ok: true, version: nextVersion };
+  } catch (e) {
+    return { ok: false, reason: "error", error: e };
+  }
+}
+
 // ── Mobile Drawer Navigation ──
 function initMobileNavigation() {
   const mobileMenuBtn = document.getElementById("mobileMenuBtn");

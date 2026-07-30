@@ -57,28 +57,23 @@ async function loadEntries() {
 }
 
 async function persist() {
-  if (isEmbedded && window.parent.firebaseSetDocFromJSON && window.parent.firebaseGetDoc) {
-    try {
-      const ref = getDocRef();
-      const freshSnap = await window.parent.firebaseGetDoc(ref);
-      const freshData = freshSnap && freshSnap.exists ? freshSnap.data() : null;
-      const freshVersion = (freshData && freshData.version) || 0;
-
-      if (freshVersion !== docVersion) {
-        if (window.parent.showBanner) {
-          window.parent.showBanner('error', "Someone else updated this list while you had it open. Reload the page to see their changes, then redo your edit.");
-        }
-        return false;
+  if (isEmbedded && window.parent.saveVersionedAgencyDoc) {
+    const result = await window.parent.saveVersionedAgencyDoc({
+      docRef: getDocRef(),
+      currentVersion: docVersion,
+      buildPayload: (v) => ({ list: entries, version: v }),
+    });
+    if (!result.ok) {
+      if (result.reason === 'error') console.error("Couldn't save run of show entry:", result.error);
+      if (window.parent.showBanner) {
+        window.parent.showBanner('error', result.reason === 'conflict'
+          ? "Someone else updated this list while you had it open. Reload the page to see their changes, then redo your edit."
+          : "Couldn't save — your change may be lost: " + result.error.message);
       }
-
-      docVersion = freshVersion + 1;
-      await window.parent.firebaseSetDocFromJSON(ref, JSON.stringify({ list: entries, version: docVersion }));
-      return true;
-    } catch (e) {
-      console.error("Couldn't save run of show entry:", e);
-      if (window.parent.showBanner) window.parent.showBanner('error', "Couldn't save — your change may be lost: " + e.message);
       return false;
     }
+    docVersion = result.version;
+    return true;
   }
   try { localStorage.setItem('run-of-show-tracker-list', JSON.stringify(entries)); } catch (e) {}
   return true;

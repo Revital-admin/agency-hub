@@ -70,31 +70,22 @@ async function loadOverrides() {
 // right before writing so two admins editing pricing at once can't
 // silently clobber each other's changes.
 async function persist() {
-  if (isEmbedded && window.parent.firebaseSetDoc && window.parent.firebaseGetDoc) {
-    try {
-      const ref = getDocRef();
-      const freshSnap = await window.parent.firebaseGetDoc(ref);
-      const freshData = freshSnap && freshSnap.exists ? freshSnap.data() : null;
-      const freshVersion = (freshData && freshData.version) || 0;
-
-      if (freshVersion !== docVersion) {
-        showBanner('error', "Someone else updated pricing while you had this open. Reload the page to see their changes, then redo your edit.");
-        return false;
-      }
-
-      docVersion = freshVersion + 1;
-      // A plain object literal built in this iframe's own JS realm gets
-      // rejected by Firestore ("a custom Object object") when handed
-      // straight to a Firestore call bound to the parent page - pass a
-      // JSON string instead so the parent parses it in its own realm.
-      await window.parent.firebaseSetDocFromJSON(ref, JSON.stringify({ prices: workingOverrides, version: docVersion }));
-      savedOverrides = JSON.parse(JSON.stringify(workingOverrides));
-      return true;
-    } catch (e) {
-      console.error("Couldn't save service pricing:", e);
-      showBanner('error', "Couldn't save — your changes may be lost: " + e.message);
+  if (isEmbedded && window.parent.saveVersionedAgencyDoc) {
+    const result = await window.parent.saveVersionedAgencyDoc({
+      docRef: getDocRef(),
+      currentVersion: docVersion,
+      buildPayload: (v) => ({ prices: workingOverrides, version: v }),
+    });
+    if (!result.ok) {
+      if (result.reason === 'error') console.error("Couldn't save service pricing:", result.error);
+      showBanner('error', result.reason === 'conflict'
+        ? "Someone else updated pricing while you had this open. Reload the page to see their changes, then redo your edit."
+        : "Couldn't save — your changes may be lost: " + result.error.message);
       return false;
     }
+    docVersion = result.version;
+    savedOverrides = JSON.parse(JSON.stringify(workingOverrides));
+    return true;
   }
   try {
     localStorage.setItem('service-pricing-admin-overrides', JSON.stringify(workingOverrides));

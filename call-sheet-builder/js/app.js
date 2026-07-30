@@ -56,32 +56,23 @@ async function loadEntries() {
 // trackers: re-check the doc's version right before writing and refuse
 // to clobber a newer save made elsewhere in the meantime.
 async function persist() {
-  if (isEmbedded && window.parent.firebaseSetDoc && window.parent.firebaseGetDoc) {
-    try {
-      const ref = getDocRef();
-      const freshSnap = await window.parent.firebaseGetDoc(ref);
-      const freshData = freshSnap && freshSnap.exists ? freshSnap.data() : null;
-      const freshVersion = (freshData && freshData.version) || 0;
-
-      if (freshVersion !== docVersion) {
-        if (window.parent.showBanner) {
-          window.parent.showBanner('error', "Someone else updated this list while you had it open. Reload the page to see their changes, then redo your edit.");
-        }
-        return false;
+  if (isEmbedded && window.parent.saveVersionedAgencyDoc) {
+    const result = await window.parent.saveVersionedAgencyDoc({
+      docRef: getDocRef(),
+      currentVersion: docVersion,
+      buildPayload: (v) => ({ list: entries, version: v }),
+    });
+    if (!result.ok) {
+      if (result.reason === 'error') console.error("Couldn't save call sheet:", result.error);
+      if (window.parent.showBanner) {
+        window.parent.showBanner('error', result.reason === 'conflict'
+          ? "Someone else updated this list while you had it open. Reload the page to see their changes, then redo your edit."
+          : "Couldn't save — your change may be lost: " + result.error.message);
       }
-
-      docVersion = freshVersion + 1;
-      // A plain object literal built in this iframe's own JS realm gets
-      // rejected by Firestore ("a custom Object object") when handed
-      // straight to a Firestore call bound to the parent page - pass a
-      // JSON string instead so the parent parses it in its own realm.
-      await window.parent.firebaseSetDocFromJSON(ref, JSON.stringify({ list: entries, version: docVersion }));
-      return true;
-    } catch (e) {
-      console.error("Couldn't save call sheet:", e);
-      if (window.parent.showBanner) window.parent.showBanner('error', "Couldn't save — your change may be lost: " + e.message);
       return false;
     }
+    docVersion = result.version;
+    return true;
   }
   try { localStorage.setItem('call-sheet-builder-list', JSON.stringify(entries)); } catch (e) {}
   return true;

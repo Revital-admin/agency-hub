@@ -99,27 +99,24 @@ async function loadTemplateLibrary() {
 }
 
 async function persistTemplateLibrary() {
-  if (!isEmbedded || !window.parent.firebaseSetDocFromJSON || !window.parent.firebaseGetDoc) {
+  if (!isEmbedded || !window.parent.saveVersionedAgencyDoc) {
     showBanner('error', "Can't save the template library outside the Hub.");
     return false;
   }
-  try {
-    const ref = getTemplateLibraryDocRef();
-    const freshSnap = await window.parent.firebaseGetDoc(ref);
-    const freshData = freshSnap && freshSnap.exists ? freshSnap.data() : null;
-    const freshVersion = (freshData && freshData.version) || 0;
-    if (freshVersion !== templateLibraryDocVersion) {
-      showBanner('error', "Someone else updated the timeline template library while you had it open. Reload to see their changes.");
-      return false;
-    }
-    templateLibraryDocVersion = freshVersion + 1;
-    await window.parent.firebaseSetDocFromJSON(ref, JSON.stringify({ list: templateLibrary, version: templateLibraryDocVersion }));
-    return true;
-  } catch (e) {
-    console.error("Couldn't save the timeline template library:", e);
-    showBanner('error', "Couldn't save: " + e.message);
+  const result = await window.parent.saveVersionedAgencyDoc({
+    docRef: getTemplateLibraryDocRef(),
+    currentVersion: templateLibraryDocVersion,
+    buildPayload: (v) => ({ list: templateLibrary, version: v }),
+  });
+  if (!result.ok) {
+    if (result.reason === 'error') console.error("Couldn't save the timeline template library:", result.error);
+    showBanner('error', result.reason === 'conflict'
+      ? "Someone else updated the timeline template library while you had it open. Reload to see their changes."
+      : "Couldn't save: " + result.error.message);
     return false;
   }
+  templateLibraryDocVersion = result.version;
+  return true;
 }
 
 /* ---------- template parsing (bulk textarea -> phases) ---------- */

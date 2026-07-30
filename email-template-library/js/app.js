@@ -123,24 +123,20 @@ document.addEventListener('DOMContentLoaded', () => {
   // writing so two people editing templates at once can't silently
   // clobber each other's changes.
   async function saveTemplates() {
-    if (!window.parent || !window.parent.firebaseDoc || !window.parent.firebaseDb || !window.parent.firebaseSetDocFromJSON || !window.parent.firebaseGetDoc) {
+    if (!window.parent || !window.parent.firebaseDoc || !window.parent.firebaseDb || !window.parent.saveVersionedAgencyDoc) {
       throw new Error("Couldn't reach the Hub's database - try reopening this tab from the Hub.");
     }
-    const ref = getDocRef();
-    const freshSnap = await window.parent.firebaseGetDoc(ref);
-    const freshData = freshSnap && freshSnap.exists ? freshSnap.data() : null;
-    const freshVersion = (freshData && freshData.version) || 0;
-
-    if (freshVersion !== docVersion) {
-      throw new Error("Someone else updated the template library while you had it open. Reload the page to see their changes, then redo your edit.");
+    const result = await window.parent.saveVersionedAgencyDoc({
+      docRef: getDocRef(),
+      currentVersion: docVersion,
+      buildPayload: (v) => ({ list: templates, version: v }),
+    });
+    if (!result.ok) {
+      throw new Error(result.reason === 'conflict'
+        ? "Someone else updated the template library while you had it open. Reload the page to see their changes, then redo your edit."
+        : result.error.message);
     }
-
-    docVersion = freshVersion + 1;
-    // A plain object literal built in this iframe's own JS realm gets
-    // rejected by Firestore ("a custom Object object") when handed
-    // straight to a Firestore call bound to the parent page - pass a
-    // JSON string instead so the parent parses it in its own realm.
-    await window.parent.firebaseSetDocFromJSON(ref, JSON.stringify({ list: templates, version: docVersion }));
+    docVersion = result.version;
   }
 
   function templateContentAsHtml(t) {

@@ -54,32 +54,23 @@ async function loadMembers() {
 }
 
 async function persist() {
-  if (isEmbedded && window.parent.firebaseSetDocFromJSON && window.parent.firebaseGetDoc) {
-    try {
-      const ref = getDocRef();
-      const freshSnap = await window.parent.firebaseGetDoc(ref);
-      const freshData = freshSnap && freshSnap.exists ? freshSnap.data() : null;
-      const freshVersion = (freshData && freshData.version) || 0;
-
-      if (freshVersion !== docVersion) {
-        if (window.parent.showBanner) {
-          window.parent.showBanner('error', "Someone else updated the roster while you had it open. Reload the page to see their changes, then redo your edit.");
-        }
-        return false;
+  if (isEmbedded && window.parent.saveVersionedAgencyDoc) {
+    const result = await window.parent.saveVersionedAgencyDoc({
+      docRef: getDocRef(),
+      currentVersion: docVersion,
+      buildPayload: (v) => ({ list: members, version: v }),
+    });
+    if (!result.ok) {
+      if (result.reason === 'error') console.error("Couldn't save team roster:", result.error);
+      if (window.parent.showBanner) {
+        window.parent.showBanner('error', result.reason === 'conflict'
+          ? "Someone else updated the roster while you had it open. Reload the page to see their changes, then redo your edit."
+          : "Couldn't save — your change may be lost: " + result.error.message);
       }
-
-      docVersion = freshVersion + 1;
-      // A plain object literal built in this iframe's own JS realm gets
-      // rejected by Firestore ("a custom Object object") when handed
-      // straight to a Firestore call bound to the parent page - pass a
-      // JSON string instead so the parent parses it in its own realm.
-      await window.parent.firebaseSetDocFromJSON(ref, JSON.stringify({ list: members, version: docVersion }));
-      return true;
-    } catch (e) {
-      console.error("Couldn't save team roster:", e);
-      if (window.parent.showBanner) window.parent.showBanner('error', "Couldn't save — your change may be lost: " + e.message);
       return false;
     }
+    docVersion = result.version;
+    return true;
   }
   try { localStorage.setItem('team-roster-list', JSON.stringify(members)); } catch (e) {}
   return true;

@@ -84,44 +84,33 @@ async function loadRecords() {
 // on every edit, so re-check the version right before writing and
 // refuse to clobber a newer save made elsewhere in the meantime.
 async function persist() {
-  if (isEmbedded && window.parent.firebaseSetDoc && window.parent.firebaseGetDoc) {
-    try {
-      const ref = getRecordsDocRef();
-      const freshSnap = await window.parent.firebaseGetDoc(ref);
-      const freshData = freshSnap && freshSnap.exists ? freshSnap.data() : null;
-      const freshVersion = (freshData && freshData.version) || 0;
-
-      if (freshVersion !== docVersion) {
-        if (window.parent.showBanner) {
-          window.parent.showBanner('error', "Someone else updated this list while you had it open. Reload the page to see their changes, then redo your edit.");
-        }
-        return false;
-      }
-
-      docVersion = freshVersion + 1;
-      // A plain object literal built in this iframe's own JS realm gets
-      // rejected by Firestore ("a custom Object object") when handed
-      // straight to a Firestore call bound to the parent page - pass a
-      // JSON string instead so the parent parses it in its own realm.
-      await window.parent.firebaseSetDocFromJSON(ref, JSON.stringify({ list: records, version: docVersion }));
-      // agency/contractInvoices lives outside clientsDb (see header
-      // comment), so saving here never goes through the parent's own
-      // saveDatabase() - which is what actually pushes fresh
-      // billingSummary data out to each client's public portal doc (see
-      // syncPublicPortalDocs and fetchBillingSummaries in the parent
-      // Hub's app.js). Without this call, a client's Billing tab and
-      // renewal banner would only pick up a status/date change here the
-      // next time the admin happened to save something unrelated
-      // elsewhere in the Hub - could be hours or days later.
-      if (window.parent.saveDatabase) window.parent.saveDatabase();
-      return true;
-    } catch (e) {
-      console.error("Couldn't save contract/invoice records to the cloud:", e);
+  if (isEmbedded && window.parent.saveVersionedAgencyDoc) {
+    const result = await window.parent.saveVersionedAgencyDoc({
+      docRef: getRecordsDocRef(),
+      currentVersion: docVersion,
+      buildPayload: (v) => ({ list: records, version: v }),
+    });
+    if (!result.ok) {
+      if (result.reason === 'error') console.error("Couldn't save contract/invoice records to the cloud:", result.error);
       if (window.parent.showBanner) {
-        window.parent.showBanner('error', "Couldn't save — your change may be lost on reload: " + e.message);
+        window.parent.showBanner('error', result.reason === 'conflict'
+          ? "Someone else updated this list while you had it open. Reload the page to see their changes, then redo your edit."
+          : "Couldn't save — your change may be lost on reload: " + result.error.message);
       }
       return false;
     }
+    docVersion = result.version;
+    // agency/contractInvoices lives outside clientsDb (see header
+    // comment), so saving here never goes through the parent's own
+    // saveDatabase() - which is what actually pushes fresh
+    // billingSummary data out to each client's public portal doc (see
+    // syncPublicPortalDocs and fetchBillingSummaries in the parent
+    // Hub's app.js). Without this call, a client's Billing tab and
+    // renewal banner would only pick up a status/date change here the
+    // next time the admin happened to save something unrelated
+    // elsewhere in the Hub - could be hours or days later.
+    if (window.parent.saveDatabase) window.parent.saveDatabase();
+    return true;
   }
   try {
     localStorage.setItem('contract-invoice-tracker-list', JSON.stringify(records));
@@ -465,29 +454,26 @@ async function loadContractLibrary() {
 }
 
 async function persistContractLibrary() {
-  if (!isEmbedded || !window.parent.firebaseSetDocFromJSON || !window.parent.firebaseGetDoc) {
+  if (!isEmbedded || !window.parent.saveVersionedAgencyDoc) {
     if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', "Can't save the contract library outside the Hub.");
     return false;
   }
-  try {
-    const ref = getContractLibraryDocRef();
-    const freshSnap = await window.parent.firebaseGetDoc(ref);
-    const freshData = freshSnap && freshSnap.exists ? freshSnap.data() : null;
-    const freshVersion = (freshData && freshData.version) || 0;
-    if (freshVersion !== contractLibraryDocVersion) {
-      if (window.parent.showBanner) {
-        window.parent.showBanner('error', "Someone else updated the contract library while you had it open. Reload to see their changes.");
-      }
-      return false;
+  const result = await window.parent.saveVersionedAgencyDoc({
+    docRef: getContractLibraryDocRef(),
+    currentVersion: contractLibraryDocVersion,
+    buildPayload: (v) => ({ list: contractLibrary, version: v }),
+  });
+  if (!result.ok) {
+    if (result.reason === 'error') console.error("Couldn't save the contract template library:", result.error);
+    if (window.parent.showBanner) {
+      window.parent.showBanner('error', result.reason === 'conflict'
+        ? "Someone else updated the contract library while you had it open. Reload to see their changes."
+        : "Couldn't save: " + result.error.message);
     }
-    contractLibraryDocVersion = freshVersion + 1;
-    await window.parent.firebaseSetDocFromJSON(ref, JSON.stringify({ list: contractLibrary, version: contractLibraryDocVersion }));
-    return true;
-  } catch (e) {
-    console.error("Couldn't save the contract template library:", e);
-    if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', "Couldn't save: " + e.message);
     return false;
   }
+  contractLibraryDocVersion = result.version;
+  return true;
 }
 
 let contractLibraryStatusTimer = null;
