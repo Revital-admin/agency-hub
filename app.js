@@ -418,8 +418,8 @@ let iframeNeedsReload = {
   "tab-discoverycall": true,
   "tab-packagerecommend": true,
   "tab-followuptracker": true,
+  "tab-coldoutreach": true,
   "tab-contractinvoice": true,
-  "tab-sowgenerator": true,
   "tab-referraltracker": true,
   "tab-renewaltracker": true,
   "tab-offboarding": true,
@@ -908,14 +908,14 @@ function refreshIframeTab(tabId) {
     case "tab-followuptracker":
       renderFollowUpTracker();
       break;
+    case "tab-coldoutreach":
+      renderColdOutreachSequencer();
+      break;
     case "tab-roiprojector":
       renderRoiProjector();
       break;
     case "tab-contractinvoice":
       renderContractInvoiceTracker();
-      break;
-    case "tab-sowgenerator":
-      renderSowGenerator();
       break;
     case "tab-referraltracker":
       renderReferralTracker();
@@ -1853,6 +1853,10 @@ function renderPackageRecommendationEngine() {
 }
 
 // ── Proposal Follow-Up Sequence Tracker Controller ──
+function renderColdOutreachSequencer() {
+  setIframeAbsoluteSrc('#tab-coldoutreach iframe', "cold-outreach-sequencer/index.html");
+}
+
 function renderFollowUpTracker() {
   setIframeAbsoluteSrc('#tab-followuptracker iframe', "proposal-followup-tracker/index.html");
 }
@@ -1865,11 +1869,6 @@ function renderRoiProjector() {
 // ── Contract & Invoice Status Tracker Controller ──
 function renderContractInvoiceTracker() {
   setIframeAbsoluteSrc('#tab-contractinvoice iframe', "contract-invoice-tracker/index.html");
-}
-
-// ── SOW Generator Controller ──
-function renderSowGenerator() {
-  setIframeAbsoluteSrc('#tab-sowgenerator iframe', "sow-generator/index.html");
 }
 
 // ── Referral Tracker Controller ──
@@ -2671,6 +2670,25 @@ function saveBrandVault() {
 
   // Update UI scorecards instantly without redrawing the whole form
   updateBrandVaultScorecards();
+
+  // ── Keep client.brandKit in sync ──
+  // The Client Portal's brand section (portal/js/app.js renderBrandKit())
+  // reads client.brandKit, not client.brandVault - but this Vault is the
+  // one this SOP-driven workflow actually points staff to fill in. Before
+  // this sync, saving here had zero effect on what the client ever saw:
+  // Vault could be perfectly filled out and the portal would still show an
+  // empty brand section, because nothing kept the two in sync. Deriving
+  // brandKit from brandVault on every save means Vault is now the single
+  // real data-entry point - Brand Asset Kit (Lite) is a read-only display
+  // of this same derived data (see brand-asset-kit/js/app.js).
+  if (!client.brandKit) client.brandKit = {};
+  client.brandKit.primaryColor = (bv.colors[0] && bv.colors[0].hex) || client.brandKit.primaryColor || '';
+  client.brandKit.secondaryColor = (bv.colors[1] && bv.colors[1].hex) || client.brandKit.secondaryColor || '';
+  client.brandKit.accentColor = (bv.colors[2] && bv.colors[2].hex) || client.brandKit.accentColor || '';
+  client.brandKit.fontPrimary = bv.typography.primaryFont || client.brandKit.fontPrimary || '';
+  client.brandKit.fontSecondary = bv.typography.secondaryFont || client.brandKit.fontSecondary || '';
+  client.brandKit.toneOfVoice = bv.brandVoice.adjectives || client.brandKit.toneOfVoice || '';
+  client.brandKit.logoUrl = bv.assets.logoUrl || client.brandKit.logoUrl || '';
 
   saveDatabase();
   renderDashboard();

@@ -9,7 +9,7 @@ endobj
 <<
 /Type /Pages
 /Count 3
-/Kids [ 4 0 R 31 0 R 55 0 R ]
+/Kids [ 4 0 R 32 0 R 57 0 R ]
 >>
 endobj
 3 0 obj
@@ -34,13 +34,14 @@ endobj
 >>
 /Font <<
 /F1 23 0 R
-/F5 24 0 R
+/F1-0 24 0 R
+/F5 25 0 R
 /F6 16 0 R
 >>
 /ProcSet [ /ImageB /ImageC /ImageI /PDF /Text ]
 >>
 /MediaBox [ 0.0 7.9200063 612 799.92 ]
-/Contents 30 0 R
+/Contents 31 0 R
 /Tabs /S
 /BleedBox [ 0.0 7.9200063 612 799.92 ]
 /TrimBox [ 0.0 7.9200063 612 799.92 ]
@@ -274,27 +275,36 @@ endobj
 endobj
 24 0 obj
 <<
+/BaseFont /Helvetica
+/Encoding /WinAnsiEncoding
+/Name /F1
+/Subtype /Type1
 /Type /Font
-/Subtype /Type0
-/BaseFont /AAAAAA+HelveticaLTPro-Bold
-/Encoding /Identity-H
-/DescendantFonts [ 25 0 R ]
-/ToUnicode 29 0 R
 >>
 endobj
 25 0 obj
 <<
 /Type /Font
-/FontDescriptor 26 0 R
+/Subtype /Type0
+/BaseFont /AAAAAA+HelveticaLTPro-Bold
+/Encoding /Identity-H
+/DescendantFonts [ 26 0 R ]
+/ToUnicode 30 0 R
+>>
+endobj
+26 0 obj
+<<
+/Type /Font
+/FontDescriptor 27 0 R
 /BaseFont /AAAAAA+HelveticaLTPro-Bold
 /Subtype /CIDFontType2
 /CIDToGIDMap /Identity
-/CIDSystemInfo 28 0 R
+/CIDSystemInfo 29 0 R
 /W [ 0 [ 512 0 0 278 ] 36 39 722 40 [ 667 611 0 0 278 ] 49 [ 722 778 667 778 722 667 611 ] 74 [ 611 0 278 0 0 0 889 611 611 0 0 389 ] 87 [ 333 611 ] ]
 /DW 556
 >>
 endobj
-26 0 obj
+27 0 obj
 <<
 /Type /FontDescriptor
 /FontName /AAAAAA+HelveticaLTPro-Bold
@@ -305,10 +315,10 @@ endobj
 /CapHeight 718
 /ItalicAngle 0
 /FontBBox [ -170 -263 1003 962 ]
-/FontFile2 27 0 R
+/FontFile2 28 0 R
 >>
 endobj
-27 0 obj
+28 0 obj
 <<
 /Length1 9392
 /Filter /FlateDecode
@@ -341,14 +351,14 @@ IÏHN5]®ó†<h”íEÆñ+4+|É>‡üËÕ\Ωf≈∆ùª◊îTµ,^¥Æw„F≤./;-√ëûbü=µcaw˚‹Ï¥¥ÙT°1‘ºtë™_"˚
 
 endstream
 endobj
-28 0 obj
+29 0 obj
 <<
 /Registry (Adobe)
 /Ordering (Identity)
 /Supplement 0
 >>
 endobj
-29 0 obj
+30 0 obj
 <<
 /Filter /FlateDecode
 /Length 311
@@ -361,11 +371,12 @@ tD:mtBäëŒH	“)E*ë≤@	Rö?õrÚÎ„i[`{ë°TX+*b√8
 ß|A((]a0¡ ˆL≈Ê 5◊·¨K|N^>ú„√¶√¥◊9kœœ`'ªV≠Á;N†-
 endstream
 endobj
-30 0 obj
+31 0 obj
 <<
-/Length 21318
+/Length 21642
 >>
 stream
+q
 q
 q
 .23999999 0 0 -.23999999 0 799.91998 cm
@@ -2078,31 +2089,63 @@ q
 Q
 Q
 
+Q
+q
+0.0 0.0 612 792 re
+W
+n
+1 0 0 1 0 0 cm
+BT
+/F1-0 12 Tf
+14.4 TL
+ET
+BT
+/F1-0 1 Tf
+1.2 TL
+ET
+BT
+1 0 0 1 43.36385 635.1487 Tm
+(\133\133EFFECTIVE\137DATE\135\135) Tj
+T*
+ET
+BT
+1 0 0 1 295.1881 635.1487 Tm
+(\133\133CLIENT\137NAME\135\135) Tj
+T*
+ET
+BT
+1 0 0 1 99.6549 619.3987 Tm
+(\133\133CLIENT\137ADDRESS\135\135) Tj
+T*
+ET
+Q
+
 endstream
 endobj
-31 0 obj
+32 0 obj
 <<
 /Type /Page
 /Resources <<
 /ExtGState <<
-/G3 32 0 R
+/G3 33 0 R
 /gs2 7 0 R
 >>
 /XObject <<
 /FormXob.8a2512636e0b565ea2e47491c9b2477b 8 0 R
-/X4 33 0 R
-/X5 36 0 R
-/X6 39 0 R
+/X4 34 0 R
+/X5 37 0 R
+/X6 40 0 R
 >>
 /Font <<
 /F1 23 0 R
-/F7 42 0 R
-/F8 48 0 R
+/F1-0 43 0 R
+/F7 44 0 R
+/F8 50 0 R
 >>
 /ProcSet [ /ImageB /ImageC /ImageI /PDF /Text ]
 >>
 /MediaBox [ 0.0 7.9200063 612 799.92 ]
-/Contents 54 0 R
+/Contents 56 0 R
 /Tabs /S
 /BleedBox [ 0.0 7.9200063 612 799.92 ]
 /TrimBox [ 0.0 7.9200063 612 799.92 ]
@@ -2112,22 +2155,22 @@ endobj
 /Parent 2 0 R
 >>
 endobj
-32 0 obj
+33 0 obj
 <<
 /ca 1
 /BM /Normal
 >>
 endobj
-33 0 obj
+34 0 obj
 <<
 /Type /XObject
 /Subtype /Form
 /Resources <<
 /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
-/ExtGState 34 0 R
+/ExtGState 35 0 R
 >>
 /BBox [ 0 0 2550 458 ]
-/Group 35 0 R
+/Group 36 0 R
 /Filter /FlateDecode
 /Length 109
 >>
@@ -2135,28 +2178,28 @@ stream
 xúmç=Ç@˚wäwóè}˚•CE°7 Ö+˜è	6v3”ÃµkCìRà4vÒÊeùòLµèúv∏,â.˚6Àœ˛O,+™^\ﬂ®ÆÂÿñq:x:ú…Ëcbô±‡Å˚–·úr*
 endstream
 endobj
-34 0 obj
+35 0 obj
 <<
-/G3 32 0 R
+/G3 33 0 R
 >>
 endobj
-35 0 obj
+36 0 obj
 <<
 /Type /Group
 /S /Transparency
 /I true
 >>
 endobj
-36 0 obj
+37 0 obj
 <<
 /Type /XObject
 /Subtype /Form
 /Resources <<
 /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
-/ExtGState 37 0 R
+/ExtGState 38 0 R
 >>
 /BBox [ 0 0 335 60 ]
-/Group 38 0 R
+/Group 39 0 R
 /Filter /FlateDecode
 /Length 100
 >>
@@ -2164,28 +2207,28 @@ stream
 xúEä±@@˚˝ä˜ŒÓÌ9îà®¸Å¢P8˜ˇ"—ÕdÊ$1•+ºwåﬂ+¬¶–%w∆≥ä≈|–≥1∆ÓÉ∞Q⁄)∂ã“*ƒ}ùÊà∫oﬁ*™õyÑÖV®Ì∫@#I
 endstream
 endobj
-37 0 obj
+38 0 obj
 <<
-/G3 32 0 R
+/G3 33 0 R
 >>
 endobj
-38 0 obj
+39 0 obj
 <<
 /Type /Group
 /S /Transparency
 /I true
 >>
 endobj
-39 0 obj
+40 0 obj
 <<
 /Type /XObject
 /Subtype /Form
 /Resources <<
 /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
-/ExtGState 40 0 R
+/ExtGState 41 0 R
 >>
 /BBox [ 0 0 335 59 ]
-/Group 41 0 R
+/Group 42 0 R
 /Filter /FlateDecode
 /Length 99
 >>
@@ -2193,41 +2236,50 @@ stream
 xúEä1@@E˚9≈øÄ5≥c'îà®‹@Q(,˜èâÓΩºwê∏"ÀÕ≤ „∑ƒã∞ÀıAÊåU<¶ùûç1¥ƒï“V±ûîñÒ⁄ñq∫Puı[Eï·É!Œ¥POMW”@πK
 endstream
 endobj
-40 0 obj
+41 0 obj
 <<
-/G3 32 0 R
+/G3 33 0 R
 >>
 endobj
-41 0 obj
+42 0 obj
 <<
 /Type /Group
 /S /Transparency
 /I true
 >>
 endobj
-42 0 obj
+43 0 obj
+<<
+/BaseFont /Helvetica
+/Encoding /WinAnsiEncoding
+/Name /F1
+/Subtype /Type1
+/Type /Font
+>>
+endobj
+44 0 obj
 <<
 /Type /Font
 /Subtype /Type0
 /BaseFont /AAAAAA+HelveticaLTPro-Bold
 /Encoding /Identity-H
-/DescendantFonts [ 43 0 R ]
-/ToUnicode 47 0 R
+/DescendantFonts [ 45 0 R ]
+/ToUnicode 49 0 R
 >>
 endobj
-43 0 obj
+45 0 obj
 <<
 /Type /Font
-/FontDescriptor 44 0 R
+/FontDescriptor 46 0 R
 /BaseFont /AAAAAA+HelveticaLTPro-Bold
 /Subtype /CIDFontType2
 /CIDToGIDMap /Identity
-/CIDSystemInfo 46 0 R
+/CIDSystemInfo 48 0 R
 /W [ 0 [ 512 0 0 278 ] 16 [ 333 ] 40 [ 667 611 778 ] 44 [ 278 0 0 611 833 ] 50 [ 778 667 ] 54 [ 667 611 ] 57 60 667 70 72 556 74 [ 611 0 278 0 0 278 889 611 611 0 0 389 556 333 611 ] ]
 /DW 722
 >>
 endobj
-44 0 obj
+46 0 obj
 <<
 /Type /FontDescriptor
 /FontName /AAAAAA+HelveticaLTPro-Bold
@@ -2238,10 +2290,10 @@ endobj
 /CapHeight 718
 /ItalicAngle 0
 /FontBBox [ -170 -263 1003 962 ]
-/FontFile2 45 0 R
+/FontFile2 47 0 R
 >>
 endobj
-45 0 obj
+47 0 obj
 <<
 /Length1 9628
 /Filter /FlateDecode
@@ -2280,14 +2332,14 @@ o¿Kh¨Å∑Ÿ„ââ⁄:)—dL†´í∂KæÒ<˛¢è2ÆﬁoÓîﬁt‘úÇâŸd]§ó‘ys#°I≥s|æ≈Îî(-•Æ·*	À(
 -ÅR[ee/Mjã≥∆”Â‘ë;Üî∂ÌﬁÇRˆ1u“$X‡	ÿ8ùVgéÁì¨1>!¡Ä:…`SïØ¿˝ªÛ&(EH,G‘£±„'˜Ó†˘´Bãz≥;¶ê	ÉÁ™•%Û»‚»≤sÒ_-£s¡
 endstream
 endobj
-46 0 obj
+48 0 obj
 <<
 /Registry (Adobe)
 /Ordering (Identity)
 /Supplement 0
 >>
 endobj
-47 0 obj
+49 0 obj
 <<
 /Filter /FlateDecode
 /Length 308
@@ -2298,29 +2350,29 @@ xú]ëÕj√0ÑÔzä=&á Y∂ìå!8|ËuÛ é¥vµ,dÂ‡∑/÷&)Ù ¡'Õ0√.ØöscM ˛·'’bÄﬁXÌqûn^!\q0ñ%¥
 !§(WJ—9RZE èë≤}§}JÙBîùàD‰€cÉ{V˛H~ïÖë:K¢W÷ëR™ïUT$ß«#ıëîR?(Üë2'eNÌÚﬁÄ2◊q¨k{ŒZ›ºG‚n„|◊…ãœıª…≠Æı¸ãùë
 endstream
 endobj
-48 0 obj
+50 0 obj
 <<
 /Type /Font
 /Subtype /Type0
 /BaseFont /BAAAAA+HelveticaLTPro-Roman
 /Encoding /Identity-H
-/DescendantFonts [ 49 0 R ]
-/ToUnicode 53 0 R
+/DescendantFonts [ 51 0 R ]
+/ToUnicode 55 0 R
 >>
 endobj
-49 0 obj
+51 0 obj
 <<
 /Type /Font
-/FontDescriptor 50 0 R
+/FontDescriptor 52 0 R
 /BaseFont /BAAAAA+HelveticaLTPro-Roman
 /Subtype /CIDFontType2
 /CIDToGIDMap /Identity
-/CIDSystemInfo 52 0 R
+/CIDSystemInfo 54 0 R
 /W [ 0 [ 512 0 0 278 ] 11 12 333 13 [ 389 ] 15 18 278 29 [ 278 ] 36 37 667 38 39 722 40 [ 667 611 ] 46 51 667 53 [ 722 667 611 722 0 944 ] 70 [ 500 ] 73 [ 278 ] 76 77 222 78 [ 500 222 833 ] 85 [ 333 500 278 ] 89 [ 500 722 500 500 ] ]
 /DW 556
 >>
 endobj
-50 0 obj
+52 0 obj
 <<
 /Type /FontDescriptor
 /FontName /BAAAAA+HelveticaLTPro-Roman
@@ -2331,10 +2383,10 @@ endobj
 /CapHeight 718
 /ItalicAngle 0
 /FontBBox [ -166 -225 1000 931 ]
-/FontFile2 51 0 R
+/FontFile2 53 0 R
 >>
 endobj
-51 0 obj
+53 0 obj
 <<
 /Length1 12632
 /Filter /FlateDecode
@@ -2389,14 +2441,14 @@ YÈŒ¸≤3b±Xgg[ã:œEøòù›I4êøFF™kiÖ"…%‰]ÍF
 u_
 endstream
 endobj
-52 0 obj
+54 0 obj
 <<
 /Registry (Adobe)
 /Ordering (Identity)
 /Supplement 0
 >>
 endobj
-53 0 obj
+55 0 obj
 <<
 /Filter /FlateDecode
 /Length 317
@@ -2408,11 +2460,12 @@ k&ﬁΩolœWó≤Y3—‹ú˚Ål‡í◊–1Qæ∂Ó≠ÄL€‘l0aﬁ\ ÊÒ5;‡1rDn‘®ar≠ﬂ⁄X.•îœ´™™
 Vˇ;ﬂS÷µSﬂ≠«Ë§‡πî±,ê∂D)QET"EG§dGt": ≈g§Ùàî–ù›ôà∂HiLDÓÓ>≤?WœGêò$ï¯Æ!E;⁄<ìtJ¥'if^Q,&iäÃJ\^¢ª“\Jµ¥Ù—uÛl¿æcÌó™èØ·F∑d-„V–¢˘
 endstream
 endobj
-54 0 obj
+56 0 obj
 <<
-/Length 40785
+/Length 41572
 >>
 stream
+q
 q
 q
 .23999999 0 0 -.23999999 0 799.91998 cm
@@ -5827,33 +5880,94 @@ q
 Q
 Q
 
+Q
+q
+0.0 0.0 612 792 re
+W
+n
+1 0 0 1 0 0 cm
+BT
+/F1-0 12 Tf
+14.4 TL
+ET
+BT
+/F1-0 1 Tf
+1.2 TL
+ET
+BT
+1 0 0 1 194.8058 557.196 Tm
+(\133\133REVISION\137WINDOW\137HOURS\135\135) Tj
+T*
+ET
+BT
+1 0 0 1 116.8295 509.3546 Tm
+(\133\133PROJECT\137FEE\135\135) Tj
+T*
+ET
+BT
+1 0 0 1 189.3538 477.8546 Tm
+(\133\133DEPOSIT\135\135) Tj
+T*
+ET
+BT
+1 0 0 1 255.2486 446.3546 Tm
+(\133\133BALANCE\135\135) Tj
+T*
+ET
+BT
+1 0 0 1 102.2723 414.8546 Tm
+(\133\133RUSH\137FEE\135\135) Tj
+T*
+ET
+BT
+1 0 0 1 83.23508 372.5191 Tm
+(\133\133KILL\137FEE\135\135) Tj
+T*
+ET
+BT
+1 0 0 1 191.9475 317.5773 Tm
+(\133\133REVISION\137ROUNDS\137INCLUDED\135\135) Tj
+T*
+ET
+BT
+1 0 0 1 239.207 286.0773 Tm
+(\133\133ADDITIONAL\137REVISION\137RATE\135\135) Tj
+T*
+ET
+BT
+1 0 0 1 206.3278 93.35737 Tm
+(\133\133USAGE\137RIGHTS\135\135) Tj
+T*
+ET
+Q
+
 endstream
 endobj
-55 0 obj
+57 0 obj
 <<
 /Type /Page
 /Resources <<
 /ExtGState <<
-/G3 56 0 R
+/G3 58 0 R
 /gs2 7 0 R
 >>
 /XObject <<
 /FormXob.8a2512636e0b565ea2e47491c9b2477b 8 0 R
-/X4 57 0 R
-/X5 60 0 R
-/X6 63 0 R
-/X9 66 0 R
+/X4 59 0 R
+/X5 62 0 R
+/X6 65 0 R
+/X9 68 0 R
 >>
 /Font <<
 /F1 23 0 R
-/F1-0 69 0 R
-/F7 70 0 R
-/F8 76 0 R
+/F1-0 71 0 R
+/F7 72 0 R
+/F8 78 0 R
 >>
 /ProcSet [ /ImageB /ImageC /ImageI /PDF /Text ]
 >>
 /MediaBox [ 0.0 7.9200063 612 799.92 ]
-/Contents 82 0 R
+/Contents 84 0 R
 /Tabs /S
 /BleedBox [ 0.0 7.9200063 612 799.92 ]
 /TrimBox [ 0.0 7.9200063 612 799.92 ]
@@ -5863,22 +5977,22 @@ endobj
 /Parent 2 0 R
 >>
 endobj
-56 0 obj
+58 0 obj
 <<
 /ca 1
 /BM /Normal
 >>
 endobj
-57 0 obj
+59 0 obj
 <<
 /Type /XObject
 /Subtype /Form
 /Resources <<
 /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
-/ExtGState 58 0 R
+/ExtGState 60 0 R
 >>
 /BBox [ 0 0 2550 458 ]
-/Group 59 0 R
+/Group 61 0 R
 /Filter /FlateDecode
 /Length 109
 >>
@@ -5886,28 +6000,28 @@ stream
 xúmç=Ç@˚wäwóè}˚•CE°7 Ö+˜è	6v3”ÃµkCìRà4vÒÊeùòLµèúv∏,â.˚6Àœ˛O,+™^\ﬂ®ÆÂÿñq:x:ú…Ëcbô±‡Å˚–·úr*
 endstream
 endobj
-58 0 obj
+60 0 obj
 <<
-/G3 56 0 R
+/G3 58 0 R
 >>
 endobj
-59 0 obj
+61 0 obj
 <<
 /Type /Group
 /S /Transparency
 /I true
 >>
 endobj
-60 0 obj
+62 0 obj
 <<
 /Type /XObject
 /Subtype /Form
 /Resources <<
 /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
-/ExtGState 61 0 R
+/ExtGState 63 0 R
 >>
 /BBox [ 0 0 335 60 ]
-/Group 62 0 R
+/Group 64 0 R
 /Filter /FlateDecode
 /Length 100
 >>
@@ -5915,28 +6029,28 @@ stream
 xúEä±@@˚˝ä˜ŒÓÌ9îà®¸Å¢P8˜ˇ"—ÕdÊ$1•+ºwåﬂ+¬¶–%w∆≥ä≈|–≥1∆ÓÉ∞Q⁄)∂ã“*ƒ}ùÊà∫oﬁ*™õyÑÖV®Ì∫@#I
 endstream
 endobj
-61 0 obj
+63 0 obj
 <<
-/G3 56 0 R
+/G3 58 0 R
 >>
 endobj
-62 0 obj
+64 0 obj
 <<
 /Type /Group
 /S /Transparency
 /I true
 >>
 endobj
-63 0 obj
+65 0 obj
 <<
 /Type /XObject
 /Subtype /Form
 /Resources <<
 /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ]
-/ExtGState 64 0 R
+/ExtGState 66 0 R
 >>
 /BBox [ 0 0 335 59 ]
-/Group 65 0 R
+/Group 67 0 R
 /Filter /FlateDecode
 /Length 99
 >>
@@ -5944,26 +6058,26 @@ stream
 xúEä1@@E˚9≈øÄ5≥c'îà®‹@Q(,˜èâÓΩºwê∏"ÀÕ≤ „∑ƒã∞ÀıAÊåU<¶ùûç1¥ƒï“V±ûîñÒ⁄ñq∫Puı[Eï·É!Œ¥POMW”@πK
 endstream
 endobj
-64 0 obj
+66 0 obj
 <<
-/G3 56 0 R
+/G3 58 0 R
 >>
 endobj
-65 0 obj
+67 0 obj
 <<
 /Type /Group
 /S /Transparency
 /I true
 >>
 endobj
-66 0 obj
+68 0 obj
 <<
 /Type /XObject
 /Subtype /Image
 /Width 2138
 /Height 53
-/ColorSpace [ /ICCBased 67 0 R ]
-/SMask 68 0 R
+/ColorSpace [ /ICCBased 69 0 R ]
+/SMask 70 0 R
 /BitsPerComponent 8
 /Filter /FlateDecode
 /Length 352
@@ -5972,7 +6086,7 @@ stream
 xúÌ¡1   ¬†ıOm†                                                                                                                                                                                                                                                                                                                                         ¯501 
 endstream
 endobj
-67 0 obj
+69 0 obj
 <<
 /N 3
 /Filter /FlateDecode
@@ -5982,7 +6096,7 @@ stream
 xú}êΩJ√ Öø‘Ç(äÉ28∏hì¶iRpi"◊V°©Sí¶AÏOHSÙtspu+.æÄËc(‚‡#à†≥§ARêx‡¬«·¿Ω˜@Æ êó†?à¬F›[V[úG@`*€dKÄÔó$˚ºıO.Ko‰@∂¨6`ÕO¯,f'·ÀòO£ asx–0A∏6˝vfÿ¬8ˇÏÙ{c7Ωõ%opÿZ¿:uÜÒÈ·Q§…	«ÿ—0QŸ£F	Ö*ÂÈ‘ê(£S¡¿¿ƒDGACAaïj‹g≤rx˙Ã]•ûsPxMΩç	¨ú√˝cÍ•vhO≠<êÎv·Ûñ-X}Ç≈£ﬂb3~ˇ¸*≤œ ómDJH»T~ ÖÕKΩ
 endstream
 endobj
-68 0 obj
+70 0 obj
 <<
 /Type /XObject
 /Subtype /Image
@@ -5998,7 +6112,7 @@ xúÌ›±	ƒ@DQ/◊ò{28v~;ÚU†Ö¡¯Ω*>
 F€                                  V †¥∫T Ä ÄRx¥ÿø  •=+ãÎ (]YY7 @È» ‚\]B ¿?;ï –FY  }î –GY  }î –GY  }¬≤∞g LÑ{68ÄâpÉ”ﬂ `"¸‚◊) 0˛: h4  J´K                                  `ù¨àB)
 endstream
 endobj
-69 0 obj
+71 0 obj
 <<
 /BaseFont /Helvetica
 /Encoding /WinAnsiEncoding
@@ -6007,29 +6121,29 @@ endobj
 /Type /Font
 >>
 endobj
-70 0 obj
+72 0 obj
 <<
 /Type /Font
 /Subtype /Type0
 /BaseFont /AAAAAA+HelveticaLTPro-Bold
 /Encoding /Identity-H
-/DescendantFonts [ 71 0 R ]
-/ToUnicode 75 0 R
+/DescendantFonts [ 73 0 R ]
+/ToUnicode 77 0 R
 >>
 endobj
-71 0 obj
+73 0 obj
 <<
 /Type /Font
-/FontDescriptor 72 0 R
+/FontDescriptor 74 0 R
 /BaseFont /AAAAAA+HelveticaLTPro-Bold
 /Subtype /CIDFontType2
 /CIDToGIDMap /Identity
-/CIDSystemInfo 74 0 R
+/CIDSystemInfo 76 0 R
 /W [ 0 [ 512 0 0 278 ] 16 [ 333 ] 36 39 722 40 [ 667 0 778 0 278 ] 48 [ 833 722 778 667 0 722 667 ] 56 [ 722 667 ] 70 72 556 76 79 278 80 [ 889 ] 85 [ 389 556 333 ] ]
 /DW 611
 >>
 endobj
-72 0 obj
+74 0 obj
 <<
 /Type /FontDescriptor
 /FontName /AAAAAA+HelveticaLTPro-Bold
@@ -6040,10 +6154,10 @@ endobj
 /CapHeight 718
 /ItalicAngle 0
 /FontBBox [ -170 -263 1003 962 ]
-/FontFile2 73 0 R
+/FontFile2 75 0 R
 >>
 endobj
-73 0 obj
+75 0 obj
 <<
 /Length1 9184
 /Filter /FlateDecode
@@ -6081,14 +6195,14 @@ IÏ'ÛÍ#í®‹^!…¢rQœ“∆|¶6âØêdóÀÔ5©Ti≈êRπ±£'‘\·˜ë>SlπTﬁÎ˜°/÷T.ïõ¸>(„§Œ>2n*—t\hRÖ
 6R8◊·6⁄ã≠¡2{UU/Mj:f3”‘ô7éîµÌŸÇ2ˆu—$X·⁄9Éﬁ ò˘$[åâOH0°^6Ÿ5Âk0Jˇû¸"µpHÖ“®2>wrÔNZ∞:º∏7ªcZ!)ºP#/ùGñ˝2;ˇó
 endstream
 endobj
-74 0 obj
+76 0 obj
 <<
 /Registry (Adobe)
 /Ordering (Identity)
 /Supplement 0
 >>
 endobj
-75 0 obj
+77 0 obj
 <<
 /Filter /FlateDecode
 /Length 318
@@ -6100,29 +6214,29 @@ xú]íMèÉ ÜÔ¸
 {¬ﬁΩoÏHwŸÌ	ÎnŒ˝¿6PNÍöjìØΩ{Î'†, ≠LXŸ˝E|≠®àú†5kX\Ø¿˜vRqŒyM´¶iööÄ’ˇæó®∫Íª˜1:≠i≈π‡ıF	G:GY§,A:!ë$R)+")“RéÑ∫uÍä2∫ª˚»ÆûèòP`¶Ûä&Räñ3/”/Àx‰´4ä≈02«»s≈›÷‹ZµçÙ9uÛlàsèΩﬂ∫n,<7ªMµ≠_8¢Ô
 endstream
 endobj
-76 0 obj
+78 0 obj
 <<
 /Type /Font
 /Subtype /Type0
 /BaseFont /BAAAAA+HelveticaLTPro-Roman
 /Encoding /Identity-H
-/DescendantFonts [ 77 0 R ]
-/ToUnicode 81 0 R
+/DescendantFonts [ 79 0 R ]
+/ToUnicode 83 0 R
 >>
 endobj
-77 0 obj
+79 0 obj
 <<
 /Type /Font
-/FontDescriptor 78 0 R
+/FontDescriptor 80 0 R
 /BaseFont /BAAAAA+HelveticaLTPro-Roman
 /Subtype /CIDFontType2
 /CIDToGIDMap /Identity
-/CIDSystemInfo 80 0 R
+/CIDSystemInfo 82 0 R
 /W [ 0 [ 512 ] 3 17 278 36 [ 667 0 722 722 667 0 778 0 278 ] 48 [ 833 722 0 667 0 722 667 611 ] 70 [ 500 ] 73 [ 278 ] 76 79 222 80 [ 833 ] 85 [ 333 500 278 ] 89 [ 500 722 500 500 ] ]
 /DW 556
 >>
 endobj
-78 0 obj
+80 0 obj
 <<
 /Type /FontDescriptor
 /FontName /BAAAAA+HelveticaLTPro-Roman
@@ -6133,10 +6247,10 @@ endobj
 /CapHeight 718
 /ItalicAngle 0
 /FontBBox [ -166 -225 1000 931 ]
-/FontFile2 79 0 R
+/FontFile2 81 0 R
 >>
 endobj
-79 0 obj
+81 0 obj
 <<
 /Length1 10420
 /Filter /FlateDecode
@@ -6175,14 +6289,14 @@ Q{ˆq¶(»Â(^â¸àé÷îœ]U[⁄&––ÒÍÓ¶ñk[[ñ.æbI˚∂∫ºí4U∂hp…ÿ∆?≠E.;IyÍÇiÛ◊ªl6£∆ju
 Ü¯ +◊y
 endstream
 endobj
-80 0 obj
+82 0 obj
 <<
 /Registry (Adobe)
 /Ordering (Identity)
 /Supplement 0
 >>
 endobj
-81 0 obj
+83 0 obj
 <<
 /Filter /FlateDecode
 /Length 319
@@ -6191,7 +6305,7 @@ stream
 xú]íMãÉ0ÜÔ˘9∂áí?⁄Ç%]¡√~∞nÄMF7∞∆”Éˇ~1”va*èŒ;Ûêë…Ê‹X(˚ìj!–ﬁXÌaûn^Ω¬`,I’FÖ;≈ª;GòlŒÌ2€O§,)eü0ò9¯ÖnNz∫¬ñ∞wØ¡;–ÕE∂[¬⁄õs?0Çîì™¢z¬‰kÁﬁ∫(ã±]£¡ñ›E∂_ã*"'h£&≥Î¯Œ@JŒ9ØhY◊u]∞˙ﬂ˜¶ÆΩ˙Ó|¨N+Zr.x©FíëíÈ%í»"e	“	iè$ëéëRÏôcœL °œ}rÒxjãá∞Sä}—'Eëµ“_Ó±Ø¿)Ÿ£d}(ôa<Gü„9∆s¨‹ãªä¨'∂nˆπuÛlàÎè+XﬂXx˛!nrkjΩ~£)§^
 endstream
 endobj
-82 0 obj
+84 0 obj
 <<
 /Length 20006
 >>
@@ -7775,96 +7889,98 @@ Q
 endstream
 endobj
 xref
-0 83
+0 85
 0000000000 65535 f 
 0000000015 00000 n 
 0000000054 00000 n 
 0000000127 00000 n 
 0000000176 00000 n 
-0000000668 00000 n 
-0000000707 00000 n 
-0000000785 00000 n 
-0000000831 00000 n 
-0000123691 00000 n 
-0000129551 00000 n 
-0000129888 00000 n 
-0000129920 00000 n 
-0000129980 00000 n 
-0000130455 00000 n 
-0000130487 00000 n 
-0000130520 00000 n 
-0000130677 00000 n 
-0000131060 00000 n 
-0000131269 00000 n 
-0000138689 00000 n 
-0000138764 00000 n 
-0000139172 00000 n 
-0000139232 00000 n 
-0000139340 00000 n 
-0000139496 00000 n 
-0000139818 00000 n 
-0000140027 00000 n 
-0000146446 00000 n 
-0000146521 00000 n 
-0000146905 00000 n 
-0000168277 00000 n 
-0000168772 00000 n 
-0000168812 00000 n 
-0000169144 00000 n 
-0000169177 00000 n 
-0000169237 00000 n 
-0000169558 00000 n 
-0000169591 00000 n 
-0000169651 00000 n 
-0000169970 00000 n 
-0000170003 00000 n 
-0000170063 00000 n 
-0000170219 00000 n 
-0000170575 00000 n 
-0000170784 00000 n 
-0000177354 00000 n 
-0000177429 00000 n 
-0000177810 00000 n 
-0000177967 00000 n 
-0000178373 00000 n 
-0000178582 00000 n 
-0000187358 00000 n 
-0000187433 00000 n 
-0000187823 00000 n 
-0000228662 00000 n 
-0000229181 00000 n 
-0000229221 00000 n 
-0000229553 00000 n 
-0000229586 00000 n 
-0000229646 00000 n 
-0000229967 00000 n 
-0000230000 00000 n 
-0000230060 00000 n 
-0000230379 00000 n 
-0000230412 00000 n 
-0000230472 00000 n 
-0000231018 00000 n 
-0000231389 00000 n 
-0000231789 00000 n 
-0000231897 00000 n 
-0000232053 00000 n 
-0000232391 00000 n 
-0000232600 00000 n 
-0000238867 00000 n 
-0000238942 00000 n 
-0000239333 00000 n 
-0000239490 00000 n 
-0000239845 00000 n 
-0000240054 00000 n 
-0000247227 00000 n 
-0000247302 00000 n 
-0000247694 00000 n 
+0000000681 00000 n 
+0000000720 00000 n 
+0000000798 00000 n 
+0000000844 00000 n 
+0000123704 00000 n 
+0000129564 00000 n 
+0000129901 00000 n 
+0000129933 00000 n 
+0000129993 00000 n 
+0000130468 00000 n 
+0000130500 00000 n 
+0000130533 00000 n 
+0000130690 00000 n 
+0000131073 00000 n 
+0000131282 00000 n 
+0000138702 00000 n 
+0000138777 00000 n 
+0000139185 00000 n 
+0000139245 00000 n 
+0000139353 00000 n 
+0000139461 00000 n 
+0000139617 00000 n 
+0000139939 00000 n 
+0000140148 00000 n 
+0000146567 00000 n 
+0000146642 00000 n 
+0000147026 00000 n 
+0000168722 00000 n 
+0000169230 00000 n 
+0000169270 00000 n 
+0000169602 00000 n 
+0000169635 00000 n 
+0000169695 00000 n 
+0000170016 00000 n 
+0000170049 00000 n 
+0000170109 00000 n 
+0000170428 00000 n 
+0000170461 00000 n 
+0000170521 00000 n 
+0000170629 00000 n 
+0000170785 00000 n 
+0000171141 00000 n 
+0000171350 00000 n 
+0000177920 00000 n 
+0000177995 00000 n 
+0000178376 00000 n 
+0000178533 00000 n 
+0000178939 00000 n 
+0000179148 00000 n 
+0000187924 00000 n 
+0000187999 00000 n 
+0000188389 00000 n 
+0000230015 00000 n 
+0000230534 00000 n 
+0000230574 00000 n 
+0000230906 00000 n 
+0000230939 00000 n 
+0000230999 00000 n 
+0000231320 00000 n 
+0000231353 00000 n 
+0000231413 00000 n 
+0000231732 00000 n 
+0000231765 00000 n 
+0000231825 00000 n 
+0000232371 00000 n 
+0000232742 00000 n 
+0000233142 00000 n 
+0000233250 00000 n 
+0000233406 00000 n 
+0000233744 00000 n 
+0000233953 00000 n 
+0000240220 00000 n 
+0000240295 00000 n 
+0000240686 00000 n 
+0000240843 00000 n 
+0000241198 00000 n 
+0000241407 00000 n 
+0000248580 00000 n 
+0000248655 00000 n 
+0000249047 00000 n 
 trailer
 <<
-/Size 83
+/Size 85
 /Root 3 0 R
 /Info 1 0 R
 >>
 startxref
-267754
+269107
 %%EOF

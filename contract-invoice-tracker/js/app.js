@@ -22,6 +22,30 @@ const SANDBOX_NAME = "Quick Sandbox (One-Offs)";
 let records = [];
 let docVersion = 0; // optimistic-concurrency guard, see persist() below
 
+// Same partial gate as Team Roster/SOP Wiki/Email Template Library:
+// everyone can still view the library and send contracts, but only
+// unrestricted users (no entry in agency/teamAccess) see the
+// Add/Replace/Delete/Review controls - previously this whole window had
+// no permission check at all, so anyone who could open this tab could
+// replace or delete any of the 6 shared contract templates.
+let isRestrictedUser = false;
+function applyContractLibraryEditPermission() {
+  if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb || !window.parent.firebaseOnSnapshot) return;
+  const ref = window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "teamAccess");
+  window.parent.firebaseOnSnapshot(ref, (docSnap) => {
+    const data = docSnap && docSnap.exists ? docSnap.data() : null;
+    const users = (data && data.users) ? data.users : {};
+    const currentEmail = (window.parent.currentAdminEmail || "").toLowerCase();
+    isRestrictedUser = !!(currentEmail && Object.prototype.hasOwnProperty.call(users, currentEmail));
+
+    const addForm = el('contractLibraryAddForm');
+    if (addForm) addForm.style.display = isRestrictedUser ? 'none' : '';
+    renderContractLibrary();
+  }, (err) => {
+    console.error("Edit-permission listener error:", err);
+  });
+}
+
 const CONTRACT_STATUSES = ['Not Sent', 'Sent', 'Signed'];
 const INVOICE_STATUSES = ['Not Sent', 'Sent', 'Paid', 'Overdue'];
 
@@ -403,6 +427,21 @@ function escapeHtmlLocal(str) {
 let contractLibrary = [];
 let contractLibraryDocVersion = 0;
 
+// Contractor documents (Independent Contractor Agreement, its NDA, and
+// anything else added the same way from Team Roster & Capacity) live in
+// this same shared list/collection, but are sent from Team Roster instead
+// of here - a contractor isn't a client, and shouldn't show up as one.
+// Filtered out of both this tool's management list and its Send Contract
+// checklist below. Matches by docCategory (set on anything created via
+// Team Roster's contractor doc manager) or, for the 2 originally-migrated
+// entries that may predate that tag, by label/filename keyword.
+function isContractorDoc(entry) {
+  if (!entry) return false;
+  if (entry.docCategory === 'contractor') return true;
+  const hay = ((entry.label || '') + ' ' + (entry.filename || '')).toLowerCase();
+  return hay.includes('independent contractor agreement') || hay.includes('nda - independent contract');
+}
+
 function getContractLibraryDocRef() {
   if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb) return null;
   return window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "contractTemplates");
@@ -467,27 +506,32 @@ function setContractLibraryStatus(msg, isError) {
   }
 }
 
+// Row layout intentionally matches Team Roster & Capacity's contractor
+// document cards (renderContractorDocManager, team-roster/js/app.js) -
+// name + a small status/meta line + a single file-input-in-a-button-label
+// control, instead of this tool's older separate-buttons layout.
 function renderContractLibrary() {
   const list = el('contractLibraryList');
   if (!list) return;
-  if (contractLibrary.length === 0) {
+  const visible = contractLibrary.filter(t => !isContractorDoc(t));
+  if (visible.length === 0) {
     list.innerHTML = `<p style="font-size:13px;color:var(--color-text-muted);">No uploaded contracts yet — the 6 built-in templates are still available below in Send Contract.</p>`;
     return;
   }
-  list.innerHTML = contractLibrary.map(t => `
-    <div class="contract-library-row" data-id="${t.id}">
-      <div>
-        <div class="contract-library-name">${escapeHtmlLocal(t.label)}${t.needsAnchorReview ? '<span class="contract-needs-review-badge">Needs Review</span>' : ''}</div>
-        <div class="contract-library-meta">${escapeHtmlLocal(t.filename || '')} &middot; uploaded ${t.uploadedAt || '--'}</div>
+  list.innerHTML = visible.map(t => `
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 0; border-bottom:1px solid var(--border-color);" data-id="${t.id}">
+      <div style="min-width:220px; flex:1;">
+        <div style="font-size:0.85rem; font-weight:600;">${escapeHtmlLocal(t.label)}${t.needsAnchorReview ? '<span class="contract-needs-review-badge">Needs Review</span>' : ''}</div>
+        <div style="font-size:0.75rem; color:var(--text-muted);">${escapeHtmlLocal(t.filename || '')} &middot; uploaded ${t.uploadedAt || '--'}</div>
       </div>
-      <div class="contract-library-actions">
-        ${t.needsAnchorReview ? `<button type="button" class="review-anchor-btn" data-id="${t.id}">Review</button>` : ''}
-        <label class="contract-replace-label">
-          Replace
-          <input type="file" accept="application/pdf" data-id="${t.id}" class="replace-contract-input" style="display:none;">
-        </label>
-        <button type="button" class="delete-contract-btn" data-id="${t.id}">Delete</button>
-      </div>
+      ${isRestrictedUser ? '' : `
+      ${t.needsAnchorReview ? `<button type="button" class="review-anchor-btn btn btn-secondary" data-id="${t.id}" style="padding:6px 12px; font-size:0.8rem;">Review</button>` : ''}
+      <label class="btn btn-secondary" style="cursor:pointer; padding:6px 12px; font-size:0.8rem;">
+        Replace File
+        <input type="file" accept="application/pdf" data-id="${t.id}" class="replace-contract-input" style="display:none;">
+      </label>
+      <button type="button" class="delete-contract-btn btn btn-secondary" data-id="${t.id}" style="padding:6px 12px; font-size:0.8rem;">Delete</button>
+      `}
     </div>
   `).join('');
 }
@@ -553,6 +597,14 @@ function ensurePdfjsWorker() {
   }
 }
 
+// Returns an ARRAY of detections, one per page that has a Client
+// Signature/Date pair - some documents (e.g. Social Media Growth
+// Agreement, which has both a main SIGNATURES page and a separate
+// Appendix A acknowledgment page) need the Client to sign in more than
+// one place. Baking [[SIG_CLIENT]]/[[DATE_CLIENT]] at every detected spot
+// works with the send flow unchanged, since DocuSign places a tab at
+// EVERY occurrence of a given anchor string in the document - one
+// signHereTabs/dateSignedTabs entry already covers all of them.
 async function detectClientAnchors(bytes) {
   ensurePdfjsWorker();
   const lib = window.pdfjsLib || window['pdfjs-dist/build/pdf'];
@@ -561,16 +613,29 @@ async function detectClientAnchors(bytes) {
   // backing a Uint8Array passed as `data`, which would corrupt the
   // caller's original `bytes` before it gets used again for baking.
   const doc = await lib.getDocument({ data: bytes.slice() }).promise;
+  const detections = [];
 
-  for (let p = doc.numPages; p >= 1; p--) {
+  for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p);
     const content = await page.getTextContent();
     const items = content.items
       .filter(it => it.str && it.str.trim())
       .map(it => ({ str: it.str.trim(), x: it.transform[4], y: it.transform[5] }));
 
-    const sigItems = items.filter(it => it.str === 'Signature');
-    const dateItems = items.filter(it => it.str === 'Date');
+    // Exact "Signature"/"Date" matches first, since that's the clean
+    // case - but some PDFs (notably OCR'd ones, where the OCR renderer
+    // sometimes fuses adjacent words like "Client" + "Date" or "Client" +
+    // "Signature" into a single text-showing operation) never produce a
+    // standalone "Date"/"Signature" item at all. Falling back to items
+    // that simply END with " Date"/" Signature" catches those fused
+    // labels too, without weakening the exact match for documents where
+    // it already works fine.
+    const exactSig = items.filter(it => it.str === 'Signature');
+    const fuzzySig = items.filter(it => it.str !== 'Signature' && it.str.endsWith(' Signature'));
+    const sigItems = [...exactSig, ...fuzzySig];
+    const exactDate = items.filter(it => it.str === 'Date');
+    const fuzzyDate = items.filter(it => it.str !== 'Date' && it.str.endsWith(' Date'));
+    const dateItems = [...exactDate, ...fuzzyDate];
     if (sigItems.length < 2 || dateItems.length < 2) continue;
 
     sigItems.sort((a, b) => a.x - b.x);
@@ -586,27 +651,39 @@ async function detectClientAnchors(bytes) {
     leftDates.sort((a, b) => a.y - b.y);
     const clientDate = leftDates[0];
 
-    return {
+    detections.push({
       page: p - 1, // 0-indexed, matches pdf-lib's getPages()
       sigX: clientSig.x,
       sigY: clientSig.y,
       dateX: clientDate.x,
       dateY: clientDate.y
-    };
+    });
   }
-  return null;
+  return detections.length ? detections : null;
 }
 
-async function bakeAnchorsAtDetection(bytes, detection) {
+// Older saved entries stored a single {page,sigX,...} object rather than
+// an array (from before a document could have multiple Client signature
+// locations) - normalize both shapes to an array so every caller only
+// has to handle one form.
+function normalizeAnchorDetections(raw) {
+  if (!raw) return [];
+  return Array.isArray(raw) ? raw : [raw];
+}
+
+async function bakeAnchorsAtDetection(bytes, detections) {
   const { PDFDocument, StandardFonts, rgb } = PDFLib;
   const pdfDoc = await PDFDocument.load(bytes);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const page = pdfDoc.getPages()[detection.page];
-  const place = (text, x, y) => {
+  const pages = pdfDoc.getPages();
+  const place = (page, text, x, y) => {
     page.drawText(text, { x, y, size: 1, font, color: rgb(1, 1, 1), opacity: 0 });
   };
-  place('[[SIG_CLIENT]]', detection.sigX, detection.sigY);
-  place('[[DATE_CLIENT]]', detection.dateX, detection.dateY);
+  for (const detection of normalizeAnchorDetections(detections)) {
+    const page = pages[detection.page];
+    place(page, '[[SIG_CLIENT]]', detection.sigX, detection.sigY);
+    place(page, '[[DATE_CLIENT]]', detection.dateX, detection.dateY);
+  }
   return await pdfDoc.save();
 }
 
@@ -648,6 +725,7 @@ if (newContractFile) {
 
 if (uploadContractBtn) {
   uploadContractBtn.addEventListener('click', async () => {
+    if (isRestrictedUser) return; // defense in depth - the button is hidden for restricted users, but don't trust the DOM alone
     const label = newContractLabel.value.trim();
     const file = newContractFile.files[0];
     if (!label) { setContractLibraryStatus('Enter a name for this contract first.', true); return; }
@@ -712,6 +790,7 @@ if (uploadContractBtn) {
 // innerHTML on every change.
 document.addEventListener('change', async (e) => {
   if (!e.target.matches('.replace-contract-input')) return;
+  if (isRestrictedUser) return; // defense in depth - this input is hidden for restricted users
   const id = e.target.getAttribute('data-id');
   const file = e.target.files[0];
   if (!file) return;
@@ -763,6 +842,7 @@ document.addEventListener('change', async (e) => {
 
 document.addEventListener('click', async (e) => {
   if (!e.target.matches('.delete-contract-btn')) return;
+  if (isRestrictedUser) return; // defense in depth - this button is hidden for restricted users
   const id = e.target.getAttribute('data-id');
   const entry = contractLibrary.find(t => t.id === id);
   if (!entry) return;
@@ -786,7 +866,7 @@ document.addEventListener('click', async (e) => {
 
 const anchorReviewPanel = el('anchorReviewPanel');
 const anchorReviewLabel = el('anchorReviewLabel');
-const anchorReviewCanvas = el('anchorReviewCanvas');
+const anchorReviewCanvasWrap = el('anchorReviewCanvasWrap');
 const anchorReviewCloseBtn = el('anchorReviewCloseBtn');
 const anchorReviewApproveBtn = el('anchorReviewApproveBtn');
 const anchorReviewRejectBtn = el('anchorReviewRejectBtn');
@@ -800,6 +880,11 @@ if (anchorReviewCloseBtn) {
   });
 }
 
+// Renders ONE mini-preview per detected Client signature location, since
+// a document (e.g. one with a separate Appendix acknowledgment page) can
+// need the Client to sign in more than one spot - approving here approves
+// the whole set together, since DocuSign will place a tab at every one
+// of them from the same anchor string.
 async function openAnchorReview(entry) {
   currentAnchorReviewId = entry.id;
   if (anchorReviewLabel) anchorReviewLabel.textContent = entry.label;
@@ -810,10 +895,11 @@ async function openAnchorReview(entry) {
   }
   if (anchorReviewApproveBtn) { anchorReviewApproveBtn.disabled = true; anchorReviewApproveBtn.textContent = 'Loading preview...'; }
   if (anchorReviewRejectBtn) anchorReviewRejectBtn.disabled = true;
+  if (anchorReviewCanvasWrap) anchorReviewCanvasWrap.innerHTML = '';
 
   try {
-    const detection = entry.anchorDetection;
-    if (!detection) throw new Error('No detection data saved for this document.');
+    const detections = normalizeAnchorDetections(entry.anchorDetection);
+    if (!detections.length) throw new Error('No detection data saved for this document.');
 
     const res = await fetch('/api/contracts/' + encodeURIComponent(entry.r2Key));
     if (!res.ok) throw new Error(`Couldn't load the file (${res.status})`);
@@ -822,30 +908,46 @@ async function openAnchorReview(entry) {
     ensurePdfjsWorker();
     const lib = window.pdfjsLib || window['pdfjs-dist/build/pdf'];
     const doc = await lib.getDocument({ data: bytes }).promise;
-    const page = await doc.getPage(detection.page + 1);
-    const scale = 1.4;
-    const viewport = page.getViewport({ scale });
-    anchorReviewCanvas.width = viewport.width;
-    anchorReviewCanvas.height = viewport.height;
-    const ctx = anchorReviewCanvas.getContext('2d');
-    await page.render({ canvasContext: ctx, viewport }).promise;
 
-    // detection.sigX/sigY/dateX/dateY are unscaled PDF points (bottom-left
-    // origin) - convert to this canvas's pixel space (top-left origin,
-    // scaled) to draw the markers in the right spot.
-    const toCanvas = (x, y) => ({ cx: x * scale, cy: viewport.height - (y * scale) });
-    const sigPt = toCanvas(detection.sigX, detection.sigY);
-    const datePt = toCanvas(detection.dateX, detection.dateY);
+    for (let i = 0; i < detections.length; i++) {
+      const detection = detections[i];
+      const page = await doc.getPage(detection.page + 1);
+      const scale = 1.4;
+      const viewport = page.getViewport({ scale });
 
-    const drawMarker = (pt, color) => {
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = color;
-      ctx.beginPath();
-      ctx.arc(pt.cx, pt.cy, 10, 0, Math.PI * 2);
-      ctx.stroke();
-    };
-    drawMarker(sigPt, '#f68d5f');
-    drawMarker(datePt, '#6366f1');
+      const block = document.createElement('div');
+      if (detections.length > 1) {
+        const heading = document.createElement('p');
+        heading.style.cssText = 'font-size:0.78rem; font-weight:600; margin: 10px 0 4px;';
+        heading.textContent = `Signature location ${i + 1} of ${detections.length} (page ${detection.page + 1})`;
+        block.appendChild(heading);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      block.appendChild(canvas);
+      anchorReviewCanvasWrap.appendChild(block);
+
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+
+      // detection.sigX/sigY/dateX/dateY are unscaled PDF points
+      // (bottom-left origin) - convert to this canvas's pixel space
+      // (top-left origin, scaled) to draw the markers in the right spot.
+      const toCanvas = (x, y) => ({ cx: x * scale, cy: viewport.height - (y * scale) });
+      const sigPt = toCanvas(detection.sigX, detection.sigY);
+      const datePt = toCanvas(detection.dateX, detection.dateY);
+
+      const drawMarker = (pt, color) => {
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = color;
+        ctx.beginPath();
+        ctx.arc(pt.cx, pt.cy, 10, 0, Math.PI * 2);
+        ctx.stroke();
+      };
+      drawMarker(sigPt, '#f68d5f');
+      drawMarker(datePt, '#6366f1');
+    }
 
     if (anchorReviewApproveBtn) { anchorReviewApproveBtn.disabled = false; anchorReviewApproveBtn.textContent = 'Looks correct — enable for DocuSign'; }
     if (anchorReviewRejectBtn) anchorReviewRejectBtn.disabled = false;
@@ -861,6 +963,7 @@ async function openAnchorReview(entry) {
 
 document.addEventListener('click', (e) => {
   if (!e.target.matches('.review-anchor-btn')) return;
+  if (isRestrictedUser) return; // defense in depth - this button is hidden for restricted users
   const id = e.target.getAttribute('data-id');
   const entry = contractLibrary.find(t => t.id === id);
   if (!entry) return;
@@ -967,6 +1070,102 @@ function resolveSelectedContractTemplate(value) {
   return null;
 }
 
+/* ── Contract fill-in-the-blank fields (Client Name, Effective Date, fees,
+   etc) ──
+   Each of the 5 anchor-eligible built-in contracts (everything except the
+   MSA's solo-Template send) has an invisible "[[TOKEN_NAME]]" anchor baked
+   in next to its blank lines - same technique as [[SIG_CLIENT]]/
+   [[DATE_CLIENT]]. This schema drives the "Fill Contract Details" panel
+   shown before a Docusign send, and the resulting values are passed as
+   fieldValues to /api/docusign/send-envelope, which turns them into
+   textTabs (see handleDocusignSendEnvelope in _worker.js). Anchors that
+   aren't present in whichever document(s) are actually being sent are
+   silently ignored by Docusign, so one merged field list safely covers a
+   combined send of several contract types at once. */
+const CONTRACT_FIELD_SCHEMA = {
+  'Creative Services Agreement - Revital Productions.pdf': [
+    { token: 'EFFECTIVE_DATE', label: 'Effective Date', default: () => todayStr() },
+    { token: 'CLIENT_NAME', label: 'Client Name', default: (r) => r && r.clientName },
+    { token: 'CLIENT_ADDRESS', label: 'Client Address', default: () => '' },
+    { token: 'REVISION_WINDOW_HOURS', label: 'Revision Window (hours)', default: () => '' },
+    { token: 'PROJECT_FEE', label: 'Project Fee ($)', default: () => '' },
+    { token: 'DEPOSIT', label: 'Deposit ($)', default: () => '' },
+    { token: 'BALANCE', label: 'Balance ($)', default: () => '' },
+    { token: 'RUSH_FEE', label: 'Rush Fee ($)', default: () => '' },
+    { token: 'KILL_FEE', label: 'Kill Fee ($)', default: () => '' },
+    { token: 'REVISION_ROUNDS_INCLUDED', label: 'Revision Rounds Included', default: () => '' },
+    { token: 'ADDITIONAL_REVISION_RATE', label: 'Additional Revision Rate ($/hour)', default: () => '' },
+    { token: 'USAGE_RIGHTS', label: 'Usage Rights Description', default: () => '' }
+  ],
+  'Independent Contractor Agreement - Revital Productions.pdf': [
+    { token: 'EFFECTIVE_DATE', label: 'Effective Date', default: () => todayStr() },
+    { token: 'CONTRACTOR_NAME', label: 'Contractor Name', default: (r) => r && r.clientName },
+    { token: 'CONTRACTOR_ADDRESS', label: 'Contractor Address', default: () => '' },
+    { token: 'RATE', label: 'Rate ($)', default: () => '' },
+    { token: 'INVOICE_DUE_DAY', label: 'Invoice Due Day of Month', default: () => '' },
+    { token: 'NONCOMPETE_MONTHS', label: 'Non-Compete Period (months)', default: () => '' },
+    { token: 'TERMINATION_NOTICE_DAYS', label: 'Termination Notice (days)', default: () => '' }
+  ],
+  'Master Service Agreement - Revital Productions.pdf': [
+    { token: 'EFFECTIVE_DATE', label: 'Effective Date', default: () => todayStr() },
+    { token: 'CLIENT_NAME', label: 'Client Name', default: (r) => r && r.clientName },
+    { token: 'CLIENT_ADDRESS', label: 'Client Address', default: () => '' }
+  ],
+  'NDA - Independent Contract - Revital Productions.pdf': [
+    { token: 'EFFECTIVE_DATE', label: 'Effective Date', default: () => todayStr() },
+    { token: 'PARTY_B_NAME', label: 'Other Party Name', default: (r) => r && r.clientName },
+    { token: 'PARTY_B_ADDRESS', label: 'Other Party Address', default: () => '' },
+    { token: 'JURISDICTION_COUNTY', label: 'Jurisdiction (Parish/County)', default: () => '' }
+  ],
+  'NDA - Tied To MSA - Revital Productions.pdf': [
+    { token: 'MSA_DATE', label: 'MSA Date', default: () => '' },
+    { token: 'CLIENT_NAME', label: 'Client Name', default: (r) => r && r.clientName },
+    { token: 'EFFECTIVE_DATE', label: 'Effective Date', default: () => todayStr() },
+    { token: 'PARTY_B_NAME', label: 'Other Party Name', default: (r) => r && r.clientName },
+    { token: 'PARTY_B_ADDRESS', label: 'Other Party Address', default: () => '' },
+    { token: 'JURISDICTION_COUNTY', label: 'Jurisdiction (Parish/County)', default: () => '' }
+  ],
+  // Note: this PDF's body text is flattened images (no real text layer),
+  // unlike the other 5 - its anchors were positioned via OCR estimation
+  // rather than exact text coordinates, so double-check placement with a
+  // test send before relying on it for a real client.
+  'Social Media Growth Agreement - Revital Productions.pdf': [
+    { token: 'EFFECTIVE_DATE', label: 'Effective Date', default: () => todayStr() },
+    { token: 'CLIENT_NAME', label: 'Client Name', default: (r) => r && r.clientName },
+    { token: 'CLIENT_ADDRESS', label: 'Client Address', default: () => '' },
+    { token: 'FIRST_PAYMENT_DATE', label: 'First Payment Due Date', default: () => '' },
+    { token: 'LATE_FEE', label: 'Late Fee ($)', default: () => '' },
+    { token: 'TERM_END_DATE', label: 'Term End Date (3 months from start)', default: () => '' }
+  ]
+};
+
+function getContractFieldTokensForFilename(filename) {
+  if (!filename) return [];
+  if (CONTRACT_FIELD_SCHEMA[filename]) return CONTRACT_FIELD_SCHEMA[filename];
+  // Fallback keyword match, in case a library entry was re-labeled/renamed
+  // on upload and no longer matches the original filename exactly. Ordered
+  // most-specific-first since "NDA - Tied To MSA" would otherwise also
+  // match the plain NDA and Master Service checks below.
+  const f = filename.toLowerCase();
+  if (f.includes('social media growth')) return CONTRACT_FIELD_SCHEMA['Social Media Growth Agreement - Revital Productions.pdf'];
+  if (f.includes('tied to msa') || (f.includes('nda') && f.includes('msa'))) return CONTRACT_FIELD_SCHEMA['NDA - Tied To MSA - Revital Productions.pdf'];
+  if (f.includes('nda') || f.includes('non-disclosure') || f.includes('non disclosure')) return CONTRACT_FIELD_SCHEMA['NDA - Independent Contract - Revital Productions.pdf'];
+  if (f.includes('independent contractor')) return CONTRACT_FIELD_SCHEMA['Independent Contractor Agreement - Revital Productions.pdf'];
+  if (f.includes('master service')) return CONTRACT_FIELD_SCHEMA['Master Service Agreement - Revital Productions.pdf'];
+  if (f.includes('creative services')) return CONTRACT_FIELD_SCHEMA['Creative Services Agreement - Revital Productions.pdf'];
+  return [];
+}
+
+function getMergedContractFields(templates) {
+  const seen = new Map();
+  templates.forEach(t => {
+    getContractFieldTokensForFilename(t.filename).forEach(f => {
+      if (!seen.has(f.token)) seen.set(f.token, f);
+    });
+  });
+  return Array.from(seen.values());
+}
+
 // Records here are tracked by free-text client name (see header comment -
 // a contract often goes out before someone is a full Client Workspace),
 // so look up the matching Client Workspace case-insensitively/trimmed
@@ -994,6 +1193,8 @@ async function fetchPdfAsBase64(url) {
 
 const sendContractPanel = el('sendContractPanel');
 const sendContractTemplateList = el('sendContractTemplateList');
+const sendContractRecipientNameGroup = el('sendContractRecipientNameGroup');
+const sendContractRecipientName = el('sendContractRecipientName');
 const sendContractTo = el('sendContractTo');
 const sendContractSubject = el('sendContractSubject');
 const sendContractBody = el('sendContractBody');
@@ -1048,15 +1249,16 @@ function populateContractTemplateChecklist(defaultSelectedValues) {
   // above) - every template, including the original 6, lives in
   // contractLibrary. Kept as a no-op map so nothing breaks if it's ever
   // reintroduced for a one-off case.
+  const clientLibrary = contractLibrary.filter(t => !isContractorDoc(t));
   const builtIn = CONTRACT_TEMPLATES.map(t => contractChecklistRowHtml(`builtin:${t.id}`, t.label, selectedValues)).join('');
-  const uploaded = contractLibrary.map(t => contractChecklistRowHtml(`uploaded:${t.id}`, t.label, selectedValues)).join('');
-  if (!contractLibrary.length && !CONTRACT_TEMPLATES.length) {
+  const uploaded = clientLibrary.map(t => contractChecklistRowHtml(`uploaded:${t.id}`, t.label, selectedValues)).join('');
+  if (!clientLibrary.length && !CONTRACT_TEMPLATES.length) {
     sendContractTemplateList.innerHTML = '<div class="contract-attach-group-label">No contract templates yet - add one in the Contract Template Library above.</div>';
     return;
   }
   sendContractTemplateList.innerHTML =
     (CONTRACT_TEMPLATES.length ? `<div class="contract-attach-group-label">Built-in Templates</div>${builtIn}` : '') +
-    (contractLibrary.length ? `<div class="contract-attach-group-label">Contract Templates</div>${uploaded}` : '');
+    (clientLibrary.length ? `<div class="contract-attach-group-label">Contract Templates</div>${uploaded}` : '');
 }
 
 // Re-renders the checklist (e.g. after an upload/replace/delete in the
@@ -1177,10 +1379,77 @@ async function openSendContractPanel(id) {
   }
   updateDocusignButtonVisibility();
 
+  if (sendContractRecipientNameGroup) sendContractRecipientNameGroup.style.display = 'none';
+
   if (sendContractPanel) {
     sendContractPanel.style.display = 'block';
     sendContractPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
+}
+
+// For documents that don't have a tracked client to send against - a
+// Model & Property Release going to talent/a location owner, a White-Label
+// & Agency Partner Agreement going to another agency, etc. Same panel as
+// openSendContractPanel above, but record stays null throughout (every
+// downstream handler below checks for that instead of assuming a client
+// record exists), and the recipient's name is typed in fresh each time
+// instead of being pulled from a Client Portal Manager config that
+// wouldn't apply to a non-client recipient anyway. "from" is left unset,
+// which the /api/send-email worker already defaults sensibly (see
+// handleSendEmail in _worker.js) - no Account Manager config needed.
+async function openSendContractPanelStandalone() {
+  const defaultValue = CONTRACT_TEMPLATES.length
+    ? `builtin:${CONTRACT_TEMPLATES[0].id}`
+    : (contractLibrary.length ? `uploaded:${contractLibrary[0].id}` : null);
+  populateContractTemplateChecklist(defaultValue ? [defaultValue] : []);
+
+  if (sendContractRecipientName) sendContractRecipientName.value = '';
+  sendContractTo.value = '';
+  sendContractSubject.value = '';
+  sendContractBody.value = '';
+  refreshSendContractMailto();
+
+  currentContractContext = {
+    record: null,
+    contactName: '',
+    amName: '',
+    from: null
+  };
+
+  if (sendContractRecipientNameGroup) sendContractRecipientNameGroup.style.display = '';
+  if (sendContractStatus) {
+    sendContractStatus.textContent = 'Enter a recipient name and email, choose a document, then send.';
+    sendContractStatus.style.color = 'var(--text-muted)';
+  }
+  if (sendContractSendBtn) {
+    sendContractSendBtn.disabled = false;
+    sendContractSendBtn.textContent = 'Send with PDF attached';
+  }
+  updateDocusignButtonVisibility();
+
+  if (sendContractPanel) {
+    sendContractPanel.style.display = 'block';
+    sendContractPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+const openOneOffSendBtn = el('openOneOffSendBtn');
+if (openOneOffSendBtn) {
+  openOneOffSendBtn.addEventListener('click', openSendContractPanelStandalone);
+}
+
+if (sendContractRecipientName) {
+  sendContractRecipientName.addEventListener('input', async () => {
+    if (!currentContractContext || currentContractContext.record) return;
+    const templates = getSelectedContractTemplates();
+    const fallbackLabel = CONTRACT_TEMPLATES[0] ? CONTRACT_TEMPLATES[0].label : (contractLibrary[0] ? contractLibrary[0].label : 'document');
+    const labels = templates.length ? templates.map(t => t.label) : [fallbackLabel];
+    const name = sendContractRecipientName.value.trim() || 'there';
+    const { subject, body } = await buildContractEmailText(name, name, labels, '');
+    sendContractSubject.value = subject;
+    sendContractBody.value = body;
+    refreshSendContractMailto();
+  });
 }
 
 if (sendContractTemplateList) {
@@ -1191,7 +1460,8 @@ if (sendContractTemplateList) {
     const { record, contactName, amName } = currentContractContext;
     const fallbackLabel = CONTRACT_TEMPLATES[0] ? CONTRACT_TEMPLATES[0].label : (contractLibrary[0] ? contractLibrary[0].label : 'contract');
     const labels = templates.length ? templates.map(t => t.label) : [fallbackLabel];
-    const { subject, body } = await buildContractEmailText(record.clientName, contactName, labels, amName);
+    const nameForEmail = record ? record.clientName : ((sendContractRecipientName && sendContractRecipientName.value.trim()) || 'there');
+    const { subject, body } = await buildContractEmailText(nameForEmail, record ? contactName : nameForEmail, labels, amName);
     sendContractSubject.value = subject;
     sendContractBody.value = body;
     refreshSendContractMailto();
@@ -1201,7 +1471,13 @@ if (sendContractTemplateList) {
 
 if (sendContractSendBtn) {
   sendContractSendBtn.addEventListener('click', async () => {
-    if (!currentContractContext || !currentContractContext.from) return;
+    if (!currentContractContext) return;
+    // Per-client sends still require an Account Manager (from) configured
+    // in Client Portal Manager, same as before - but a one-off send (no
+    // tracked client, currentContractContext.record === null) never has
+    // one to pull from, so it's exempt: the /api/send-email worker already
+    // supplies a sensible default "from" when none is given.
+    if (currentContractContext.record && !currentContractContext.from) return;
     if (!sendContractTo.value.trim()) {
       if (sendContractStatus) {
         sendContractStatus.textContent = 'Enter a recipient email address first.';
@@ -1219,6 +1495,7 @@ if (sendContractSendBtn) {
       return;
     }
     const { record } = currentContractContext;
+    const recipientLabel = record ? record.clientName : ((sendContractRecipientName && sendContractRecipientName.value.trim()) || sendContractTo.value.trim());
     const labelList = templates.map(t => t.label).join(', ');
 
     sendContractSendBtn.disabled = true;
@@ -1257,8 +1534,9 @@ if (sendContractSendBtn) {
       }
 
       // Reflect the send in the tracker itself, same as flipping the
-      // Contract status dropdown by hand.
-      if (record.contractStatus === 'Not Sent') {
+      // Contract status dropdown by hand - only applies to a real tracked
+      // client, obviously, since a one-off recipient has no such record.
+      if (record && record.contractStatus === 'Not Sent') {
         record.contractStatus = 'Sent';
         record.contractSentDate = record.contractSentDate || todayStr();
         await persist();
@@ -1266,10 +1544,10 @@ if (sendContractSendBtn) {
       }
 
       if (isEmbedded && window.parent.logAdminActivity) {
-        window.parent.logAdminActivity('Contract sent for signature', record.clientName);
+        window.parent.logAdminActivity('Contract sent for signature', recipientLabel);
       }
       if (isEmbedded && window.parent.showBanner) {
-        window.parent.showBanner('success', `${labelList} emailed to ${record.clientName}.`);
+        window.parent.showBanner('success', `${labelList} emailed to ${recipientLabel}.`);
       }
     } catch (e) {
       console.error('Send contract email failed:', e);
@@ -1307,82 +1585,148 @@ if (sendContractDocusignBtn) {
     const allAnchorEligible = templates.every(t => t.docusignAnchorTags);
     if (!soloMsa && !allAnchorEligible) return;
 
-    const { record, contactName } = currentContractContext;
-    const labelList = templates.map(t => t.label).join(', ');
-
-    sendContractDocusignBtn.disabled = true;
-    sendContractDocusignBtn.textContent = templates.length > 1 ? 'Preparing documents...' : 'Sending for signature...';
-    if (sendContractStatus) sendContractStatus.textContent = '';
-
-    try {
-      let res;
-      if (soloMsa) {
-        res = await fetch('/api/docusign/send-envelope', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            templateId: templates[0].docusignTemplateId,
-            templateRoleName: templates[0].docusignRoleName,
-            signerName: contactName || record.clientName,
-            signerEmail: sendContractTo.value,
-            emailSubject: sendContractSubject.value
-          })
-        });
-      } else {
-        const documents = await Promise.all(templates.map(async (t) => {
-          const base64 = await fetchPdfAsBase64(t.fetchUrl);
-          if (!base64) throw new Error(`${t.label} produced no data`);
-          return { name: t.filename, base64 };
-        }));
-
-        sendContractDocusignBtn.textContent = 'Sending for signature...';
-        res = await fetch('/api/docusign/send-envelope', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            documents,
-            signerName: contactName || record.clientName,
-            signerEmail: sendContractTo.value,
-            emailSubject: sendContractSubject.value
-          })
-        });
-      }
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || `Send failed (${res.status})`);
-      }
-
-      sendContractDocusignBtn.textContent = 'Sent ✓';
-      if (sendContractStatus) {
-        sendContractStatus.textContent = `Sent for e-signature via Docusign (envelope ${data.envelopeId}) - ${labelList}.`;
-        sendContractStatus.style.color = 'var(--color-success, #10b981)';
-      }
-
-      // Same tracker-status reflection as the flat-PDF send path.
-      if (record.contractStatus === 'Not Sent') {
-        record.contractStatus = 'Sent';
-        record.contractSentDate = record.contractSentDate || todayStr();
-        await persist();
-        renderTable();
-      }
-
-      if (isEmbedded && window.parent.logAdminActivity) {
-        window.parent.logAdminActivity('Contract sent for e-signature (Docusign)', record.clientName);
-      }
-      if (isEmbedded && window.parent.showBanner) {
-        window.parent.showBanner('success', `${labelList} sent to ${record.clientName} for e-signature via Docusign.`);
-      }
-    } catch (e) {
-      console.error('Docusign envelope send failed:', e);
-      sendContractDocusignBtn.disabled = false;
-      sendContractDocusignBtn.textContent = 'Send for E-Signature (DocuSign)';
-      if (sendContractStatus) {
-        sendContractStatus.textContent = "Couldn't send via Docusign (" + e.message + ") - try \"Send with PDF attached\" instead.";
-        sendContractStatus.style.color = 'var(--color-error, #f68d5f)';
+    // The combined-documents path (everything except the MSA's solo
+    // Docusign-Template send) has fill-in-the-blank fields baked in as
+    // invisible anchors (Client Name, Effective Date, fees, etc - see
+    // CONTRACT_FIELD_SCHEMA above). Collect those from the sender before
+    // building the envelope so the client isn't signing a contract with
+    // blank lines. If none apply (e.g. an arbitrary uploaded PDF with no
+    // matching schema), skip straight to sending.
+    if (!soloMsa) {
+      const fields = getMergedContractFields(templates);
+      if (fields.length) {
+        openContractFieldFillPanel(fields, templates, soloMsa);
+        return;
       }
     }
+    await performDocusignSend(templates, soloMsa, {});
   });
+}
+
+function openContractFieldFillPanel(fields, templates, soloMsa) {
+  const panel = el('contractFieldFillPanel');
+  const container = el('contractFieldFillFields');
+  const continueBtn = el('contractFieldFillContinueBtn');
+  const closeBtn = el('contractFieldFillCloseBtn');
+  if (!panel || !container || !continueBtn || !closeBtn) {
+    // Panel markup missing for some reason - fall back to sending with no
+    // field values rather than silently blocking the send entirely.
+    performDocusignSend(templates, soloMsa, {});
+    return;
+  }
+  const { record } = currentContractContext || {};
+  container.innerHTML = fields.map(f => {
+    const def = typeof f.default === 'function' ? (f.default(record) || '') : '';
+    return `
+      <div class="form-group">
+        <label for="cff_${f.token}">${escapeHtmlLocal(f.label)}</label>
+        <input type="text" id="cff_${f.token}" value="${escapeHtmlLocal(def)}">
+      </div>`;
+  }).join('');
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  function cleanup() {
+    continueBtn.removeEventListener('click', onContinue);
+    closeBtn.removeEventListener('click', onClose);
+  }
+  async function onContinue() {
+    const fieldValues = {};
+    fields.forEach(f => {
+      const input = el(`cff_${f.token}`);
+      if (input && input.value.trim()) fieldValues[f.token] = input.value.trim();
+    });
+    panel.style.display = 'none';
+    cleanup();
+    await performDocusignSend(templates, soloMsa, fieldValues);
+  }
+  function onClose() {
+    panel.style.display = 'none';
+    cleanup();
+  }
+  continueBtn.addEventListener('click', onContinue);
+  closeBtn.addEventListener('click', onClose);
+}
+
+async function performDocusignSend(templates, soloMsa, fieldValues) {
+  const { record, contactName } = currentContractContext;
+  const recipientLabel = record ? (contactName || record.clientName) : ((sendContractRecipientName && sendContractRecipientName.value.trim()) || sendContractTo.value.trim());
+  const labelList = templates.map(t => t.label).join(', ');
+
+  sendContractDocusignBtn.disabled = true;
+  sendContractDocusignBtn.textContent = templates.length > 1 ? 'Preparing documents...' : 'Sending for signature...';
+  if (sendContractStatus) sendContractStatus.textContent = '';
+
+  try {
+    let res;
+    if (soloMsa) {
+      res = await fetch('/api/docusign/send-envelope', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          templateId: templates[0].docusignTemplateId,
+          templateRoleName: templates[0].docusignRoleName,
+          signerName: recipientLabel,
+          signerEmail: sendContractTo.value,
+          emailSubject: sendContractSubject.value
+        })
+      });
+    } else {
+      const documents = await Promise.all(templates.map(async (t) => {
+        const base64 = await fetchPdfAsBase64(t.fetchUrl);
+        if (!base64) throw new Error(`${t.label} produced no data`);
+        return { name: t.filename, base64 };
+      }));
+
+      sendContractDocusignBtn.textContent = 'Sending for signature...';
+      res = await fetch('/api/docusign/send-envelope', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          documents,
+          signerName: recipientLabel,
+          signerEmail: sendContractTo.value,
+          emailSubject: sendContractSubject.value,
+          fieldValues
+        })
+      });
+    }
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || `Send failed (${res.status})`);
+    }
+
+    sendContractDocusignBtn.textContent = 'Sent ✓';
+    if (sendContractStatus) {
+      sendContractStatus.textContent = `Sent for e-signature via Docusign (envelope ${data.envelopeId}) - ${labelList}.`;
+      sendContractStatus.style.color = 'var(--color-success, #10b981)';
+    }
+
+    // Same tracker-status reflection as the flat-PDF send path - only
+    // applies to a real tracked client.
+    if (record && record.contractStatus === 'Not Sent') {
+      record.contractStatus = 'Sent';
+      record.contractSentDate = record.contractSentDate || todayStr();
+      await persist();
+      renderTable();
+    }
+
+    if (isEmbedded && window.parent.logAdminActivity) {
+      window.parent.logAdminActivity('Contract sent for e-signature (Docusign)', recipientLabel);
+    }
+    if (isEmbedded && window.parent.showBanner) {
+      window.parent.showBanner('success', `${labelList} sent to ${recipientLabel} for e-signature via Docusign.`);
+    }
+  } catch (e) {
+    console.error('Docusign envelope send failed:', e);
+    sendContractDocusignBtn.disabled = false;
+    sendContractDocusignBtn.textContent = 'Send for E-Signature (DocuSign)';
+    if (sendContractStatus) {
+      sendContractStatus.textContent = "Couldn't send via Docusign (" + e.message + ") - try \"Send with PDF attached\" instead.";
+      sendContractStatus.style.color = 'var(--color-error, #f68d5f)';
+    }
+  }
 }
 
 async function addTrackedClient() {
@@ -1433,6 +1777,7 @@ function initListeners() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  applyContractLibraryEditPermission();
   populateClientDatalist();
   await loadRecords();
   renderTable();

@@ -419,9 +419,37 @@ async function handleDocusignSendEnvelope(request, env) {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
 
-  const { templateId, templateRoleName, signerName, signerEmail, emailSubject, documents } = payload || {};
+  const { templateId, templateRoleName, signerName, signerEmail, emailSubject, documents, fieldValues } = payload || {};
   if (!signerName || !signerEmail) {
     return jsonResponse({ error: "signerName and signerEmail are required" }, 400);
+  }
+
+  // Optional per-contract data fields (Client Name, Effective Date, Project
+  // Fee, etc). Each of the 6 built-in contract PDFs has an invisible
+  // "[[TOKEN_NAME]]" anchor baked in next to its fill-in-the-blank lines
+  // (same technique as the [[SIG_CLIENT]]/[[DATE_CLIENT]] anchors below).
+  // fieldValues is a flat { TOKEN_NAME: "value" } map from the Contract &
+  // Invoice Tracker's "Fill Contract Details" step - anchorIgnoreIfNotPresent
+  // means a token that isn't in whichever document(s) are actually in this
+  // envelope is silently skipped, so one fieldValues object can cover a
+  // combined send of several different contract types at once.
+  const textTabs = [];
+  if (fieldValues && typeof fieldValues === "object") {
+    for (const [token, value] of Object.entries(fieldValues)) {
+      if (typeof value !== "string" || !value.trim()) continue;
+      if (!/^[A-Z0-9_]+$/.test(token)) continue;
+      textTabs.push({
+        anchorString: `[[${token}]]`,
+        anchorUnits: "pixels",
+        anchorXOffset: "2",
+        anchorYOffset: "-9",
+        anchorIgnoreIfNotPresent: "true",
+        value: value.slice(0, 500),
+        locked: "true",
+        font: "Helvetica",
+        fontSize: "Size9"
+      });
+    }
   }
 
   let accessToken;
@@ -475,7 +503,8 @@ async function handleDocusignSendEnvelope(request, env) {
           email: signerEmail,
           tabs: {
             signHereTabs: [{ anchorString: "[[SIG_CLIENT]]", anchorUnits: "pixels", anchorXOffset: "0", anchorYOffset: "-6", anchorIgnoreIfNotPresent: "true" }],
-            dateSignedTabs: [{ anchorString: "[[DATE_CLIENT]]", anchorUnits: "pixels", anchorXOffset: "0", anchorYOffset: "-6", anchorIgnoreIfNotPresent: "true" }]
+            dateSignedTabs: [{ anchorString: "[[DATE_CLIENT]]", anchorUnits: "pixels", anchorXOffset: "0", anchorYOffset: "-6", anchorIgnoreIfNotPresent: "true" }],
+            ...(textTabs.length ? { textTabs } : {})
           }
         }]
       },

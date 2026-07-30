@@ -5,9 +5,11 @@
    elsewhere - health history (client.weeklyCheckins), deliverables
    (client.approvalHistory), referrals (agency/referrals, name-matched -
    same pattern fetchReferralSummaries in the parent Hub's app.js uses),
-   billing (agency/contractInvoices, name-matched), and open revisions
+   billing (agency/contractInvoices, name-matched), open revisions
    (agency/revisionFeedbackLog, name-matched - same source the Agency
-   Health Dashboard uses). Nothing here writes anywhere.
+   Health Dashboard uses), and budget pacing (client.budgetPacing, same
+   object the Budget Pacing Tracker reads/writes). Nothing here writes
+   anywhere.
    ============================================================ */
 
 let isEmbedded = false;
@@ -139,6 +141,42 @@ async function renderRevisions(clientName) {
   `;
 }
 
+function getPacingStatus(spent, total, startDate, endDate) {
+  if (!total || total <= 0) return { label: 'Not set up', cls: 'qbr-health-none' };
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const now = new Date();
+  if (now > end) return { label: 'Period ended', cls: 'qbr-health-none' };
+  if (now < start) return { label: "Hasn't started", cls: 'qbr-health-none' };
+
+  const totalDays = (end - start) / (1000 * 60 * 60 * 24);
+  const daysPassed = (now - start) / (1000 * 60 * 60 * 24);
+  const expectedPacingRatio = totalDays > 0 ? daysPassed / totalDays : 0;
+  const actualPacingRatio = spent / total;
+
+  if (actualPacingRatio > expectedPacingRatio * 1.15) return { label: 'Overspending', cls: 'qbr-health-red' };
+  if (actualPacingRatio < expectedPacingRatio * 0.85) return { label: 'Underspending', cls: 'qbr-health-yellow' };
+  return { label: 'On pace', cls: 'qbr-health-green' };
+}
+
+function renderBudgetPacing(client) {
+  const listEl = el('budgetPacingBlock');
+  const p = client.budgetPacing;
+  if (!p) {
+    listEl.innerHTML = '<div class="qbr-empty-note">No budget pacing tracked for this client.</div>';
+    return;
+  }
+  const status = getPacingStatus(p.spentToDate, p.totalBudget, p.startDate, p.endDate);
+  const isSpend = p.budgetType === 'Ad Spend';
+  const fmt = (v) => isSpend ? '$' + Number(v || 0).toLocaleString() : Number(v || 0) + ' hrs';
+
+  listEl.innerHTML = `
+    <div class="qbr-list-row"><span class="qbr-list-row-label"><span class="qbr-health-dot ${status.cls}"></span>${escapeHtml(p.budgetType || 'Retainer')}</span><span class="qbr-list-row-meta">${status.label}</span></div>
+    <div class="qbr-list-row"><span class="qbr-list-row-label">Spent to date</span><span class="qbr-list-row-meta">${fmt(p.spentToDate)} of ${fmt(p.totalBudget)}</span></div>
+    <div class="qbr-list-row"><span class="qbr-list-row-label">Period</span><span class="qbr-list-row-meta">${escapeHtml(p.startDate || '--')} to ${escapeHtml(p.endDate || '--')}</span></div>
+  `;
+}
+
 function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str == null ? "" : String(str);
@@ -161,6 +199,7 @@ async function renderQbr() {
 
   renderHealthTrend(client);
   renderDeliverables(client);
+  renderBudgetPacing(client);
   await Promise.all([
     renderReferrals(clientName),
     renderBilling(clientName),
@@ -182,6 +221,7 @@ function buildQbrPdfPayload(clientName) {
   const referralsHtml = document.getElementById('referralsSummary').innerHTML;
   const billingHtml = document.getElementById('billingSummaryBlock').innerHTML;
   const revisionsHtml = document.getElementById('revisionsSummary').innerHTML;
+  const budgetPacingHtml = document.getElementById('budgetPacingBlock').innerHTML;
 
   // Reuse the already-rendered section markup but strip the dark-theme
   // classes down to plain text - this document needs to print on white,
@@ -206,6 +246,8 @@ function buildQbrPdfPayload(clientName) {
     <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit; margin-bottom:18px;">${stripToText(referralsHtml)}</pre>
     <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Billing &amp; contract</h3>
     <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit; margin-bottom:18px;">${stripToText(billingHtml)}</pre>
+    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Budget &amp; pacing</h3>
+    <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit; margin-bottom:18px;">${stripToText(budgetPacingHtml)}</pre>
     <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Open revisions</h3>
     <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit;">${stripToText(revisionsHtml)}</pre>
   `;

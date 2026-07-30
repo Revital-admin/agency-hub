@@ -39,6 +39,14 @@
 <label>Contract(s) to Attach</label>
 <div id="sendContractTemplateList" class="contract-attach-list"></div>
 </div>
+<!-- Only shown/used for one-off sends opened via "Send One-Off Document"
+     below (see openSendContractPanelStandalone, js/app.js) - a per-client
+     send already has a name (the client's contact) to build the email
+     greeting from, so this stays blank and unused in that case. -->
+<div class="form-group" id="sendContractRecipientNameGroup" style="display:none;">
+<label for="sendContractRecipientName">Recipient Name</label>
+<input type="text" id="sendContractRecipientName" placeholder="e.g. Jane Doe (Model) or Acme Agency">
+</div>
 <div class="form-group">
 <label for="sendContractTo">To</label>
 <input type="text" id="sendContractTo">
@@ -61,6 +69,21 @@
 <button class="download-pdf-btn" id="sendContractDocusignBtn" type="button" style="padding: 10px 20px; display:none; background: #f68d5f; border-color: #f68d5f;">Send for E-Signature (DocuSign)</button>
 </div>
 <div id="sendContractStatus" style="font-size: 0.8rem; margin-top: 8px;"></div>
+</div>
+
+<!-- Shown after clicking "Send for E-Signature (DocuSign)" for any
+     anchor-eligible contract that has fill-in-the-blank fields (Client
+     Name, Effective Date, fees, etc - see CONTRACT_FIELD_SCHEMA in
+     js/app.js). Values entered here are stamped onto the [[TOKEN]] anchors
+     baked into the PDF via Docusign textTabs, so the client isn't signing
+     a contract with blank lines. -->
+<div id="contractFieldFillPanel" style="display:none; max-width: 640px; margin: 0 auto 24px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md, 10px); padding: 20px; position: relative;">
+<button type="button" id="contractFieldFillCloseBtn" aria-label="Close" style="position: absolute; top: 14px; right: 14px; background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 4px;">&times;</button>
+<p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; padding-right: 24px;">Fill in the contract-specific details below - they'll be stamped onto the fill-in-the-blank lines in the PDF the client signs. Leave a field blank to leave that line blank.</p>
+<div id="contractFieldFillFields"></div>
+<div style="display:flex; gap:8px; margin-top: 12px;">
+<button class="download-pdf-btn" id="contractFieldFillContinueBtn" type="button" style="padding: 10px 20px;">Continue &amp; Send for Signature</button>
+</div>
 </div>
 
 <header class="site-header">
@@ -95,7 +118,14 @@
 <h2>Contract Template Library</h2>
 <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-top: 4px;">Add, replace, or remove the contract PDFs available in "Send Contract" below.</p>
 </div>
+<div style="display:flex; gap:8px; flex-wrap:wrap;">
 <button id="openContractLibraryBtn" class="btn-secondary" type="button">Manage Contract Templates</button>
+<!-- For documents that don't belong to any tracked client - a model
+     release, a partner agreement, etc. Opens the same Send Contract panel
+     below, just without requiring a client row first (see
+     openSendContractPanelStandalone, js/app.js). -->
+<button id="openOneOffSendBtn" class="btn-secondary" type="button">Send One-Off Document</button>
+</div>
 </div>
 
 <div class="step-card" id="contractLibraryCard" style="display:none; position: relative;">
@@ -105,7 +135,7 @@
 <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-top: 4px;">These show up in the "Send Contract" panel below. The 6 built-in templates are edited by replacing the file in the codebase; anything added here can be replaced or removed directly, no redeploy needed.</p>
 </div>
 <div id="contractLibraryList" class="contract-library-list"></div>
-<div class="contract-library-add">
+<div class="contract-library-add" id="contractLibraryAddForm">
 <input type="text" id="newContractLabel" placeholder="Contract name (e.g. Photography Services Agreement)">
 <label class="contract-file-label">
 Choose File
@@ -128,8 +158,11 @@ Choose File
 <button type="button" id="anchorReviewCloseBtn" aria-label="Close" style="position: absolute; top: 14px; right: 14px; background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 4px;">&times;</button>
 <p style="font-size: 0.85rem; margin-bottom: 4px; padding-right: 24px;">Reviewing DocuSign placement for "<strong id="anchorReviewLabel"></strong>"</p>
 <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">The <span style="color:#f68d5f; font-weight:600;">red circle</span> should sit on the Client's <strong>Signature</strong> line and the <span style="color:#6366f1; font-weight:600;">blue circle</span> on the Client's <strong>Date</strong> line. If either looks wrong (or missing), reject it — the document still works fine as a flat PDF attachment either way.</p>
-<div id="anchorReviewCanvasWrap" style="overflow:auto; max-height: 60vh; border: 1px solid var(--border-color); border-radius: 6px; background:#fff;">
-<canvas id="anchorReviewCanvas"></canvas>
+<div id="anchorReviewCanvasWrap" style="overflow:auto; max-height: 60vh; border: 1px solid var(--border-color); border-radius: 6px; background:#fff; padding: 0 8px;">
+<!-- One <canvas> per detected Client signature location is added here at
+     review time (see openAnchorReview in js/app.js) - a document can
+     need the Client to sign in more than one place (e.g. a main
+     signature page plus a separate appendix acknowledgment). -->
 </div>
 <div style="display:flex; gap:8px; flex-wrap: wrap; align-items: center; margin-top: 14px;">
 <button class="download-pdf-btn" id="anchorReviewApproveBtn" type="button" style="padding: 10px 20px;">Looks correct — enable for DocuSign</button>

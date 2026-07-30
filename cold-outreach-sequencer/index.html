@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cold Outreach Sequencer</title>
+  <link rel="stylesheet" href="../style.css?v=3">
+  <link rel="stylesheet" href="css/style.css?v=1">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="bg-grid"></div>
+
+  <main class="container container-wide">
+    <div class="brand-bar">
+      <div class="brand-logo-container"></div>
+    </div>
+
+    <header class="site-header">
+      <div class="header-eyebrow">
+        <span class="dot"></span>
+        <span>Sales & Prospecting</span>
+      </div>
+      <h1 class="site-title">Cold Outreach <em>Sequencer</em></h1>
+      <p class="site-subtitle">Tracks the 4-touch cold outreach cadence from the Growth SOPs (Day 1 / 4 / 8 / 30) so a touch never quietly gets forgotten. Not a full CRM — log leads here from the Leads List once outreach starts.</p>
+    </header>
+
+    <div class="summary-bar" id="summaryBar">
+      <div class="summary-stat"><span class="summary-num" id="summaryActive">0</span><span class="summary-label">Active Sequences</span></div>
+      <div class="summary-stat"><span class="summary-num" id="summaryDueToday">0</span><span class="summary-label">Due Today</span></div>
+      <div class="summary-stat"><span class="summary-num" id="summaryOverdue">0</span><span class="summary-label">Overdue</span></div>
+    </div>
+
+    <div class="step-card tracker-controls">
+      <div class="tracker-controls-row">
+        <input type="text" id="newLeadName" placeholder="Lead / company name..." list="leadOptions">
+        <datalist id="leadOptions"></datalist>
+        <input type="date" id="newFirstContactDate">
+        <select id="newChannel">
+          <option value="Email">Email</option>
+          <option value="DM">DM</option>
+          <option value="Call">Call</option>
+        </select>
+        <button id="addLeadBtn" class="btn-primary">+ Start Sequence (Touch 1 sent)</button>
+        <label class="show-closed-toggle">
+          <input type="checkbox" id="showClosedToggle"> Show closed
+        </label>
+      </div>
+    </div>
+
+    <div class="step-card table-card">
+      <div class="tracker-table-wrap">
+        <table class="tracker-table">
+          <thead>
+            <tr>
+              <th>Lead</th>
+              <th>First Contact</th>
+              <th>Stage</th>
+              <th>Next Touch Due</th>
+              <th>Suggested Goal</th>
+              <th>Last Contact</th>
+              <th>Notes</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="trackerTableBody">
+          </tbody>
+        </table>
+        <p id="emptyState" class="empty-state" style="display: none;">No leads in an active outreach sequence yet. Add one above right after sending Touch 1.</p>
+      </div>
+    </div>
+  </main>
+
+  <script src="js/app.js?v=1"></script>
+</body>
+</html>

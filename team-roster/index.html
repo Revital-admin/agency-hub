@@ -7,6 +7,15 @@
 <link rel="stylesheet" href="../style.css?v=2">
 <link rel="stylesheet" href="css/style.css?v=2">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+<!-- pdf.js: reads text positions out of a newly uploaded/replaced contractor
+     document so we can auto-detect where the Client's Signature/Date lines
+     are. pdf-lib: bakes the invisible [[SIG_CLIENT]]/[[DATE_CLIENT]]
+     DocuSign anchor tags at those detected coordinates, and renders the
+     review panel's preview canvas. See detectClientAnchors/
+     bakeAnchorsAtDetection in js/app.js (ported from contract-invoice-
+     tracker's identical setup). -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 </head>
 <body>
 <div class="bg-grid"></div>
@@ -30,6 +39,63 @@
 <div class="summary-stat"><span class="summary-num" id="summaryHasRoom">0</span><span class="summary-label">Have Room</span></div>
 <div class="summary-stat"><span class="summary-num" id="summaryNearCapacity">0</span><span class="summary-label">Near Capacity</span></div>
 <div class="summary-stat"><span class="summary-num" id="summaryAtCapacity">0</span><span class="summary-label">At Capacity</span></div>
+</div>
+
+<!-- Send Agreement panel - contractor-only. Sends the Independent
+     Contractor Agreement and/or its NDA via the same Docusign
+     integration the Contract & Invoice Tracker uses, without needing to
+     add the contractor as a fake "client" row over there (see
+     openSendAgreementPanel/performSendAgreement in js/app.js). -->
+<div id="sendAgreementPanel" style="display:none; max-width: 640px; margin: 0 auto 24px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md, 10px); padding: 20px; position: relative;">
+<button type="button" id="sendAgreementCloseBtn" aria-label="Close" style="position: absolute; top: 14px; right: 14px; background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 4px;">&times;</button>
+<h3 id="sendAgreementTitle" style="font-family: var(--font-heading); color: var(--color-accent); margin-bottom: 12px;">Send Contractor Agreement</h3>
+<div class="form-group">
+<label>Document(s) to Send</label>
+<div id="sendAgreementDocList" style="display:flex; flex-direction:column; gap:6px;"></div>
+</div>
+<div class="form-group">
+<label for="sendAgreementTo">Contractor Email</label>
+<input type="email" id="sendAgreementTo">
+</div>
+<div id="sendAgreementFields"></div>
+<div style="display:flex; gap:8px; margin-top: 12px;">
+<button class="btn-primary" id="sendAgreementSendBtn" type="button">Send for E-Signature (DocuSign)</button>
+</div>
+<div id="sendAgreementStatus" style="font-size: 0.8rem; margin-top: 8px;"></div>
+</div>
+
+<!-- Where to upload/replace the 2 contractor documents (Independent
+     Contractor Agreement + its NDA) - lives here instead of the Contract
+     & Invoice Tracker since contractors aren't tracked there. Same
+     shared Contract Template Library under the hood (agency/
+     contractTemplates + R2), just given its own access point so managing
+     contractor paperwork never requires opening the client tool. Hidden
+     for restricted teammates, same gate as Add/Edit/Remove above. -->
+<div class="step-card" id="contractorDocCard" style="display:none;">
+<div class="section-title" style="margin-bottom: 12px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent); font-size: 1.1rem;">Contractor Documents</h2>
+</div>
+<p style="font-size:0.8rem; color:var(--text-muted); margin-bottom: 10px;">Upload a document and it's auto-scanned for the Client's Signature/Date lines, same as the Contract & Invoice Tracker's Contract Template Library. If detection succeeds, click Review to confirm placement before it's DocuSign-ready; if it doesn't, the file still works as a flat PDF attachment until it's replaced with a version the scanner can read.</p>
+<div id="contractorDocManager"></div>
+</div>
+
+<!-- Anchor review panel - identical to Contract & Invoice Tracker's (see
+     detectClientAnchors/bakeAnchorsAtDetection/openAnchorReview in
+     js/app.js). The document is NOT eligible for DocuSign until this is
+     approved here. -->
+<div id="anchorReviewPanel" style="display:none; max-width: 720px; margin: 0 auto 24px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md, 10px); padding: 20px; position: relative;">
+<button type="button" id="anchorReviewCloseBtn" aria-label="Close" style="position: absolute; top: 14px; right: 14px; background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 4px;">&times;</button>
+<p style="font-size: 0.85rem; margin-bottom: 4px; padding-right: 24px;">Reviewing DocuSign placement for "<strong id="anchorReviewLabel"></strong>"</p>
+<p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">The <span style="color:#f68d5f; font-weight:600;">red circle</span> should sit on the Client's <strong>Signature</strong> line and the <span style="color:#6366f1; font-weight:600;">blue circle</span> on the Client's <strong>Date</strong> line. If either looks wrong (or missing), reject it — the document still works fine as a flat PDF attachment either way.</p>
+<div id="anchorReviewCanvasWrap" style="overflow:auto; max-height: 60vh; border: 1px solid var(--border-color); border-radius: 6px; background:#fff; padding: 0 8px;">
+<!-- One <canvas> per detected Client signature location is added here at
+     review time (see openAnchorReview in js/app.js). -->
+</div>
+<div style="display:flex; gap:8px; flex-wrap: wrap; align-items: center; margin-top: 14px;">
+<button class="download-pdf-btn" id="anchorReviewApproveBtn" type="button" style="padding: 10px 20px;">Looks correct — enable for DocuSign</button>
+<button class="btn-secondary" id="anchorReviewRejectBtn" type="button" style="padding: 10px 20px;">Not correct — keep as flat PDF only</button>
+</div>
+<div id="anchorReviewStatus" style="font-size: 0.8rem; margin-top: 8px;"></div>
 </div>
 
 <div class="step-card" id="formCard" style="display:none;">
@@ -91,6 +157,7 @@
 <th>Type</th>
 <th>Load</th>
 <th>Capacity</th>
+<th>Agreement</th>
 <th>Notes</th>
 <th id="actionsHeader" style="display:none;">Actions</th>
 </tr>
@@ -102,6 +169,6 @@
 </div>
 
 </main>
-<script src="js/app.js?v=2"></script>
+<script src="js/app.js?v=3"></script>
 </body>
 </html>

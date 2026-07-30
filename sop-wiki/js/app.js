@@ -14,11 +14,22 @@ document.addEventListener('DOMContentLoaded', () => {
   const editSopBtn = document.getElementById('editSopBtn');
   const deleteSopBtn = document.getElementById('deleteSopBtn');
 
+  // ── Checklist Mode ──
+  const toggleChecklistBtn = document.getElementById('toggleChecklistBtn');
+  const toggleChecklistBtnLabel = document.getElementById('toggleChecklistBtnLabel');
+  const checklistView = document.getElementById('checklistView');
+  const checklistProgressFill = document.getElementById('checklistProgressFill');
+  const checklistProgressLabel = document.getElementById('checklistProgressLabel');
+  const checklistRunControls = document.getElementById('checklistRunControls');
+  const checklistItemsEl = document.getElementById('checklistItems');
+  const checklistHistoryList = document.getElementById('checklistHistoryList');
+
   const editorOverlay = document.getElementById('editorOverlay');
   const editorModalTitle = document.getElementById('editorModalTitle');
   const editorCategory = document.getElementById('editorCategory');
   const editorTitle = document.getElementById('editorTitle');
   const editorContent = document.getElementById('editorContent'); // contenteditable rich-text area
+  const editorChecklistEnabled = document.getElementById('editorChecklistEnabled');
   const editorNewCategory = document.getElementById('editorNewCategory');
   const editorToolbar = document.getElementById('editorToolbar');
   const closeEditorBtn = document.getElementById('closeEditorBtn');
@@ -28,6 +39,21 @@ document.addEventListener('DOMContentLoaded', () => {
   let sops = [];
   let activeSopId = null;
   let editingSopId = null; // null while creating a new SOP, set while editing an existing one
+
+  // ── Checklist Mode state ──
+  // checklistModeActive: whether the currently-open SOP is showing the
+  // checklist view instead of the prose view. Resets to prose every time a
+  // different SOP is opened - the two views share the same underlying
+  // content, but which one you land on shouldn't carry over between docs.
+  let checklistModeActive = false;
+  // checklistRunsBySop: { [sopId]: { runs: [ { id, startedDate, updatedDate,
+  // completedDate|null, checks: { [itemKey]: true|false } } ] } }, synced
+  // from the single agency/sopChecklistRuns Firestore document (see below).
+  let checklistRunsBySop = {};
+  // Which run is currently showing in the checklist view for each SOP, kept
+  // in memory only (not persisted) - reopening the wiki just falls back to
+  // the most recent incomplete run, or the most recent run overall.
+  let activeRunIdBySop = {};
 
   // ── Non-blocking status toasts ──
   //
@@ -117,6 +143,43 @@ document.addEventListener('DOMContentLoaded', () => {
   function getLegacySopsDocRef() {
     if (!window.parent || !window.parent.firebaseDb || !window.parent.firebaseDoc) return null;
     return window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "sops");
+  }
+
+  // ── Checklist Mode: run-state storage ──
+  //
+  // Deliberately a single, unsharded agency/sopChecklistRuns document
+  // ({ [sopId]: { runs: [...] } }), unlike the SOP content itself. Run
+  // state is just booleans and dates - a few hundred bytes per run even
+  // for a long checklist - so it would take an enormous number of runs
+  // across every SOP to approach Firestore's 1MB document limit. If that
+  // ever becomes a real risk, this can be sharded the same way sops was,
+  // but there's no reason to pay that complexity now for a single-SOP
+  // prototype.
+  function getChecklistRunsDocRef() {
+    if (!window.parent || !window.parent.firebaseDb || !window.parent.firebaseDoc) return null;
+    return window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "sopChecklistRuns");
+  }
+
+  function saveChecklistRunsToFirestore() {
+    if (!window.parent || !window.parent.firebaseSetDocFromJSON) {
+      return Promise.reject(new Error("Couldn't reach the Hub's database - try reopening this tab from the Hub."));
+    }
+    const ref = getChecklistRunsDocRef();
+    return window.parent.firebaseSetDocFromJSON(ref, JSON.stringify(checklistRunsBySop));
+  }
+
+  function initChecklistRuns() {
+    const ref = getChecklistRunsDocRef();
+    if (!ref || !window.parent.firebaseOnSnapshot) return;
+    window.parent.firebaseOnSnapshot(ref, (docSnap) => {
+      checklistRunsBySop = docSnap.exists ? (docSnap.data() || {}) : {};
+      if (checklistModeActive && activeSopId) {
+        const sop = sops.find(s => s.id === activeSopId);
+        if (sop) renderChecklistView(sop);
+      }
+    }, (err) => {
+      console.error("Checklist runs listener error:", err);
+    });
   }
 
   // Greedily bin-packs the full SOP list into shard-sized chunks, each kept
@@ -295,6 +358,266 @@ document.addEventListener('DOMContentLoaded', () => {
     return (tmp.textContent || '').toLowerCase();
   }
 
+  // ── Checklist Mode: parsing the doc's own content into checkable rows ──
+  //
+  // Deliberately reads the same rendered HTML the prose view uses instead
+  // of a separate stored checklist - there's only ever one source of truth
+  // for a SOP's steps, so editing the doc automatically updates what the
+  // checklist shows next time it's opened.
+  //
+  // Item keys are just "item-<position>" (document order). That's stable
+  // as long as the doc isn't restructured, but a heavily edited doc can
+  // shift what "item-3" refers to between runs - an acceptable simplification
+  // for a first prototype on one SOP, not something to build a migration
+  // system around yet.
+  function extractChecklistItems(html) {
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    const items = [];
+    let currentHeading = '';
+    let index = 0;
+
+    function nestingDepth(el) {
+      let depth = 0;
+      let p = el.parentElement;
+      while (p && p !== container) {
+        if (p.tagName === 'LI') depth++;
+        p = p.parentElement;
+      }
+      return Math.min(depth, 2);
+    }
+
+    container.querySelectorAll('h1,h2,h3,h4,li').forEach(el => {
+      if (el.tagName[0] === 'H') {
+        currentHeading = el.textContent.trim();
+        return;
+      }
+      // LI: strip any nested sub-list before reading text, so a parent
+      // "step" row doesn't swallow its own children's text - each nested
+      // item still gets picked up separately as its own row below.
+      const clone = el.cloneNode(true);
+      clone.querySelectorAll('ul, ol').forEach(n => n.remove());
+      const text = clone.textContent.trim();
+      if (!text) return;
+      items.push({ key: 'item-' + index, text, heading: currentHeading, depth: nestingDepth(el) });
+      index++;
+    });
+
+    return items;
+  }
+
+  function getSopRuns(sopId) {
+    const entry = checklistRunsBySop[sopId];
+    return entry && Array.isArray(entry.runs) ? entry.runs : [];
+  }
+
+  function formatRunDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso + 'T00:00:00');
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  async function startNewChecklistRun(sop) {
+    const today = new Date().toISOString().slice(0, 10);
+    const run = {
+      id: 'run-' + Date.now(),
+      startedDate: today,
+      updatedDate: today,
+      completedDate: null,
+      checks: {}
+    };
+    const previous = JSON.parse(JSON.stringify(checklistRunsBySop));
+    if (!checklistRunsBySop[sop.id]) checklistRunsBySop[sop.id] = { runs: [] };
+    checklistRunsBySop[sop.id].runs.push(run);
+    activeRunIdBySop[sop.id] = run.id;
+    renderChecklistView(sop);
+
+    try {
+      await saveChecklistRunsToFirestore();
+    } catch (err) {
+      console.error('Failed to start checklist run:', err);
+      checklistRunsBySop = previous;
+      renderChecklistView(sop);
+      showToast("Couldn't start a new run: " + err.message, 'error');
+    }
+  }
+
+  async function toggleChecklistItem(sop, run, itemKey, totalItems) {
+    const wasChecked = !!run.checks[itemKey];
+    const previous = JSON.parse(JSON.stringify(checklistRunsBySop));
+
+    run.checks[itemKey] = !wasChecked;
+    run.updatedDate = new Date().toISOString().slice(0, 10);
+    const checkedCount = Object.values(run.checks).filter(Boolean).length;
+    run.completedDate = (checkedCount >= totalItems && totalItems > 0) ? run.updatedDate : null;
+
+    renderChecklistView(sop);
+
+    try {
+      await saveChecklistRunsToFirestore();
+    } catch (err) {
+      console.error('Failed to save checklist progress:', err);
+      checklistRunsBySop = previous;
+      renderChecklistView(sop);
+      showToast("Couldn't save that checkbox: " + err.message, 'error');
+    }
+  }
+
+  function renderChecklistView(sop) {
+    const items = extractChecklistItems(sopContentAsHtml(sop));
+
+    if (items.length === 0) {
+      checklistItemsEl.innerHTML = '<p class="checklist-empty-note">This SOP doesn\'t have a step list to check off - switch back to Read view.</p>';
+      checklistProgressLabel.textContent = '';
+      checklistProgressFill.style.width = '0%';
+      checklistRunControls.innerHTML = '';
+      checklistHistoryList.innerHTML = '';
+      return;
+    }
+
+    const runs = getSopRuns(sop.id);
+    let activeRun = activeRunIdBySop[sop.id]
+      ? runs.find(r => r.id === activeRunIdBySop[sop.id])
+      : null;
+    if (!activeRun && runs.length > 0) {
+      activeRun = runs.slice().reverse().find(r => !r.completedDate) || runs[runs.length - 1];
+      activeRunIdBySop[sop.id] = activeRun.id;
+    }
+
+    // ── Run controls ──
+    checklistRunControls.innerHTML = '';
+    if (activeRun) {
+      const meta = document.createElement('span');
+      meta.className = 'checklist-run-meta';
+      meta.innerHTML = `Run started <strong>${formatRunDate(activeRun.startedDate)}</strong>${activeRun.completedDate ? ` &middot; completed <strong>${formatRunDate(activeRun.completedDate)}</strong>` : ''}`;
+      checklistRunControls.appendChild(meta);
+    } else {
+      const meta = document.createElement('span');
+      meta.className = 'checklist-run-meta';
+      meta.textContent = 'No run in progress yet.';
+      checklistRunControls.appendChild(meta);
+    }
+    const startBtn = document.createElement('button');
+    startBtn.type = 'button';
+    startBtn.className = 'btn-start-run';
+    startBtn.textContent = activeRun ? 'Start New Run' : 'Start a Run';
+    startBtn.addEventListener('click', () => startNewChecklistRun(sop));
+    checklistRunControls.appendChild(startBtn);
+
+    // ── Progress bar ──
+    const checkedCount = activeRun ? Object.values(activeRun.checks).filter(Boolean).length : 0;
+    const pct = items.length > 0 ? Math.round((checkedCount / items.length) * 100) : 0;
+    checklistProgressFill.style.width = pct + '%';
+    checklistProgressLabel.textContent = `${checkedCount} / ${items.length} complete`;
+
+    // ── Checklist rows ──
+    checklistItemsEl.innerHTML = '';
+    if (!activeRun) {
+      const note = document.createElement('p');
+      note.className = 'checklist-empty-note';
+      note.textContent = 'Click "Start a Run" above to begin checking off this SOP.';
+      checklistItemsEl.appendChild(note);
+    } else {
+      let lastHeading = null;
+      items.forEach(item => {
+        if (item.heading && item.heading !== lastHeading) {
+          const headingEl = document.createElement('div');
+          headingEl.className = 'checklist-heading-label';
+          headingEl.textContent = item.heading;
+          checklistItemsEl.appendChild(headingEl);
+          lastHeading = item.heading;
+        }
+
+        const row = document.createElement('label');
+        row.className = 'checklist-item-row' + (item.depth > 0 ? ` nested-${item.depth}` : '');
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'checklist-item-checkbox';
+        checkbox.checked = !!activeRun.checks[item.key];
+        checkbox.addEventListener('change', () => toggleChecklistItem(sop, activeRun, item.key, items.length));
+
+        const text = document.createElement('span');
+        text.className = 'checklist-item-text' + (checkbox.checked ? ' is-checked' : '');
+        text.textContent = item.text;
+
+        row.appendChild(checkbox);
+        row.appendChild(text);
+        checklistItemsEl.appendChild(row);
+      });
+    }
+
+    // ── Run history ──
+    checklistHistoryList.innerHTML = '';
+    if (runs.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'checklist-history-empty';
+      empty.textContent = 'No runs yet for this SOP.';
+      checklistHistoryList.appendChild(empty);
+    } else {
+      runs.slice().reverse().forEach(run => {
+        const runChecked = Object.values(run.checks).filter(Boolean).length;
+        const row = document.createElement('div');
+        row.className = 'checklist-history-row' + (activeRun && run.id === activeRun.id ? ' is-active' : '');
+
+        const meta = document.createElement('div');
+        meta.className = 'checklist-history-meta';
+        const badge = document.createElement('span');
+        badge.className = 'checklist-history-badge' + (run.completedDate ? '' : ' in-progress');
+        badge.textContent = run.completedDate ? 'Complete' : 'In progress';
+        meta.appendChild(badge);
+        const label = document.createElement('span');
+        label.textContent = `Started ${formatRunDate(run.startedDate)} · ${runChecked}/${items.length}`;
+        meta.appendChild(label);
+        row.appendChild(meta);
+
+        const viewBtn = document.createElement('button');
+        viewBtn.type = 'button';
+        viewBtn.className = 'btn-view-run';
+        viewBtn.textContent = (activeRun && run.id === activeRun.id) ? 'Viewing' : 'View';
+        viewBtn.disabled = !!(activeRun && run.id === activeRun.id);
+        viewBtn.addEventListener('click', () => {
+          activeRunIdBySop[sop.id] = run.id;
+          renderChecklistView(sop);
+        });
+        row.appendChild(viewBtn);
+
+        checklistHistoryList.appendChild(row);
+      });
+    }
+  }
+
+  // Opt-in, not automatic: a doc having a bullet list doesn't mean it's a
+  // real checklist. Contracts, statements of work, and reference guides
+  // (Custom Field Options Reference, Email Template libraries) all have
+  // plenty of <li> content but nothing anyone should be "checking off" -
+  // so the toggle only shows for SOPs someone has deliberately flagged via
+  // the editor's "Enable Checklist Mode" checkbox.
+  function updateChecklistToggleVisibility(sop) {
+    if (!sop.checklistEnabled) {
+      toggleChecklistBtn.style.display = 'none';
+      return;
+    }
+    const items = extractChecklistItems(sopContentAsHtml(sop));
+    toggleChecklistBtn.style.display = items.length > 0 ? '' : 'none';
+  }
+
+  function setChecklistMode(active) {
+    checklistModeActive = active;
+    docBody.style.display = active ? 'none' : '';
+    checklistView.style.display = active ? '' : 'none';
+    toggleChecklistBtnLabel.textContent = active ? 'Read View' : 'Checklist Mode';
+    toggleChecklistBtn.classList.toggle('btn-doc-action-active', active);
+
+    if (active && activeSopId) {
+      const sop = sops.find(s => s.id === activeSopId);
+      if (sop) renderChecklistView(sop);
+    }
+  }
+
+  toggleChecklistBtn.addEventListener('click', () => setChecklistMode(!checklistModeActive));
+
   function filterSops(query) {
     return sops.filter(sop =>
       sop.title.toLowerCase().includes(query) ||
@@ -312,6 +635,13 @@ document.addEventListener('DOMContentLoaded', () => {
       renderSopList(query ? filterSops(query) : sops);
     }, 300);
   });
+
+  // Strips any leading emoji/symbol/whitespace so sorting compares actual
+  // words - without this, "👋 Client Welcome..." and "🤝 Referral..." would
+  // sort by their emoji's character code instead of alphabetically by title.
+  function getSortableTitle(title) {
+    return (title || '').replace(/^[^a-zA-Z0-9]+/, '');
+  }
 
   function renderSopList(sopsToRender) {
     sopListEl.innerHTML = '';
@@ -337,7 +667,17 @@ document.addEventListener('DOMContentLoaded', () => {
       titleEl.textContent = category;
       groupEl.appendChild(titleEl);
 
-      grouped[category].forEach(sop => {
+      // A-Z within the category, ignoring any leading emoji/symbol in the
+      // title (e.g. "👋 Client Welcome..." sorts under C, not clumped with
+      // every other emoji-prefixed title by coincidence of character code).
+      // This runs fresh on every render against whatever's currently in
+      // `sops`, so a newly-added SOP just lands in its correct alphabetical
+      // slot automatically the next time the list renders - no separate
+      // "insert in order" logic needed, and nothing to maintain by hand.
+      grouped[category]
+        .slice()
+        .sort((a, b) => getSortableTitle(a.title).localeCompare(getSortableTitle(b.title), undefined, { sensitivity: 'base' }))
+        .forEach(sop => {
         const itemEl = document.createElement('div');
         itemEl.className = `sop-item ${activeSopId === sop.id ? 'active' : ''}`;
 
@@ -373,6 +713,12 @@ document.addEventListener('DOMContentLoaded', () => {
     docDate.textContent = `Last updated: ${sop.date}`;
 
     docBody.innerHTML = sopContentAsHtml(sop);
+
+    updateChecklistToggleVisibility(sop);
+    // Always land back on the prose view when switching documents - the two
+    // views share content, but which one you were on for a different SOP
+    // shouldn't carry over.
+    setChecklistMode(false);
   }
 
   // ── Rich-text paste sanitization ──
@@ -702,6 +1048,7 @@ document.addEventListener('DOMContentLoaded', () => {
     populateCategoryDropdown('');
     editorTitle.value = '';
     editorContent.innerHTML = '';
+    editorChecklistEnabled.checked = false;
     editorOverlay.style.display = 'flex';
     editorCategory.focus();
   }
@@ -715,6 +1062,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // opened in the editor; saving completes the one-time migration for
     // that entry.
     editorContent.innerHTML = sopContentAsHtml(sop);
+    editorChecklistEnabled.checked = !!sop.checklistEnabled;
     editorOverlay.style.display = 'flex';
     editorCategory.focus();
   }
@@ -748,6 +1096,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const title = editorTitle.value.trim();
     const content = editorContent.innerHTML.trim();
+    const checklistEnabled = editorChecklistEnabled.checked;
 
     if (!category || !title) {
       showToast('Category and Title are required.', 'error');
@@ -772,6 +1121,7 @@ document.addEventListener('DOMContentLoaded', () => {
         existing.content = content;
         existing.format = 'html';
         existing.date = today;
+        existing.checklistEnabled = checklistEnabled;
         targetId = existing.id;
       }
     } else {
@@ -782,7 +1132,7 @@ document.addEventListener('DOMContentLoaded', () => {
         id = `${baseId}-${suffix}`;
         suffix++;
       }
-      sops.push({ id, category, title, content, format: 'html', date: today });
+      sops.push({ id, category, title, content, format: 'html', date: today, checklistEnabled });
       targetId = id;
     }
 
@@ -904,4 +1254,5 @@ document.addEventListener('DOMContentLoaded', () => {
   // this iframe just loaded fresh (same pattern used by Client Portal
   // Manager for the same reason).
   setTimeout(initSops, 300);
+  setTimeout(initChecklistRuns, 300);
 });

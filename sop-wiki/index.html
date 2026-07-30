@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <link rel="stylesheet" href="css/style.css?v=10" />
+  <link rel="stylesheet" href="css/style.css?v=13" />
 </head>
 <body>
   <div class="split-layout">
@@ -47,6 +47,10 @@
           <div class="doc-header-top">
             <span class="doc-category" id="docCategory">Category</span>
             <div class="doc-actions">
+              <button id="toggleChecklistBtn" class="btn-doc-action" type="button" style="display:none;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+                <span id="toggleChecklistBtnLabel">Checklist Mode</span>
+              </button>
               <button id="editSopBtn" class="btn-doc-action" type="button">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path></svg>
                 Edit
@@ -64,6 +68,25 @@
         </header>
         <div class="doc-body" id="docBody">
           <!-- Rendered Markdown -->
+        </div>
+
+        <!-- Checklist Mode: same underlying doc content, rendered as a
+             clickable run-through instead of prose. Prototype - built
+             generically so it works on any SOP with step lists, but only
+             being rolled out/tested against one real SOP for now. -->
+        <div class="doc-body checklist-view" id="checklistView" style="display:none;">
+          <div class="checklist-progress-wrap" id="checklistProgressWrap">
+            <div class="checklist-progress-bar-track">
+              <div class="checklist-progress-bar-fill" id="checklistProgressFill" style="width:0%;"></div>
+            </div>
+            <span class="checklist-progress-label" id="checklistProgressLabel">0 / 0 complete</span>
+          </div>
+          <div class="checklist-run-controls" id="checklistRunControls"></div>
+          <div class="checklist-items" id="checklistItems"></div>
+          <div class="checklist-history" id="checklistHistory">
+            <h3 class="checklist-history-title">Run History</h3>
+            <div id="checklistHistoryList"></div>
+          </div>
         </div>
       </div>
     </main>
@@ -85,6 +108,11 @@
 
         <label class="editor-label" for="editorTitle">Title</label>
         <input type="text" id="editorTitle" class="editor-input" placeholder="e.g. Revision &amp; Feedback Process" autocomplete="off">
+
+        <label class="editor-checklist-toggle" for="editorChecklistEnabled">
+          <input type="checkbox" id="editorChecklistEnabled">
+          <span>Enable Checklist Mode — adds a clickable, step-by-step checklist view for this SOP. Only turn this on for real step-by-step processes, not templates, contracts, or reference guides.</span>
+        </label>
 
         <label class="editor-label" for="editorContent">Content</label>
         <div id="editorToolbar" class="editor-toolbar">
@@ -116,6 +144,6 @@
   </div>
 
   <script src="js/data.js?v=6"></script>
-  <script src="js/app.js?v=67"></script>
+  <script src="js/app.js?v=70"></script>
 </body>
 </html>

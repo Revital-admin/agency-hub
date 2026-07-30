@@ -1,3 +1,27 @@
+/* ============================================================
+   BRAND ASSET KIT (LITE) — APP LOGIC
+   Read-only quick-glance view, not an independent data store.
+
+   HISTORY: this used to be its own editable tool writing to
+   client.brandKit, completely separate from Brand Identity Vault
+   (client.brandVault). Nothing kept the two in sync, and the Client
+   Onboarding SOP only ever told staff to fill in the Vault - so a team
+   could do everything the SOP asked and the client's own Portal (which
+   reads client.brandKit, see portal/js/app.js renderBrandKit()) would
+   still show an empty brand section.
+
+   FIX: Brand Identity Vault is now the single real data-entry point.
+   Saving it (see saveBrandVault() in the root app.js) derives and writes
+   client.brandKit automatically, so filling in the Vault is enough on its
+   own. This tool just displays that same data read-only, with a shortcut
+   button back to the Vault - it doesn't write anything.
+
+   Falls back to any pre-existing client.brandKit field the old editable
+   version may have saved, for clients who had Kit data before this change
+   but haven't touched Brand Identity Vault since - so nothing they
+   already had appears to vanish.
+   ============================================================ */
+
 let isEmbedded = false;
 try {
   if (window.parent && typeof window.parent.getAllClients === 'function') {
@@ -18,13 +42,10 @@ function getClients() {
   return {};
 }
 
-function persist() {
-  if (isEmbedded) window.parent.saveDatabase();
-}
-
 function populateClientSelect() {
   const clients = getClients();
   const select = el('clientSelect');
+  const prevValue = select.value;
   select.innerHTML = '<option value="">Select a client...</option>';
   Object.keys(clients).sort().forEach(name => {
     if (name === SANDBOX_NAME) return;
@@ -33,19 +54,34 @@ function populateClientSelect() {
     opt.textContent = name;
     select.appendChild(opt);
   });
+  if (prevValue && clients[prevValue]) select.value = prevValue;
 }
 
-function syncColorInputs(pickerId, textId) {
-  const picker = el(pickerId);
-  const text = el(textId);
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str == null ? '' : String(str);
+  return div.innerHTML;
+}
 
-  picker.addEventListener('input', () => { text.value = picker.value.toUpperCase(); });
-  text.addEventListener('input', () => {
-    const val = text.value.trim();
-    if (/^#[0-9A-F]{6}$/i.test(val)) {
-      picker.value = val;
-    }
-  });
+// Brand Identity Vault's 5 named colors (Primary, Secondary, Accent 1,
+// Accent 2, Background) collapse down to the Lite view's 3-color summary -
+// this mirrors the exact mapping saveBrandVault() uses to derive
+// client.brandKit, so what's shown here always matches what the Portal is
+// actually displaying to the client.
+function getDerivedKit(client) {
+  const bv = client.brandVault;
+  const legacyKit = client.brandKit || {};
+  const colors = (bv && bv.colors) || [];
+
+  return {
+    primaryColor: (colors[0] && colors[0].hex) || legacyKit.primaryColor || '',
+    secondaryColor: (colors[1] && colors[1].hex) || legacyKit.secondaryColor || '',
+    accentColor: (colors[2] && colors[2].hex) || legacyKit.accentColor || '',
+    fontPrimary: (bv && bv.typography && bv.typography.primaryFont) || legacyKit.fontPrimary || '',
+    fontSecondary: (bv && bv.typography && bv.typography.secondaryFont) || legacyKit.fontSecondary || '',
+    toneOfVoice: (bv && bv.brandVoice && bv.brandVoice.adjectives) || legacyKit.toneOfVoice || '',
+    logoUrl: (bv && bv.assets && bv.assets.logoUrl) || legacyKit.logoUrl || ''
+  };
 }
 
 function renderState() {
@@ -60,51 +96,38 @@ function renderState() {
   el('brandKitInterface').style.display = 'block';
 
   const clients = getClients();
-  const kit = clients[clientName].brandKit || {
-    primaryColor: '#000000',
-    secondaryColor: '#FFFFFF',
-    accentColor: '#FF0000',
-    fontPrimary: '',
-    fontSecondary: '',
-    toneOfVoice: '',
-    logoUrl: ''
-  };
+  const client = clients[clientName] || {};
+  const kit = getDerivedKit(client);
 
-  el('primaryColorPick').value = kit.primaryColor || '#000000';
-  el('primaryColorText').value = kit.primaryColor || '#000000';
+  // Colors
+  const colorDefs = [
+    { label: 'Primary', hex: kit.primaryColor },
+    { label: 'Secondary', hex: kit.secondaryColor },
+    { label: 'Accent', hex: kit.accentColor }
+  ];
+  const colorsHtml = colorDefs
+    .filter(c => c.hex)
+    .map(c => `
+      <div class="kit-color-row">
+        <div class="kit-color-swatch" style="background-color:${escapeHtml(c.hex)};"></div>
+        <span class="kit-color-label">${escapeHtml(c.label)}</span>
+        <span class="kit-color-hex">${escapeHtml(c.hex)}</span>
+      </div>
+    `).join('');
+  el('colorsReadout').innerHTML = colorsHtml || '<p class="kit-empty-note">No colors set yet in Brand Identity Vault.</p>';
 
-  el('secondaryColorPick').value = kit.secondaryColor || '#FFFFFF';
-  el('secondaryColorText').value = kit.secondaryColor || '#FFFFFF';
+  // Typography & Voice
+  const typographyLines = [];
+  if (kit.fontPrimary) typographyLines.push(`<div class="kit-readout-line"><strong>Primary Font:</strong> ${escapeHtml(kit.fontPrimary)}</div>`);
+  if (kit.fontSecondary) typographyLines.push(`<div class="kit-readout-line"><strong>Secondary Font:</strong> ${escapeHtml(kit.fontSecondary)}</div>`);
+  if (kit.toneOfVoice) typographyLines.push(`<div class="kit-readout-line"><strong>Tone of Voice:</strong> ${escapeHtml(kit.toneOfVoice)}</div>`);
+  el('typographyReadout').innerHTML = typographyLines.join('') || '<p class="kit-empty-note">No typography or voice notes set yet in Brand Identity Vault.</p>';
 
-  el('accentColorPick').value = kit.accentColor || '#FF0000';
-  el('accentColorText').value = kit.accentColor || '#FF0000';
-
-  el('fontPrimary').value = kit.fontPrimary || '';
-  el('fontSecondary').value = kit.fontSecondary || '';
-  el('toneOfVoice').value = kit.toneOfVoice || '';
-  el('logoUrl').value = kit.logoUrl || '';
-}
-
-function saveBrandKit() {
-  const clientName = el('clientSelect').value;
-  if (!clientName) return;
-
-  const clients = getClients();
-
-  clients[clientName].brandKit = {
-    primaryColor: el('primaryColorText').value.trim(),
-    secondaryColor: el('secondaryColorText').value.trim(),
-    accentColor: el('accentColorText').value.trim(),
-    fontPrimary: el('fontPrimary').value.trim(),
-    fontSecondary: el('fontSecondary').value.trim(),
-    toneOfVoice: el('toneOfVoice').value.trim(),
-    logoUrl: el('logoUrl').value.trim()
-  };
-
-  persist();
-
-  if (isEmbedded && window.parent.showBanner) {
-    window.parent.showBanner('success', 'Brand Asset Kit saved and synced to Client Portal!');
+  // Logo
+  if (kit.logoUrl) {
+    el('logoReadout').innerHTML = `<a href="${escapeHtml(kit.logoUrl)}" target="_blank" rel="noopener" class="btn-secondary" style="text-decoration:none;">Open Logo / Brand Folder</a>`;
+  } else {
+    el('logoReadout').innerHTML = '<p class="kit-empty-note">No logo link set yet in Brand Identity Vault.</p>';
   }
 }
 
@@ -120,24 +143,32 @@ function autoSelectActiveClient() {
   } catch (e) { /* CORS or not embedded - leave picker on "Select a client..." */ }
 }
 
+// Jumps the parent Hub over to Brand Identity Vault - same mechanism the
+// dashboard's own "Go to Brand Vault" quick-link button uses (see
+// enableDashboardQuickLinks' [data-go] handler in the root app.js), just
+// triggered from inside this iframe instead of from the top-level page.
+function goToBrandVault() {
+  if (!isEmbedded) return;
+  try {
+    const navBtn = window.parent.document.querySelector('.nav-item-btn[data-tab="tab-brandvault"]');
+    if (navBtn) navBtn.click();
+  } catch (e) { /* CORS - nothing we can do from in here */ }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   populateClientSelect();
   autoSelectActiveClient();
   renderState();
   el('clientSelect').addEventListener('change', renderState);
-  el('saveBrandKitBtn').addEventListener('click', saveBrandKit);
-
-  syncColorInputs('primaryColorPick', 'primaryColorText');
-  syncColorInputs('secondaryColorPick', 'secondaryColorText');
-  syncColorInputs('accentColorPick', 'accentColorText');
+  el('editInVaultBtn').addEventListener('click', goToBrandVault);
 
   // The parent Hub loads its client database asynchronously (instant
   // localStorage boot, then a Firestore sync on top of that). If this
   // module's iframe finishes loading before that data is ready,
-  // populateClientSelect() above runs against an empty client list and -
-  // since nothing else ever re-triggers it - the dropdown stays empty
-  // forever, even after the real data arrives moments later. Poll
-  // briefly and re-populate once real client data shows up.
+  // populateClientSelect()/renderState() above run against an empty
+  // client list and - since nothing else ever re-triggers them - the
+  // dropdown stays empty forever, even after the real data arrives moments
+  // later. Poll briefly and re-render once real client data shows up.
   let clientPollAttempts = 0;
   const clientPoll = setInterval(() => {
     clientPollAttempts++;
