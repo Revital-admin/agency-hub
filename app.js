@@ -3370,38 +3370,14 @@ function commitDatabaseToCloud() {
   const cleanDb = JSON.parse(JSON.stringify(clientsDb));
   const shards = packClientsDbIntoShards(cleanDb);
 
-  // Safety-net backup: a "last known good" full snapshot, written
-  // alongside the real shards whenever we're confident clientsDb is
-  // complete (guard above). If the live shards ever get corrupted again
-  // for any reason, this is always a recent, complete copy to recover
-  // from - see agency/clientsDbBackup-shard-0, -1, etc. and
-  // agency/clientsDbBackupShardMeta. Sharded the exact same way as the
-  // live data (reusing the `shards` array above) so it can't hit
-  // Firestore's ~1MB per-document limit as the client roster grows -
-  // an earlier version of this wrote one big document and had the same
-  // size ceiling the old pre-sharding format did. Fire-and-forget: a
-  // backup failure shouldn't block or alarm the user about the actual
-  // save below. (agency/clientsDbBackup, the old single-document
-  // location, is no longer written to - safe to ignore/delete.)
-  const backupMetaRef = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackupShardMeta");
-  window.firebaseGetDoc(backupMetaRef).then((backupMetaSnap) => {
-    const prevBackupShardCount = (backupMetaSnap.exists && typeof backupMetaSnap.data().count === 'number')
-      ? backupMetaSnap.data().count : 0;
-
-    const backupWrites = shards.map((shardObj, i) => {
-      const ref = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackup-shard-" + i);
-      return window.firebaseSetDoc(ref, shardObj);
-    });
-    // Blank out any trailing backup shards left over from a larger
-    // previous backup, same reasoning as the live-shard cleanup below.
-    for (let i = shards.length; i < prevBackupShardCount; i++) {
-      const ref = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackup-shard-" + i);
-      backupWrites.push(window.firebaseSetDoc(ref, {}));
-    }
-    backupWrites.push(window.firebaseSetDoc(backupMetaRef, { count: shards.length, savedAt: new Date().toISOString() }));
-
-    return Promise.all(backupWrites);
-  }).catch(err => console.error("clientsDb backup write failed:", err));
+  // Safety-net backup write moved below (see comment there) - it used to
+  // fire here, unconditionally, before the version-conflict check further
+  // down. That meant a REJECTED save (someone else saved in the meantime)
+  // still overwrote the backup docs with this tab's stale/conflicting
+  // data, potentially clobbering a newer, correct backup with an older
+  // one - undermining the one guarantee the backup exists to provide.
+  // Fixed by only firing it once the version check below confirms this
+  // tab's data is actually the one being accepted.
 
   const metaRef = getClientsDbShardMetaDocRef();
 
@@ -3443,6 +3419,40 @@ function commitDatabaseToCloud() {
       showBanner("error", "Someone else saved changes to the client database while you had this open. Reload the page to see their changes, then redo your last edit.");
       return;
     }
+
+    // Safety-net backup: a "last known good" full snapshot, written
+    // alongside the real shards now that the version check above has
+    // confirmed this tab's data is fresh and about to be accepted (moved
+    // here, after that check, so a rejected save never overwrites the
+    // backup with stale data - see the comment where this used to live).
+    // If the live shards ever get corrupted again for any reason, this is
+    // always a recent, complete copy to recover from - see
+    // agency/clientsDbBackup-shard-0, -1, etc. and
+    // agency/clientsDbBackupShardMeta. Sharded the exact same way as the
+    // live data (reusing the `shards` array above) so it can't hit
+    // Firestore's ~1MB per-document limit as the client roster grows.
+    // Fire-and-forget: a backup failure shouldn't block or alarm the user
+    // about the actual save below. (agency/clientsDbBackup, the old
+    // single-document location, is no longer written to.)
+    const backupMetaRef = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackupShardMeta");
+    window.firebaseGetDoc(backupMetaRef).then((backupMetaSnap) => {
+      const prevBackupShardCount = (backupMetaSnap.exists && typeof backupMetaSnap.data().count === 'number')
+        ? backupMetaSnap.data().count : 0;
+
+      const backupWrites = shards.map((shardObj, i) => {
+        const ref = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackup-shard-" + i);
+        return window.firebaseSetDoc(ref, shardObj);
+      });
+      // Blank out any trailing backup shards left over from a larger
+      // previous backup, same reasoning as the live-shard cleanup below.
+      for (let i = shards.length; i < prevBackupShardCount; i++) {
+        const ref = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackup-shard-" + i);
+        backupWrites.push(window.firebaseSetDoc(ref, {}));
+      }
+      backupWrites.push(window.firebaseSetDoc(backupMetaRef, { count: shards.length, savedAt: new Date().toISOString() }));
+
+      return Promise.all(backupWrites);
+    }).catch(err => console.error("clientsDb backup write failed:", err));
 
     const writes = shards.map((shardObj, i) => {
       const docRef = getClientsDbShardDocRef(i);
