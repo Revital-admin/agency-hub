@@ -1416,7 +1416,18 @@ function renderMoodBoards() {
   nav.style.display = "flex";
   if (emptyState) emptyState.style.display = "none";
 
-  container.innerHTML = boards.map(board => `
+  container.innerHTML = boards.map(board => {
+    const allLinks = board.embedLinks || [];
+    // Uploaded images used to get piped through the same 380px <iframe>
+    // treatment as real reference URLs, which is wrong for a data URL -
+    // no object-fit, a scrollbar-prone embed, and a redundant "open in
+    // new tab" link pointing at a raw base64 string. Split them into a
+    // proper thumbnail grid; the iframe embed stays for actual external
+    // reference links (Pinterest boards, etc).
+    const images = allLinks.filter(isMoodBoardImage);
+    const links = allLinks.filter(l => !isMoodBoardImage(l));
+
+    return `
     <div class="moodboard-card">
       <div class="moodboard-card-header">
         <h3>${escapeHtml(board.title || "")}</h3>
@@ -1425,9 +1436,19 @@ function renderMoodBoards() {
       ${board.ideaSummary ? `<p>${escapeHtml(board.ideaSummary)}</p>` : ""}
       ${board.visualDirection ? `<div class="moodboard-section-label">Visual Direction</div><p>${escapeHtml(board.visualDirection)}</p>` : ""}
       ${board.keyElements ? `<div class="moodboard-section-label">Key Elements</div><p>${escapeHtml(board.keyElements)}</p>` : ""}
-      ${(board.embedLinks && board.embedLinks.length) ? `
+      ${images.length ? `
+        <div class="moodboard-section-label">Reference Images</div>
+        <div class="moodboard-image-grid">
+          ${images.map(l => `
+            <a class="moodboard-image-tile" href="${escapeHtml(l.url)}" target="_blank" rel="noopener" title="${escapeHtml(l.label || '')}">
+              <img src="${escapeHtml(l.url)}" alt="${escapeHtml(l.label || '')}" loading="lazy">
+            </a>
+          `).join("")}
+        </div>
+      ` : ""}
+      ${links.length ? `
         <div class="moodboard-section-label">References</div>
-        ${board.embedLinks.map(l => `
+        ${links.map(l => `
           <div class="moodboard-embed-wrapper">
             <iframe src="${escapeHtml(l.url)}" loading="lazy"></iframe>
           </div>
@@ -1435,7 +1456,12 @@ function renderMoodBoards() {
         `).join("")}
       ` : ""}
     </div>
-  `).join("");
+  `;
+  }).join("");
+}
+
+function isMoodBoardImage(l) {
+  return !!(l && (l.isImage || (l.url || "").startsWith("data:image")));
 }
 
 // ── Testimonial submission ──
