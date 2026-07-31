@@ -1,14 +1,34 @@
 /* ============================================================
    TEAM ACCESS MANAGER — APP LOGIC
    Hub-wide (not per-client). Reads/writes a single small Firestore
-   doc, agency/teamAccess: { users: { "email": ["sectionKey", ...] } }.
+   doc, agency/teamAccess:
+     {
+       version: N,
+       roleTiers: { "Role Name": { sections: [...], note: "..." }, ... },
+       users: {
+         "email": { role: "Role Name" },                 // enforced - sections come from roleTiers, live
+         "email": { role: null, sections: [...] }         // custom - one-off, not tied to any role
+       }
+     }
 
-   Anyone NOT listed in that map has full access to every section of
-   the Hub (unchanged default behavior) - this tool only adds explicit
-   restrictions for specific teammates. This is a menu-level control:
-   it hides sidebar sections for restricted accounts, it does not
-   change what the underlying Firestore rules allow that account to
-   read/write. Scoped to trusted internal teammates for that reason.
+   This used to store users as a flat { email: [sectionKey, ...] } list,
+   with a hardcoded 5-tier "quick-fill" that just auto-checked boxes once
+   and then forgot it had ever done so - editing a tier's definition did
+   nothing for anyone already assigned it. Now a role is enforced: assign
+   someone a role, and they get that role's CURRENT sections, live, for
+   as long as they're on it. Edit the role once here and everyone on it
+   updates automatically - no more re-saving each person by hand. Legacy
+   array-shaped user entries (saved before this change) are read as
+   "Custom" with their existing section list intact, so nobody's access
+   silently changes on this upgrade - they just aren't on an enforced
+   role until an admin explicitly assigns one.
+
+   Anyone NOT listed in `users` at all has full access to every section
+   of the Hub (unchanged default behavior) - this tool only adds explicit
+   restrictions for specific teammates. This is a menu-level control: it
+   hides sidebar sections for restricted accounts, it does not change
+   what the underlying Firestore rules allow that account to read/write.
+   Scoped to trusted internal teammates for that reason.
    ============================================================ */
 
 const SECTION_DEFS = [
@@ -24,53 +44,42 @@ const SECTION_DEFS = [
   { key: "retention-social-proof", label: "Retention & Social Proof" },
   { key: "agency-globals", label: "Agency Globals" }
 ];
+const SECTION_KEYS = new Set(SECTION_DEFS.map(s => s.key));
 // NOTE (July 2026 sidebar reorg): "Account Management" was split into
-// "Ad Accounts & Access" (ad platform setup/budget/access logs) and
-// "Reporting & Health" (health dashboard, QBR, weekly check-ins, reports).
-// "Client Retention" and "Social Proof" were merged into one
-// "Retention & Social Proof" section. Anyone previously granted the old
-// "account-management", "client-retention", or "social-proof" keys in
-// Firestore (agency/teamAccess.users) needs to be re-checked below and
-// re-saved so they keep access to the tools that moved - the old keys no
-// longer match anything in the sidebar and will just silently grant nothing.
+// "Ad Accounts & Access" and "Reporting & Health"; "Client Retention" and
+// "Social Proof" were merged into "Retention & Social Proof". Any Custom
+// entry saved before that reorg may still list the old keys
+// ("account-management", "client-retention", "social-proof"), which no
+// longer match anything - see staleKeysFor/renderStaleKeyWarning below,
+// which now surfaces this in the edit form instead of it staying a
+// silent, undiscoverable gap.
 
-// Role tiers — a quick-fill convenience for the section checkboxes below.
-// Picking a role auto-checks the sections that role would typically need;
-// the checkboxes stay fully editable after, and this has no effect on
-// storage (still just { email: [sectionKey, ...] } in Firestore).
-//
-// Trimmed to roles that would actually log into the Hub - the marketing/
-// client-facing side of the business (leadership, sales, account
-// management, digital marketing, ops/admin). Field production and AV crew
-// (shoot-day crew, editors, live events techs, etc.) don't use the Hub
-// day-to-day, so they're left off rather than padding the list.
-const ROLE_TIERS = [
-  {
-    tier: "Full Access — Leadership",
+// Seed data for agency/teamAccess.roleTiers - only used the very first
+// time this doc is read and has no roleTiers yet (fresh install). After
+// that first save, Firestore is the live source of truth and this
+// constant is never consulted again; edit roles from the UI, not here.
+const DEFAULT_ROLE_TIERS = {
+  "Full Access — Leadership": {
     sections: ["core", "ad-accounts-access", "reporting-health", "production", "content-creation", "account-ops", "audits", "strategy-competition", "sales-pipeline", "retention-social-proof", "agency-globals"],
-    roles: ["Founder / CEO", "Creative Director", "Executive Producer", "Chief Operating Officer (COO)", "Head of Strategy"]
+    note: "Founder / CEO, Creative Director, Executive Producer, Chief Operating Officer (COO), Head of Strategy"
   },
-  {
-    tier: "Sales & Business Development",
+  "Sales & Business Development": {
     sections: ["sales-pipeline", "retention-social-proof", "strategy-competition"],
-    roles: ["Business Development Manager", "New Business Representative", "Sales Coordinator", "Partnerships Manager", "Proposal & Bids Specialist"]
+    note: "Business Development Manager, New Business Representative, Sales Coordinator, Partnerships Manager, Proposal & Bids Specialist"
   },
-  {
-    tier: "Account Management / Client Services",
+  "Account Management / Client Services": {
     sections: ["core", "ad-accounts-access", "reporting-health", "production", "content-creation", "account-ops", "retention-social-proof"],
-    roles: ["Producer", "Senior Producer", "Account Manager", "Account Coordinator", "Client Success Manager"]
+    note: "Producer, Senior Producer, Account Manager, Account Coordinator, Client Success Manager"
   },
-  {
-    tier: "Digital Marketing",
+  "Digital Marketing": {
     sections: ["ad-accounts-access", "reporting-health", "content-creation", "account-ops", "audits", "strategy-competition"],
-    roles: ["Digital Marketing Strategist", "Social Media Manager", "Content Manager", "SEO Specialist", "Paid Ads Specialist", "Email Marketing Specialist", "Analytics / Reporting Specialist"]
+    note: "Digital Marketing Strategist, Social Media Manager, Content Manager, SEO Specialist, Paid Ads Specialist, Email Marketing Specialist, Analytics / Reporting Specialist"
   },
-  {
-    tier: "Operations & Admin",
+  "Operations & Admin": {
     sections: ["core", "ad-accounts-access", "account-ops", "agency-globals"],
-    roles: ["Studio Manager", "Operations Manager", "Executive Assistant", "Bookkeeper / Finance Manager", "HR Coordinator"]
+    note: "Studio Manager, Operations Manager, Executive Assistant, Bookkeeper / Finance Manager, HR Coordinator"
   }
-];
+};
 
 let isEmbedded = false;
 try {
@@ -81,21 +90,23 @@ try {
   console.warn("CORS prevented parent access:", e);
 }
 
-let teamAccessUsers = {}; // { email: [sectionKey, ...] }
+let roleTiers = {}; // { roleName: { sections: [...], note: "" } }
+let teamAccessUsers = {}; // { email: { role: name|null, sections: [...] (if role is null) } }
 let teamActivity = {}; // { email: { lastSeen: isoString } }
-let editingEmail = null; // set while the form is editing an existing entry
+let editingEmail = null; // set while the person form is editing an existing entry
 // Optimistic-concurrency guard (see saveTeamAccessDoc below), kept fresh by
-// listenToTeamAccess's live onSnapshot rather than a one-time load - this
-// tool already re-syncs teamAccessUsers continuously, so the real race this
-// closes is narrower than Referral Tracker/Team Roster's (which only ever
-// loaded once), but it's the same class of "someone else saved while you
-// had the form open" bug, so it gets the same protection.
+// listenToTeamAccess's live onSnapshot rather than a one-time load.
 let docVersion = 0;
 
 function el(id) { return document.getElementById(id); }
 function sectionLabel(key) {
   const def = SECTION_DEFS.find(s => s.key === key);
   return def ? def.label : key;
+}
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str || "";
+  return div.innerHTML;
 }
 
 function formatLastSeen(iso) {
@@ -113,27 +124,64 @@ function formatLastSeen(iso) {
   return new Date(iso).toLocaleDateString();
 }
 
-function populateRoleTierSelect() {
-  const select = el("roleTierSelect");
-  if (!select) return;
-  const options = ROLE_TIERS.map(t => `<option value="${t.tier.replace(/"/g, "&quot;")}">${t.tier}</option>`).join("");
-  select.innerHTML = `<option value="">— Select an access tier —</option>${options}`;
+// Normalizes one stored user entry into { role: name|null, sections: [...] }
+// regardless of which shape it was saved in - the legacy flat array (pre-
+// roles), or the current object shape. Never mutates the input.
+function normalizeUserEntry(entry) {
+  if (Array.isArray(entry)) return { role: null, sections: entry.slice() };
+  if (entry && typeof entry === "object") {
+    return { role: entry.role || null, sections: Array.isArray(entry.sections) ? entry.sections.slice() : [] };
+  }
+  return { role: null, sections: [] };
 }
 
-function applyRoleTier(tierName) {
-  const hint = el("roleTierHint");
-  if (!tierName) {
-    if (hint) hint.textContent = "";
+// The actual enforcement resolution, mirrored in root app.js's
+// initTeamAccessGate (that's the copy that really matters - this one is
+// just for rendering this tool's own table/preview accurately).
+function effectiveSections(entry) {
+  const norm = normalizeUserEntry(entry);
+  if (norm.role && roleTiers[norm.role]) return roleTiers[norm.role].sections || [];
+  return norm.sections;
+}
+
+function staleKeysFor(sections) {
+  return (sections || []).filter(k => !SECTION_KEYS.has(k));
+}
+
+// ── Role select (person form) ──
+function populateRoleSelect() {
+  const select = el("roleSelect");
+  if (!select) return;
+  const options = Object.keys(roleTiers).sort().map(name =>
+    `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`
+  ).join("");
+  select.innerHTML = `<option value="">— Custom (pick sections manually) —</option>${options}`;
+}
+
+function renderRoleSelectionUI() {
+  const roleName = el("roleSelect").value;
+  const previewEl = el("rolePreview");
+  const customGroup = el("customSectionsGroup");
+
+  if (!roleName) {
+    // Custom mode
+    previewEl.textContent = "";
+    customGroup.style.display = "";
     return;
   }
-  const tier = ROLE_TIERS.find(t => t.tier === tierName);
-  if (!tier) return;
-  setCheckedSections(tier.sections);
-  if (hint) {
-    hint.textContent = `Applied "${tier.tier}" access (${tier.sections.map(sectionLabel).join(", ")}). Adjust the checkboxes below if this person needs more or less. See the SOP Wiki for which role maps to which tier.`;
+
+  customGroup.style.display = "none";
+  const role = roleTiers[roleName];
+  if (!role) {
+    previewEl.textContent = "This role no longer exists - pick another or switch to Custom.";
+    return;
   }
+  previewEl.textContent = (role.sections || []).length
+    ? `Grants: ${role.sections.map(sectionLabel).join(", ")}`
+    : "This role currently grants no sections (fully restricted).";
 }
 
+// ── Custom-mode checkboxes ──
 function renderSectionCheckboxes() {
   const container = el("sectionCheckboxes");
   container.innerHTML = SECTION_DEFS.map(s => `
@@ -157,6 +205,18 @@ function setCheckedSections(sections) {
   });
 }
 
+function renderStaleKeyWarning(sections) {
+  const warn = el("staleKeyWarning");
+  const stale = staleKeysFor(sections);
+  if (stale.length) {
+    warn.style.display = "";
+    warn.textContent = `⚠ Includes section key(s) that no longer exist in the current sidebar: ${stale.join(", ")}. Likely left over from before the July 2026 sidebar reorg - uncheck/re-save to clean this up (it isn't granting access to anything anymore).`;
+  } else {
+    warn.style.display = "none";
+    warn.textContent = "";
+  }
+}
+
 function showFormStatus(message, type) {
   const status = el("formStatus");
   status.textContent = message;
@@ -164,6 +224,157 @@ function showFormStatus(message, type) {
   if (message) setTimeout(() => { status.textContent = ""; status.className = "form-status"; }, 4000);
 }
 
+// ── Roles management ──
+function renderRolesList() {
+  const container = el("rolesList");
+  const names = Object.keys(roleTiers).sort();
+  if (!names.length) {
+    container.innerHTML = `<p style="font-size:0.85rem; color:var(--color-text-secondary);">No roles defined yet.</p>`;
+  } else {
+    container.innerHTML = names.map(name => {
+      const role = roleTiers[name] || { sections: [], note: "" };
+      const checkboxes = SECTION_DEFS.map(s => `
+        <label class="checkbox-item">
+          <div class="custom-checkbox">
+            <input type="checkbox" class="role-section-checkbox" data-role="${escapeHtml(name)}" value="${s.key}" ${role.sections.includes(s.key) ? "checked" : ""}>
+            <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </div>
+          <span>${s.label}</span>
+        </label>
+      `).join("");
+      return `
+        <div class="step-card" style="margin-bottom:14px; background: var(--color-surface-2, var(--color-surface));" data-role-block="${escapeHtml(name)}">
+          <div class="form-group">
+            <label>Role name</label>
+            <input type="text" class="role-name-input" data-original="${escapeHtml(name)}" value="${escapeHtml(name)}">
+          </div>
+          <div class="form-group">
+            <label>Typical job titles (optional, for reference only)</label>
+            <input type="text" class="role-note-input" data-role="${escapeHtml(name)}" value="${escapeHtml(role.note || "")}">
+          </div>
+          <div class="form-group">
+            <label>Sections this role grants</label>
+            <div class="section-checkbox-grid">${checkboxes}</div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button type="button" class="btn-primary save-role-btn" data-role="${escapeHtml(name)}" style="padding:8px 16px; font-size:0.85rem;">Save Role</button>
+            <button type="button" class="btn btn-secondary delete-role-btn" data-role="${escapeHtml(name)}" style="padding:8px 16px; font-size:0.85rem;">Delete Role</button>
+          </div>
+          <p class="role-tier-hint role-save-status" data-role="${escapeHtml(name)}"></p>
+        </div>`;
+    }).join("");
+  }
+
+  container.querySelectorAll(".save-role-btn").forEach(btn => {
+    btn.addEventListener("click", () => saveRole(btn.getAttribute("data-role")));
+  });
+  container.querySelectorAll(".delete-role-btn").forEach(btn => {
+    btn.addEventListener("click", () => deleteRole(btn.getAttribute("data-role")));
+  });
+}
+
+function roleSaveStatus(name, message, isError) {
+  const block = document.querySelector(`[data-role-block="${CSS.escape(name)}"] .role-save-status`);
+  if (!block) return;
+  block.textContent = message;
+  block.style.color = isError ? "#ef4444" : "var(--color-success, #10b981)";
+  if (message) setTimeout(() => { block.textContent = ""; }, 4000);
+}
+
+function saveRole(originalName) {
+  const block = document.querySelector(`[data-role-block="${CSS.escape(originalName)}"]`);
+  if (!block) return;
+  const newName = block.querySelector(".role-name-input").value.trim();
+  const note = block.querySelector(".role-note-input").value.trim();
+  const sections = Array.from(block.querySelectorAll(".role-section-checkbox:checked")).map(cb => cb.value);
+
+  if (!newName) {
+    roleSaveStatus(originalName, "Role name can't be empty.", true);
+    return;
+  }
+  if (newName !== originalName && roleTiers[newName]) {
+    roleSaveStatus(originalName, `A role named "${newName}" already exists.`, true);
+    return;
+  }
+
+  const nextRoleTiers = { ...roleTiers };
+  delete nextRoleTiers[originalName];
+  nextRoleTiers[newName] = { sections, note };
+
+  // Renaming cascades to every person currently assigned the old name, so
+  // nobody silently loses access because their role field now points at
+  // a name that no longer exists in roleTiers.
+  const nextUsers = { ...teamAccessUsers };
+  if (newName !== originalName) {
+    Object.keys(nextUsers).forEach(email => {
+      const norm = normalizeUserEntry(nextUsers[email]);
+      if (norm.role === originalName) {
+        nextUsers[email] = { role: newName };
+      }
+    });
+  }
+
+  const prevRoleTiers = roleTiers;
+  const prevUsers = teamAccessUsers;
+  roleTiers = nextRoleTiers;
+  teamAccessUsers = nextUsers;
+
+  saveTeamAccessDoc().then(() => {
+    roleSaveStatus(newName, "Saved.", false);
+    renderRolesList();
+    populateRoleSelect();
+    renderTable();
+  }).catch(err => {
+    roleTiers = prevRoleTiers;
+    teamAccessUsers = prevUsers;
+    roleSaveStatus(originalName, err.message || "Save failed - try again.", true);
+    renderRolesList();
+  });
+}
+
+function deleteRole(name) {
+  const assignedCount = Object.keys(teamAccessUsers).filter(email => normalizeUserEntry(teamAccessUsers[email]).role === name).length;
+  if (assignedCount > 0) {
+    alert(`Can't delete "${name}" - ${assignedCount} teammate(s) are currently assigned this role. Reassign or remove them first (Restricted Teammates table below), then delete the role.`);
+    return;
+  }
+  if (!confirm(`Delete the "${name}" role? This can't be undone.`)) return;
+
+  const prevRoleTiers = roleTiers;
+  const nextRoleTiers = { ...roleTiers };
+  delete nextRoleTiers[name];
+  roleTiers = nextRoleTiers;
+
+  saveTeamAccessDoc().then(() => {
+    renderRolesList();
+    populateRoleSelect();
+    if (window.parent.showBanner) window.parent.showBanner("success", `Deleted role "${name}".`);
+  }).catch(err => {
+    roleTiers = prevRoleTiers;
+    renderRolesList();
+    alert(err.message || "Delete failed - try again.");
+  });
+}
+
+function addRole() {
+  const name = (prompt("Name for the new role:") || "").trim();
+  if (!name) return;
+  if (roleTiers[name]) {
+    alert(`A role named "${name}" already exists.`);
+    return;
+  }
+  const prevRoleTiers = roleTiers;
+  roleTiers = { ...roleTiers, [name]: { sections: [], note: "" } };
+  saveTeamAccessDoc().then(() => {
+    renderRolesList();
+    populateRoleSelect();
+  }).catch(err => {
+    roleTiers = prevRoleTiers;
+    alert(err.message || "Couldn't add role - try again.");
+  });
+}
+
+// ── Restricted teammates table ──
 function renderTable() {
   const tbody = el("restrictionsTableBody");
   const emails = Object.keys(teamAccessUsers).sort();
@@ -171,19 +382,24 @@ function renderTable() {
   el("emptyState").style.display = emails.length === 0 ? "block" : "none";
 
   emails.forEach(email => {
-    const sections = teamAccessUsers[email] || [];
-    const tr = document.createElement("tr");
+    const norm = normalizeUserEntry(teamAccessUsers[email]);
+    const sections = effectiveSections(teamAccessUsers[email]);
     const tagsHtml = sections.length
       ? sections.map(key => `<span class="section-tag">${sectionLabel(key)}</span>`).join("")
       : `<span class="section-tag-empty">No sections (fully restricted)</span>`;
+    const roleCell = norm.role
+      ? (roleTiers[norm.role] ? escapeHtml(norm.role) : `<span style="color:#ef4444;">${escapeHtml(norm.role)} (deleted)</span>`)
+      : `<span class="section-tag-empty">Custom</span>`;
+    const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td class="email-cell">${email}</td>
+      <td class="email-cell">${escapeHtml(email)}</td>
+      <td>${roleCell}</td>
       <td><div class="section-tag-list">${tagsHtml}</div></td>
       <td class="last-seen-cell">${formatLastSeen((teamActivity[email] || {}).lastSeen)}</td>
       <td>
         <div class="row-actions">
-          <button class="edit-btn" data-email="${email}">Edit</button>
-          <button class="remove-btn" data-email="${email}">Remove</button>
+          <button class="edit-btn" data-email="${escapeHtml(email)}">Edit</button>
+          <button class="remove-btn" data-email="${escapeHtml(email)}">Remove</button>
         </div>
       </td>
     `;
@@ -201,9 +417,11 @@ function renderTable() {
 function startEdit(email) {
   editingEmail = email;
   el("restrictEmailInput").value = email;
-  setCheckedSections(teamAccessUsers[email] || []);
-  if (el("roleTierSelect")) el("roleTierSelect").value = "";
-  if (el("roleTierHint")) el("roleTierHint").textContent = "";
+  const norm = normalizeUserEntry(teamAccessUsers[email]);
+  el("roleSelect").value = (norm.role && roleTiers[norm.role]) ? norm.role : "";
+  renderRoleSelectionUI();
+  setCheckedSections(norm.sections);
+  renderStaleKeyWarning(norm.sections);
   el("saveRestrictionBtn").textContent = "Update Access";
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -211,9 +429,10 @@ function startEdit(email) {
 function resetForm() {
   editingEmail = null;
   el("restrictEmailInput").value = "";
+  el("roleSelect").value = "";
+  renderRoleSelectionUI();
   setCheckedSections([]);
-  if (el("roleTierSelect")) el("roleTierSelect").value = "";
-  if (el("roleTierHint")) el("roleTierHint").textContent = "";
+  renderStaleKeyWarning([]);
   el("saveRestrictionBtn").textContent = "Save Access";
 }
 
@@ -226,7 +445,7 @@ function saveTeamAccessDoc() {
   return window.parent.saveVersionedAgencyDoc({
     docRef: ref,
     currentVersion: docVersion,
-    buildPayload: (v) => ({ users: teamAccessUsers, version: v }),
+    buildPayload: (v) => ({ users: teamAccessUsers, roleTiers: roleTiers, version: v }),
   }).then(result => {
     if (!result.ok) {
       const err = new Error(result.reason === "conflict"
@@ -247,13 +466,17 @@ function saveRestriction() {
     return;
   }
 
-  const sections = getCheckedSections();
+  const roleName = el("roleSelect").value;
+  const entry = roleName ? { role: roleName } : { role: null, sections: getCheckedSections() };
 
+  const prevUsers = teamAccessUsers;
+  const nextUsers = { ...teamAccessUsers };
   // Renaming: if editing and the email changed, drop the old key.
   if (editingEmail && editingEmail !== email) {
-    delete teamAccessUsers[editingEmail];
+    delete nextUsers[editingEmail];
   }
-  teamAccessUsers[email] = sections;
+  nextUsers[email] = entry;
+  teamAccessUsers = nextUsers;
 
   saveTeamAccessDoc().then(() => {
     showFormStatus("Saved.", "success");
@@ -263,6 +486,7 @@ function saveRestriction() {
       window.parent.showBanner("success", `Updated Hub access for ${email}.`);
     }
   }).catch(err => {
+    teamAccessUsers = prevUsers;
     console.error("Team access save failed:", err);
     showFormStatus(err.message || "Save failed - try again.", "error");
   });
@@ -270,7 +494,10 @@ function saveRestriction() {
 
 function removeRestriction(email) {
   if (!confirm(`Remove the access restriction for ${email}? They'll go back to seeing everything in the Hub.`)) return;
-  delete teamAccessUsers[email];
+  const prevUsers = teamAccessUsers;
+  const nextUsers = { ...teamAccessUsers };
+  delete nextUsers[email];
+  teamAccessUsers = nextUsers;
   saveTeamAccessDoc().then(() => {
     renderTable();
     if (editingEmail === email) resetForm();
@@ -278,6 +505,7 @@ function removeRestriction(email) {
       window.parent.showBanner("success", `${email} now has full Hub access again.`);
     }
   }).catch(err => {
+    teamAccessUsers = prevUsers;
     console.error("Team access remove failed:", err);
     showFormStatus(err.message || "Couldn't remove - try again.", "error");
   });
@@ -308,6 +536,11 @@ function listenToTeamAccess() {
   window.parent.firebaseOnSnapshot(ref, (docSnap) => {
     const data = docSnap.exists ? docSnap.data() : null;
     teamAccessUsers = (data && data.users) ? data.users : {};
+    // First-ever load with no roleTiers saved yet: seed in-memory from the
+    // defaults so the UI has something to show. Not written to Firestore
+    // until an actual save happens (adding/editing a role, or saving a
+    // person) - doesn't clobber anything by just being viewed.
+    roleTiers = (data && data.roleTiers && Object.keys(data.roleTiers).length) ? data.roleTiers : JSON.parse(JSON.stringify(DEFAULT_ROLE_TIERS));
     docVersion = (data && data.version) || 0;
 
     // Gate the panel itself: a restricted teammate should never be able
@@ -325,6 +558,8 @@ function listenToTeamAccess() {
 
     el("teamAccessContent").style.display = "";
     el("notAuthorizedState").style.display = "none";
+    populateRoleSelect();
+    renderRolesList();
     renderTable();
   }, (err) => {
     console.error("Team access listener error:", err);
@@ -334,11 +569,15 @@ function listenToTeamAccess() {
 
 document.addEventListener("DOMContentLoaded", () => {
   renderSectionCheckboxes();
-  populateRoleTierSelect();
   el("saveRestrictionBtn").addEventListener("click", saveRestriction);
-  if (el("roleTierSelect")) {
-    el("roleTierSelect").addEventListener("change", (e) => applyRoleTier(e.target.value));
-  }
+  el("roleSelect").addEventListener("change", () => {
+    renderRoleSelectionUI();
+    renderStaleKeyWarning(getCheckedSections());
+  });
+  document.querySelectorAll(".section-checkbox").forEach(cb => {
+    cb.addEventListener("change", () => renderStaleKeyWarning(getCheckedSections()));
+  });
+  el("addRoleBtn").addEventListener("click", addRole);
   listenToTeamAccess();
   listenToTeamActivity();
 });

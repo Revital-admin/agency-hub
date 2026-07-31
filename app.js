@@ -251,14 +251,39 @@ function applyTeamAccessRestrictions(allowedSections) {
   }
 }
 
+// Resolves what a restricted teammate's stored agency/teamAccess entry
+// actually grants, regardless of which shape it was saved in - the
+// legacy flat array (every entry before roles existed), the current
+// role-based shape ({role: "Name"} - sections come from roleTiers,
+// live), or the current custom shape ({role: null, sections: [...]}).
+// Mirrored from team-access-manager/js/app.js's effectiveSections/
+// normalizeUserEntry - this is the copy that actually enforces it, that
+// one is just for rendering its own admin UI accurately. If a role was
+// deleted while someone was still assigned it, this falls back to no
+// sections (fully restricted) rather than silently granting full access.
+function resolveAllowedSections(entry, roleTiers) {
+  if (Array.isArray(entry)) return entry;
+  if (entry && typeof entry === "object") {
+    if (entry.role) {
+      const role = (roleTiers || {})[entry.role];
+      return role ? (role.sections || []) : [];
+    }
+    if (Array.isArray(entry.sections)) return entry.sections;
+  }
+  return [];
+}
+
 function initTeamAccessGate() {
   if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseOnSnapshot) return;
   const ref = window.firebaseDoc(window.firebaseDb, "agency", "teamAccess");
   window.firebaseOnSnapshot(ref, (docSnap) => {
     const data = docSnap.exists ? docSnap.data() : null;
     const users = (data && data.users) ? data.users : {};
+    const roleTiers = (data && data.roleTiers) ? data.roleTiers : {};
     const email = (window.currentAdminEmail || "").toLowerCase();
-    const allowedSections = Object.prototype.hasOwnProperty.call(users, email) ? users[email] : null;
+    const allowedSections = Object.prototype.hasOwnProperty.call(users, email)
+      ? resolveAllowedSections(users[email], roleTiers)
+      : null;
     applyTeamAccessRestrictions(allowedSections);
   }, (err) => {
     console.error("Team access gate listener error:", err);
