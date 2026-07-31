@@ -164,7 +164,7 @@ async function addTimeOff() {
   el('timeOffEnd').value = '';
   el('timeOffNote').value = '';
   renderTimeOffSection();
-  renderTable();
+  refreshViews();
 }
 
 async function removeTimeOff(id) {
@@ -176,7 +176,95 @@ async function removeTimeOff(id) {
   const ok = await persist();
   if (!ok) entry.timeOff = previous;
   renderTimeOffSection();
+  refreshViews();
+}
+
+// ── Calendar view (rolling 30-day time-off timeline) ──
+// A plain flex strip of day-cells, one row per team member, rather than a
+// real Sun-Sat month grid: no month-navigation state to manage, no
+// calendar date-math edge cases, and it's actually easier to spot two
+// people's time off overlapping when every row starts at the same "today"
+// origin. Reads the same per-member timeOff arrays the List view's row
+// badges already use - this is just a second render of that same data.
+let rosterView = 'list';
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function toIsoLocal(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+
+function get30DayWindow() {
+  const days = [];
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    days.push(d);
+  }
+  return days;
+}
+
+function findTimeOffForDay(timeOff, iso) {
+  return (Array.isArray(timeOff) ? timeOff : []).find(t => t.startDate <= iso && iso <= (t.endDate || t.startDate));
+}
+
+// Renders whichever view is currently active, plus the summary bar (which
+// renderTable() always computes regardless of view) - call this instead of
+// renderTable() directly anywhere state changes, so Calendar stays in sync
+// without needing its own separate change-tracking.
+function refreshViews() {
   renderTable();
+  if (rosterView === 'calendar') renderTimeline();
+}
+
+function switchRosterView(view) {
+  rosterView = view;
+  el('viewListBtn').classList.toggle('is-active', view === 'list');
+  el('viewCalendarBtn').classList.toggle('is-active', view === 'calendar');
+  el('tableCard').style.display = view === 'list' ? '' : 'none';
+  el('calendarCard').style.display = view === 'calendar' ? '' : 'none';
+  if (view === 'calendar') renderTimeline();
+}
+
+function renderTimeline() {
+  const days = get30DayWindow();
+  const todayIso = toIsoLocal(days[0]);
+
+  const filter = (el('filterInput').value || '').trim().toLowerCase();
+  const rows = members.filter(m => {
+    if (!filter) return true;
+    return (m.memberName || '').toLowerCase().includes(filter) || (m.role || '').toLowerCase().includes(filter);
+  });
+
+  const headerCells = days.map((d, i) => {
+    const showMonth = i === 0 || d.getDate() === 1;
+    const label = showMonth ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : String(d.getDate());
+    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+    return `<div class="timeline-daycell timeline-head${isWeekend ? ' timeline-weekend' : ''}" title="${d.toDateString()}">${label}</div>`;
+  }).join('');
+  el('timelineHeader').innerHTML = `<div class="timeline-row"><div class="timeline-namecell timeline-head">Team Member</div>${headerCells}</div>`;
+
+  if (!rows.length) {
+    el('timelineBody').innerHTML = '<p class="empty-state">No team members to show.</p>';
+    return;
+  }
+
+  el('timelineBody').innerHTML = rows.map(m => {
+    const cells = days.map(d => {
+      const iso = toIsoLocal(d);
+      const hit = findTimeOffForDay(m.timeOff, iso);
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      let cls = 'timeline-daycell';
+      let title = d.toDateString();
+      if (hit) {
+        cls += hit.startDate <= todayIso ? ' timeline-off-active' : ' timeline-off-upcoming';
+        title += hit.note ? ` — ${hit.note}` : ' — Time off';
+      } else if (isWeekend) {
+        cls += ' timeline-weekend';
+      }
+      return `<div class="${cls}" title="${escapeHtml(title)}"></div>`;
+    }).join('');
+    return `<div class="timeline-row"><div class="timeline-namecell">${escapeHtml(m.memberName)}</div>${cells}</div>`;
+  }).join('');
 }
 
 function el(id) { return document.getElementById(id); }
@@ -962,7 +1050,7 @@ function saveMember() {
     // live snapshot before re-rendering rather than waiting for a reload.
     await refreshCapacitySnapshot();
     resetForm();
-    renderTable();
+    refreshViews();
     if (window.parent.showBanner) window.parent.showBanner('success', `Saved ${name}.`);
   });
 }
@@ -990,7 +1078,7 @@ function removeMember(id) {
     if (!ok) return;
     await refreshCapacitySnapshot();
     if (editingId === id) resetForm();
-    renderTable();
+    refreshViews();
   });
 }
 
@@ -1134,7 +1222,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   applyEditPermission();
   resetForm();
   await Promise.all([loadMembers(), refreshCapacitySnapshot()]);
-  renderTable();
+  refreshViews();
 
   el('newMemberBtn').addEventListener('click', () => {
     resetForm();
@@ -1144,7 +1232,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   el('saveMemberBtn').addEventListener('click', saveMember);
   el('cancelEditBtn').addEventListener('click', resetForm);
   el('role').addEventListener('change', updateCurrentClientCountVisibility);
-  el('filterInput').addEventListener('input', renderTable);
+  el('filterInput').addEventListener('input', refreshViews);
+  el('viewListBtn').addEventListener('click', () => switchRosterView('list'));
+  el('viewCalendarBtn').addEventListener('click', () => switchRosterView('calendar'));
   const timeOffAddBtn = el('timeOffAddBtn');
   if (timeOffAddBtn) timeOffAddBtn.addEventListener('click', addTimeOff);
 

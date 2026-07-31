@@ -155,6 +155,62 @@
 
 .empty-state { text-align: center; padding: 40px 20px; color: var(--color-text-muted); font-size: 14px; }
 
+/* ── Time Off timeline (Calendar view) ──
+   Rolling 30-day view, one row per team member. Deliberately a plain
+   flex strip of day-cells rather than a real month grid (see js/app.js
+   comment on renderTimeline) - simpler to build and easier to scan for
+   overlapping time off across people than a Sun-Sat grid would be. */
+.view-toggle-group { display: flex; gap: 6px; }
+.view-toggle-group button.is-active { background: var(--color-accent); border-color: var(--color-accent); color: #1a1a17; }
+
+.timeline-wrap { overflow-x: auto; padding-bottom: 4px; }
+.timeline-row { display: flex; align-items: stretch; }
+.timeline-namecell {
+  flex: 0 0 150px;
+  width: 150px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  position: sticky;
+  left: 0;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+  white-space: nowrap;
+  z-index: 1;
+}
+.timeline-daycell {
+  flex: 0 0 26px;
+  width: 26px;
+  min-width: 26px;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--color-border);
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9.5px;
+  color: var(--color-text-muted);
+}
+.timeline-head {
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.timeline-weekend { background: rgba(255, 255, 255, 0.03); }
+.timeline-off-active { background: #ef4444; }
+.timeline-off-upcoming { background: #f68d5f; }
+.timeline-today-marker { box-shadow: inset 0 0 0 1px var(--color-accent); }
+.timeline-legend { display: flex; gap: 16px; margin-top: 10px; font-size: 11.5px; color: var(--color-text-muted); }
+.timeline-legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
 @media (max-width: 768px) {
   html, body { overflow-x: hidden; }
   .site-title { font-size: 1.6rem; overflow-wrap: break-word; }
