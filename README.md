@@ -6,6 +6,8 @@ Live at **hub.revitalproductions.com**. Access is gated to `@revitalproductions.
 
 For a full map of how the platform fits together (core shell vs. tools, the client data model, auth, shared backend services, and known rough edges), see **[ARCHITECTURE.md](./ARCHITECTURE.md)**. That doc is the up-to-date reference; this README is just the front door.
 
+If client data ever looks wrong, see **[BACKUP_RESTORE_RUNBOOK.md](./BACKUP_RESTORE_RUNBOOK.md)** for the recovery steps.
+
 ---
 
 ## Tech stack

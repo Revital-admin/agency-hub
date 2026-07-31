@@ -34,3 +34,5 @@ The two fixes above stop this specific bug from recurring, but they're both stil
 - The app-level fixes are live and require no ongoing action.
 - Turning on Firestore's scheduled backups (above) is the one remaining step, and it's a one-time setup.
 - If client data ever looks wrong again, the recovery path is: check `agency/clientsDbBackup-shard-*` + `agency/clientsDbBackupShardMeta` first (app-level, most recent), then Firestore's own scheduled backup snapshots if that's enabled.
+- **Update:** the backup write used to fire before the version-conflict check in `commitDatabaseToCloud()`, meaning a rejected save could still overwrite the backup with stale data. Fixed - it now only fires once that check confirms the save is being accepted.
+- For the actual step-by-step (confirming backups are on, checking they're current, and testing a real restore - which hasn't been done yet), see **[BACKUP_RESTORE_RUNBOOK.md](./BACKUP_RESTORE_RUNBOOK.md)**.
