@@ -65,15 +65,21 @@
         </div>
 
         <div class="form-group mt-3">
-          <label>Reference / Embed Links</label>
+          <label>Reference Images</label>
+          <div id="imageDropZone" class="drop-zone mt-2">
+            <div id="imageDropZoneText">Drag images here (multiple at once is fine), or click to upload</div>
+            <input type="file" id="imageFileInput" accept="image/png, image/jpeg, image/webp" multiple style="display:none;">
+          </div>
+          <div id="imageGrid" class="mb-image-grid"></div>
+          <p id="imageGridEmptyState" class="mb-image-grid-empty">No images added yet.</p>
+        </div>
+
+        <div class="form-group mt-3">
+          <label>Reference Links</label>
           <div class="form-row">
             <input type="text" id="embedLabel" class="form-control" placeholder="Label (e.g. Pinterest board)" style="flex:1">
             <input type="url" id="embedUrl" class="form-control" placeholder="https://..." style="flex:2">
             <button id="addEmbedBtn" class="btn-secondary" style="white-space:nowrap;">+ Add Link</button>
-          </div>
-          <div id="imageDropZone" class="drop-zone mt-2">
-            <div id="imageDropZoneText">Drag an image here to add it as a reference, or click to upload</div>
-            <input type="file" id="imageFileInput" accept="image/png, image/jpeg, image/webp" style="display:none;">
           </div>
           <ul id="embedLinksList" style="list-style:none; margin-top:12px; display:flex; flex-direction:column; gap:8px;"></ul>
         </div>

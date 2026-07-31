@@ -116,24 +116,55 @@ function removeDraftEmbedLink(id) {
   renderEmbedLinksList();
 }
 
+function isImageEntry(l) {
+  return l.isImage || (l.url || '').startsWith('data:image');
+}
+
+// Images and plain URL references share one underlying draftEmbedLinks
+// array (and the same saved board.embedLinks field) so existing boards
+// saved before this split still load exactly as they were - only the
+// rendering is split into two visual groups now, filtered from the
+// same list by isImageEntry().
 function renderEmbedLinksList() {
+  renderImageGrid();
+  renderLinksList();
+}
+
+function renderImageGrid() {
+  const grid = el('imageGrid');
+  const empty = el('imageGridEmptyState');
+  const images = draftEmbedLinks.filter(isImageEntry);
+  if (images.length === 0) {
+    grid.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  grid.innerHTML = images.map(l => `
+    <div class="mb-image-tile">
+      <img src="${l.url}" alt="${escapeHtml(l.label)}">
+      <button data-id="${l.id}" class="mb-image-remove-btn" aria-label="Remove image" title="Remove">✕</button>
+      <span class="mb-image-caption">${escapeHtml(l.label)}</span>
+    </div>
+  `).join('');
+  grid.querySelectorAll('.mb-image-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => removeDraftEmbedLink(btn.getAttribute('data-id')));
+  });
+}
+
+function renderLinksList() {
   const list = el('embedLinksList');
-  if (draftEmbedLinks.length === 0) {
+  const links = draftEmbedLinks.filter(l => !isImageEntry(l));
+  if (links.length === 0) {
     list.innerHTML = '<p style="color:var(--color-text-secondary); font-size:13px; margin:0;">No reference links added yet.</p>';
     return;
   }
-  list.innerHTML = draftEmbedLinks.map(l => {
-    const isImage = l.isImage || (l.url || '').startsWith('data:image');
-    const main = isImage
-      ? `<img class="embed-thumb" src="${l.url}" alt=""><span><strong>${escapeHtml(l.label)}</strong> — uploaded image</span>`
-      : `<span><strong>${escapeHtml(l.label)}</strong> — ${escapeHtml(l.url)}</span>`;
-    return `
+  list.innerHTML = links.map(l => `
     <li class="embed-link-chip">
-      <div class="embed-link-main">${main}</div>
+      <div class="embed-link-main"><span><strong>${escapeHtml(l.label)}</strong> — ${escapeHtml(l.url)}</span></div>
       <button data-id="${l.id}" class="remove-embed-btn">✕</button>
     </li>
-  `;
-  }).join('');
+  `).join('');
   document.querySelectorAll('.remove-embed-btn').forEach(btn => {
     btn.addEventListener('click', () => removeDraftEmbedLink(btn.getAttribute('data-id')));
   });
@@ -234,6 +265,25 @@ function toggleShare(id) {
   }
 }
 
+const BOARD_CARD_THUMB_LIMIT = 5;
+
+function renderBoardCardThumbs(board) {
+  const links = board.embedLinks || [];
+  const images = links.filter(isImageEntry);
+  const nonImageCount = links.length - images.length;
+  if (images.length === 0) {
+    return nonImageCount
+      ? `<p style="margin:8px 0 0; font-size:12px; color:var(--color-text-secondary);">${nonImageCount} reference link${nonImageCount === 1 ? '' : 's'}</p>`
+      : '';
+  }
+  const shown = images.slice(0, BOARD_CARD_THUMB_LIMIT);
+  const overflow = images.length - shown.length;
+  const thumbs = shown.map(l => `<img class="board-card-thumb" src="${l.url}" alt="${escapeHtml(l.label)}" title="${escapeHtml(l.label)}">`).join('');
+  const overflowBadge = overflow > 0 ? `<span class="board-card-thumb-overflow">+${overflow}</span>` : '';
+  const linkNote = nonImageCount ? `<span style="font-size:11px; color:var(--color-text-secondary); margin-left:6px;">+ ${nonImageCount} link${nonImageCount === 1 ? '' : 's'}</span>` : '';
+  return `<div style="display:flex; align-items:center; gap:6px; margin-top:10px; flex-wrap:wrap;">${thumbs}${overflowBadge}${linkNote}</div>`;
+}
+
 function renderBoardsList() {
   const client = currentClient();
   const container = el('boardsList');
@@ -257,7 +307,7 @@ function renderBoardsList() {
         </div>
       </div>
       ${board.ideaSummary ? `<p style="margin:12px 0 0; font-size:13px; color:var(--color-text-secondary);">${escapeHtml(board.ideaSummary)}</p>` : ''}
-      ${(board.embedLinks || []).length ? `<p style="margin:8px 0 0; font-size:12px; color:var(--color-text-secondary);">${board.embedLinks.length} reference link${board.embedLinks.length === 1 ? '' : 's'}</p>` : ''}
+      ${renderBoardCardThumbs(board)}
     </div>
   `).join('');
 

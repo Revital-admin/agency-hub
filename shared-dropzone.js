@@ -111,9 +111,28 @@ function processImageFile(file, opts = {}) {
  * Calls onFile(file) once per valid file the user drops or selects —
  * the caller is responsible for calling processImageFile() on it and
  * handling the result/errors.
+ *
+ * Multi-file support: if fileInputEl has the `multiple` attribute set,
+ * every file in the drop/selection is passed to onFile (once each) -
+ * lets a caller drag a whole batch of images in one go instead of
+ * repeating the action per file. Callers that want the original
+ * single-file-only behavior (e.g. a logo upload that replaces, not
+ * appends) simply leave `multiple` off their <input>, unchanged from
+ * before this was added.
  */
 function wireDropZone(zoneEl, fileInputEl, onFile) {
   if (!zoneEl || !fileInputEl) return;
+
+  const allowsMultiple = fileInputEl.hasAttribute("multiple");
+
+  function dispatchFiles(fileList) {
+    if (!fileList || !fileList.length) return;
+    if (allowsMultiple) {
+      Array.from(fileList).forEach(f => onFile(f));
+    } else if (fileList[0]) {
+      onFile(fileList[0]);
+    }
+  }
 
   zoneEl.addEventListener("click", () => fileInputEl.click());
 
@@ -130,15 +149,11 @@ function wireDropZone(zoneEl, fileInputEl, onFile) {
   zoneEl.addEventListener("drop", (e) => {
     e.preventDefault();
     zoneEl.classList.remove("dragover");
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      onFile(e.dataTransfer.files[0]);
-    }
+    dispatchFiles(e.dataTransfer.files);
   });
 
   fileInputEl.addEventListener("change", (e) => {
-    if (e.target.files && e.target.files[0]) {
-      onFile(e.target.files[0]);
-      fileInputEl.value = ""; // allow re-selecting the same file again later
-    }
+    dispatchFiles(e.target.files);
+    fileInputEl.value = ""; // allow re-selecting the same file(s) again later
   });
 }
