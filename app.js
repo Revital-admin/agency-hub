@@ -3609,6 +3609,28 @@ function foldInTestimonialSubmission(target, publicData) {
   return true;
 }
 
+// moodBoardViews is a {boardId: firstViewedAt} map the portal writes to
+// when the client opens the Mood Boards tab (see recordMoodBoardViews in
+// portal/js/app.js). Write-once per boardId on the portal's side, and
+// this fold is the same: a key already present here never gets
+// overwritten by an incoming value, so re-visiting a board later doesn't
+// look like a "change" and doesn't re-trigger anything downstream. The
+// caller (ensureClientPortalListeners) is what turns a genuinely NEW key
+// into an admin notification, by diffing target.moodBoardViews before vs.
+// after calling this.
+function foldInMoodBoardViews(target, publicData) {
+  if (!target || !publicData || !publicData.moodBoardViews) return false;
+  if (!target.moodBoardViews) target.moodBoardViews = {};
+  let changed = false;
+  Object.keys(publicData.moodBoardViews).forEach(boardId => {
+    if (!target.moodBoardViews[boardId]) {
+      target.moodBoardViews[boardId] = publicData.moodBoardViews[boardId];
+      changed = true;
+    }
+  });
+  return changed;
+}
+
 // Appends one entry to a client's notification feed (the bell icon on
 // their portal). Admin-only to create - called from wherever the hub
 // pushes something the client needs to know about (a new approval request,
@@ -4356,6 +4378,13 @@ async function syncPublicPortalDocs(dbSnapshot) {
       // fetchReferralSummaries above). null if this client has never
       // referred anyone under a matching name.
       referralSummary: referralSummaries[name.toLowerCase()] || null,
+      // Client-driven, same story as clientChecklist above (not
+      // lastVisitedAt's story): ensureClientPortalListeners keeps
+      // client.moodBoardViews continuously up to date as views come in, so
+      // by the time this save runs it already reflects the latest state
+      // from both sides - no separate fold-in-existing-doc step needed
+      // here, just carry the current value forward.
+      moodBoardViews: client.moodBoardViews || {},
       // Carried forward as-is (see preservedLastVisitedAt above) - the
       // admin never writes this, only preserves whatever the portal itself
       // already recorded so a Hub save doesn't erase it.
@@ -4429,6 +4458,22 @@ function ensureClientPortalListeners() {
         pushAdminNotification("testimonial", `${name} submitted a testimonial.`);
       }
 
+      // Same before/after-diff approach as approvals above: capture which
+      // board IDs were already marked viewed before folding in whatever
+      // just arrived, so only genuinely new views become a notification -
+      // not every snapshot fire for a board the client already opened
+      // days ago.
+      const priorViewedBoardIds = new Set(Object.keys(currentClient.moodBoardViews || {}));
+      const changedMoodBoardViews = foldInMoodBoardViews(currentClient, data);
+      if (changedMoodBoardViews) {
+        Object.keys(currentClient.moodBoardViews || {})
+          .filter(boardId => !priorViewedBoardIds.has(boardId))
+          .forEach(boardId => {
+            const board = (currentClient.moodBoards || []).find(b => b.id === boardId);
+            pushAdminNotification("moodboard_viewed", `${name} viewed the mood board "${board ? board.title : "Untitled"}".`, name);
+          });
+      }
+
       // Portal last-visited tracking - the portal writes lastVisitedAt to
       // its own public doc on load (see portal/js/app.js); pull it into
       // clientsDb here the same way everything else client-driven arrives,
@@ -4439,7 +4484,7 @@ function ensureClientPortalListeners() {
         currentClient.portalLastVisitedAt = data.lastVisitedAt;
       }
 
-      if (changedOnboarding || changedClientChecklist || changedApprovals || changedTestimonial || changedVisit) {
+      if (changedOnboarding || changedClientChecklist || changedApprovals || changedTestimonial || changedVisit || changedMoodBoardViews) {
         localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
         try { renderOnboardingChecklist(); } catch (e) {}
         try { renderDashboard(); } catch (e) {}

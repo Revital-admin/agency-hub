@@ -119,6 +119,36 @@ function recordPortalVisit() {
   });
 }
 
+// Same idea as recordPortalVisit above, one level more specific: fires
+// when the client actually opens the Mood Boards tab (see the nav-btn
+// click handler below), not just on page load, and writes one first-
+// viewed timestamp per board instead of one per whole visit. Write-once
+// per boardId - a key already in clientData.moodBoardViews never gets
+// overwritten, so revisiting the tab later doesn't send another write or
+// generate a second "viewed" notification on the admin side (see
+// foldInMoodBoardViews in app.js, which relies on this same write-once
+// behavior).
+function recordMoodBoardViews() {
+  const boards = Array.isArray(clientData.moodBoards) ? clientData.moodBoards.filter(b => b.sharedWithClient) : [];
+  if (!boards.length) return;
+
+  if (!clientData.moodBoardViews) clientData.moodBoardViews = {};
+  const nowIso = new Date().toISOString();
+  let changed = false;
+  boards.forEach(board => {
+    if (board.id && !clientData.moodBoardViews[board.id]) {
+      clientData.moodBoardViews[board.id] = nowIso;
+      changed = true;
+    }
+  });
+  if (!changed) return;
+
+  const docRef = db.collection("clients").doc(clientToken);
+  docRef.set({ moodBoardViews: clientData.moodBoardViews }, { merge: true }).catch(err => {
+    console.error("Error recording mood board view:", err);
+  });
+}
+
 function renderPortal() {
   const config = clientData.portalConfig;
   
@@ -968,6 +998,10 @@ navBtns.forEach(btn => {
     btn.classList.add("active");
     const targetSection = document.getElementById(btn.dataset.target);
     targetSection.classList.add("active");
+
+    if (btn.dataset.target === "view-moodboards") {
+      recordMoodBoardViews();
+    }
 
     // Lazy Load logic: If the target section has an iframe with a dataset.src, load it now!
     const targetIframe = targetSection.querySelector("iframe");
