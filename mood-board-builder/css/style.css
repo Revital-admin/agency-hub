@@ -225,6 +225,22 @@
   padding: 8px 12px;
   margin-top: 10px;
 }
+
+.mb-client-size-warning {
+  font-size: 12.5px;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 6px;
+  padding: 9px 13px;
+  margin: 10px 0 4px;
+}
+.mb-client-size-warning.mb-client-size-critical {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.35);
+  font-weight: 500;
+}
 .mb-image-tile {
   position: relative;
   border: 1px solid var(--color-border);

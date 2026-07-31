@@ -133,6 +133,7 @@ function isImageEntry(l) {
 function renderEmbedLinksList() {
   renderImageGrid();
   renderLinksList();
+  renderClientSizeWarning();
 }
 
 // Images are stored inline as base64 data URLs in the client's Firestore
@@ -148,6 +149,68 @@ function estimateDataUrlBytes(dataUrl) {
   const commaIdx = (dataUrl || '').indexOf(',');
   const b64 = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : (dataUrl || '');
   return Math.round(b64.length * 0.75);
+}
+
+// The per-board warning above catches one board getting heavy, but not
+// several boards each just under that limit stacking up on the same
+// client. That matters because clientsDb's Firestore sharding
+// (packClientsDbIntoShards in app.js) bin-packs whole clients into
+// ~700KB shards - it can split the database across clients, but it
+// can't split one client's own record across two shards. If a single
+// client's total data (all their tools, not just mood boards) gets
+// close to Firestore's real ~1MB per-document limit, a save for that
+// client can fail outright, not just look bloated. This estimates that
+// total the same way packClientsDbIntoShards does (Blob byte size of
+// the JSON), swapping in the current in-progress draft for whichever
+// board is being edited so the estimate reflects what Save would
+// actually write.
+const CLIENT_SIZE_WARNING_BYTES = 500 * 1024;
+const CLIENT_SIZE_CRITICAL_BYTES = 850 * 1024;
+
+function estimateClientTotalBytes() {
+  const client = currentClient();
+  if (!client) return 0;
+
+  const clone = Object.assign({}, client);
+  if (Array.isArray(clone.moodBoards)) {
+    clone.moodBoards = clone.moodBoards.filter(b => b.id !== editingBoardId);
+  }
+  const draftBoard = {
+    id: editingBoardId || 'draft',
+    title: el('mbTitle') ? el('mbTitle').value : '',
+    category: el('mbCategory') ? el('mbCategory').value : '',
+    ideaSummary: el('mbIdeaSummary') ? el('mbIdeaSummary').value : '',
+    visualDirection: el('mbVisualDirection') ? el('mbVisualDirection').value : '',
+    keyElements: el('mbKeyElements') ? el('mbKeyElements').value : '',
+    embedLinks: draftEmbedLinks
+  };
+  clone.moodBoards = (clone.moodBoards || []).concat([draftBoard]);
+
+  try {
+    return new Blob([JSON.stringify(clone)]).size;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function renderClientSizeWarning() {
+  const el2 = el('clientSizeWarning');
+  if (!el2) return;
+  const totalBytes = estimateClientTotalBytes();
+
+  if (totalBytes >= CLIENT_SIZE_CRITICAL_BYTES) {
+    const mb = (totalBytes / (1024 * 1024)).toFixed(2);
+    el2.textContent = `This client's total record is ~${mb}MB, close to Firestore's ~1MB-per-document limit. The next save for this client risks failing outright - remove some images before adding more.`;
+    el2.className = 'mb-client-size-warning mb-client-size-critical';
+    el2.style.display = 'block';
+  } else if (totalBytes >= CLIENT_SIZE_WARNING_BYTES) {
+    const kb = Math.round(totalBytes / 1024);
+    el2.textContent = `This client's total record is ~${kb}KB across all their mood boards and other tools. Getting large - worth trimming older/unused reference images.`;
+    el2.className = 'mb-client-size-warning';
+    el2.style.display = 'block';
+  } else {
+    el2.style.display = 'none';
+  }
 }
 
 function renderImageGrid() {
