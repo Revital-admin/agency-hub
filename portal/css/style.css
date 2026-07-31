@@ -1374,14 +1374,91 @@ body {
   margin-top: 8px;
 }
 .moodboard-image-tile {
+  position: relative;
   display: block;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   overflow: hidden;
   aspect-ratio: 1 / 1;
   background: rgba(255, 255, 255, 0.03);
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
 }
 .moodboard-image-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.moodboard-image-caption {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+  color: #fff;
+  font-size: 11px;
+  text-align: left;
+  padding: 16px 8px 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.moodboard-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+.moodboard-lightbox-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+.moodboard-lightbox-body img {
+  max-width: 90vw;
+  max-height: 78vh;
+  object-fit: contain;
+  border-radius: 8px;
+  display: block;
+}
+.moodboard-lightbox-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+.moodboard-lightbox-counter { color: var(--color-text-secondary); opacity: 0.7; }
+.moodboard-lightbox-close {
+  position: absolute;
+  top: 20px; right: 24px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  font-size: 15px;
+  cursor: pointer;
+}
+.moodboard-lightbox-close:hover { background: rgba(255,255,255,0.15); }
+.moodboard-lightbox-nav {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  font-size: 22px;
+  cursor: pointer;
+  flex-shrink: 0;
+  z-index: 1;
+}
+.moodboard-lightbox-nav:hover { background: rgba(255,255,255,0.15); }
+@media (max-width: 640px) {
+  .moodboard-lightbox { padding: 16px; }
+  .moodboard-lightbox-nav { width: 36px; height: 36px; font-size: 18px; }
+}
 .moodboard-embed-wrapper {
   margin-top: 8px;
   border: 1px solid var(--color-border);

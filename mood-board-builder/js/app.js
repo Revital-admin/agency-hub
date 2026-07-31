@@ -130,25 +130,61 @@ function renderEmbedLinksList() {
   renderLinksList();
 }
 
+// Images are stored inline as base64 data URLs in the client's Firestore
+// doc (see shared-dropzone.js), and the whole clientsDb gets rewritten on
+// every save - so a board that quietly accumulates a lot of full-size
+// images is a real cost, not just a UI concern. Rough estimate only
+// (base64 runs ~4/3 the size of the original bytes); good enough for a
+// heads-up, not meant to be exact.
+const IMAGE_COUNT_WARNING_THRESHOLD = 8;
+const IMAGE_SIZE_WARNING_BYTES = 2 * 1024 * 1024; // ~2MB of base64 across one board
+
+function estimateDataUrlBytes(dataUrl) {
+  const commaIdx = (dataUrl || '').indexOf(',');
+  const b64 = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : (dataUrl || '');
+  return Math.round(b64.length * 0.75);
+}
+
 function renderImageGrid() {
   const grid = el('imageGrid');
   const empty = el('imageGridEmptyState');
+  const warningEl = el('imageGridWarning');
   const images = draftEmbedLinks.filter(isImageEntry);
+
   if (images.length === 0) {
     grid.innerHTML = '';
     empty.style.display = 'block';
+    if (warningEl) warningEl.style.display = 'none';
     return;
   }
   empty.style.display = 'none';
+
+  if (warningEl) {
+    const totalBytes = images.reduce((sum, l) => sum + estimateDataUrlBytes(l.url), 0);
+    if (images.length >= IMAGE_COUNT_WARNING_THRESHOLD || totalBytes >= IMAGE_SIZE_WARNING_BYTES) {
+      const mb = (totalBytes / (1024 * 1024)).toFixed(1);
+      warningEl.textContent = `This board has ${images.length} images (~${mb}MB) stored directly in the client's record. Consider trimming to the strongest references.`;
+      warningEl.style.display = 'block';
+    } else {
+      warningEl.style.display = 'none';
+    }
+  }
+
   grid.innerHTML = images.map(l => `
     <div class="mb-image-tile">
       <img src="${l.url}" alt="${escapeHtml(l.label)}">
       <button data-id="${l.id}" class="mb-image-remove-btn" aria-label="Remove image" title="Remove">✕</button>
-      <span class="mb-image-caption">${escapeHtml(l.label)}</span>
+      <input type="text" class="mb-image-caption-input" data-id="${l.id}" value="${escapeHtml(l.label)}" placeholder="Add a caption..." aria-label="Image caption">
     </div>
   `).join('');
   grid.querySelectorAll('.mb-image-remove-btn').forEach(btn => {
     btn.addEventListener('click', () => removeDraftEmbedLink(btn.getAttribute('data-id')));
+  });
+  grid.querySelectorAll('.mb-image-caption-input').forEach(input => {
+    input.addEventListener('input', () => {
+      const entry = draftEmbedLinks.find(l => l.id === input.getAttribute('data-id'));
+      if (entry) entry.label = input.value;
+    });
   });
 }
 

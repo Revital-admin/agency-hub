@@ -685,6 +685,19 @@ window.addEventListener('error', function(e) {
     </main>
   </div>
 
-  <script src="js/app.js?v=76"></script>
+  <div id="moodboardLightbox" class="moodboard-lightbox" style="display:none;">
+    <button type="button" id="moodboardLightboxClose" class="moodboard-lightbox-close" aria-label="Close">✕</button>
+    <button type="button" id="moodboardLightboxPrev" class="moodboard-lightbox-nav moodboard-lightbox-prev" aria-label="Previous image">‹</button>
+    <div class="moodboard-lightbox-body">
+      <img id="moodboardLightboxImg" src="" alt="">
+      <div class="moodboard-lightbox-meta">
+        <span id="moodboardLightboxCaption"></span>
+        <span id="moodboardLightboxCounter" class="moodboard-lightbox-counter"></span>
+      </div>
+    </div>
+    <button type="button" id="moodboardLightboxNext" class="moodboard-lightbox-nav moodboard-lightbox-next" aria-label="Next image">›</button>
+  </div>
+
+  <script src="js/app.js?v=77"></script>
 </body>
 </html>

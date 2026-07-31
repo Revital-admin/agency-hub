@@ -1439,10 +1439,11 @@ function renderMoodBoards() {
       ${images.length ? `
         <div class="moodboard-section-label">Reference Images</div>
         <div class="moodboard-image-grid">
-          ${images.map(l => `
-            <a class="moodboard-image-tile" href="${escapeHtml(l.url)}" target="_blank" rel="noopener" title="${escapeHtml(l.label || '')}">
+          ${images.map((l, idx) => `
+            <button type="button" class="moodboard-image-tile" data-board-id="${escapeHtml(board.id || "")}" data-idx="${idx}" aria-label="View ${escapeHtml(l.label || 'reference image')} full size">
               <img src="${escapeHtml(l.url)}" alt="${escapeHtml(l.label || '')}" loading="lazy">
-            </a>
+              ${l.label ? `<span class="moodboard-image-caption">${escapeHtml(l.label)}</span>` : ""}
+            </button>
           `).join("")}
         </div>
       ` : ""}
@@ -1458,11 +1459,79 @@ function renderMoodBoards() {
     </div>
   `;
   }).join("");
+
+  container.querySelectorAll(".moodboard-image-tile").forEach(btn => {
+    btn.addEventListener("click", () => {
+      openMoodBoardLightbox(btn.getAttribute("data-board-id"), parseInt(btn.getAttribute("data-idx"), 10));
+    });
+  });
 }
 
 function isMoodBoardImage(l) {
   return !!(l && (l.isImage || (l.url || "").startsWith("data:image")));
 }
+
+// ── Mood board image lightbox ──
+// Click-to-new-tab on a raw base64 data URL was a rough experience (huge
+// ugly URL bar, no zoom, no way to browse the board's other images). This
+// is a lightweight in-page modal instead, with prev/next across whichever
+// board's grid was opened from.
+let lightboxImages = [];
+let lightboxIndex = 0;
+
+function openMoodBoardLightbox(boardId, idx) {
+  const board = (clientData.moodBoards || []).find(b => b.id === boardId);
+  if (!board) return;
+  lightboxImages = (board.embedLinks || []).filter(isMoodBoardImage);
+  lightboxIndex = idx;
+  if (!lightboxImages.length) return;
+
+  const overlay = document.getElementById("moodboardLightbox");
+  if (!overlay) return;
+  overlay.style.display = "flex";
+  renderLightboxImage();
+}
+
+function renderLightboxImage() {
+  const img = document.getElementById("moodboardLightboxImg");
+  const caption = document.getElementById("moodboardLightboxCaption");
+  const counter = document.getElementById("moodboardLightboxCounter");
+  const current = lightboxImages[lightboxIndex];
+  if (!img || !current) return;
+  img.src = current.url;
+  img.alt = current.label || "";
+  if (caption) caption.textContent = current.label || "";
+  if (counter) counter.textContent = lightboxImages.length > 1 ? `${lightboxIndex + 1} / ${lightboxImages.length}` : "";
+}
+
+function closeMoodBoardLightbox() {
+  const overlay = document.getElementById("moodboardLightbox");
+  if (overlay) overlay.style.display = "none";
+  lightboxImages = [];
+}
+
+function moodBoardLightboxStep(delta) {
+  if (!lightboxImages.length) return;
+  lightboxIndex = (lightboxIndex + delta + lightboxImages.length) % lightboxImages.length;
+  renderLightboxImage();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const overlay = document.getElementById("moodboardLightbox");
+  if (!overlay) return;
+  document.getElementById("moodboardLightboxClose")?.addEventListener("click", closeMoodBoardLightbox);
+  document.getElementById("moodboardLightboxPrev")?.addEventListener("click", () => moodBoardLightboxStep(-1));
+  document.getElementById("moodboardLightboxNext")?.addEventListener("click", () => moodBoardLightboxStep(1));
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeMoodBoardLightbox();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (overlay.style.display !== "flex") return;
+    if (e.key === "Escape") closeMoodBoardLightbox();
+    if (e.key === "ArrowLeft") moodBoardLightboxStep(-1);
+    if (e.key === "ArrowRight") moodBoardLightboxStep(1);
+  });
+});
 
 // ── Testimonial submission ──
 // Writes directly to this client's own public clients/{token} doc, same
