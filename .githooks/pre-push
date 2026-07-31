@@ -1,0 +1,25 @@
+#!/bin/sh
+# Pre-push hook: run the static-analysis smoke test before anything leaves
+# this machine. Blocks the push if it fails.
+#
+# Not enabled by default - git doesn't auto-run hooks from a committed
+# .githooks/ folder, they have to be pointed at explicitly per clone. One-
+# time setup (see README.md "Deploying" section):
+#
+#   git config core.hooksPath .githooks
+#
+# To skip once (e.g. an emergency push): git push --no-verify
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+echo "Running smoke test before push (scripts/verify-hub.js)..."
+node "$REPO_ROOT/scripts/verify-hub.js"
+STATUS=$?
+
+if [ $STATUS -ne 0 ]; then
+  echo ""
+  echo "Push blocked: smoke test failed. Fix the ✗ items above, or use 'git push --no-verify' to skip in an emergency."
+  exit 1
+fi
+
+exit 0

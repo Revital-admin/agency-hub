@@ -39,7 +39,15 @@ npx wrangler deploy
 node scripts/verify-hub.js
 ```
 
-There's no automated test suite or CI for this project - it's ~40k lines of hand-maintained JS with no safety net beyond this script. It statically checks every JS file for syntax errors, confirms every tool folder is actually wired into the nav/reload system (the exact bug class fixed in the "6 tools with hardcoded iframe src" commit — a tool that's never wired in silently never refreshes when you switch clients), and flags a couple of advisory-only concerns (direct Firestore writes that skip the shared version-guard helper, JS referencing an element id that doesn't exist in its own HTML). See the comment at the top of the script for details. Exits non-zero if anything real is broken.
+There's no automated test suite for this project - it's ~40k lines of hand-maintained JS with no safety net beyond this script. It statically checks every JS file for syntax errors, confirms every tool folder is actually wired into the nav/reload system and every iframe-based tab has a matching dispatch case (the exact bug class fixed in the "6 tools with hardcoded iframe src" commit — a tool that's never wired in silently never refreshes when you switch clients), and flags a couple of advisory-only concerns (direct Firestore writes that skip the shared version-guard helper, JS referencing an element id that doesn't exist in its own HTML). See the comment at the top of the script for details. Exits non-zero if anything real is broken.
+
+**Make it automatic (one-time setup, per clone):**
+
+```bash
+git config core.hooksPath .githooks
+```
+
+This points git at the committed `.githooks/pre-push` hook, which runs the smoke test on every `git push` and blocks the push if it fails (`git push --no-verify` skips it in an emergency). Cloudflare's git-connected auto-deploy has no build-time checks of its own — without this, a broken push goes straight to production the moment it lands on `main`. Every clone needs to run the `git config` line once; it isn't inherited automatically. A GitHub Actions workflow (`.github/workflows/verify.yml`) runs the same check server-side as a second layer, independent of whether any given clone has the hook enabled — see that file's comment for the one-time GitHub branch-protection setting that would let it actually block a bad push, not just flag it.
 
 ---
 

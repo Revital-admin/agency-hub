@@ -1,0 +1,31 @@
+# Server-side twin of .githooks/pre-push - runs on every push/PR
+# regardless of whether any given clone has the local hook enabled
+# (git config core.hooksPath .githooks). Cloudflare's git-connected
+# auto-deploy has no build-time checks of its own, so without this
+# nothing catches a broken push before it goes live.
+#
+# By itself this only reports pass/fail as a check on the commit/PR -
+# it does NOT block the push or Cloudflare's auto-deploy from
+# happening. To make a red check actually stop a bad merge to main,
+# turn on branch protection (one-time, GitHub repo Settings ->
+# Branches -> Branch protection rules -> main -> "Require status
+# checks to pass before merging" -> select "verify-hub"). That's a
+# GitHub admin setting, not something this workflow file can turn on
+# by itself.
+name: verify-hub
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify-hub:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node scripts/verify-hub.js
