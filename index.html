@@ -775,6 +775,28 @@
             </div>
           </div>
 
+          <h3 class="dashboard-section-title">Agency-Wide</h3>
+          <!-- Sales Pipeline Value: agency-wide, unlike every other card on
+               this dashboard (which are all scoped to the active client) -
+               sums Proposal Calculator's computedMonthly across every
+               client that isn't yet a signed contract in Contract &
+               Invoice Tracker. See renderSalesPipelineValue in app.js. -->
+          <div class="tool-progress-card">
+            <div class="tool-card-header">
+              <span class="tool-card-title">Sales Pipeline Value</span>
+              <div class="tool-card-icon-wrap icon-purple">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+              </div>
+            </div>
+            <div class="tool-card-stat">
+              <div id="dashPipelineValue" class="tool-stat-value">$0</div>
+              <div id="dashPipelineCount" class="tool-stat-desc">0 open proposals</div>
+            </div>
+            <div class="tool-card-actions" style="margin-top: 16px;">
+              <button class="btn-card-go" data-go="tab-proposal">Go to Proposal Calculator &rarr;</button>
+            </div>
+          </div>
+
           <h3 class="dashboard-section-title">Account Health</h3>
           <!-- Client Health (from Weekly Account Check-In) -->
           <div class="tool-progress-card">

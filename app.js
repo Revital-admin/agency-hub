@@ -281,6 +281,10 @@ function boot() {
   try { loadAdminNotifications(); } catch(e) { console.error("AdminNotifications Error:", e); }
   try { initTeamAccessGate(); } catch(e) { console.error("TeamAccessGate Error:", e); }
   try { refreshAllViews(); } catch(e) { console.error("Refresh Error:", e); }
+  // Overview Dashboard (tab-dashboard) is active by default at boot, so
+  // no tab-click fires to trigger this the way it does for every other
+  // tab - needs its own explicit first call here.
+  renderSalesPipelineValue().catch(e => console.error("SalesPipelineValue Error:", e));
 
   const resetSandboxBtn = document.getElementById("resetSandboxBtn");
   if (resetSandboxBtn) {
@@ -1093,6 +1097,12 @@ function initTabNavigation() {
       if (targetTab === "tab-myclients") {
         renderMyClients().catch(e => console.error("Error in renderMyClients:", e));
       }
+      // Same reasoning as My Clients above - reads contractInvoices too,
+      // agency-wide rather than active-client, so refreshed on open
+      // rather than on every save.
+      if (targetTab === "tab-dashboard") {
+        renderSalesPipelineValue().catch(e => console.error("Error in renderSalesPipelineValue:", e));
+      }
     });
   });
 
@@ -1216,6 +1226,7 @@ function refreshAllViews() {
   // side effect of the admin happening to save something.
   try { ensureClientPortalListeners(); } catch (e) {}
   try { runStaleClientNudgeCheck(); } catch (e) {}
+  runRenewalNudgeCheck().catch(e => console.error("Error in runRenewalNudgeCheck:", e));
 
   // Toggle Sandbox Banner
   const sandboxName = "Quick Sandbox (One-Offs)";
@@ -1299,6 +1310,79 @@ async function fetchContractRenewalsByClientName() {
   return byName;
 }
 
+// Returns the set of client names with a signed (active) contract in
+// Contract & Invoice Tracker's agency/contractInvoices - used below to
+// exclude already-signed clients from Sales Pipeline Value, since a
+// proposal only counts as open pipeline if the deal hasn't closed yet.
+// Separate read from fetchContractRenewalsByClientName even though it's
+// the same doc - they're used independently and neither is hot-path
+// enough that combining them into one fetch is worth the coupling.
+async function fetchSignedClientNameSet() {
+  const signed = new Set();
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return signed;
+  try {
+    const ref = window.firebaseDoc(window.firebaseDb, "agency", "contractInvoices");
+    const snap = await window.firebaseGetDoc(ref);
+    const list = (snap.exists && snap.data().list) || [];
+    list.forEach(r => { if (r.clientName && r.contractStatus === "Signed") signed.add(r.clientName); });
+  } catch (e) {
+    console.warn("Couldn't load signed-client list for Sales Pipeline Value:", e);
+  }
+  return signed;
+}
+
+// Agency-wide (unlike every other Overview Dashboard card, which is
+// scoped to the active client): sums Proposal Calculator's
+// computedMonthly across every client that isn't yet a signed contract.
+// There was previously no way to see total open-proposal value without
+// opening each client's Proposal Calculator one at a time and reading
+// the on-screen total.
+async function renderSalesPipelineValue() {
+  const valueEl = document.getElementById("dashPipelineValue");
+  const countEl = document.getElementById("dashPipelineCount");
+  if (!valueEl) return;
+
+  const signedNames = await fetchSignedClientNameSet();
+  const sandboxName = "Quick Sandbox (One-Offs)";
+
+  let total = 0, count = 0;
+  Object.keys(clientsDb).forEach(name => {
+    if (name === sandboxName || signedNames.has(name)) return;
+    const proposal = clientsDb[name].proposal;
+    const monthly = proposal && typeof proposal.computedMonthly === "number" ? proposal.computedMonthly : 0;
+    if (monthly > 0) {
+      total += monthly;
+      count++;
+    }
+  });
+
+  valueEl.textContent = "$" + Math.round(total).toLocaleString("en-US");
+  if (countEl) countEl.textContent = count + (count === 1 ? " open proposal" : " open proposals");
+}
+
+// Same doc as fetchContractRenewalsByClientName, different signal: which
+// clients currently have an overdue invoice. Kept separate rather than
+// merged into that function's return shape, since runRenewalNudgeCheck
+// already depends on that one's exact shape and this is a distinct,
+// independent use (My Clients' "needs attention" signals below).
+async function fetchOverdueInvoiceAmountsByClientName() {
+  const byName = {};
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return byName;
+  try {
+    const ref = window.firebaseDoc(window.firebaseDb, "agency", "contractInvoices");
+    const snap = await window.firebaseGetDoc(ref);
+    const list = (snap.exists && snap.data().list) || [];
+    list.forEach(r => {
+      if (r.clientName && r.invoiceStatus === "Overdue") {
+        byName[r.clientName] = r.invoiceAmount || "";
+      }
+    });
+  } catch (e) {
+    console.warn("Couldn't load overdue invoice info for My Clients:", e);
+  }
+  return byName;
+}
+
 async function renderMyClients() {
   const listEl = document.getElementById("myClientsList");
   const emptyEl = document.getElementById("myClientsEmpty");
@@ -1319,7 +1403,10 @@ async function renderMyClients() {
     return;
   }
 
-  const renewalsByName = await fetchContractRenewalsByClientName();
+  const [renewalsByName, overdueByName] = await Promise.all([
+    fetchContractRenewalsByClientName(),
+    fetchOverdueInvoiceAmountsByClientName(),
+  ]);
 
   listEl.innerHTML = mine.map(c => {
     const checklist = Array.isArray(c.onboardingChecklist) ? c.onboardingChecklist : [];
@@ -1343,12 +1430,18 @@ async function renderMyClients() {
       }
     }
 
+    let overdueNote = "";
+    if (Object.prototype.hasOwnProperty.call(overdueByName, c.name)) {
+      const amt = overdueByName[c.name];
+      overdueNote = ` &middot; <span style="color:#ef4444;">invoice overdue${amt ? ` (${escapeHtmlForMyClients(String(amt))})` : ''}</span>`;
+    }
+
     return `
       <div class="step-card" style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; padding:16px 20px;">
         <div>
           <div style="font-weight:600; font-size:1rem;">${escapeHtmlForMyClients(c.name)}</div>
           <div style="font-size:0.8rem; color:var(--text-muted); margin-top:4px;">
-            Onboarding ${pct}% complete${pendingApprovals > 0 ? ` &middot; <span style="color:#f68d5f;">${pendingApprovals} approval${pendingApprovals === 1 ? '' : 's'} waiting</span>` : ''}${renewalNote}
+            Onboarding ${pct}% complete${pendingApprovals > 0 ? ` &middot; <span style="color:#f68d5f;">${pendingApprovals} approval${pendingApprovals === 1 ? '' : 's'} waiting</span>` : ''}${renewalNote}${overdueNote}
           </div>
         </div>
         <div style="display:flex; align-items:center; gap:10px;">
@@ -3608,6 +3701,73 @@ const STALE_NUDGE_CHECK_INTERVAL_MS = 60 * 60 * 1000; // re-scan at most hourly
 const STALE_NUDGE_DAYS_THRESHOLD = 7;
 const STALE_NUDGE_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000; // don't re-nudge same client within 3 days
 
+// Builds a renewal-reminder email draft - same "who's this for" shape as
+// buildStaleNudgeDraftEmail above (sendEnabled:true + a real "from" only
+// when the account manager's name/email and the client's contact email
+// are both on file). Renewal date comes from Contract & Invoice Tracker's
+// own agency/contractInvoices doc via fetchContractRenewalsByClientName
+// (see My Clients, which reads the same doc for the same reason) - it's
+// not on the client object itself.
+function buildRenewalNudgeDraftEmail(client, name, days) {
+  const config = client.portalConfig || {};
+  if (!config.clientContactEmail) return null;
+
+  const contactFirstName = (config.clientContactName || name).split(' ')[0];
+  const amFirstName = config.accountManagerName ? config.accountManagerName.split(' ')[0] : "our team";
+  const whenPhrase = days < 0
+    ? `was due to renew ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} ago`
+    : days === 0
+      ? "renews today"
+      : `is coming up for renewal in ${days} day${days === 1 ? '' : 's'}`;
+
+  const subject = `Your agreement with Revital Productions — renewal coming up`;
+  const body = `Hi ${contactFirstName},\n\nJust a heads-up that your agreement with Revital Productions ${whenPhrase}. Let us know if you'd like to review anything before it renews, or if you have any questions about the next term.\n\nThanks,\n${amFirstName}`;
+
+  const draft = { to: config.clientContactEmail, subject: subject, body: body };
+  if (config.accountManagerEmail && config.accountManagerName) {
+    draft.from = `${config.accountManagerName} <${config.accountManagerEmail}>`;
+    draft.sendEnabled = true;
+  }
+  return draft;
+}
+
+let lastRenewalNudgeCheckAt = 0;
+const RENEWAL_NUDGE_CHECK_INTERVAL_MS = 60 * 60 * 1000; // same hourly cadence as the stale-client check
+const RENEWAL_NUDGE_DAYS_THRESHOLD = 30; // flag renewals within 30 days (matches My Clients' own renewal note)
+const RENEWAL_NUDGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // renewals move slower than portal check-ins, so a longer cooldown than the 3-day stale-client one
+
+// Same notification-bell nudge pattern as runStaleClientNudgeCheck below,
+// for contracts coming up (or already overdue) for renewal instead of
+// unread portal approvals. Async (unlike that one) because the renewal
+// date isn't in clientsDb - it's a second doc read, same one My Clients
+// uses. Called fire-and-forget from refreshAllViews, not awaited.
+async function runRenewalNudgeCheck() {
+  const now = Date.now();
+  if (now - lastRenewalNudgeCheckAt < RENEWAL_NUDGE_CHECK_INTERVAL_MS) return;
+  lastRenewalNudgeCheckAt = now;
+
+  const renewalsByName = await fetchContractRenewalsByClientName();
+
+  Object.entries(renewalsByName).forEach(([name, renewalDate]) => {
+    const client = clientsDb[name];
+    if (!client || !client.portalConfig || !client.portalConfig.magicToken) return;
+
+    const days = Math.round((new Date(renewalDate) - new Date(new Date().toDateString())) / 86400000);
+    if (Number.isNaN(days) || days > RENEWAL_NUDGE_DAYS_THRESHOLD) return;
+
+    const alreadyNudged = adminNotifications.some(n =>
+      n.type === 'contract_renewal' &&
+      n.clientName === name &&
+      (now - new Date(n.createdAt).getTime()) < RENEWAL_NUDGE_COOLDOWN_MS
+    );
+    if (alreadyNudged) return;
+
+    const draftEmail = buildRenewalNudgeDraftEmail(client, name, days);
+    const phrase = days < 0 ? `renewal was due ${Math.abs(days)}d ago` : `renews in ${days}d`;
+    pushAdminNotification('contract_renewal', `${name}'s contract ${phrase}.`, name, draftEmail);
+  });
+}
+
 function runStaleClientNudgeCheck() {
   const now = Date.now();
   if (now - lastStaleNudgeCheckAt < STALE_NUDGE_CHECK_INTERVAL_MS) return;
@@ -3690,9 +3850,11 @@ function renderAdminNotifications() {
     body.appendChild(p);
     body.appendChild(time);
 
-    // The Hub has no email-sending backend (see Auto-Send Email
-    // Integration Plan.md) - this only ever reveals a pre-filled draft for
-    // the admin to review, edit, and send themselves.
+    // Most flows still only reveal a pre-filled draft for the admin to
+    // review, edit, and send themselves (mailto/copy) - only drafts with
+    // sendEnabled:true (see pushAdminNotification) get a real "Send"
+    // button that calls /api/send-email server-side. (Auto-Send Email
+    // Integration Plan.md has the full story on what's wired vs. not.)
     if (item.draftEmail) {
       const draftBtn = document.createElement("button");
       draftBtn.type = "button";

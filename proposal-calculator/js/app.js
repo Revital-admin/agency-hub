@@ -496,9 +496,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   function saveState() {
     const checkedValues = [];
     serviceCheckboxes.forEach(cb => { if (cb.checked) checkedValues.push(cb.value); });
-    
+
+    // computedMonthly/computedSetup: the actual dollar totals calculate()
+    // just wrote into the DOM, read back the same way generatePDFProposal
+    // already does (parse the $ text back to a number) rather than
+    // re-deriving them here - saveState() doesn't have access to
+    // calculate()'s local monthly/setup variables, and re-running the
+    // whole pricing formula (base fee + tier + per-item add-ons + custom
+    // items + rush fee + term discount) a second time here would be a
+    // second copy of that logic to keep in sync. Nothing previously
+    // persisted these - every other field in `state` is a raw input, not
+    // a derived total - so there was no way to see proposal $ value
+    // without opening this tool and reading the on-screen total. Used by
+    // the root Hub's Sales Pipeline Value rollup on Overview Dashboard.
+    const monthlyNum = parseInt((totalMonthlyEl.textContent || '').replace(/[^0-9]/g, '')) || 0;
+    const setupNum = parseInt((totalSetupEl.textContent || '').replace(/[^0-9]/g, '')) || 0;
+
     const state = {
       baseFee: baseFee.value,
+      computedMonthly: monthlyNum,
+      computedSetup: setupNum,
       services: checkedValues,
       spendTier: spendTier ? spendTier.value : "0",
       blogCount: blogCount ? blogCount.value : "0",
