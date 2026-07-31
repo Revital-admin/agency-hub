@@ -186,6 +186,18 @@ function populateClientDatalist() {
   });
 }
 
+// invoiceAmount is a free-text field (placeholder "$0.00") - people type
+// "$3,500", "3500", "3500.00", whatever - so this strips everything but
+// digits/decimal/minus before parsing rather than trusting a clean number.
+function parseAmountToNumber(v) {
+  if (!v) return 0;
+  const n = parseFloat(String(v).replace(/[^0-9.-]/g, ''));
+  return isNaN(n) ? 0 : n;
+}
+function formatCurrency(n) {
+  return '$' + Math.round(n).toLocaleString('en-US');
+}
+
 function renderSummary() {
   const awaitingSignature = records.filter(r => r.contractStatus === 'Sent');
   const renewalsDue = records.filter(r => {
@@ -200,6 +212,31 @@ function renderSummary() {
   el('summaryRenewalsDue').textContent = renewalsDue.length;
   el('summaryDueSoon').textContent = dueSoon.length;
   el('summaryOverdue').textContent = overdue.length;
+
+  // Dollar rollups, added alongside the existing counts above - there was
+  // no aggregate revenue figure anywhere in the Hub before this (per-client
+  // billing existed, nothing summed it up). "Active Billing" is a proxy
+  // for MRR: every signed client's invoiceAmount, added together - not a
+  // true MRR figure since nothing here enforces the invoice cycle is
+  // monthly, but it's the best available signal from data that already
+  // exists, not a new field to maintain.
+  const activeBillingEl = el('summaryActiveBillingTotal');
+  const overdueTotalEl = el('summaryOverdueTotal');
+  const renewalsValueEl = el('summaryRenewalsDueTotal');
+  if (activeBillingEl) {
+    const activeBillingTotal = records
+      .filter(r => r.contractStatus === 'Signed')
+      .reduce((sum, r) => sum + parseAmountToNumber(r.invoiceAmount), 0);
+    activeBillingEl.textContent = formatCurrency(activeBillingTotal);
+  }
+  if (overdueTotalEl) {
+    const overdueTotal = overdue.reduce((sum, r) => sum + parseAmountToNumber(r.invoiceAmount), 0);
+    overdueTotalEl.textContent = formatCurrency(overdueTotal);
+  }
+  if (renewalsValueEl) {
+    const renewalsValue = renewalsDue.reduce((sum, r) => sum + parseAmountToNumber(r.invoiceAmount), 0);
+    renewalsValueEl.textContent = formatCurrency(renewalsValue);
+  }
 }
 
 function optionsHtml(list, selected) {

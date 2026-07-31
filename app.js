@@ -1085,6 +1085,14 @@ function initTabNavigation() {
       if (targetTab === "tab-report") {
         updateReportPreview();
       }
+      // Refreshed on open rather than on every clientsDb change (like
+      // renderDashboard/renderOnboardingChecklist above) - it reads an
+      // extra doc (contractInvoices) for renewal dates, and My Clients
+      // isn't the active-client view those others are, so there's no
+      // reason to pay that cost on every save across the whole Hub.
+      if (targetTab === "tab-myclients") {
+        renderMyClients().catch(e => console.error("Error in renderMyClients:", e));
+      }
     });
   });
 
@@ -1252,6 +1260,112 @@ function refreshAllViews() {
 }
 
 // ── Dashboard Overview Renderer ──
+function escapeHtmlForMyClients(str) {
+  const div = document.createElement("div");
+  div.textContent = str || "";
+  return div.innerHTML;
+}
+
+// "My Clients" - a filtered, cross-client view for whoever's logged in,
+// instead of paging through the workspace switcher one client at a time.
+// Matches clientsDb entries against window.currentAdminEmail via the same
+// portalConfig.accountManagerEmail field Team Roster & Capacity's live
+// caseload and Client Portal Manager's capacity warning already use (see
+// getAccountManagerCapacitySnapshot) - no new data to maintain, just
+// another view onto it. Lives directly in the core (like Overview
+// Dashboard) rather than as an iframe tool, since it needs to scan every
+// client in clientsDb at once, not just the active one.
+//
+// Renewal date isn't on the client object itself - it lives in Contract &
+// Invoice Tracker's own agency/contractInvoices doc (see that tool's
+// header comment for why it's kept separate from clientsDb). Read fresh
+// each time this view opens rather than kept as a live listener, since
+// it's just informational context here, not something this view edits.
+async function fetchContractRenewalsByClientName() {
+  const byName = {};
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return byName;
+  try {
+    const ref = window.firebaseDoc(window.firebaseDb, "agency", "contractInvoices");
+    const snap = await window.firebaseGetDoc(ref);
+    const list = (snap.exists && snap.data().list) || [];
+    list.forEach(r => {
+      if (r.clientName && r.contractStatus === "Signed" && r.contractRenewalDate) {
+        byName[r.clientName] = r.contractRenewalDate;
+      }
+    });
+  } catch (e) {
+    console.warn("Couldn't load contract renewal dates for My Clients:", e);
+  }
+  return byName;
+}
+
+async function renderMyClients() {
+  const listEl = document.getElementById("myClientsList");
+  const emptyEl = document.getElementById("myClientsEmpty");
+  if (!listEl) return;
+
+  const myEmail = (window.currentAdminEmail || "").trim().toLowerCase();
+  const sandboxName = "Quick Sandbox (One-Offs)";
+
+  const mine = Object.keys(clientsDb)
+    .filter(name => name !== sandboxName)
+    .map(name => clientsDb[name])
+    .filter(c => c && myEmail && c.portalConfig && (c.portalConfig.accountManagerEmail || "").trim().toLowerCase() === myEmail)
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+  if (emptyEl) emptyEl.style.display = mine.length === 0 ? "block" : "none";
+  if (mine.length === 0) {
+    listEl.innerHTML = "";
+    return;
+  }
+
+  const renewalsByName = await fetchContractRenewalsByClientName();
+
+  listEl.innerHTML = mine.map(c => {
+    const checklist = Array.isArray(c.onboardingChecklist) ? c.onboardingChecklist : [];
+    let total = 0, checked = 0;
+    checklist.forEach(cat => (cat.items || []).forEach(item => {
+      total++;
+      if (item.checked) checked++;
+    }));
+    const pct = total > 0 ? Math.round((checked / total) * 100) : 0;
+    const pendingApprovals = Array.isArray(c.pendingApprovals) ? c.pendingApprovals.length : 0;
+    const stage = (c.portalConfig && c.portalConfig.engagementStage) || "onboarding";
+
+    let renewalNote = "";
+    const renewalDate = renewalsByName[c.name];
+    if (renewalDate) {
+      const days = Math.round((new Date(renewalDate) - new Date(new Date().toDateString())) / 86400000);
+      if (!Number.isNaN(days) && days <= 30) {
+        renewalNote = days < 0
+          ? ` &middot; <span style="color:#ef4444;">renewal overdue</span>`
+          : ` &middot; <span style="color:#f68d5f;">renews in ${days}d</span>`;
+      }
+    }
+
+    return `
+      <div class="step-card" style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; padding:16px 20px;">
+        <div>
+          <div style="font-weight:600; font-size:1rem;">${escapeHtmlForMyClients(c.name)}</div>
+          <div style="font-size:0.8rem; color:var(--text-muted); margin-top:4px;">
+            Onboarding ${pct}% complete${pendingApprovals > 0 ? ` &middot; <span style="color:#f68d5f;">${pendingApprovals} approval${pendingApprovals === 1 ? '' : 's'} waiting</span>` : ''}${renewalNote}
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:0.72rem; text-transform:capitalize; background:rgba(99,102,241,0.15); color:#6366f1; padding:3px 10px; border-radius:20px; white-space:nowrap;">${escapeHtmlForMyClients(stage)}</span>
+          <button type="button" class="btn btn-secondary my-clients-open-btn" data-client="${escapeHtmlForMyClients(c.name)}" style="padding:6px 14px; font-size:0.8rem;">Open</button>
+        </div>
+      </div>`;
+  }).join("");
+
+  listEl.querySelectorAll(".my-clients-open-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      switchClient(btn.getAttribute("data-client"));
+      navigateToTab("tab-dashboard");
+    });
+  });
+}
+
 function renderDashboard() {
   const client = getActiveClient();
   if (!client) return;

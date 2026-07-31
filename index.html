@@ -214,6 +214,12 @@
             </button>
           </li>
           <li>
+            <button class="nav-item-btn" data-tab="tab-myclients">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+              <span>My Clients</span>
+            </button>
+          </li>
+          <li>
             <button class="nav-item-btn" data-tab="tab-onboarding">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
               <span>Client Onboarding</span>
@@ -1098,6 +1104,34 @@
             </div>
           </div>
         </div>
+      </section>
+
+      <!-- ── SECTION: MY CLIENTS ──
+           Rendered directly (not an iframe tool) since it needs full
+           clientsDb access to filter across every client at once - see
+           renderMyClients() in app.js. Shows only the clients where this
+           logged-in admin's email matches portalConfig.accountManagerEmail
+           (set in Client Portal Manager) - the same live-matching data
+           Team Roster & Capacity and the account-manager capacity warning
+           already use. Anyone not set as an AM on any client (production/
+           creative roles, or an AM before any client has them assigned
+           yet) just sees the empty state - this is a filtered view of the
+           same clientsDb everyone already has full access to, not a new
+           permission boundary. -->
+      <section id="tab-myclients" class="tab-section">
+        <div class="site-header">
+          <div class="header-eyebrow">
+            <span class="dot"></span>
+            <span>Your Portfolio</span>
+          </div>
+          <h1 class="site-title">My <em>Clients</em></h1>
+          <p class="site-subtitle">Every client where you're the account manager on file, with onboarding progress and anything waiting on you - instead of paging through the workspace switcher one client at a time.</p>
+        </div>
+
+        <div id="myClientsList" style="display:flex; flex-direction:column; gap:10px; max-width: 900px;"></div>
+        <p id="myClientsEmpty" style="display:none; color:var(--text-muted); font-size:0.9rem; max-width:600px;">
+          No clients are assigned to you yet - the Account Manager Name/Email on a client's Client Portal Manager page decides who shows up here.
+        </p>
       </section>
 
       <!-- ── SECTION: INTAKE REQUEST GEN ── -->
