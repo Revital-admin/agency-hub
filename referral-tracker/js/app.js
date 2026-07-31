@@ -16,6 +16,7 @@ try {
 const SANDBOX_NAME = "Quick Sandbox (One-Offs)";
 
 let referrals = [];
+let docVersion = 0; // optimistic-concurrency guard, see persist() below
 
 function el(id) { return document.getElementById(id); }
 
@@ -29,7 +30,9 @@ async function loadReferrals() {
     try {
       const ref = getReferralsDocRef();
       const snap = await window.parent.firebaseGetDoc(ref);
-      referrals = (snap && snap.exists && snap.data().list) || [];
+      const data = snap && snap.exists ? snap.data() : null;
+      referrals = (data && data.list) || [];
+      docVersion = (data && data.version) || 0;
       return;
     } catch (e) {
       console.error("Couldn't load referrals from the cloud:", e);
@@ -47,31 +50,32 @@ async function loadReferrals() {
 }
 
 async function persist() {
-  if (isEmbedded && window.parent.firebaseSetDocFromJSON) {
-    try {
-      const ref = getReferralsDocRef();
-      // A plain object literal built in this iframe's own JS realm gets
-      // rejected by Firestore ("a custom Object object") when handed
-      // straight to a Firestore call bound to the parent page - pass a
-      // JSON string instead so the parent parses it in its own realm.
-      await window.parent.firebaseSetDocFromJSON(ref, JSON.stringify({ list: referrals }));
-      // agency/referrals lives outside clientsDb (see header comment), so
-      // saving here never goes through the parent's own saveDatabase() -
-      // which is what actually pushes fresh referralSummary data out to
-      // each client's public portal doc (see syncPublicPortalDocs and
-      // fetchReferralSummaries in the parent Hub's app.js). Without this
-      // call, a client's "My Referrals" tab would only pick up a referral
-      // logged here the next time the admin happened to save something
-      // unrelated elsewhere in the Hub - could be hours or days later.
-      if (window.parent.saveDatabase) window.parent.saveDatabase();
-      return true;
-    } catch (e) {
-      console.error("Couldn't save referrals to the cloud:", e);
+  if (isEmbedded && window.parent.saveVersionedAgencyDoc) {
+    const result = await window.parent.saveVersionedAgencyDoc({
+      docRef: getReferralsDocRef(),
+      currentVersion: docVersion,
+      buildPayload: (v) => ({ list: referrals, version: v }),
+    });
+    if (!result.ok) {
+      if (result.reason === 'error') console.error("Couldn't save referrals to the cloud:", result.error);
       if (window.parent.showBanner) {
-        window.parent.showBanner('error', "Couldn't save — your change may be lost on reload: " + e.message);
+        window.parent.showBanner('error', result.reason === 'conflict'
+          ? "Someone else updated the referral list while you had it open. Reload the page to see their changes, then redo your edit."
+          : "Couldn't save — your change may be lost on reload: " + result.error.message);
       }
       return false;
     }
+    docVersion = result.version;
+    // agency/referrals lives outside clientsDb (see header comment), so
+    // saving here never goes through the parent's own saveDatabase() -
+    // which is what actually pushes fresh referralSummary data out to
+    // each client's public portal doc (see syncPublicPortalDocs and
+    // fetchReferralSummaries in the parent Hub's app.js). Without this
+    // call, a client's "My Referrals" tab would only pick up a referral
+    // logged here the next time the admin happened to save something
+    // unrelated elsewhere in the Hub - could be hours or days later.
+    if (window.parent.saveDatabase) window.parent.saveDatabase();
+    return true;
   }
   try {
     localStorage.setItem('referral-tracker-list', JSON.stringify(referrals));
