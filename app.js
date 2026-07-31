@@ -417,6 +417,7 @@ let iframeNeedsReload = {
   "tab-subscriptiontracker": true,
   "tab-activitylog": true,
   "tab-teamroster": true,
+  "tab-hourslog": true,
   "tab-testimonialtracker": true,
   "tab-intakequalifier": true,
   "tab-discoverycall": true,
@@ -1001,6 +1002,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-teamroster":
       renderTeamRoster();
+      break;
+    case "tab-hourslog":
+      renderHoursLog();
       break;
     case "tab-testimonialtracker":
       renderTestimonialTracker();
@@ -2216,6 +2220,10 @@ function renderActivityLogTab() {
 // ── Team Roster & Capacity Controller ──
 function renderTeamRoster() {
   setIframeAbsoluteSrc('#tab-teamroster iframe', "team-roster/index.html");
+}
+
+function renderHoursLog() {
+  setIframeAbsoluteSrc('#tab-hourslog iframe', "hours-tracker/index.html");
 }
 
 // ── Testimonial & Review Requests Controller ──
