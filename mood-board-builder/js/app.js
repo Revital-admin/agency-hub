@@ -426,6 +426,17 @@ function toggleShare(id) {
   const board = (client.moodBoards || []).find(b => b.id === id);
   if (!board) return;
   board.sharedWithClient = !board.sharedWithClient;
+
+  // Same pattern as Client Portal Manager (new approval) and Monthly
+  // Report Archive (new report) - the client's own portal bell should
+  // light up when there's something new to look at, not just have the
+  // Mood Boards nav item silently appear with no nudge. Only fires when
+  // turning sharing ON; hiding a board isn't something worth notifying
+  // the client about.
+  if (board.sharedWithClient && isEmbedded && window.parent.pushClientNotification) {
+    window.parent.pushClientNotification(client, "moodboard", `A new mood board, "${board.title}", is ready for you to view.`);
+  }
+
   persist();
   renderBoardsList();
   if (isEmbedded && window.parent.showBanner) {
