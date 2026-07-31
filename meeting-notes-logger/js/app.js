@@ -161,7 +161,7 @@ function wireDynamicListeners() {
   });
 }
 
-function addActionItemRow() {
+function addActionItemRow(prefillText) {
   const container = el('newActionItemsList');
   const row = document.createElement('div');
   row.className = 'action-item-row';
@@ -169,9 +169,151 @@ function addActionItemRow() {
     <input type="text" class="form-control ai-input" placeholder="E.g. Send updated logo files">
     <button class="btn-remove-action">✕</button>
   `;
+  const input = row.querySelector('input');
+  if (prefillText) input.value = prefillText;
   row.querySelector('.btn-remove-action').addEventListener('click', () => row.remove());
   container.appendChild(row);
-  row.querySelector('input').focus();
+  if (!prefillText) input.focus();
+}
+
+/* ============================================================
+   IMPORT MEETING NOTES FROM FILE — drag-and-drop
+   Handles the common real-world case at Revital: Gemini auto-generates
+   notes in a Google Doc during a Google Meet call, and someone downloads
+   that doc (as .txt or .docx) to log here instead of retyping it by hand.
+   .txt is read directly; .docx is unpacked client-side via mammoth.js
+   (loaded in index.html) - both end up as one plain-text string.
+   ============================================================ */
+
+// Gemini's notes docs consistently use one of these headings right before
+// the follow-up list - matching any of them (case-insensitively, allowing
+// a trailing colon) lets everything after it be auto-split into
+// individual action item rows instead of landing in the summary textarea
+// as one big undifferentiated block.
+const ACTION_ITEMS_HEADING_RE = /^(suggested next steps|next steps|action items)\s*:?\s*$/i;
+
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error('Could not read the file.'));
+    reader.readAsText(file);
+  });
+}
+
+function readFileAsArrayBuffer(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error('Could not read the file.'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+async function extractTextFromNotesFile(file) {
+  const name = (file.name || '').toLowerCase();
+  if (name.endsWith('.docx')) {
+    if (typeof mammoth === 'undefined') {
+      throw new Error("The .docx reader didn't load - check your internet connection and try again, or drop a .txt file instead.");
+    }
+    const buffer = await readFileAsArrayBuffer(file);
+    const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+    return result.value || '';
+  }
+  if (name.endsWith('.txt')) {
+    return await readFileAsText(file);
+  }
+  throw new Error('Only .txt and .docx files are supported.');
+}
+
+// Splits the raw extracted text into { summaryText, actionItems } by
+// finding the first line that matches ACTION_ITEMS_HEADING_RE. Everything
+// before that heading (trimmed) becomes the summary; everything after it
+// is split into non-empty lines, each stripped of a leading bullet/dash/
+// number so "- Send proof by Friday" and "1. Send proof by Friday" both
+// become the clean action item text "Send proof by Friday".
+function splitNotesIntoSummaryAndActionItems(rawText) {
+  const lines = (rawText || '').replace(/\r\n/g, '\n').split('\n');
+  const headingIndex = lines.findIndex(line => ACTION_ITEMS_HEADING_RE.test(line.trim()));
+
+  if (headingIndex === -1) {
+    return { summaryText: rawText.trim(), actionItems: [] };
+  }
+
+  const summaryText = lines.slice(0, headingIndex).join('\n').trim();
+  const actionItems = lines.slice(headingIndex + 1)
+    .map(line => line.trim().replace(/^[-*•]\s*/, '').replace(/^\d+[\.\)]\s*/, ''))
+    .filter(line => line.length > 0);
+
+  return { summaryText, actionItems };
+}
+
+async function handleNotesFileDrop(file) {
+  const dropzone = el('notesDropzone');
+  const dropzoneText = dropzone ? dropzone.querySelector('span') : null;
+  const originalText = dropzoneText ? dropzoneText.textContent : '';
+  if (dropzoneText) dropzoneText.textContent = 'Reading file…';
+
+  try {
+    const rawText = await extractTextFromNotesFile(file);
+    const { summaryText, actionItems } = splitNotesIntoSummaryAndActionItems(rawText);
+
+    if (!summaryText && actionItems.length === 0) {
+      throw new Error("That file didn't have any readable text in it.");
+    }
+
+    el('newSummary').value = summaryText;
+    // Auto-fill the title from the filename (minus extension) only if the
+    // title field is still empty, so this never clobbers something the
+    // user already typed in.
+    const titleInput = el('newTitle');
+    if (titleInput && !titleInput.value.trim()) {
+      titleInput.value = file.name.replace(/\.(docx|txt)$/i, '').replace(/[-_]+/g, ' ').trim();
+    }
+
+    el('newActionItemsList').innerHTML = '';
+    actionItems.forEach(text => addActionItemRow(text));
+
+    const message = actionItems.length > 0
+      ? `Imported notes from "${file.name}" — ${actionItems.length} action item${actionItems.length === 1 ? '' : 's'} detected.`
+      : `Imported notes from "${file.name}".`;
+    if (isEmbedded && window.parent.showBanner) {
+      window.parent.showBanner('success', message);
+    }
+  } catch (e) {
+    console.error('Failed to import notes file:', e);
+    if (isEmbedded && window.parent.showBanner) {
+      window.parent.showBanner('error', "Couldn't import that file: " + e.message);
+    } else {
+      alert("Couldn't import that file: " + e.message);
+    }
+  } finally {
+    if (dropzoneText) dropzoneText.textContent = originalText;
+  }
+}
+
+function wireNotesDropzone() {
+  const zone = el('notesDropzone');
+  const input = el('notesFileInput');
+  if (!zone || !input) return;
+
+  zone.addEventListener('click', () => input.click());
+  zone.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+  });
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', (e) => { e.preventDefault(); zone.classList.remove('dragover'); });
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) handleNotesFileDrop(file);
+  });
+  input.addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) handleNotesFileDrop(file);
+    input.value = '';
+  });
 }
 
 function saveMeeting() {
@@ -229,8 +371,9 @@ function saveMeeting() {
 document.addEventListener('DOMContentLoaded', () => {
   populateClientSelect();
   el('clientSelect').addEventListener('change', renderState);
-  el('addActionItemBtn').addEventListener('click', addActionItemRow);
+  el('addActionItemBtn').addEventListener('click', () => addActionItemRow());
   el('saveMeetingBtn').addEventListener('click', saveMeeting);
+  wireNotesDropzone();
   renderState();
 
   // The parent Hub loads its client database asynchronously (instant

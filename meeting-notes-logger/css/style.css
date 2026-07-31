@@ -204,6 +204,37 @@
   color: #f87171;
 }
 
+.notes-dropzone {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1.5px dashed var(--color-border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.notes-dropzone:hover,
+.notes-dropzone:focus-visible {
+  border-color: var(--primary);
+  color: var(--text-bright);
+  outline: none;
+}
+
+.notes-dropzone.dragover {
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--text-bright);
+}
+
+.notes-dropzone svg {
+  flex-shrink: 0;
+  color: var(--primary);
+}
+
 .meetings-timeline {
   display: flex;
   flex-direction: column;

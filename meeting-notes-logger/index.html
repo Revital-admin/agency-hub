@@ -9,6 +9,10 @@
   <link rel="stylesheet" href="../shared-components.css">
   <link rel="stylesheet" href="../forms.css?v=2">
   <link rel="stylesheet" href="css/style.css">
+  <!-- mammoth.js: extracts plain text from .docx files client-side, so a
+       downloaded Gemini/Google Meet notes doc can be dragged in directly
+       without the user manually copy-pasting. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.11.0/mammoth.browser.min.js"></script>
 </head>
 <body class="module-body">
   <div class="module-container">
@@ -72,7 +76,12 @@
             </div>
             <div class="form-group">
               <label>Notes / Takeaways</label>
-              <textarea id="newSummary" class="form-control" rows="3" placeholder="What was discussed?"></textarea>
+              <div id="notesDropzone" class="notes-dropzone" tabindex="0">
+                <input type="file" id="notesFileInput" accept=".txt,.docx" style="display:none;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <span>Drop a Gemini/Google Meet notes file here (.txt or .docx), or click to browse</span>
+              </div>
+              <textarea id="newSummary" class="form-control mt-2" rows="3" placeholder="What was discussed? (or drop a notes file above to auto-fill)"></textarea>
             </div>
             <div class="form-group">
               <label>Action Items (Syncs to Client Portal)</label>
