@@ -134,101 +134,141 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadState();
 
   // ── Package Presets ──
-  const presets = {
-    presetBasic: [
-      "Feed Posts (static images, carousels)",
-      "Reels & Short-Form Video",
-      "Stories",
-      "Community Management (responding to comments, DMs, engaging followers)",
-      "Content Calendar Management"
-    ],
-    presetGrowth: [
-      "Meta Ads (Facebook + Instagram)",
-      "Google Ads — Search",
-      "Audience Research & Targeting",
-      "Ad Creative Production",
-      "Campaign Setup & Management",
-      "Budget Management & Reporting"
-    ],
-    presetFull: [
-      "Feed Posts (static images, carousels)",
-      "Reels & Short-Form Video",
-      "Community Management (responding to comments, DMs, engaging followers)",
-      "Content Calendar Management",
-      "Meta Ads (Facebook + Instagram)",
-      "Google Ads — Search",
-      "Audience Research & Targeting",
-      "Campaign Setup & Management",
-      "On-Page SEO (meta titles, descriptions, headers, content optimization)",
-      "Technical SEO (site speed, crawlability, schema markup)",
-      "Keyword Research & Strategy",
-      "Newsletter Campaigns",
-      "Analytics Setup (GA4, Meta Pixel, GTM)"
-    ]
-  };
-
-  ['presetBasic', 'presetGrowth', 'presetFull'].forEach(presetId => {
-    const btn = document.getElementById(presetId);
-    if (btn) {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.service-cb').forEach(cb => cb.checked = false);
-        const services = presets[presetId];
-        document.querySelectorAll('.service-cb').forEach(cb => {
-          if (services.includes(cb.value)) cb.checked = true;
-        });
-        calculate();
-      });
-    }
-  });
-
-  // ── Website & Branding Package Presets ──
-  // These are flat "starting at" bundle prices (logo/branding work isn't
-  // broken out as individual line items in the service catalog above), so
-  // rather than toggling checkboxes we add a single tagged one-time custom
-  // item. They're additive, not exclusive with the social/ads presets or
-  // any other checked services, so existing selections are left alone.
-  // Clicking a different tier (or the same one again) swaps out any
-  // previously-added package item rather than stacking duplicates.
-  const websiteBrandingPresets = {
-    presetWebBasic: {
-      tag: 'pkg-basic-website',
-      name: 'Basic Website Package (up to 5 pages, responsive design, contact form, basic SEO, 2 revision rounds)',
-      price: 700
+  // Historically these were hardcoded here (3 service-bundle presets + 3
+  // flat website/branding presets). Now they're admin-editable from Service
+  // Pricing Admin and live at agency/packagePresets - this list is only the
+  // fallback used if that doc doesn't exist yet (e.g. nobody's opened the
+  // new admin panel), so behavior for existing users doesn't change until
+  // someone actually customizes the presets.
+  const DEFAULT_PRESETS = [
+    {
+      id: 'presetBasic', name: 'Basic Social', type: 'services',
+      services: [
+        "Feed Posts (static images, carousels)",
+        "Reels & Short-Form Video",
+        "Stories",
+        "Community Management (responding to comments, DMs, engaging followers)",
+        "Content Calendar Management"
+      ]
     },
-    presetWebBranding: {
-      tag: 'pkg-branding-website',
-      name: 'Branding + Website Package (logo, brand style guide, up to 5-page website, 2 revision rounds)',
-      price: 1400
+    {
+      id: 'presetGrowth', name: 'Growth Ads', type: 'services',
+      services: [
+        "Meta Ads (Facebook + Instagram)",
+        "Google Ads — Search",
+        "Audience Research & Targeting",
+        "Ad Creative Production",
+        "Campaign Setup & Management",
+        "Budget Management & Reporting"
+      ]
     },
-    presetWebComplete: {
-      tag: 'pkg-complete-brand',
-      name: 'Complete Brand Package (full brand guidelines, up to 7-page custom website, social templates, 3 revision rounds)',
-      price: 2100
+    {
+      id: 'presetFull', name: 'Full-Stack', type: 'services',
+      services: [
+        "Feed Posts (static images, carousels)",
+        "Reels & Short-Form Video",
+        "Community Management (responding to comments, DMs, engaging followers)",
+        "Content Calendar Management",
+        "Meta Ads (Facebook + Instagram)",
+        "Google Ads — Search",
+        "Audience Research & Targeting",
+        "Campaign Setup & Management",
+        "On-Page SEO (meta titles, descriptions, headers, content optimization)",
+        "Technical SEO (site speed, crawlability, schema markup)",
+        "Keyword Research & Strategy",
+        "Newsletter Campaigns",
+        "Analytics Setup (GA4, Meta Pixel, GTM)"
+      ]
+    },
+    {
+      id: 'presetWebBasic', name: 'Basic Website ($700)', type: 'flat',
+      itemName: 'Basic Website Package (up to 5 pages, responsive design, contact form, basic SEO, 2 revision rounds)',
+      price: 700, feeType: 'setup'
+    },
+    {
+      id: 'presetWebBranding', name: 'Branding + Website ($1,400)', type: 'flat',
+      itemName: 'Branding + Website Package (logo, brand style guide, up to 5-page website, 2 revision rounds)',
+      price: 1400, feeType: 'setup'
+    },
+    {
+      id: 'presetWebComplete', name: 'Complete Brand ($2,100+)', type: 'flat',
+      itemName: 'Complete Brand Package (full brand guidelines, up to 7-page custom website, social templates, 3 revision rounds)',
+      price: 2100, feeType: 'setup'
     }
-  };
+  ];
 
-  Object.keys(websiteBrandingPresets).forEach(presetId => {
-    const btn = document.getElementById(presetId);
-    if (btn) {
-      btn.addEventListener('click', () => {
-        const preset = websiteBrandingPresets[presetId];
-        // Remove any previously-added website/branding package item first
-        // (whether it's this same tier or a different one) so re-clicking
-        // swaps instead of stacking.
-        const allTags = Object.values(websiteBrandingPresets).map(p => p.tag);
-        customItemsArray = customItemsArray.filter(item => !allTags.includes(item.presetTag));
-        customItemsArray.push({
-          id: Date.now(),
-          name: preset.name,
-          price: preset.price,
-          type: 'setup',
-          presetTag: preset.tag
-        });
-        renderCustomItems();
-        calculate();
-      });
+  let PRESETS = DEFAULT_PRESETS;
+
+  async function loadPresets() {
+    if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb || !window.parent.firebaseGetDoc) return;
+    try {
+      const ref = window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "packagePresets");
+      const snap = await window.parent.firebaseGetDoc(ref);
+      const data = snap && snap.exists ? snap.data() : null;
+      if (data && Array.isArray(data.presets) && data.presets.length > 0) {
+        PRESETS = data.presets;
+      }
+    } catch (e) {
+      console.warn("Couldn't load package presets, using built-in defaults:", e);
     }
-  });
+  }
+  await loadPresets();
+
+  // "services" presets clear every checkbox then check just the listed
+  // services - same behavior as the original hardcoded Basic/Growth/Full
+  // buttons. "flat" presets add a single tagged custom line item and swap
+  // out (rather than stack alongside) any other flat preset previously
+  // added, so re-clicking a tier or picking a different one never
+  // duplicates line items.
+  function renderPresetButtons() {
+    const serviceContainer = document.getElementById('servicePresetButtons');
+    const flatContainer = document.getElementById('flatPresetButtons');
+    if (!serviceContainer || !flatContainer) return;
+    serviceContainer.innerHTML = '';
+    flatContainer.innerHTML = '';
+
+    PRESETS.forEach(preset => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn-copy';
+      btn.style.cssText = 'flex: 1; padding: 8px; font-size: 0.8rem;';
+      btn.textContent = preset.name;
+
+      if (preset.type === 'services') {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.service-cb').forEach(cb => cb.checked = false);
+          document.querySelectorAll('.service-cb').forEach(cb => {
+            if ((preset.services || []).includes(cb.value)) cb.checked = true;
+          });
+          calculate();
+        });
+        serviceContainer.appendChild(btn);
+      } else if (preset.type === 'flat') {
+        btn.addEventListener('click', () => {
+          const allFlatIds = PRESETS.filter(p => p.type === 'flat').map(p => p.id);
+          customItemsArray = customItemsArray.filter(item => !allFlatIds.includes(item.presetTag));
+          customItemsArray.push({
+            id: Date.now(),
+            name: preset.itemName || preset.name,
+            price: preset.price,
+            type: preset.feeType || 'setup',
+            presetTag: preset.id
+          });
+          renderCustomItems();
+          calculate();
+        });
+        flatContainer.appendChild(btn);
+      }
+    });
+
+    if (!PRESETS.some(p => p.type === 'services')) {
+      serviceContainer.innerHTML = '<p class="section-desc" style="margin:0;">No service-bundle presets configured yet.</p>';
+    }
+    if (!PRESETS.some(p => p.type === 'flat')) {
+      flatContainer.innerHTML = '<p class="section-desc" style="margin:0;">No flat-package presets configured yet.</p>';
+    }
+  }
+  renderPresetButtons();
 
   // Bind events
   baseFee.addEventListener('input', calculate);

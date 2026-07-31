@@ -73,18 +73,13 @@
 
       <div class="input-section" style="background: var(--bg-card); padding: 16px; border-radius: var(--radius-md); margin-bottom: 24px; border: 1px solid var(--border-color);">
         <h3 style="margin-top: 0;">⚡ Package Presets</h3>
-        <p class="section-desc" style="margin-bottom: 12px;">Instantly load common scope combinations.</p>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button id="presetBasic" class="btn-copy" style="flex: 1; padding: 8px; font-size: 0.8rem;">Basic Social</button>
-          <button id="presetGrowth" class="btn-copy" style="flex: 1; padding: 8px; font-size: 0.8rem;">Growth Ads</button>
-          <button id="presetFull" class="btn-copy" style="flex: 1; padding: 8px; font-size: 0.8rem;">Full-Stack</button>
-        </div>
-        <p class="section-desc" style="margin: 14px 0 8px;">Website &amp; branding packages (added as a one-time line item, stacks with any services above).</p>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button id="presetWebBasic" class="btn-copy" style="flex: 1; padding: 8px; font-size: 0.8rem;">Basic Website ($700)</button>
-          <button id="presetWebBranding" class="btn-copy" style="flex: 1; padding: 8px; font-size: 0.8rem;">Branding + Website ($1,400)</button>
-          <button id="presetWebComplete" class="btn-copy" style="flex: 1; padding: 8px; font-size: 0.8rem;">Complete Brand ($2,100+)</button>
-        </div>
+        <p class="section-desc" style="margin-bottom: 12px;">Instantly load common scope combinations. Edit these anytime in Service Pricing Admin.</p>
+        <!-- Buttons rendered by js/app.js's renderPresetButtons(), from
+             agency/packagePresets (Firestore) with a built-in fallback list
+             if that doc hasn't been customized yet - see DEFAULT_PRESETS. -->
+        <div id="servicePresetButtons" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
+        <p class="section-desc" style="margin: 14px 0 8px;">Flat packages (added as a one-time or monthly line item, stacks with any services above).</p>
+        <div id="flatPresetButtons" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
       </div>
 
       <div class="input-section">

@@ -204,3 +204,146 @@ body {
   text-align: center;
   padding: 40px 0;
 }
+
+/* ── Package Presets panel ── */
+.pricing-admin-section {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.pricing-admin-section-header h2 {
+  margin: 0 0 6px;
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+}
+
+.pricing-admin-section-header .section-desc {
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  max-width: 720px;
+  margin: 0 0 20px;
+}
+
+.preset-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.preset-card-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.preset-card-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.preset-card-type {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--primary);
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.preset-card-summary {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.preset-card-actions {
+  display: flex;
+  gap: 14px;
+}
+
+.preset-edit-btn,
+.preset-delete-btn {
+  background: none;
+  border: none;
+  font-size: 0.78rem;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  color: var(--color-text-secondary);
+}
+
+.preset-edit-btn:hover {
+  color: var(--color-text-primary);
+}
+
+.preset-delete-btn:hover {
+  color: #f87171;
+}
+
+.preset-form {
+  margin-top: 24px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+.preset-form h3 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+
+.preset-form label {
+  display: block;
+  font-size: 0.8rem;
+  margin: 12px 0 6px;
+  color: var(--color-text-secondary);
+}
+
+.preset-form label:first-of-type {
+  margin-top: 0;
+}
+
+.preset-services-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 12px 0 6px;
+}
+
+.preset-services-header label {
+  margin: 0;
+}
+
+.preset-service-checklist {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  margin-top: 8px;
+}
+
+.preset-service-row {
+  display: block;
+  font-size: 0.82rem;
+  padding: 5px 0;
+  margin-bottom: 0 !important;
+}
+
+.preset-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+}

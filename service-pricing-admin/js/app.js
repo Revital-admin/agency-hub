@@ -285,6 +285,233 @@ function initAccessGate() {
   });
 }
 
+/* ============================================================
+   PACKAGE PRESETS — admin CRUD
+   Stored at agency/packagePresets, same optimistic-concurrency
+   pattern as the pricing overrides above but a separate doc and a
+   separate (immediate, not batched) save - each add/edit/delete
+   persists right away rather than waiting for "Save All Changes",
+   since preset edits are discrete actions rather than rapid-fire
+   numeric field changes like the price table above.
+   The Proposal Calculator reads this same doc and falls back to its
+   own built-in defaults (Basic Social, Growth Ads, Full-Stack, and
+   3 website/branding packages) if this doc doesn't exist yet - so
+   nothing breaks for anyone who hasn't opened this panel.
+   ============================================================ */
+
+let presetsDocVersion = 0;
+let presetsList = [];
+let editingPresetId = null;
+let draftSelectedServices = [];
+
+function getPresetsDocRef() {
+  if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb) return null;
+  return window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "packagePresets");
+}
+
+async function loadPresetsData() {
+  if (isEmbedded && window.parent.firebaseGetDoc) {
+    try {
+      const ref = getPresetsDocRef();
+      const snap = await window.parent.firebaseGetDoc(ref);
+      const data = snap && snap.exists ? snap.data() : null;
+      presetsList = (data && data.presets) || [];
+      presetsDocVersion = (data && data.version) || 0;
+      return;
+    } catch (e) {
+      console.error("Couldn't load package presets:", e);
+      showBanner('error', "Couldn't load package presets: " + e.message);
+      presetsList = [];
+      return;
+    }
+  }
+  try {
+    const raw = localStorage.getItem('service-pricing-admin-presets');
+    presetsList = raw ? JSON.parse(raw) : [];
+  } catch (e) { presetsList = []; }
+}
+
+async function persistPresets() {
+  if (isEmbedded && window.parent.saveVersionedAgencyDoc) {
+    const result = await window.parent.saveVersionedAgencyDoc({
+      docRef: getPresetsDocRef(),
+      currentVersion: presetsDocVersion,
+      buildPayload: (v) => ({ presets: presetsList, version: v }),
+    });
+    if (!result.ok) {
+      if (result.reason === 'error') console.error("Couldn't save package presets:", result.error);
+      showBanner('error', result.reason === 'conflict'
+        ? "Someone else updated presets while you had this open. Reload the page to see their changes, then redo your edit."
+        : "Couldn't save preset — your change may be lost: " + result.error.message);
+      return false;
+    }
+    presetsDocVersion = result.version;
+    return true;
+  }
+  try { localStorage.setItem('service-pricing-admin-presets', JSON.stringify(presetsList)); } catch (e) {}
+  return true;
+}
+
+function presetUid() { return 'preset-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8); }
+
+function renderPresetsList() {
+  const container = el('presetsListContainer');
+  if (!container) return;
+  if (presetsList.length === 0) {
+    container.innerHTML = '<p class="pricing-no-results">No custom presets yet — the Proposal Calculator is showing its built-in defaults (Basic Social, Growth Ads, Full-Stack, and 3 website/branding packages). Add one below to start customizing.</p>';
+    return;
+  }
+  container.innerHTML = presetsList.map(p => {
+    const summary = p.type === 'services'
+      ? `${(p.services || []).length} service${(p.services || []).length === 1 ? '' : 's'}`
+      : `$${(p.price || 0).toLocaleString()} ${p.feeType === 'monthly' ? '/mo' : 'one-time'}`;
+    return `<div class="preset-card">
+      <div class="preset-card-main">
+        <span class="preset-card-name">${p.name}</span>
+        <span class="preset-card-type">${p.type === 'services' ? 'Service Bundle' : 'Flat Package'}</span>
+        <span class="preset-card-summary">${summary}</span>
+      </div>
+      <div class="preset-card-actions">
+        <button class="preset-edit-btn" data-id="${p.id}">Edit</button>
+        <button class="preset-delete-btn" data-id="${p.id}">Delete</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  container.querySelectorAll('.preset-edit-btn').forEach(btn => btn.addEventListener('click', () => startEditPreset(btn.getAttribute('data-id'))));
+  container.querySelectorAll('.preset-delete-btn').forEach(btn => btn.addEventListener('click', () => deletePreset(btn.getAttribute('data-id'))));
+}
+
+function renderServiceChecklist() {
+  const container = el('presetServiceChecklist');
+  if (!container) return;
+  const search = (el('presetServiceSearch').value || '').trim().toLowerCase();
+  const rows = flatCatalog().filter(svc => !search || svc.name.toLowerCase().includes(search));
+
+  container.innerHTML = rows.map(svc => `
+    <label class="cb-label preset-service-row">
+      <input type="checkbox" class="preset-service-cb" value="${encodeURIComponent(svc.name)}" ${draftSelectedServices.includes(svc.name) ? 'checked' : ''}>
+      ${svc.name}
+    </label>
+  `).join('');
+
+  container.querySelectorAll('.preset-service-cb').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const name = decodeURIComponent(cb.value);
+      if (cb.checked) {
+        if (!draftSelectedServices.includes(name)) draftSelectedServices.push(name);
+      } else {
+        draftSelectedServices = draftSelectedServices.filter(n => n !== name);
+      }
+      updateSelectedCount();
+    });
+  });
+  updateSelectedCount();
+}
+
+function updateSelectedCount() {
+  const countEl = el('presetSelectedCount');
+  if (countEl) countEl.textContent = `${draftSelectedServices.length} selected`;
+}
+
+function togglePresetTypeFields() {
+  const type = el('presetTypeInput').value;
+  el('presetServicesFields').style.display = type === 'services' ? '' : 'none';
+  el('presetFlatFields').style.display = type === 'flat' ? '' : 'none';
+}
+
+function resetPresetForm() {
+  editingPresetId = null;
+  draftSelectedServices = [];
+  el('presetFormTitle').textContent = 'Add New Preset';
+  el('presetNameInput').value = '';
+  el('presetTypeInput').value = 'services';
+  el('presetItemNameInput').value = '';
+  el('presetPriceInput').value = '';
+  el('presetFeeTypeInput').value = 'setup';
+  el('presetServiceSearch').value = '';
+  el('addPresetBtn').textContent = 'Add Preset';
+  el('cancelPresetEditBtn').style.display = 'none';
+  togglePresetTypeFields();
+  renderServiceChecklist();
+}
+
+function startEditPreset(id) {
+  const preset = presetsList.find(p => p.id === id);
+  if (!preset) return;
+  editingPresetId = id;
+  el('presetFormTitle').textContent = `Editing "${preset.name}"`;
+  el('presetNameInput').value = preset.name;
+  el('presetTypeInput').value = preset.type;
+  togglePresetTypeFields();
+  if (preset.type === 'services') {
+    draftSelectedServices = [...(preset.services || [])];
+  } else {
+    draftSelectedServices = [];
+    el('presetItemNameInput').value = preset.itemName || '';
+    el('presetPriceInput').value = preset.price || '';
+    el('presetFeeTypeInput').value = preset.feeType || 'setup';
+  }
+  el('addPresetBtn').textContent = 'Update Preset';
+  el('cancelPresetEditBtn').style.display = 'inline';
+  renderServiceChecklist();
+  el('presetFormTitle').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function deletePreset(id) {
+  const preset = presetsList.find(p => p.id === id);
+  if (!preset) return;
+  if (!confirm(`Delete the "${preset.name}" preset? This can't be undone.`)) return;
+  presetsList = presetsList.filter(p => p.id !== id);
+  persistPresets().then(ok => {
+    if (!ok) return;
+    if (editingPresetId === id) resetPresetForm();
+    renderPresetsList();
+    showBanner('success', `Deleted "${preset.name}".`);
+  });
+}
+
+function savePresetFromForm() {
+  const name = el('presetNameInput').value.trim();
+  const type = el('presetTypeInput').value;
+  if (!name) {
+    showBanner('error', 'Give the preset a name first.');
+    return;
+  }
+
+  let preset;
+  if (type === 'services') {
+    if (draftSelectedServices.length === 0) {
+      showBanner('error', 'Select at least one service for this bundle.');
+      return;
+    }
+    preset = { id: editingPresetId || presetUid(), name, type: 'services', services: [...draftSelectedServices] };
+  } else {
+    const itemName = el('presetItemNameInput').value.trim() || name;
+    const price = Math.max(0, parseInt(el('presetPriceInput').value) || 0);
+    const feeType = el('presetFeeTypeInput').value;
+    if (price <= 0) {
+      showBanner('error', 'Enter a price greater than $0.');
+      return;
+    }
+    preset = { id: editingPresetId || presetUid(), name, type: 'flat', itemName, price, feeType };
+  }
+
+  if (editingPresetId) {
+    const idx = presetsList.findIndex(p => p.id === editingPresetId);
+    if (idx >= 0) presetsList[idx] = preset; else presetsList.push(preset);
+  } else {
+    presetsList.push(preset);
+  }
+
+  persistPresets().then(ok => {
+    if (!ok) return;
+    resetPresetForm();
+    renderPresetsList();
+    showBanner('success', `Saved "${preset.name}".`);
+  });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   initAccessGate();
   await loadOverrides();
@@ -308,4 +535,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       e.returnValue = '';
     }
   });
+
+  // Package Presets panel
+  await loadPresetsData();
+  renderPresetsList();
+  resetPresetForm();
+
+  el('presetTypeInput').addEventListener('change', togglePresetTypeFields);
+  el('presetServiceSearch').addEventListener('input', renderServiceChecklist);
+  el('addPresetBtn').addEventListener('click', savePresetFromForm);
+  el('cancelPresetEditBtn').addEventListener('click', resetPresetForm);
 });

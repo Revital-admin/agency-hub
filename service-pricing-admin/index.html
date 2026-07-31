@@ -40,9 +40,57 @@
 
   <div id="catalogContainer"></div>
 
+  <div class="pricing-admin-section" id="presetsSection">
+    <div class="pricing-admin-section-header">
+      <h2>Package Presets</h2>
+      <p class="section-desc">One-click bundles agents can apply in the Proposal Calculator. "Service Bundle" presets check a set of existing services (like Basic Social or Growth Ads); "Flat Package" presets add one fixed-price line item (like a website/branding package). Changes here apply immediately — no separate save step.</p>
+    </div>
+
+    <div id="presetsListContainer"></div>
+
+    <div class="preset-form">
+      <h3 id="presetFormTitle">Add New Preset</h3>
+
+      <label>Preset Name</label>
+      <input type="text" id="presetNameInput" class="num-input" placeholder="e.g. Growth Ads">
+
+      <label>Preset Type</label>
+      <select id="presetTypeInput" class="select-input">
+        <option value="services">Service Bundle (check existing services)</option>
+        <option value="flat">Flat Package (fixed price line item)</option>
+      </select>
+
+      <div id="presetServicesFields">
+        <div class="preset-services-header">
+          <label style="margin:0;">Services in this bundle</label>
+          <span id="presetSelectedCount" class="pricing-category-meta"></span>
+        </div>
+        <input type="text" id="presetServiceSearch" class="num-input" placeholder="Search services to add...">
+        <div id="presetServiceChecklist" class="preset-service-checklist"></div>
+      </div>
+
+      <div id="presetFlatFields" style="display:none;">
+        <label>Line item text (shown on the proposal)</label>
+        <input type="text" id="presetItemNameInput" class="num-input" placeholder="e.g. Basic Website Package (up to 5 pages...)">
+        <div style="display:flex; gap:10px; margin-top:10px;">
+          <input type="number" id="presetPriceInput" class="num-input" placeholder="Price ($)" style="flex:1;">
+          <select id="presetFeeTypeInput" class="select-input" style="flex:1;">
+            <option value="setup">One-Time</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="preset-form-actions">
+        <button id="addPresetBtn" class="btn-copy" style="background: var(--primary); color: #fff;">Add Preset</button>
+        <button id="cancelPresetEditBtn" class="pricing-reset-btn" style="display:none;">Cancel edit</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <script src="../proposal-calculator/js/service-catalog.js"></script>
-<script src="js/app.js?v=4"></script>
+<script src="js/app.js?v=5"></script>
 </body>
 </html>
