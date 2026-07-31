@@ -285,6 +285,7 @@ function boot() {
   // no tab-click fires to trigger this the way it does for every other
   // tab - needs its own explicit first call here.
   renderSalesPipelineValue().catch(e => console.error("SalesPipelineValue Error:", e));
+  renderWhosOutToday().catch(e => console.error("WhosOutToday Error:", e));
 
   const resetSandboxBtn = document.getElementById("resetSandboxBtn");
   if (resetSandboxBtn) {
@@ -1106,6 +1107,7 @@ function initTabNavigation() {
       // rather than on every save.
       if (targetTab === "tab-dashboard") {
         renderSalesPipelineValue().catch(e => console.error("Error in renderSalesPipelineValue:", e));
+        renderWhosOutToday().catch(e => console.error("Error in renderWhosOutToday:", e));
       }
     });
   });
@@ -2457,6 +2459,43 @@ async function getAccountManagerCapacitySnapshot() {
   } catch (e) {
     console.warn("Couldn't build the account-manager capacity snapshot:", e);
     return {};
+  }
+}
+
+// Same underlying timeOff data as Team Roster's Calendar view (see
+// team-roster/js/app.js's renderTimeline) - just "today's column" of
+// that same data, surfaced on the dashboard so checking who's out
+// doesn't require a click into Team Roster first. Local calendar day,
+// not UTC, so this doesn't flip over an hour early/late depending on
+// timezone.
+function todayIsoLocalForDashboard() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+async function renderWhosOutToday() {
+  const el = document.getElementById('whosOutTodayList');
+  if (!el) return;
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return;
+  try {
+    const ref = window.firebaseDoc(window.firebaseDb, "agency", "teamRoster");
+    const snap = await window.firebaseGetDoc(ref);
+    const data = snap && snap.exists ? snap.data() : null;
+    const members = (data && data.list) || [];
+    const today = todayIsoLocalForDashboard();
+
+    const outToday = members.filter(m => {
+      const timeOff = Array.isArray(m.timeOff) ? m.timeOff : [];
+      return timeOff.some(t => t.startDate <= today && today <= (t.endDate || t.startDate));
+    });
+
+    el.innerHTML = outToday.length
+      ? outToday.map(m => `<div style="padding:3px 0;">${escapeHtmlCore(m.memberName)}</div>`).join('')
+      : `<div style="color: var(--color-text-muted);">Everyone's in today.</div>`;
+  } catch (e) {
+    console.warn("Couldn't load who's out today:", e);
+    el.innerHTML = `<div style="color: var(--color-text-muted);">Couldn't load.</div>`;
   }
 }
 
