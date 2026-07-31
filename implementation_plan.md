@@ -1,32 +1,11 @@
-# Add Firebase Authentication and Fix Cloud Syncing
+# Add Firebase Authentication and Fix Cloud Syncing — Status: Superseded
 
-The Hub currently displays "Guest" in the profile section, and cross-tab/incognito syncing is failing. We will implement Firebase Authentication to handle user logins and update the Firestore real-time listeners to securely and reliably sync data across devices.
+This proposed adding Firebase Email/Password auth (a login modal, a "Sign Up" flow, a Firebase Console step to enable Email/Password sign-in) to replace the old "Guest" placeholder and fix cross-tab syncing. **That's not what got built** — kept here for history, not as an active plan.
 
-## User Review Required
+## What actually happened instead
 
-> [!WARNING]
-> Because we are adding real authentication, you will need to go to your Firebase Console and enable the **Email/Password** sign-in method under the **Authentication** tab. You will also need to create a user account for yourself there, or we can add a quick "Sign Up" button. Let me know which you prefer!
+Auth is handled by **Cloudflare Access** (Google SSO, gated to `@revitalproductions.com` accounts) at the edge, not by a Firebase Email/Password login modal in the app. `_worker.js` reads the `Cf-Access-Authenticated-User-Email` header Cloudflare Access verifies on every request, and `/api/mint-firebase-token` exchanges that verified email for a Firebase custom auth token (a hand-signed RS256 JWT, since Workers can't run the Node-based `firebase-admin` SDK) so the Hub can also authenticate against Firestore using the same identity. There's no separate login screen, password, or "Guest" state to fix — anyone signed into a company Google account is already authenticated before the Hub's own code runs.
 
-## Proposed Changes
+The cross-tab syncing problem this doc was also trying to solve got fixed as part of that same work: real-time Firestore listeners (`onSnapshot`) now drive the UI directly, so a change in one tab/incognito window propagates to others through normal Firestore sync, not through the `hasPendingWrites`/`JSON.stringify` workaround proposed here.
 
-### Core Logic
-
-#### [MODIFY] app.js
-- Remove the unreliable `docSnap.metadata.hasPendingWrites` check in the Firestore listener, and replace it with a robust `JSON.stringify` comparison. This ensures that when a change is detected from *another* tab (like your incognito window), the UI will instantly refresh to match the cloud database.
-- Integrate Firebase Authentication listeners (`onAuthStateChanged`) to detect when a user logs in.
-- Update the UI to display the logged-in user's email and initial in the top right corner instead of "Guest".
-- Redirect unauthenticated users to a login modal/screen, preventing them from accessing the Hub until they log in.
-
-#### [MODIFY] index.html
-- Import the Firebase Authentication library `firebase-auth.js`.
-- Create a simple Login Modal overlay that handles Email/Password authentication.
-- Attach the login modal to the Firebase Auth SDK.
-
-## Verification Plan
-
-### Manual Verification
-1. I will provide you with the updated ZIP file.
-2. You will open the Hub, log in with your email/password (after enabling it in Firebase).
-3. The top right corner should display your email.
-4. You will open an incognito window, log in there as well.
-5. Checking a box in the main window should instantly visually check the box in the incognito window.
+See **[ARCHITECTURE.md](./ARCHITECTURE.md)** (the "Auth" section under "The core platform") for the accurate, current description of how this works.
