@@ -1270,12 +1270,17 @@ function refreshAllViews() {
   }
 }
 
-// ── Dashboard Overview Renderer ──
-function escapeHtmlForMyClients(str) {
+// Generic HTML-escaping helper for core-level innerHTML templates (My
+// Clients, the command palette, etc.) - root app.js didn't have one of
+// its own before (every tool file has its own local copy; this is that
+// same pattern's first use directly in the core).
+function escapeHtmlCore(str) {
   const div = document.createElement("div");
   div.textContent = str || "";
   return div.innerHTML;
 }
+
+// ── Dashboard Overview Renderer ──
 
 // "My Clients" - a filtered, cross-client view for whoever's logged in,
 // instead of paging through the workspace switcher one client at a time.
@@ -1433,20 +1438,20 @@ async function renderMyClients() {
     let overdueNote = "";
     if (Object.prototype.hasOwnProperty.call(overdueByName, c.name)) {
       const amt = overdueByName[c.name];
-      overdueNote = ` &middot; <span style="color:#ef4444;">invoice overdue${amt ? ` (${escapeHtmlForMyClients(String(amt))})` : ''}</span>`;
+      overdueNote = ` &middot; <span style="color:#ef4444;">invoice overdue${amt ? ` (${escapeHtmlCore(String(amt))})` : ''}</span>`;
     }
 
     return `
       <div class="step-card" style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; padding:16px 20px;">
         <div>
-          <div style="font-weight:600; font-size:1rem;">${escapeHtmlForMyClients(c.name)}</div>
+          <div style="font-weight:600; font-size:1rem;">${escapeHtmlCore(c.name)}</div>
           <div style="font-size:0.8rem; color:var(--text-muted); margin-top:4px;">
             Onboarding ${pct}% complete${pendingApprovals > 0 ? ` &middot; <span style="color:#f68d5f;">${pendingApprovals} approval${pendingApprovals === 1 ? '' : 's'} waiting</span>` : ''}${renewalNote}${overdueNote}
           </div>
         </div>
         <div style="display:flex; align-items:center; gap:10px;">
-          <span style="font-size:0.72rem; text-transform:capitalize; background:rgba(99,102,241,0.15); color:#6366f1; padding:3px 10px; border-radius:20px; white-space:nowrap;">${escapeHtmlForMyClients(stage)}</span>
-          <button type="button" class="btn btn-secondary my-clients-open-btn" data-client="${escapeHtmlForMyClients(c.name)}" style="padding:6px 14px; font-size:0.8rem;">Open</button>
+          <span style="font-size:0.72rem; text-transform:capitalize; background:rgba(99,102,241,0.15); color:#6366f1; padding:3px 10px; border-radius:20px; white-space:nowrap;">${escapeHtmlCore(stage)}</span>
+          <button type="button" class="btn btn-secondary my-clients-open-btn" data-client="${escapeHtmlCore(c.name)}" style="padding:6px 14px; font-size:0.8rem;">Open</button>
         </div>
       </div>`;
   }).join("");
@@ -4418,26 +4423,49 @@ document.addEventListener('DOMContentLoaded', () => {
   let selectedIndex = 0;
   let currentResults = [];
 
-  const tools = [
-    { id: 'tab-dashboard', title: 'Overview Dashboard', icon: 'M3 3h7v9H3z M14 3h7v5h-7z M14 12h7v9h-7z M3 16h7v5H3z' },
-    { id: 'tab-onboarding', title: 'Client Onboarding', icon: 'M22 11.08V12a10 10 0 1 1-5.93-9.14 M22 4L12 14.01l-3-3' },
-    { id: 'tab-brandvault', title: 'Brand Vault', icon: 'M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z' },
-    { id: 'tab-uxui', title: 'UX/UI Audit', icon: 'M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z' },
-    { id: 'tab-seo', title: 'SEO Audit Checklist', icon: 'M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z' },
-    { id: 'tab-paidads', title: 'Paid Ads Audit', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
-    { id: 'tab-creativebrief', title: 'Creative Brief', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' },
-    { id: 'tab-proposal', title: 'Proposal Calculator', icon: 'M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6' },
-    { id: 'tab-emailsig', title: 'Email Signature', icon: 'M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z M22 6l-10 7L2 6' },
-    { id: 'tab-sopwiki', title: 'SOP Wiki', icon: 'M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z' },
-    { id: 'tab-redflag', title: 'Red Flag Checklist', icon: 'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z M4 22v-7' },
-    { id: 'tab-healthdashboard', title: 'Agency Health Dashboard', icon: 'M22 12h-4l-3 9L9 3l-3 9H2' },
-    { id: 'tab-changeorder', title: 'Change Order Generator', icon: 'M12 20h9 M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z' },
-    { id: 'tab-casestudy', title: 'Case Study Builder', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M9 15l2 2 4-4' },
-    { id: 'tab-portfolioshowcase', title: 'Portfolio Showcase', icon: 'M3 3h7v7H3z M14 3h7v7h-7z M14 14h7v7h-7z M3 14h7v7H3z' },
-    { id: 'tab-emailtemplates', title: 'Email Template Library', icon: 'M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z M22 6l-10 7L2 6' },
-    { id: 'tab-teamroster', title: 'Team Roster & Capacity', icon: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8' },
-    { id: 'tab-testimonialtracker', title: 'Testimonial & Review Requests', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' }
-  ];
+  // Read live from the sidebar DOM instead of a hand-maintained list -
+  // the old hardcoded list here only covered 17 of 60+ tools and had
+  // already drifted (My Clients, added this session, was never going to
+  // be in a list someone has to remember to update by hand). .nav-item-btn
+  // also matches the Admin footer buttons (Team Access, Service Pricing,
+  // etc.), which is desirable - they're just as reachable via the
+  // sidebar, so they should be just as searchable here. offsetParent
+  // check skips anything currently hidden (a collapsed section still in
+  // the DOM, or a Team-Access-restricted section/footer tool) so a
+  // restricted teammate can't use the palette to reach something the
+  // sidebar is deliberately hiding from them.
+  const GENERIC_TOOL_ICON = 'M12 2L2 7l10 5 10-5-10-5z M2 17l10 5 10-5 M2 12l10 5 10-5';
+  function getNavTools() {
+    return Array.from(document.querySelectorAll('.nav-item-btn[data-tab]'))
+      .filter(btn => btn.offsetParent !== null)
+      .map(btn => {
+        const span = btn.querySelector('span:last-child');
+        const pathEl = btn.querySelector('svg path');
+        return {
+          kind: 'tool',
+          id: btn.getAttribute('data-tab'),
+          title: (span ? span.textContent : btn.textContent).trim(),
+          icon: pathEl ? pathEl.getAttribute('d') : GENERIC_TOOL_ICON
+        };
+      });
+  }
+
+  // Client jump: only searched (not listed by default - a full client
+  // roster dumped into the palette on every open would bury the tool
+  // list), and only once the query is non-trivial so "a" doesn't match
+  // half the roster. Matches My Clients' "Open" behavior exactly -
+  // switchClient + land on the dashboard - so Cmd+K becomes a second,
+  // faster way to reach the same place, not a different destination.
+  const CLIENT_ICON = 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8';
+  function getClientMatches(q) {
+    if (!q || q.length < 2) return [];
+    const sandboxName = "Quick Sandbox (One-Offs)";
+    return Object.keys(clientsDb)
+      .filter(name => name !== sandboxName && name.toLowerCase().includes(q))
+      .sort((a, b) => a.localeCompare(b))
+      .slice(0, 8)
+      .map(name => ({ kind: 'client', id: name, title: name, icon: CLIENT_ICON }));
+  }
 
   function openCmdK() {
     overlay.style.display = 'flex';
@@ -4451,10 +4479,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderResults(query) {
-    const q = query.toLowerCase();
-    currentResults = tools.filter(t => t.title.toLowerCase().includes(q) || t.id.toLowerCase().includes(q));
+    const q = query.toLowerCase().trim();
+    const toolMatches = getNavTools().filter(t => t.title.toLowerCase().includes(q) || t.id.toLowerCase().includes(q));
+    // Client matches first when there's a real query - "type a client
+    // name" is usually someone who already knows exactly where they want
+    // to go, same as picking that client from the workspace switcher.
+    currentResults = [...getClientMatches(q), ...toolMatches];
     selectedIndex = 0;
-    
+
     if (currentResults.length === 0) {
       resultsEl.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--color-text-secondary);">No matches found.</div>';
       return;
@@ -4464,8 +4496,8 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="cmdk-item ${idx === 0 ? 'active' : ''}" data-index="${idx}">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="${item.icon}"></path></svg>
         <div>
-          <div class="cmdk-item-title">${item.title}</div>
-          <div class="cmdk-item-subtitle">Navigation</div>
+          <div class="cmdk-item-title">${escapeHtmlCore(item.title)}</div>
+          <div class="cmdk-item-subtitle">${item.kind === 'client' ? 'Switch to client' : 'Navigation'}</div>
         </div>
       </div>
     `).join('');
@@ -4486,6 +4518,11 @@ document.addEventListener('DOMContentLoaded', () => {
   function executeResult(item) {
     if (!item) return;
     closeCmdK();
+    if (item.kind === 'client') {
+      switchClient(item.id);
+      navigateToTab('tab-dashboard');
+      return;
+    }
     // Simulate clicking the corresponding sidebar button
     const btn = document.querySelector(`.nav-item-btn[data-tab="${item.id}"]`);
     if (btn) btn.click();
