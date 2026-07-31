@@ -127,6 +127,12 @@ document.addEventListener('DOMContentLoaded', () => {
   let shardData = {};           // { [shardIndex]: [...sopsInThatShard] }
   let shardUnsubscribers = [];  // active onSnapshot unsubscribe fns, one per shard
   let lastKnownShardCount = 0;  // shard count as of the last successful sync
+  // Optimistic-concurrency guard, kept in sync by initSops' meta-doc
+  // listener. Sharded equivalent of the docVersion pattern every other
+  // agency/* doc in the Hub uses (see saveVersionedAgencyDoc in the root
+  // app.js) - see saveSopsToFirestore below for why this can't just call
+  // that shared helper directly.
+  let sopsDocVersion = 0;
 
   function getSopShardMetaDocRef() {
     if (!window.parent || !window.parent.firebaseDb || !window.parent.firebaseDoc) return null;
@@ -211,36 +217,61 @@ document.addEventListener('DOMContentLoaded', () => {
   // itself (fire-and-forget + its own alert() on failure), which is what
   // let the UI show "saved" before the cloud write had actually landed -
   // callers now decide what "saved" and "failed" should look like.
+  //
+  // Also the sharded equivalent of the Hub's saveVersionedAgencyDoc
+  // pattern (see app.js): re-reads the meta doc's version fresh
+  // immediately before writing and refuses to write ANY of the shards
+  // (not just the meta doc) if it's moved since this tab last synced -
+  // "someone else updated the SOP library while you had it open" gets
+  // caught here instead of silently overwriting their change. Can't just
+  // call the shared saveVersionedAgencyDoc helper directly since that one
+  // assumes a single doc; this spans N shard docs + one meta doc that all
+  // need to agree, so a half-applied write on conflict would be worse
+  // than a single-doc one - hence checking before writing anything,
+  // rather than writing and detecting the conflict after.
   function saveSopsToFirestore() {
-    if (!window.parent || !window.parent.firebaseDb || !window.parent.firebaseDoc || !window.parent.firebaseSetDocFromJSON) {
+    if (!window.parent || !window.parent.firebaseDb || !window.parent.firebaseDoc || !window.parent.firebaseSetDocFromJSON || !window.parent.firebaseGetDoc) {
       return Promise.reject(new Error("Couldn't reach the Hub's database - try reopening this tab from the Hub."));
     }
 
-    const shards = packSopsIntoShards(sops);
-
-    // Pass a JSON string, not an object literal, across the iframe
-    // boundary. An object built in this iframe's own JS realm gets
-    // rejected by Firestore ("a custom Object object") when handed
-    // straight to a Firestore call bound to the parent page - a string is
-    // a primitive with no realm identity problem, and firebaseSetDocFromJSON
-    // parses it in the parent's own realm before writing.
-    const writes = shards.map((shardList, i) => {
-      const docRef = getSopShardDocRef(i);
-      return window.parent.firebaseSetDocFromJSON(docRef, JSON.stringify({ list: shardList }));
-    });
-
-    // If the list just got shorter/smaller and now needs fewer shards than
-    // last time, blank out the now-unused trailing shard documents instead
-    // of leaving stale content sitting in them.
-    for (let i = shards.length; i < lastKnownShardCount; i++) {
-      const docRef = getSopShardDocRef(i);
-      writes.push(window.parent.firebaseSetDocFromJSON(docRef, JSON.stringify({ list: [] })));
-    }
-
     const metaRef = getSopShardMetaDocRef();
-    writes.push(window.parent.firebaseSetDocFromJSON(metaRef, JSON.stringify({ count: shards.length })));
 
-    return Promise.all(writes);
+    return window.parent.firebaseGetDoc(metaRef).then(freshMetaSnap => {
+      const freshVersion = (freshMetaSnap.exists && typeof freshMetaSnap.data().version === "number")
+        ? freshMetaSnap.data().version : 0;
+
+      if (freshVersion !== sopsDocVersion) {
+        throw new Error("Someone else updated the SOP library while you had it open - reload to see their changes.");
+      }
+
+      const shards = packSopsIntoShards(sops);
+
+      // Pass a JSON string, not an object literal, across the iframe
+      // boundary. An object built in this iframe's own JS realm gets
+      // rejected by Firestore ("a custom Object object") when handed
+      // straight to a Firestore call bound to the parent page - a string is
+      // a primitive with no realm identity problem, and firebaseSetDocFromJSON
+      // parses it in the parent's own realm before writing.
+      const writes = shards.map((shardList, i) => {
+        const docRef = getSopShardDocRef(i);
+        return window.parent.firebaseSetDocFromJSON(docRef, JSON.stringify({ list: shardList }));
+      });
+
+      // If the list just got shorter/smaller and now needs fewer shards than
+      // last time, blank out the now-unused trailing shard documents instead
+      // of leaving stale content sitting in them.
+      for (let i = shards.length; i < lastKnownShardCount; i++) {
+        const docRef = getSopShardDocRef(i);
+        writes.push(window.parent.firebaseSetDocFromJSON(docRef, JSON.stringify({ list: [] })));
+      }
+
+      const nextVersion = freshVersion + 1;
+      writes.push(window.parent.firebaseSetDocFromJSON(metaRef, JSON.stringify({ count: shards.length, version: nextVersion })));
+
+      return Promise.all(writes).then(() => {
+        sopsDocVersion = nextVersion;
+      });
+    });
   }
 
   function rebuildSopsFromShards() {
@@ -302,6 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.parent.firebaseOnSnapshot(metaRef, async (metaSnap) => {
       if (metaSnap.exists && typeof metaSnap.data().count === 'number') {
+        sopsDocVersion = typeof metaSnap.data().version === 'number' ? metaSnap.data().version : 0;
         setShardListenerCount(metaSnap.data().count);
         return;
       }

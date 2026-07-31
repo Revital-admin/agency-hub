@@ -84,6 +84,13 @@ try {
 let teamAccessUsers = {}; // { email: [sectionKey, ...] }
 let teamActivity = {}; // { email: { lastSeen: isoString } }
 let editingEmail = null; // set while the form is editing an existing entry
+// Optimistic-concurrency guard (see saveTeamAccessDoc below), kept fresh by
+// listenToTeamAccess's live onSnapshot rather than a one-time load - this
+// tool already re-syncs teamAccessUsers continuously, so the real race this
+// closes is narrower than Referral Tracker/Team Roster's (which only ever
+// loaded once), but it's the same class of "someone else saved while you
+// had the form open" bug, so it gets the same protection.
+let docVersion = 0;
 
 function el(id) { return document.getElementById(id); }
 function sectionLabel(key) {
@@ -211,17 +218,24 @@ function resetForm() {
 }
 
 function saveTeamAccessDoc() {
-  if (!isEmbedded || !window.parent.firebaseSetDocFromJSON || !window.parent.firebaseDoc || !window.parent.firebaseDb) {
+  if (!isEmbedded || !window.parent.saveVersionedAgencyDoc || !window.parent.firebaseDoc || !window.parent.firebaseDb) {
     showFormStatus("Not connected to the Hub - can't save.", "error");
     return Promise.reject(new Error("not embedded"));
   }
   const ref = window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "teamAccess");
-  // A plain object literal built in this iframe's own JS realm gets
-  // rejected by Firestore ("a custom Object object") when handed straight
-  // to a Firestore call bound to the parent page - this was the real
-  // cause of "Save Access does nothing." Pass a JSON string instead so
-  // the parent parses it in its own realm before writing.
-  return window.parent.firebaseSetDocFromJSON(ref, JSON.stringify({ users: teamAccessUsers }));
+  return window.parent.saveVersionedAgencyDoc({
+    docRef: ref,
+    currentVersion: docVersion,
+    buildPayload: (v) => ({ users: teamAccessUsers, version: v }),
+  }).then(result => {
+    if (!result.ok) {
+      const err = new Error(result.reason === "conflict"
+        ? "Someone else updated Team Access while you had it open. Reload the page to see their changes, then redo your edit."
+        : (result.error ? result.error.message : "Save failed - try again."));
+      throw err;
+    }
+    docVersion = result.version;
+  });
 }
 
 function saveRestriction() {
@@ -250,7 +264,7 @@ function saveRestriction() {
     }
   }).catch(err => {
     console.error("Team access save failed:", err);
-    showFormStatus("Save failed - try again.", "error");
+    showFormStatus(err.message || "Save failed - try again.", "error");
   });
 }
 
@@ -265,7 +279,7 @@ function removeRestriction(email) {
     }
   }).catch(err => {
     console.error("Team access remove failed:", err);
-    showFormStatus("Couldn't remove - try again.", "error");
+    showFormStatus(err.message || "Couldn't remove - try again.", "error");
   });
 }
 
@@ -294,6 +308,7 @@ function listenToTeamAccess() {
   window.parent.firebaseOnSnapshot(ref, (docSnap) => {
     const data = docSnap.exists ? docSnap.data() : null;
     teamAccessUsers = (data && data.users) ? data.users : {};
+    docVersion = (data && data.version) || 0;
 
     // Gate the panel itself: a restricted teammate should never be able
     // to open Team Access, even if they reach this URL directly - only
