@@ -389,6 +389,16 @@ let iframeNeedsReload = {
   "tab-reportarchive": true,
   "tab-brandassetkit": true,
   "tab-budgetpacing": true,
+  // These two were never even added to this map, on top of never getting
+  // a switch-case/render function below - so unlike the pair above (which
+  // at least got flagged true and then silently no-op'd), these hardcoded-
+  // src iframes never got touched by the reload system in any way, not
+  // even a wasted attempt. Found via a static-analysis pass cross-
+  // referencing every tool folder against its wiring in this file - see
+  // the same pass's summary for the other 4 already-flagged-but-unwired
+  // tabs fixed alongside these two.
+  "tab-brandguidelines": true,
+  "tab-moodboard": true,
 
   // These tool tabs previously had a hardcoded iframe src in index.html and
   // were never wired into the reload system at all, so switching client
@@ -1033,6 +1043,32 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-copywriting":
       renderCopywriting();
+      break;
+    // Found via a static-analysis pass: these 6 had a hardcoded iframe
+    // src baked directly into index.html and were never wired into this
+    // switch statement at all, so switching client workspaces never
+    // refreshed them - same bug class (and same fix) as the batch this
+    // file's iframeNeedsReload comment already documents fixing earlier.
+    // brandguidelines/moodboard weren't even in the iframeNeedsReload map
+    // above; the other 4 were flagged true but had no case here, so
+    // refreshIframeTab() silently did nothing for them.
+    case "tab-brandassetkit":
+      renderBrandAssetKit();
+      break;
+    case "tab-brandguidelines":
+      renderBrandGuidelines();
+      break;
+    case "tab-budgetpacing":
+      renderBudgetPacing();
+      break;
+    case "tab-meetingnotes":
+      renderMeetingNotes();
+      break;
+    case "tab-moodboard":
+      renderMoodBoard();
+      break;
+    case "tab-reportarchive":
+      renderReportArchive();
       break;
   }
   iframeNeedsReload[tabId] = false;
@@ -2226,6 +2262,26 @@ function renderTeamRoster() {
 
 function renderHoursLog() {
   setIframeAbsoluteSrc('#tab-hourslog iframe', "hours-tracker/index.html");
+}
+
+// ── Newly-wired iframe reload fixes (see the switch-case comment above) ──
+function renderBrandAssetKit() {
+  setIframeAbsoluteSrc('#tab-brandassetkit iframe', "brand-asset-kit/index.html?v=2");
+}
+function renderBrandGuidelines() {
+  setIframeAbsoluteSrc('#tab-brandguidelines iframe', "brand-guidelines-builder/index.html");
+}
+function renderBudgetPacing() {
+  setIframeAbsoluteSrc('#tab-budgetpacing iframe', "budget-pacing-tracker/index.html");
+}
+function renderMeetingNotes() {
+  setIframeAbsoluteSrc('#tab-meetingnotes iframe', "meeting-notes-logger/index.html");
+}
+function renderMoodBoard() {
+  setIframeAbsoluteSrc('#tab-moodboard iframe', "mood-board-builder/index.html");
+}
+function renderReportArchive() {
+  setIframeAbsoluteSrc('#tab-reportarchive iframe', "monthly-report-archive/index.html");
 }
 
 // ── Testimonial & Review Requests Controller ──

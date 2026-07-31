@@ -1396,24 +1396,31 @@
         <iframe src="competitor-analysis/revital-monthly-report-styled.html?v=1.5" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;" allow="clipboard-write"></iframe>
       </section>
 
-      <!-- ── NEW MODULES ── -->
+      <!-- ── NEW MODULES ──
+           These 6 iframe src values used to be hardcoded here and were
+           never wired into app.js's reload system, so switching client
+           workspaces never refreshed them (found via a static-analysis
+           pass). Now blank + lazy-loaded via setIframeAbsoluteSrc, same
+           as every other tool tab - see renderBrandAssetKit/
+           renderBrandGuidelines/renderBudgetPacing/renderMeetingNotes/
+           renderMoodBoard/renderReportArchive in app.js. -->
       <section id="tab-meetingnotes" class="tab-section" style="width: 100%;">
-        <iframe src="meeting-notes-logger/index.html" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
+        <iframe src="" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
       </section>
       <section id="tab-reportarchive" class="tab-section" style="width: 100%;">
-        <iframe src="monthly-report-archive/index.html" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
+        <iframe src="" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
       </section>
       <section id="tab-brandassetkit" class="tab-section" style="width: 100%;">
-        <iframe src="brand-asset-kit/index.html?v=2" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
+        <iframe src="" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
       </section>
       <section id="tab-brandguidelines" class="tab-section" style="width: 100%;">
-        <iframe src="brand-guidelines-builder/index.html" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
+        <iframe src="" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
       </section>
       <section id="tab-moodboard" class="tab-section" style="width: 100%;">
-        <iframe src="mood-board-builder/index.html" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
+        <iframe src="" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
       </section>
       <section id="tab-budgetpacing" class="tab-section" style="width: 100%;">
-        <iframe src="budget-pacing-tracker/index.html" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
+        <iframe src="" style="width: 100%; height: 90vh; border: none; border-radius: var(--radius-lg); background: transparent;"></iframe>
       </section>
       <!-- ── SECTION 8: COPYWRITING ASSISTANT ── -->
       <section id="tab-copywriting" class="tab-section" style="width: 100%;">
