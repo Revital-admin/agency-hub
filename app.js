@@ -3140,6 +3140,26 @@ function saveBrandVault() {
 
   saveDatabase();
   renderDashboard();
+
+  // ── Force Brand Asset Kit (Lite) to pick up this change ──
+  // iframeNeedsReload["tab-brandassetkit"] only flips back to true when the
+  // active CLIENT changes (see refreshAllViews) - saving the Vault for the
+  // client that's already active never touched that flag. So once someone
+  // opened Brand Asset Kit (Lite) even once this session, it kept showing
+  // whatever the Vault looked like at that first visit - every Vault edit
+  // after that was invisible there until switching clients and back (which
+  // resets every tab's flag) or a full page reload. Same fix already used
+  // for tab-portal below (see the portal listener further down): flag it
+  // for reload next time, and if it's the tab on screen right now, refresh
+  // it immediately instead of making the user click away and back.
+  if (typeof iframeNeedsReload !== "undefined" && iframeNeedsReload["tab-brandassetkit"] !== undefined) {
+    iframeNeedsReload["tab-brandassetkit"] = true;
+    const activeTabBtn = document.querySelector(".nav-item-btn.active");
+    const activeTab = activeTabBtn ? activeTabBtn.getAttribute("data-tab") : "";
+    if (activeTab === "tab-brandassetkit") {
+      refreshIframeTab("tab-brandassetkit");
+    }
+  }
 }
 
 
