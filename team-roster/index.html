@@ -136,6 +136,29 @@
 </div>
 <div class="form-group"><label for="notes">Notes</label><textarea id="notes" rows="2" placeholder="Specialties, availability notes, time off coming up..."></textarea></div>
 
+<!-- Time Off - only shown once a member exists (editingId set), same
+     reasoning as Contractor Documents: nothing to attach it to yet for a
+     brand-new, not-yet-saved entry. Lightweight on purpose - no accrual,
+     no approval workflow, just dates + a note so the rest of the team can
+     see who's out. See renderTimeOffSection/addTimeOff/removeTimeOff in
+     js/app.js. -->
+<div class="form-group" id="timeOffSection" style="display:none;">
+<label>Time Off</label>
+<div id="timeOffList" style="margin-bottom:10px;"></div>
+<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+<div>
+<label for="timeOffStart" style="font-size:0.72rem;">Start</label>
+<input type="date" id="timeOffStart">
+</div>
+<div>
+<label for="timeOffEnd" style="font-size:0.72rem;">End (optional)</label>
+<input type="date" id="timeOffEnd">
+</div>
+<input type="text" id="timeOffNote" placeholder="Note (optional)" style="flex:1; min-width:140px;">
+<button type="button" id="timeOffAddBtn" class="btn btn-secondary" style="padding:8px 14px; font-size:0.8rem;">+ Add</button>
+</div>
+</div>
+
 <div class="form-actions" style="display:flex; gap:10px; margin-top: 10px;">
 <button id="saveMemberBtn" class="btn-primary">Add Team Member</button>
 <button id="cancelEditBtn" class="btn btn-secondary" style="display:none;">Cancel</button>
@@ -171,6 +194,6 @@
 </div>
 
 </main>
-<script src="js/app.js?v=4"></script>
+<script src="js/app.js?v=5"></script>
 </body>
 </html>

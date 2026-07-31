@@ -82,6 +82,103 @@ function toggleClientExpand(id) {
   renderTable();
 }
 
+// ── Time Off (lightweight - not a payroll/HR system) ──
+// Each entry has its own timeOff: [{id, startDate, endDate, note}] list,
+// same optimistic-concurrency save as everything else here. Deliberately
+// small: no accrual, no approval workflow, no balance tracking - this is
+// just "so the rest of the team can see who's out" visible right next to
+// the same capacity info they're already checking before assigning new
+// client work, not a replacement for whatever actually runs payroll.
+function formatShortDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function timeOffStatus(entry) {
+  const timeOff = Array.isArray(entry.timeOff) ? entry.timeOff : [];
+  if (!timeOff.length) return null;
+  const today = todayStr();
+
+  const active = timeOff.find(t => t.startDate <= today && today <= (t.endDate || t.startDate));
+  if (active) return { text: `Out until ${formatShortDate(active.endDate || active.startDate)}`, color: '#ef4444' };
+
+  const upcoming = timeOff
+    .filter(t => t.startDate > today)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
+  if (upcoming) {
+    const daysUntil = Math.round((new Date(upcoming.startDate + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000);
+    if (daysUntil <= 14) return { text: `Off starting ${formatShortDate(upcoming.startDate)}`, color: '#f68d5f' };
+  }
+  return null;
+}
+
+function renderTimeOffSection() {
+  const section = el('timeOffSection');
+  if (!section) return;
+  if (!editingId) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = 'block';
+
+  const entry = members.find(m => m.id === editingId);
+  const listEl = el('timeOffList');
+  const timeOff = (entry && Array.isArray(entry.timeOff)) ? entry.timeOff : [];
+
+  listEl.innerHTML = timeOff.length
+    ? timeOff.map(t => `
+        <div style="display:flex; align-items:center; gap:8px; font-size:0.8rem; padding:5px 0; border-bottom:1px solid var(--border-color);">
+          <span style="flex:1;">${formatShortDate(t.startDate)}${t.endDate && t.endDate !== t.startDate ? ' – ' + formatShortDate(t.endDate) : ''}${t.note ? ' — ' + escapeHtml(t.note) : ''}</span>
+          <button type="button" class="time-off-remove-btn btn btn-secondary" data-id="${t.id}" style="padding:3px 10px; font-size:0.72rem;">Remove</button>
+        </div>`).join('')
+    : '<p style="font-size:0.78rem; color:var(--text-muted); margin:4px 0;">No time off scheduled.</p>';
+
+  listEl.querySelectorAll('.time-off-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => removeTimeOff(btn.getAttribute('data-id')));
+  });
+}
+
+async function addTimeOff() {
+  const entry = members.find(m => m.id === editingId);
+  if (!entry) return;
+  const start = el('timeOffStart').value;
+  const end = el('timeOffEnd').value || start;
+  const note = el('timeOffNote').value.trim();
+  if (!start) {
+    if (window.parent.showBanner) window.parent.showBanner('error', 'Pick a start date first.');
+    return;
+  }
+  if (!Array.isArray(entry.timeOff)) entry.timeOff = [];
+  const previous = entry.timeOff;
+  entry.timeOff = [...entry.timeOff, { id: uid(), startDate: start, endDate: end, note }]
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+  const ok = await persist();
+  if (!ok) {
+    entry.timeOff = previous;
+    return;
+  }
+  el('timeOffStart').value = '';
+  el('timeOffEnd').value = '';
+  el('timeOffNote').value = '';
+  renderTimeOffSection();
+  renderTable();
+}
+
+async function removeTimeOff(id) {
+  const entry = members.find(m => m.id === editingId);
+  if (!entry || !Array.isArray(entry.timeOff)) return;
+  const previous = entry.timeOff;
+  entry.timeOff = entry.timeOff.filter(t => t.id !== id);
+
+  const ok = await persist();
+  if (!ok) entry.timeOff = previous;
+  renderTimeOffSection();
+  renderTable();
+}
+
 function el(id) { return document.getElementById(id); }
 
 function getDocRef() {
@@ -813,6 +910,7 @@ function resetForm() {
   el('cancelEditBtn').style.display = 'none';
   el('formCard').style.display = 'none';
   updateCurrentClientCountVisibility();
+  renderTimeOffSection();
 }
 
 // Merges onto `base` (the previous entry, when editing) rather than
@@ -879,6 +977,7 @@ function startEdit(id) {
   el('cancelEditBtn').style.display = 'inline-block';
   el('formCard').style.display = 'block';
   updateCurrentClientCountVisibility();
+  renderTimeOffSection();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -970,8 +1069,12 @@ function renderTable() {
     const capacityCell = load.isLive
       ? `<span class="section-tag ${info.cls} roster-capacity-toggle" data-id="${m.id}" style="cursor:pointer;" title="Click to see assigned clients">${info.label} ${expandedRosterId === m.id ? '▴' : '▾'}</span>`
       : `<span class="section-tag ${info.cls}">${info.label}</span>`;
+    const timeOffInfo = timeOffStatus(m);
+    const timeOffBadge = timeOffInfo
+      ? `<div style="font-size:0.68rem; color:${timeOffInfo.color}; margin-top:2px;">${timeOffInfo.text}</div>`
+      : '';
     let rowHtml = `<tr>
-      <td class="client-cell">${escapeHtml(m.memberName)}</td>
+      <td class="client-cell">${escapeHtml(m.memberName)}${timeOffBadge}</td>
       <td>${escapeHtml(m.role)}${isContractor ? ' <span class="section-tag" style="margin-left:4px;">Contractor</span>' : ''}</td>
       <td>${escapeHtml(m.employmentType)}</td>
       <td>${loadCell}</td>
@@ -1042,6 +1145,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   el('cancelEditBtn').addEventListener('click', resetForm);
   el('role').addEventListener('change', updateCurrentClientCountVisibility);
   el('filterInput').addEventListener('input', renderTable);
+  const timeOffAddBtn = el('timeOffAddBtn');
+  if (timeOffAddBtn) timeOffAddBtn.addEventListener('click', addTimeOff);
 
   const sendAgreementCloseBtn = el('sendAgreementCloseBtn');
   const sendAgreementSendBtn = el('sendAgreementSendBtn');
