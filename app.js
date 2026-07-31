@@ -4227,6 +4227,41 @@ function foldInApprovalDecisions(target, publicData) {
   return changed;
 }
 
+// Real gap found auditing the mood-board fix's bug class elsewhere: a
+// client can leave a comment on an approval (addApprovalComment in
+// portal/js/app.js) without deciding yet - that write only ever touches
+// pendingApprovals, never approvalHistory, so foldInApprovalDecisions
+// above never saw it. Client Portal Manager reads pendingApprovals
+// straight out of clientsDb (not a live Firestore fetch), so a mid-
+// conversation client comment was invisible to the admin - stale forever
+// in the Hub's own copy - until the client eventually made a final
+// decision and the whole entry (comments included) got folded in as a
+// side effect of that move. This pulls comment updates in continuously
+// instead, matching how clientChecklist already works, and returns the
+// newly-arrived client comments so the caller can notify on them.
+function foldInPendingApprovalComments(target, publicData) {
+  if (!target || !publicData || !Array.isArray(publicData.pendingApprovals)) return [];
+  if (!Array.isArray(target.pendingApprovals)) target.pendingApprovals = [];
+
+  const newClientComments = [];
+  publicData.pendingApprovals.forEach(incomingEntry => {
+    const targetEntry = target.pendingApprovals.find(p => p.id === incomingEntry.id);
+    if (!targetEntry) return; // already moved to approvalHistory, or doesn't exist here yet
+
+    const knownCommentIds = new Set((targetEntry.comments || []).map(c => c.id));
+    const incomingComments = Array.isArray(incomingEntry.comments) ? incomingEntry.comments : [];
+    const freshComments = incomingComments.filter(c => !knownCommentIds.has(c.id));
+    if (freshComments.length === 0) return;
+
+    targetEntry.comments = incomingComments;
+    freshComments
+      .filter(c => c.author === 'client')
+      .forEach(c => newClientComments.push({ entry: targetEntry, comment: c }));
+  });
+
+  return newClientComments;
+}
+
 // The Contract & Invoice Status Tracker deliberately keeps its own record
 // list at agency/contractInvoices rather than inside clientsDb (a contract
 // can exist before someone is a fully onboarded client - see that tool's
@@ -4458,6 +4493,18 @@ function ensureClientPortalListeners() {
         pushAdminNotification("testimonial", `${name} submitted a testimonial.`);
       }
 
+      // A client can comment on a pending approval without deciding yet -
+      // foldInApprovalDecisions above only reacts once an item moves to
+      // approvalHistory, so a mid-conversation comment needs its own pull-
+      // in (see foldInPendingApprovalComments' comment for the full story
+      // on why this was invisible to the admin before).
+      const newPendingComments = foldInPendingApprovalComments(currentClient, data);
+      const changedPendingComments = newPendingComments.length > 0;
+      newPendingComments.forEach(({ entry, comment }) => {
+        const preview = comment.text.length > 80 ? comment.text.slice(0, 80) + "…" : comment.text;
+        pushAdminNotification("approval_comment", `${name} commented on "${entry.title}": "${preview}"`, name);
+      });
+
       // Same before/after-diff approach as approvals above: capture which
       // board IDs were already marked viewed before folding in whatever
       // just arrived, so only genuinely new views become a notification -
@@ -4484,7 +4531,7 @@ function ensureClientPortalListeners() {
         currentClient.portalLastVisitedAt = data.lastVisitedAt;
       }
 
-      if (changedOnboarding || changedClientChecklist || changedApprovals || changedTestimonial || changedVisit || changedMoodBoardViews) {
+      if (changedOnboarding || changedClientChecklist || changedApprovals || changedTestimonial || changedVisit || changedMoodBoardViews || changedPendingComments) {
         localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
         try { renderOnboardingChecklist(); } catch (e) {}
         try { renderDashboard(); } catch (e) {}
