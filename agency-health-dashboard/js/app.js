@@ -1,13 +1,24 @@
 /* ============================================================
    AGENCY HEALTH DASHBOARD — APP LOGIC
-   Read-only cross-client view. Pulls from three places that already
-   exist rather than duplicating any data:
+   Read-only cross-client view. Pulls from places that already exist
+   rather than duplicating any data:
      - client.weeklyCheckins[0] (clientsDb, via getAllClients()) for
        Health rating + last check-in date - same data the per-client
        Dashboard's "Client Health" card already reads.
      - agency/contractInvoices for contractRenewalDate per client.
      - agency/revisionFeedbackLog for open (unresolved) revision counts
        per client.
+     - client.budgetPacing (clientsDb) for over/underspend status - same
+       field Budget Pacing Tracker owns; getBudgetPaceClass below mirrors
+       that tool's own getPacingClass() (including its divide-by-zero
+       fix for same-day flights) so the two never disagree.
+     - client.pendingApprovals (clientsDb) for how long the oldest
+       still-open approval has been waiting on the client - same array
+       Client Portal Manager owns; each entry's createdAt timestamp was
+       already being written and just never read for staleness anywhere.
+     - client.meetingNotes (clientsDb) for days since the last logged
+       client contact and how many action items across all meetings are
+       still unchecked - same array Meeting Notes Logger owns.
    Nothing here writes anywhere - it's a lens over data owned by those
    other tools, so there's no version-guard/save logic to worry about.
    ============================================================ */
@@ -46,6 +57,47 @@ function getClients() {
   }
   return {};
 }
+
+// Mirrors budget-pacing-tracker/js/app.js's getPacingClass(), including
+// its fix for a same-day (or misconfigured) flight dividing by zero -
+// duplicated rather than imported since each tool's iframe is fully
+// standalone, but kept intentionally identical so a client never shows
+// "on track" here while the Budget Pacing Tracker itself is flagging it
+// (or vice versa).
+function getBudgetPaceClass(p) {
+  if (!p || !p.totalBudget || p.totalBudget <= 0) return null;
+
+  const start = new Date(p.startDate);
+  const end = new Date(p.endDate);
+  const now = new Date();
+
+  if (now > end) return 'pace-danger';
+  if (now < start) return 'pace-good';
+
+  const totalDays = (end - start) / (1000 * 60 * 60 * 24);
+  const daysPassed = (now - start) / (1000 * 60 * 60 * 24);
+  const expectedPacingRatio = totalDays > 0 ? daysPassed / totalDays : 1;
+  const actualPacingRatio = p.spentToDate / p.totalBudget;
+
+  if (actualPacingRatio > expectedPacingRatio * 1.15) return 'pace-danger';
+  if (actualPacingRatio < expectedPacingRatio * 0.85) return 'pace-warn';
+  return 'pace-good';
+}
+
+// "Awaiting response" threshold for a still-pending client approval - long
+// enough that it's a genuine follow-up candidate, not just "sent this
+// morning." Matches the spirit of Revision & Feedback Tracker's 3-day
+// overdue threshold, given a couple extra days since approvals often need
+// a client to actually look at creative rather than just reply to an email.
+const STALE_APPROVAL_DAYS = 5;
+// "No recent contact" threshold for meeting notes - deliberately longer
+// than the 14-day stale-checkin window above, since not every week
+// necessarily has a client-facing meeting even on a healthy account.
+const STALE_CONTACT_DAYS = 30;
+// Matches heavyRevisions' "3+" bar below, for the same reason: a couple
+// of open items is normal follow-up, three or more starts to suggest
+// things are backing up.
+const HEAVY_OPEN_ACTION_ITEMS = 3;
 
 function listenToContractLog() {
   if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb || !window.parent.firebaseOnSnapshot) return;
@@ -95,7 +147,38 @@ function buildRows() {
     ).length;
     const heavyRevisions = openRevisions >= 3;
 
-    const needsAttention = healthRating === 'Red' || renewalDueSoon || heavyRevisions;
+    // Budget Pacing Tracker only tracks clients someone has opted in there
+    // (client.budgetPacing is undefined for everyone else), so budgetPace
+    // is null - not "on track" - for any client not being tracked at all.
+    const budgetPace = getBudgetPaceClass(client.budgetPacing);
+    const overspending = budgetPace === 'pace-danger';
+
+    const pendingApprovals = Array.isArray(client.pendingApprovals) ? client.pendingApprovals : [];
+    const approvalAges = pendingApprovals
+      .filter(a => a && a.createdAt)
+      .map(a => daysBetween(a.createdAt.slice(0, 10), todayStr()));
+    const oldestPendingApprovalDays = approvalAges.length ? Math.max(...approvalAges) : null;
+    const staleApproval = oldestPendingApprovalDays !== null && oldestPendingApprovalDays >= STALE_APPROVAL_DAYS;
+
+    // Unlike staleCheckin above, a client with ZERO meeting notes ever
+    // logged is deliberately NOT treated as "stale contact" - Meeting
+    // Notes Logger isn't necessarily used for every account yet (a quiet,
+    // report-only retainer might genuinely have no logged meetings and be
+    // perfectly healthy), and flagging every never-logged client as
+    // needing attention would just be adoption noise, not a real signal.
+    // Only a client who WAS being logged and then went quiet counts here.
+    const meetingNotes = Array.isArray(client.meetingNotes) ? client.meetingNotes : [];
+    const lastMeetingDate = meetingNotes.length
+      ? meetingNotes.map(m => m.date).filter(Boolean).sort().slice(-1)[0]
+      : null;
+    const daysSinceMeeting = lastMeetingDate ? daysBetween(lastMeetingDate, todayStr()) : null;
+    const staleContact = daysSinceMeeting !== null && daysSinceMeeting >= STALE_CONTACT_DAYS;
+    const openActionItems = meetingNotes.reduce((sum, m) =>
+      sum + (Array.isArray(m.actionItems) ? m.actionItems.filter(ai => !ai.completed).length : 0), 0);
+    const heavyOpenActionItems = openActionItems >= HEAVY_OPEN_ACTION_ITEMS;
+
+    const needsAttention = healthRating === 'Red' || renewalDueSoon || heavyRevisions
+      || overspending || staleApproval || heavyOpenActionItems || staleContact;
 
     // Written by the portal itself on page load (portal/js/app.js's
     // recordPortalVisit), pulled into clientsDb by the Hub's
@@ -107,7 +190,11 @@ function buildRows() {
     return {
       name, healthRating, lastCheckinDate, daysSinceCheckin, staleCheckin,
       renewalDate, renewalDays, renewalDueSoon, openRevisions, heavyRevisions, needsAttention,
-      portalLastVisitedAt, daysSinceVisit
+      portalLastVisitedAt, daysSinceVisit,
+      budgetPace, overspending,
+      oldestPendingApprovalDays, staleApproval,
+      lastMeetingDate, daysSinceMeeting, staleContact,
+      openActionItems, heavyOpenActionItems
     };
   }).sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -134,6 +221,25 @@ function renewalCellHtml(row) {
   return `<span class="date-cell">${row.renewalDate} (${label})</span>`;
 }
 
+// One compact stacked-badge cell instead of three more full table columns
+// - keeps the table from getting unreadably wide while still surfacing
+// every new signal. Urgent ones (red) only show when actually triggered;
+// "no meetings logged yet" shows as a muted, informational note instead
+// of an urgent flag, since that's more likely a tool-adoption gap than an
+// account actually going quiet (see the comment on staleContact above).
+function signalBadgesHtml(row) {
+  const badges = [];
+  if (row.overspending) badges.push(`<span class="signal-badge">⚠ Overspending</span>`);
+  if (row.staleApproval) badges.push(`<span class="signal-badge">⏳ Approval waiting ${row.oldestPendingApprovalDays}d</span>`);
+  if (row.heavyOpenActionItems) badges.push(`<span class="signal-badge">☑ ${row.openActionItems} open action items</span>`);
+  if (row.staleContact) badges.push(`<span class="signal-badge">💬 No contact ${row.daysSinceMeeting}d</span>`);
+  if (!badges.length && row.lastMeetingDate === null) {
+    badges.push(`<span class="signal-badge signal-muted">No meetings logged</span>`);
+  }
+  if (!badges.length) return '<span class="signal-none">—</span>';
+  return `<div class="signal-badges">${badges.join('')}</div>`;
+}
+
 function renderTable() {
   const rows = buildRows();
   const filterText = el('filterClientInput').value.trim().toLowerCase();
@@ -149,6 +255,9 @@ function renderTable() {
   el('summaryNoCheckin').textContent = rows.filter(r => r.staleCheckin).length;
   el('summaryRenewalsDue').textContent = rows.filter(r => r.renewalDueSoon).length;
   el('summaryOpenRevisions').textContent = rows.filter(r => r.heavyRevisions).length;
+  el('summaryOverspending').textContent = rows.filter(r => r.overspending).length;
+  el('summaryStaleApprovals').textContent = rows.filter(r => r.staleApproval).length;
+  el('summaryNoContact').textContent = rows.filter(r => r.staleContact).length;
 
   const tbody = el('dashboardTableBody');
   tbody.innerHTML = '';
@@ -164,6 +273,7 @@ function renderTable() {
       <td>${renewalCellHtml(row)}</td>
       <td>${row.openRevisions}</td>
       <td>${portalVisitCellHtml(row)}</td>
+      <td>${signalBadgesHtml(row)}</td>
       <td><span class="section-tag ${row.needsAttention ? 'status-attention' : 'status-ok'}">${row.needsAttention ? 'Needs Attention' : 'On Track'}</span></td>
     `;
     tbody.appendChild(tr);

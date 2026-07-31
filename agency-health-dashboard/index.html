@@ -22,7 +22,7 @@
 <span>Account Management</span>
 </div>
 <h1 class="site-title">Agency Health <em>Dashboard</em></h1>
-<p class="site-subtitle">One glance across every client: health rating, last check-in, renewal timing, and open revisions — pulled from the Weekly Check-In, Contract &amp; Invoice Tracker, and Revision &amp; Feedback Tracker so you don't have to open four different tools to see who needs attention.</p>
+<p class="site-subtitle">One glance across every client: health rating, last check-in, renewal timing, open revisions, budget pacing, approval response time, and contact recency — pulled from the Weekly Check-In, Contract &amp; Invoice Tracker, Revision &amp; Feedback Tracker, Budget Pacing Tracker, Client Portal Manager, and Meeting Notes Logger so you don't have to open six different tools to see who needs attention.</p>
 </header>
 
 <div class="summary-bar" id="summaryBar">
@@ -30,6 +30,9 @@
 <div class="summary-stat"><span class="summary-num" id="summaryNoCheckin">0</span><span class="summary-label">No Recent Check-In</span></div>
 <div class="summary-stat"><span class="summary-num" id="summaryRenewalsDue">0</span><span class="summary-label">Renewals Due 30d</span></div>
 <div class="summary-stat"><span class="summary-num" id="summaryOpenRevisions">0</span><span class="summary-label">Clients w/ 3+ Open Revisions</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryOverspending">0</span><span class="summary-label">Overspending Budgets</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryStaleApprovals">0</span><span class="summary-label">Approvals Awaiting Response 5d+</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryNoContact">0</span><span class="summary-label">No Contact Logged 30d+</span></div>
 </div>
 
 <div class="step-card table-card">
@@ -52,6 +55,7 @@
 <th>Renewal</th>
 <th>Open Revisions</th>
 <th>Portal Last Visited</th>
+<th>Other Signals</th>
 <th>Status</th>
 </tr>
 </thead>

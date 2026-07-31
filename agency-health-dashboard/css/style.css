@@ -100,6 +100,28 @@
 .section-tag.status-ok { border-color: #22c55e; color: #22c55e; }
 .section-tag.status-attention { border-color: #ef4444; color: #ef4444; }
 
+.signal-badges { display: flex; flex-direction: column; gap: 4px; }
+.signal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 100px;
+  white-space: nowrap;
+  width: fit-content;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+.signal-badge.signal-muted {
+  border-color: var(--color-border-md);
+  color: var(--color-text-muted);
+  background: var(--color-surface-2);
+}
+.signal-none { color: var(--color-text-muted); font-size: 12px; }
+
 .empty-state { text-align: center; padding: 40px 20px; color: var(--color-text-muted); font-size: 14px; }
 
 @media (max-width: 768px) {
