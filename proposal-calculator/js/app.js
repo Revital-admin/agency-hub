@@ -181,6 +181,60 @@ document.addEventListener('DOMContentLoaded', async () => {
       ]
     },
     {
+      id: 'presetSEO', name: 'SEO Foundations', type: 'services',
+      services: [
+        "On-Page SEO (meta titles, descriptions, headers, content optimization)",
+        "Technical SEO (site speed, crawlability, schema markup)",
+        "Keyword Research & Strategy",
+        "SEO Audits",
+        "Google Search Console Management",
+        "Rank Tracking & Reporting"
+      ]
+    },
+    {
+      id: 'presetEmail', name: 'Email Growth', type: 'services',
+      services: [
+        "Newsletter Campaigns",
+        "Promotional Emails",
+        "Drip / Nurture Sequences",
+        "Welcome Sequences",
+        "List Segmentation & Hygiene",
+        "Performance Reporting"
+      ]
+    },
+    {
+      id: 'presetInbound', name: 'Content & Inbound', type: 'services',
+      services: [
+        "Content Strategy Development",
+        "Blog Writing & Management",
+        "Lead Magnet Creation (guides, checklists, templates, free audits)",
+        "Landing Page Copywriting",
+        "CTA Strategy",
+        "Content Distribution"
+      ]
+    },
+    {
+      id: 'presetStrategyRetainer', name: 'Strategy Retainer', type: 'services',
+      services: [
+        "Competitor Analysis",
+        "Brand Positioning",
+        "Quarterly Marketing Planning",
+        "Analytics & Data Interpretation",
+        "Consulting & Advisory"
+      ]
+    },
+    {
+      id: 'presetDtcEssentials', name: 'DTC Essentials', type: 'services',
+      services: [
+        "Meta Ads (Facebook + Instagram)",
+        "TikTok Ads",
+        "Retargeting Campaigns",
+        "Drip / Nurture Sequences",
+        "Conversion Rate Optimization (CRO)",
+        "Analytics Setup (GA4, Meta Pixel, GTM)"
+      ]
+    },
+    {
       id: 'presetWebBasic', name: 'Basic Website ($700)', type: 'flat',
       itemName: 'Basic Website Package (up to 5 pages, responsive design, contact form, basic SEO, 2 revision rounds)',
       price: 700, feeType: 'setup'
