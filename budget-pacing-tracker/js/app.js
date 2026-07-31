@@ -48,7 +48,13 @@ function getPacingClass(spent, total, startDate, endDate) {
 
   const totalDays = (end - start) / (1000 * 60 * 60 * 24);
   const daysPassed = (now - start) / (1000 * 60 * 60 * 24);
-  const expectedPacingRatio = daysPassed / totalDays;
+  // A same-day (or misconfigured start-after-end) flight makes totalDays
+  // 0, which used to divide out to NaN - NaN fails every comparison
+  // below, so this silently fell through to the default "pace-good"
+  // instead of ever flagging over/underspend. Treat a zero-or-less-day
+  // flight as fully due today (100% of budget expected), which is what
+  // "the whole flight is today" actually means.
+  const expectedPacingRatio = totalDays > 0 ? daysPassed / totalDays : 1;
   const actualPacingRatio = spent / total;
 
   if (actualPacingRatio > expectedPacingRatio * 1.15) return 'pace-danger'; // Overspending
