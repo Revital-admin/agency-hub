@@ -2894,6 +2894,16 @@ let lastKnownClientsDbShardCount = 0;
 let clientsDbShardsLoadedIndices = new Set();
 let clientsDbAllShardsLoaded = false;
 
+// Optimistic-concurrency guard for clientsDb itself (see
+// commitDatabaseToCloud below) - kept fresh by loadDatabase's meta-doc
+// listener, same version-field pattern every other agency/* doc in the
+// Hub now uses (see saveVersionedAgencyDoc). clientsDb was the one doc
+// left without this protection after this session's sweep - the exact
+// "someone else saved while you had it open" bug class that already
+// caused a real data-loss incident once (see data-loss-prevention-plan.md),
+// just never closed here specifically.
+let clientsDbDocVersion = 0;
+
 function getClientsDbShardMetaDocRef() {
   if (!window.firebaseDb || !window.firebaseDoc) return null;
   return window.firebaseDoc(window.firebaseDb, "agency", "clientsDbShardMeta");
@@ -3078,23 +3088,10 @@ function commitDatabaseToCloud() {
     return Promise.all(backupWrites);
   }).catch(err => console.error("clientsDb backup write failed:", err));
 
-  const writes = shards.map((shardObj, i) => {
-    const docRef = getClientsDbShardDocRef(i);
-    return window.firebaseSetDoc(docRef, shardObj);
-  });
-
-  // If the client list just got shorter (client deleted) and now needs
-  // fewer shards than last time, blank out the now-unused trailing shard
-  // documents instead of leaving stale client data sitting in them.
-  for (let i = shards.length; i < lastKnownClientsDbShardCount; i++) {
-    const docRef = getClientsDbShardDocRef(i);
-    writes.push(window.firebaseSetDoc(docRef, {}));
-  }
-
   const metaRef = getClientsDbShardMetaDocRef();
-  writes.push(window.firebaseSetDoc(metaRef, { count: shards.length }));
 
-  // Add a manual timeout to detect hanging
+  // Add a manual timeout to detect hanging - covers the version check
+  // below too, not just the writes, since both are part of one save cycle.
   let resolved = false;
   setTimeout(() => {
     if (!resolved && indicator) {
@@ -3103,12 +3100,70 @@ function commitDatabaseToCloud() {
     }
   }, 10000);
 
-  Promise.all(writes).then(() => {
-    resolved = true;
-    if (indicator) {
-      indicator.innerHTML = "Saved to Cloud ✅";
-      setTimeout(() => { indicator.style.opacity = "0"; }, 2000);
+  // Optimistic-concurrency guard, same version-field pattern as every
+  // other agency/* doc (see saveVersionedAgencyDoc) - re-read the meta
+  // doc's version fresh right before writing, and refuse the ENTIRE save
+  // (not just the meta doc) if it moved since this tab last synced,
+  // rather than silently overwriting whatever another admin just saved
+  // elsewhere in the client roster. This is deliberately the same
+  // hard-block-and-ask behavior as everywhere else, not a softer
+  // auto-merge - clientsDb fires this on nearly every edit across the
+  // whole Hub, so a rejected save is expected to be rare in practice for
+  // a team this size, and staying consistent with the pattern every other
+  // tool already uses (rather than inventing a different, more complex
+  // behavior just for this one doc) keeps the "someone else saved, reload
+  // and redo" mental model the same everywhere an admin might see it.
+  window.firebaseGetDoc(metaRef).then((freshMetaSnap) => {
+    const freshVersion = (freshMetaSnap.exists && typeof freshMetaSnap.data().version === "number")
+      ? freshMetaSnap.data().version : 0;
+
+    if (freshVersion !== clientsDbDocVersion) {
+      resolved = true;
+      console.warn("commitDatabaseToCloud: skipped - clientsDb changed elsewhere since this tab last synced (local v" +
+        clientsDbDocVersion + " vs cloud v" + freshVersion + ").");
+      if (indicator) {
+        indicator.innerHTML = "Save Skipped ⚠️";
+        setTimeout(() => { indicator.style.opacity = "0"; }, 5000);
+      }
+      showBanner("error", "Someone else saved changes to the client database while you had this open. Reload the page to see their changes, then redo your last edit.");
+      return;
     }
+
+    const writes = shards.map((shardObj, i) => {
+      const docRef = getClientsDbShardDocRef(i);
+      return window.firebaseSetDoc(docRef, shardObj);
+    });
+
+    // If the client list just got shorter (client deleted) and now needs
+    // fewer shards than last time, blank out the now-unused trailing shard
+    // documents instead of leaving stale client data sitting in them.
+    for (let i = shards.length; i < lastKnownClientsDbShardCount; i++) {
+      const docRef = getClientsDbShardDocRef(i);
+      writes.push(window.firebaseSetDoc(docRef, {}));
+    }
+
+    const nextVersion = freshVersion + 1;
+    writes.push(window.firebaseSetDoc(metaRef, { count: shards.length, version: nextVersion }));
+
+    return Promise.all(writes).then(() => {
+      resolved = true;
+      clientsDbDocVersion = nextVersion;
+      if (indicator) {
+        indicator.innerHTML = "Saved to Cloud ✅";
+        setTimeout(() => { indicator.style.opacity = "0"; }, 2000);
+      }
+
+      // Mirror only the portal-facing subset of each client into its own
+      // public document (see syncPublicPortalDocs). The full clientsDb
+      // data above is admin-only under Firestore rules; this is what the
+      // unauthenticated client portal is allowed to read. Only runs after
+      // a confirmed successful save - cleanDb shouldn't be pushed out to
+      // the public portal on a skipped/failed save, since it may not
+      // reflect the true current state.
+      syncPublicPortalDocs(cleanDb).catch(err => {
+        console.error("Public portal sync failed:", err);
+      });
+    });
   }).catch(err => {
     resolved = true;
     console.error("Firebase save failed:", err);
@@ -3116,14 +3171,6 @@ function commitDatabaseToCloud() {
       indicator.innerHTML = "Cloud Error ❌: " + err.message;
       setTimeout(() => { indicator.style.opacity = "0"; }, 5000);
     }
-  });
-
-  // Mirror only the portal-facing subset of each client into its own
-  // public document (see syncPublicPortalDocs). The full clientsDb data
-  // above is admin-only under Firestore rules; this is what the
-  // unauthenticated client portal is allowed to read.
-  syncPublicPortalDocs(cleanDb).catch(err => {
-    console.error("Public portal sync failed:", err);
   });
 }
 
@@ -4050,6 +4097,7 @@ function loadDatabase() {
     const metaRef = getClientsDbShardMetaDocRef();
     window.firebaseOnSnapshot(metaRef, async (metaSnap) => {
       if (metaSnap.exists && typeof metaSnap.data().count === 'number') {
+        clientsDbDocVersion = typeof metaSnap.data().version === 'number' ? metaSnap.data().version : 0;
         setClientsDbShardListenerCount(metaSnap.data().count);
         return;
       }
