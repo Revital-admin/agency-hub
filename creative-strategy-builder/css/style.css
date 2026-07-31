@@ -1,0 +1,80 @@
+.csb-hint { font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 18px; line-height: 1.5; }
+
+.csb-tabs { display: flex; gap: 6px; margin-bottom: 22px; flex-wrap: wrap; }
+.csb-tabs button.is-active { background: var(--color-accent); border-color: var(--color-accent); color: #1a1a17; }
+
+.csb-divider { height: 1px; background: var(--color-border); margin: 22px 0; }
+
+.csb-panel { margin-bottom: 40px; }
+
+.csb-tag-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 4px 16px;
+  margin-bottom: 6px;
+}
+.csb-tag-grid .form-group { margin-bottom: 14px; }
+
+.tracker-table-wrap { overflow-x: auto; }
+.tracker-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tracker-table th {
+  text-align: left;
+  padding: 12px 14px;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+.tracker-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  vertical-align: top;
+}
+.tracker-table tr:last-child td { border-bottom: none; }
+
+.tracker-table td.stage-cell { font-weight: 600; white-space: nowrap; }
+
+.tracker-table textarea,
+.tracker-table input[type="text"] {
+  width: 100%;
+  min-width: 140px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-md);
+  border-radius: 5px;
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  resize: vertical;
+}
+
+.csb-funnel-table td.stage-cell,
+.csb-thread-table td.stage-cell { min-width: 90px; }
+
+.csb-taxonomy-table td { font-size: 12px; }
+.csb-taxonomy-table td.asset-cell { font-weight: 600; white-space: nowrap; }
+
+.row-actions button {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 100px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition, 0.15s ease);
+}
+.row-actions button:hover {
+  background: var(--color-surface-2);
+  border-color: var(--color-border-md);
+  color: #ef4444;
+}
+
+.empty-state { padding: 30px; text-align: center; color: var(--color-text-secondary); font-size: 13px; }

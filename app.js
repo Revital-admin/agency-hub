@@ -434,6 +434,7 @@ let iframeNeedsReload = {
   "tab-welcomeguide": true,
   "tab-emailsig": true,
   "tab-creativebrief": true,
+  "tab-creativestrategy": true,
   "tab-contentaudit": true,
   "tab-paidads": true,
   "tab-emailstrategy": true,
@@ -921,6 +922,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-creativebrief":
       renderCreativeBrief();
+      break;
+    case "tab-creativestrategy":
+      renderCreativeStrategyBuilder();
       break;
     case "tab-contentaudit":
       renderContentAudit();
@@ -2079,6 +2083,11 @@ function renderEmailSigGenerator() {
 // ── Creative Brief Generator Controller ──
 function renderCreativeBrief() {
   setIframeAbsoluteSrc('#tab-creativebrief iframe', "creative-brief-generator/index.html");
+}
+
+// ── Creative Strategy Builder Controller ──
+function renderCreativeStrategyBuilder() {
+  setIframeAbsoluteSrc('#tab-creativestrategy iframe', "creative-strategy-builder/index.html");
 }
 
 // ── Content Audit Controller ──

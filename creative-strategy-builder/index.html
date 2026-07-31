@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Creative Strategy Builder</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="css/style.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<main class="main-content" style="max-width: 1100px;">
+
+<div class="brand-bar">
+  <div class="brand-logo-container"></div>
+  <button class="btn btn-secondary" id="copyBriefBtn" type="button">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+    <span>Copy Full Strategy</span>
+  </button>
+</div>
+
+<header class="site-header">
+  <div class="header-eyebrow">
+    <span class="dot"></span>
+    <span id="clientNameLabel">Creative planning</span>
+  </div>
+  <h1 class="site-title">Creative <em>Strategy Builder</em></h1>
+  <p class="site-subtitle">Set the strategy before anyone shoots or writes anything: the Creative Strategy Stack, how the funnel stages should work, the Golden Thread that keeps every channel consistent, and a taxonomy log so you know why a winner won.</p>
+</header>
+
+<div class="view-toggle-group csb-tabs">
+  <button class="btn btn-secondary is-active" data-panel="panelStack" type="button">1. Strategy Stack</button>
+  <button class="btn btn-secondary" data-panel="panelFunnel" type="button">2. Funnel Plan</button>
+  <button class="btn btn-secondary" data-panel="panelThread" type="button">3. Golden Thread</button>
+  <button class="btn btn-secondary" data-panel="panelTaxonomy" type="button">4. Taxonomy Log</button>
+</div>
+
+<!-- ── PANEL 1: STRATEGY STACK ── -->
+<section id="panelStack" class="csb-panel">
+  <div class="step-card">
+    <div class="section-title"><h2 style="font-family: var(--font-heading); color: var(--color-accent);">The Creative Strategy Stack</h2></div>
+    <p class="csb-hint">Seven questions every piece of creative should be able to answer before production starts. Each level builds on the one above it.</p>
+
+    <div class="form-group">
+      <label for="stackGoal">1. Business goal — what commercial result is this meant to support?</label>
+      <input type="text" id="stackGoal" placeholder="e.g. Drive first purchase of the intro bundle among new visitors from paid social">
+    </div>
+    <div class="form-group">
+      <label for="stackFunnelStage">2. Funnel stage — where is the audience in their relationship with the brand?</label>
+      <select id="stackFunnelStage">
+        <option value="">Select a stage…</option>
+        <option value="Awareness">Awareness</option>
+        <option value="Consideration">Consideration</option>
+        <option value="Conversion">Conversion</option>
+        <option value="Retention">Retention</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="stackAudience">3. Audience — which specific segment, not the general customer?</label>
+      <textarea id="stackAudience" rows="2" placeholder="e.g. Women 28-42, busy professionals, relying on caffeine to get through the day"></textarea>
+    </div>
+    <div class="form-group">
+      <label for="stackProblem">4. Problem or desire — framed the way they'd say it to a friend</label>
+      <textarea id="stackProblem" rows="2" placeholder="e.g. Want steady energy without the crash, but don't connect it to sleep quality"></textarea>
+    </div>
+    <div class="form-group">
+      <label for="stackMechanism">5. Product mechanism — the one feature/process that makes the claim believable</label>
+      <textarea id="stackMechanism" rows="2" placeholder="e.g. Magnesium glycinate supports deep sleep and overnight recovery"></textarea>
+    </div>
+    <div class="form-group">
+      <label for="stackProof">6. Proof — what makes the claim credible?</label>
+      <textarea id="stackProof" rows="2" placeholder="e.g. Customer reviews, sleep tracking screenshots, ingredient education"></textarea>
+    </div>
+    <div class="form-group">
+      <label for="stackMessage">7. Message — the one sentence someone should take away</label>
+      <textarea id="stackMessage" rows="2" placeholder="e.g. Better mornings start with what you do the night before"></textarea>
+    </div>
+
+    <div class="csb-divider"></div>
+
+    <div class="form-group">
+      <label for="stackConcept">Concept — the angle, hook, or story that makes the message land</label>
+      <input type="text" id="stackConcept" placeholder="e.g. Your mornings start the night before">
+    </div>
+    <div class="form-group">
+      <label for="stackFormat">Format — what asset type best delivers this at this funnel stage</label>
+      <input type="text" id="stackFormat" placeholder="e.g. Meta video ad, educational email, PDP recovery section">
+    </div>
+    <div class="form-group">
+      <label for="stackReuse">Reuse plan — where else does this idea go before production starts</label>
+      <textarea id="stackReuse" rows="2" placeholder="e.g. 2 Reels, 1 Meta ad, 1 email, 1 PDP module, 1 IG carousel"></textarea>
+    </div>
+  </div>
+</section>
+
+<!-- ── PANEL 2: FUNNEL PLAN ── -->
+<section id="panelFunnel" class="csb-panel" style="display:none;">
+  <div class="step-card">
+    <div class="section-title"><h2 style="font-family: var(--font-heading); color: var(--color-accent);">Planning by Funnel Stage</h2></div>
+    <p class="csb-hint">A first-time visitor needs something completely different from someone who's nearly bought. Map what creative needs to do at each stage for this client.</p>
+    <div class="tracker-table-wrap">
+      <table class="tracker-table csb-funnel-table">
+        <thead>
+          <tr><th style="width:110px;">Stage</th><th>What the customer needs</th><th>What creative should do</th><th>Strong formats</th></tr>
+        </thead>
+        <tbody id="funnelTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ── PANEL 3: GOLDEN THREAD ── -->
+<section id="panelThread" class="csb-panel" style="display:none;">
+  <div class="step-card">
+    <div class="section-title"><h2 style="font-family: var(--font-heading); color: var(--color-accent);">The Golden Thread</h2></div>
+    <p class="csb-hint">What stays constant across every channel, and what's allowed to adapt. This is what makes a customer feel like they're dealing with one coherent brand.</p>
+
+    <div class="form-group">
+      <label for="threadCoreMessage">Core message — what belief are we trying to build or deepen?</label>
+      <textarea id="threadCoreMessage" rows="2" placeholder="e.g. Sustained, clean energy feels better than the spike-and-crash cycle"></textarea>
+    </div>
+    <div class="form-group">
+      <label for="threadExpression">Creative expression — what visual or narrative idea brings that to life?</label>
+      <textarea id="threadExpression" rows="2" placeholder="e.g. The calm, focused morning. Slow ritual, clear thinking, steady pace"></textarea>
+    </div>
+
+    <div class="csb-divider"></div>
+    <p class="csb-hint" style="margin-bottom:14px;">The thread holds. The execution adapts per channel — hook, pacing, and CTA strength shift, but the message underneath doesn't.</p>
+
+    <div class="tracker-table-wrap">
+      <table class="tracker-table csb-thread-table">
+        <thead>
+          <tr><th style="width:120px;">Channel</th><th>Hook / opening</th><th>Format</th><th>Job at this touchpoint</th></tr>
+        </thead>
+        <tbody id="threadTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ── PANEL 4: TAXONOMY LOG ── -->
+<section id="panelTaxonomy" class="csb-panel" style="display:none;">
+  <div class="step-card">
+    <div class="section-title"><h2 style="font-family: var(--font-heading); color: var(--color-accent);">Creative Taxonomy Log</h2></div>
+    <p class="csb-hint">Tag every asset before it goes live. Unlabeled creative means a win teaches you nothing beyond "that one worked." These nine tags are how you find out why.</p>
+
+    <div class="csb-tag-grid">
+      <div class="form-group"><label for="tagAsset">Asset name</label><input type="text" id="tagAsset" placeholder="e.g. Founder clip v2"></div>
+      <div class="form-group"><label for="tagAudience">Audience</label><input type="text" id="tagAudience" placeholder="Who this is built for"></div>
+      <div class="form-group"><label for="tagAngle">Angle</label><input type="text" id="tagAngle" placeholder="Messaging approach"></div>
+      <div class="form-group"><label for="tagMechanism">Mechanism</label><input type="text" id="tagMechanism" placeholder="Feature/ingredient highlighted"></div>
+      <div class="form-group"><label for="tagFormat">Format</label><input type="text" id="tagFormat" placeholder="Asset type"></div>
+      <div class="form-group"><label for="tagHook">Hook tactic</label><input type="text" id="tagHook" placeholder="How the opening works"></div>
+      <div class="form-group"><label for="tagProof">Proof type</label><input type="text" id="tagProof" placeholder="What makes the claim credible"></div>
+      <div class="form-group"><label for="tagOffer">Offer</label><input type="text" id="tagOffer" placeholder="Commercial incentive, if any"></div>
+      <div class="form-group">
+        <label for="tagFunnelStage">Funnel stage</label>
+        <select id="tagFunnelStage">
+          <option value="">Select…</option>
+          <option value="Awareness">Awareness</option>
+          <option value="Consideration">Consideration</option>
+          <option value="Conversion">Conversion</option>
+          <option value="Retention">Retention</option>
+        </select>
+      </div>
+      <div class="form-group"><label for="tagChannel">Channel</label><input type="text" id="tagChannel" placeholder="Where it's published"></div>
+    </div>
+    <button class="btn-primary" id="addTagBtn" type="button">+ Add Tagged Asset</button>
+
+    <div class="tracker-table-wrap" style="margin-top:22px;">
+      <table class="tracker-table csb-taxonomy-table">
+        <thead>
+          <tr>
+            <th>Asset</th><th>Audience</th><th>Angle</th><th>Mechanism</th><th>Format</th>
+            <th>Hook</th><th>Proof</th><th>Offer</th><th>Stage</th><th>Channel</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="taxonomyTableBody"></tbody>
+      </table>
+      <p id="taxonomyEmptyState" class="empty-state" style="display:none;">No assets tagged yet.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<script src="js/logo.js"></script>
+<script src="js/app.js?v=1"></script>
+</body>
+</html>
