@@ -1,91 +1,40 @@
-# Client Onboarding & Audit Hub
+# Revital Productions — Client Onboarding & Audit Hub
 
-A premium, glassmorphic client onboarding and audit management console built for agencies and digital marketing teams. This portal consolidates key onboarding workflows, SWOT competitor analysis, checklist audits, social strategy guides, and monthly client reporting into a unified interface.
+An internal business-operations Hub for Revital Productions: one place for client data, contracts, audits, reporting, production workflows, and the sales pipeline, organized per client and shared across the whole team. It's grown into the closest thing the agency has to a business OS — 60+ purpose-built tools sharing one client data model, one auth gate, and one backend.
 
----
+Live at **hub.revitalproductions.com**. Access is gated to `@revitalproductions.com` Google accounts via Cloudflare Access — there's no separate login screen or signup flow.
 
-## 🌟 Key Features
-
-1. **Overview Dashboard**: Track audit progress (UX/UI, SEO, Social, and Content Strategy) dynamically across all client profiles.
-2. **Client Workspace Manager**: Easily switch between client profiles, add new clients, or export the entire LocalStorage database.
-3. **Quick Sandbox (One-Offs)**: A pinned workspace that allows running one-off audits without cluttering client list. Features a global warning banner and a master reset button to clear checklist states instantly.
-4. **UX/UI Heuristic Audit**: A structured grading system covering usability heuristics, layout, typography, and site performance.
-5. **SEO Audit Checklist**: Step-by-step workflow covering indexing, technical SEO, mobile friendliness, metadata, and core web vitals.
-6. **Social & Digital Strategy Guide**: Tactical digital marketing pillars covering audience pain points, topic clustering, and KPIs.
-7. **Social Media Audit**: 8-step auditing tool with 40 granular sub-tasks for optimizing brand presence.
-8. **Competitor Lists (Web & Social)**: Comparison grids with built-in interactive SWOT prompts that copy directly into notes.
-9. **Monthly Report Designer**: real-time preview document generator with custom platform metrics (Engagement, Reach, Impressions) that formats into a clean, borderless layout for PDF printing.
+For a full map of how the platform fits together (core shell vs. tools, the client data model, auth, shared backend services, and known rough edges), see **[ARCHITECTURE.md](./ARCHITECTURE.md)**. That doc is the up-to-date reference; this README is just the front door.
 
 ---
 
-## 🛠 Architecture & Tech Stack
+## Tech stack
 
-- **Core Technologies**: HTML5, CSS3 (Vanilla glassmorphic design), ES6 JavaScript.
-- **Embedded Checklists**: Standalone sub-tools nested inside parent `iframe` wrappers.
-- **Bidirectional Sync**: Checklist states and text fields bind directly to parent `localStorage` data objects. Switching clients or updating checkmarks triggers real-time parent state saving and dashboard metric re-calculations.
-- **Print Engine**: Fully integrated `@media print` directives in the stylesheets that automatically hide navigation sidebars, buttons, and input boundaries for clean PDF exports.
+- **Backend**: a single Cloudflare Worker (`_worker.js`) — serves the static site, bridges Cloudflare Access identity to a Firebase custom token, and handles email (Resend), contract file storage (R2), and e-signature (DocuSign) API routes.
+- **Data**: Firestore. `agency/*` holds internal data (client roster, sharded across multiple docs since a single client list exceeds Firestore's 1MB doc limit); `clients/{token}` is a narrow public-portal projection for the client-facing `portal/` app, keyed by a magic-link token.
+- **Frontend**: vanilla HTML/CSS/JS. `index.html` + root `app.js` are the shell (nav, client switcher, shared data access); every tool is its own directory with its own `index.html`/`css`/`js`, loaded into an iframe and talking to the shell via a `window.parent.*` API.
+- **Auth**: Cloudflare Access at the edge (Google SSO, domain-restricted) — not application code.
 
 ---
 
-## 🚀 How to Run Locally
+## Deploying
 
-Since this portal utilizes `iframe` elements sharing a parent origin, browsers require files to be served via a local web server (instead of double-clicking `index.html` from the file system).
+This deploys via Cloudflare's git-connected auto-deploy, not GitHub Pages or a manual upload flow. To ship a change:
 
-### Option 1: Using Python (Simplest)
-Open terminal in the project directory and run:
 ```bash
-python3 -m http.server 8000
+git push origin main
 ```
-Then open your web browser and navigate to:
-**[http://localhost:8000](http://localhost:8000)**
 
-### Option 2: Using Node.js
-If you have Node.js installed, you can use `serve` or any similar HTTP server:
+If a change needs a fresh Worker deploy immediately rather than waiting on the git-connected build:
+
 ```bash
-npx serve
+npx wrangler deploy
 ```
-Then navigate to the port displayed in the console.
+
+(Requires `wrangler` to be authenticated against the Cloudflare account this project lives under — run `npx wrangler whoami` to check.)
 
 ---
 
-## 📦 How to Upload to GitHub
+## Running locally
 
-Follow these steps to initialize a Git repository and push the project to your GitHub account:
-
-1. **Create a GitHub Repository**:
-   - Go to [GitHub](https://github.com) and click **New Repository**.
-   - Name your repository (e.g., `client-onboarding-hub`).
-   - Do **not** add a README, `.gitignore`, or license (as we will create them locally).
-
-2. **Initialize Local Git Repository**:
-   Open terminal in your project directory `/Users/ronald/Downloads/Ui landing page` and run:
-   ```bash
-   git init
-   ```
-
-3. **Add and Commit Files**:
-   ```bash
-   git add .
-   git commit -m "Initial commit: Client Onboarding and Audit Hub with new modules"
-   ```
-
-4. **Link Local Repository to GitHub & Push**:
-   Replace `your-username` with your GitHub username:
-   ```bash
-   git branch -M main
-   git remote add origin https://github.com/your-username/client-onboarding-hub.git
-   git push -u origin main
-   ```
-
----
-
-## 🌐 Publish Online with GitHub Pages
-
-You can host this hub for free directly on GitHub Pages:
-
-1. Go to your repository on GitHub.
-2. Click **Settings** (gear icon at the top).
-3. Under the left menu, click **Pages**.
-4. Under **Build and deployment**, set the branch Source to `main` and folder to `/ (root)`.
-5. Click **Save**.
-6. After a few minutes, your site will be live at: `https://your-username.github.io/client-onboarding-hub/`
+Because the Hub depends on Cloudflare Access headers, a live Firestore project, and Worker-only API routes (`/api/mint-firebase-token`, `/api/send-email`, `/api/contracts`, `/api/docusign/send-envelope`), a plain static file server (`python3 -m http.server`, `npx serve`, etc.) will render the UI but auth, data persistence, and every API-backed feature won't work. For real local testing, use `wrangler dev` against the same `wrangler.toml` config used for production, with your own Firestore/R2 credentials wired in.
