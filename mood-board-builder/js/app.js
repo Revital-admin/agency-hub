@@ -100,7 +100,12 @@ let imageDropCounter = 0;
 // shared-dropzone.js) so it lives inline in the client doc, same as
 // Client Portal Manager's logo.
 function handleDroppedImage(file) {
-  processImageFile(file, { maxWidth: 800 }).then(dataUrl => {
+  // 1400px (bumped from 800px): the Client Portal now opens these in a
+  // near-full-screen lightbox rather than only ever showing a 36px chip,
+  // so the old cap looked visibly soft once zoomed. Still compressed/
+  // capped, not the original file - the size warning below accounts for
+  // the larger resulting size on its own, no extra wiring needed.
+  processImageFile(file, { maxWidth: 1400 }).then(dataUrl => {
     imageDropCounter++;
     const label = (file.name || `Image ${imageDropCounter}`).replace(/\.[^.]+$/, '');
     draftEmbedLinks.push({ id: uid(), label, url: dataUrl, isImage: true });
@@ -170,9 +175,10 @@ function renderImageGrid() {
     }
   }
 
-  grid.innerHTML = images.map(l => `
-    <div class="mb-image-tile">
+  grid.innerHTML = images.map((l, idx) => `
+    <div class="mb-image-tile${idx === 0 ? ' mb-image-tile-lead' : ''}" draggable="true" data-id="${l.id}">
       <img src="${l.url}" alt="${escapeHtml(l.label)}">
+      ${idx === 0 ? '<span class="mb-image-lead-badge">Lead</span>' : ''}
       <button data-id="${l.id}" class="mb-image-remove-btn" aria-label="Remove image" title="Remove">✕</button>
       <input type="text" class="mb-image-caption-input" data-id="${l.id}" value="${escapeHtml(l.label)}" placeholder="Add a caption..." aria-label="Image caption">
     </div>
@@ -186,6 +192,69 @@ function renderImageGrid() {
       if (entry) entry.label = input.value;
     });
   });
+  wireImageReordering(grid);
+}
+
+// Drag-to-reorder, desktop only (native HTML5 drag-and-drop - this is the
+// internal admin tool, used at a desk, not the client-facing Portal, so
+// skipping touch support is an acceptable tradeoff). Reorders just the
+// image entries within draftEmbedLinks and leaves URL link entries where
+// they are; renderLinksList() filters those out anyway so their position
+// in the combined array doesn't matter. The new order is what gets saved
+// to board.embedLinks, so it's also what the Client Portal grid shows -
+// first image here becomes the "Lead" image there too.
+let draggedImageId = null;
+
+function wireImageReordering(grid) {
+  const tiles = grid.querySelectorAll('.mb-image-tile');
+  tiles.forEach(tile => {
+    tile.addEventListener('dragstart', (e) => {
+      // Without this check, clicking into the caption input to select
+      // text (or clicking the remove button) can get hijacked by the
+      // tile's own draggable="true" instead of behaving like a normal
+      // text field / button click.
+      if (e.target.classList.contains('mb-image-caption-input') || e.target.classList.contains('mb-image-remove-btn')) {
+        e.preventDefault();
+        return;
+      }
+      draggedImageId = tile.getAttribute('data-id');
+      tile.classList.add('mb-image-dragging');
+    });
+    tile.addEventListener('dragend', () => {
+      tile.classList.remove('mb-image-dragging');
+      draggedImageId = null;
+    });
+    tile.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      tile.classList.add('mb-image-drop-target');
+    });
+    tile.addEventListener('dragleave', () => {
+      tile.classList.remove('mb-image-drop-target');
+    });
+    tile.addEventListener('drop', (e) => {
+      e.preventDefault();
+      tile.classList.remove('mb-image-drop-target');
+      const targetId = tile.getAttribute('data-id');
+      if (!draggedImageId || draggedImageId === targetId) return;
+      reorderImages(draggedImageId, targetId);
+    });
+  });
+}
+
+function reorderImages(draggedId, targetId) {
+  const images = draftEmbedLinks.filter(isImageEntry);
+  const links = draftEmbedLinks.filter(l => !isImageEntry(l));
+  const fromIdx = images.findIndex(l => l.id === draggedId);
+  const toIdx = images.findIndex(l => l.id === targetId);
+  if (fromIdx === -1 || toIdx === -1) return;
+  const [moved] = images.splice(fromIdx, 1);
+  images.splice(toIdx, 0, moved);
+  // Matches handleDroppedImage/addDraftEmbedLink: this only touches the
+  // in-progress draft, not the saved board, so no persist() here - the
+  // reorder is committed along with everything else when "Save Mood
+  // Board" is clicked (saveBoard() writes draftEmbedLinks to the board).
+  draftEmbedLinks = [...images, ...links];
+  renderImageGrid();
 }
 
 function renderLinksList() {
