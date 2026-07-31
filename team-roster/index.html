@@ -159,6 +159,15 @@
 </div>
 </div>
 
+<!-- Onboarding Checklist - new-hire setup steps, not to be confused with
+     the Client Onboarding tab elsewhere in the Hub. Same "existing
+     member only" visibility as Time Off above - see
+     renderOnboardingSection/toggleOnboardingItem in js/app.js. -->
+<div class="form-group" id="onboardingSection" style="display:none;">
+<label>Onboarding Checklist</label>
+<div id="onboardingList"></div>
+</div>
+
 <div class="form-actions" style="display:flex; gap:10px; margin-top: 10px;">
 <button id="saveMemberBtn" class="btn-primary">Add Team Member</button>
 <button id="cancelEditBtn" class="btn btn-secondary" style="display:none;">Cancel</button>
@@ -215,6 +224,6 @@
 </div>
 
 </main>
-<script src="js/app.js?v=6"></script>
+<script src="js/app.js?v=7"></script>
 </body>
 </html>

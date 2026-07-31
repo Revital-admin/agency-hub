@@ -267,6 +267,78 @@ function renderTimeline() {
   }).join('');
 }
 
+// ── Onboarding Checklist (new-hire setup, not client onboarding) ──
+// Same "only shown once a member exists" pattern as Time Off - nothing
+// to check off for a brand-new, not-yet-saved entry. A fixed list of
+// steps rather than free-form (like QC Checklist/Red Flag Checklist),
+// since "did we actually do the standard setup steps" is the whole
+// point - a blank free-text box would just recreate the "did we
+// remember to..." problem this exists to solve. Deliberately generic
+// enough to cover both contractors and employees rather than two
+// separate lists.
+const ONBOARDING_ITEMS = [
+  { key: 'email', label: 'Company email created' },
+  { key: 'clickup', label: 'Added to ClickUp' },
+  { key: 'passwordmanager', label: 'Password manager access granted' },
+  { key: 'agreement', label: 'Agreement sent (contractor) or offer signed (employee)' },
+  { key: 'hubaccess', label: 'Hub login confirmed' },
+  { key: 'firstclient', label: 'First client assigned' }
+];
+
+function getOnboardingState(entry) {
+  if (!entry.onboarding || typeof entry.onboarding !== 'object') entry.onboarding = { items: {} };
+  if (!entry.onboarding.items || typeof entry.onboarding.items !== 'object') entry.onboarding.items = {};
+  return entry.onboarding;
+}
+
+function onboardingProgress(entry) {
+  if (!entry.onboarding || !entry.onboarding.items) return { done: 0, total: ONBOARDING_ITEMS.length };
+  const done = ONBOARDING_ITEMS.filter(item => entry.onboarding.items[item.key] && entry.onboarding.items[item.key].done).length;
+  return { done, total: ONBOARDING_ITEMS.length };
+}
+
+function renderOnboardingSection() {
+  const section = el('onboardingSection');
+  if (!section) return;
+  if (!editingId) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = 'block';
+
+  const entry = members.find(m => m.id === editingId);
+  const listEl = el('onboardingList');
+  if (!entry || !listEl) return;
+  const state = getOnboardingState(entry);
+
+  listEl.innerHTML = ONBOARDING_ITEMS.map(item => {
+    const itemState = state.items[item.key] || { done: false };
+    return `
+      <label style="display:flex; align-items:center; gap:8px; font-size:0.82rem; padding:5px 0; border-bottom:1px solid var(--color-border); cursor:pointer;">
+        <input type="checkbox" class="onboarding-item-checkbox" data-key="${item.key}" ${itemState.done ? 'checked' : ''} style="width:auto;">
+        <span style="flex:1;">${escapeHtml(item.label)}</span>
+        ${itemState.done && itemState.doneDate ? `<span style="font-size:0.7rem; color:var(--color-text-muted);">${formatShortDate(itemState.doneDate)}</span>` : ''}
+      </label>`;
+  }).join('');
+
+  listEl.querySelectorAll('.onboarding-item-checkbox').forEach(cb => {
+    cb.addEventListener('change', () => toggleOnboardingItem(cb.getAttribute('data-key'), cb.checked));
+  });
+}
+
+async function toggleOnboardingItem(key, checked) {
+  const entry = members.find(m => m.id === editingId);
+  if (!entry) return;
+  const state = getOnboardingState(entry);
+  const previous = { ...state.items };
+  state.items = { ...state.items, [key]: { done: checked, doneDate: checked ? todayStr() : null } };
+
+  const ok = await persist();
+  if (!ok) { state.items = previous; renderOnboardingSection(); return; }
+  renderOnboardingSection();
+  renderTable();
+}
+
 function el(id) { return document.getElementById(id); }
 
 function getDocRef() {
@@ -999,6 +1071,7 @@ function resetForm() {
   el('formCard').style.display = 'none';
   updateCurrentClientCountVisibility();
   renderTimeOffSection();
+  renderOnboardingSection();
 }
 
 // Merges onto `base` (the previous entry, when editing) rather than
@@ -1066,6 +1139,7 @@ function startEdit(id) {
   el('formCard').style.display = 'block';
   updateCurrentClientCountVisibility();
   renderTimeOffSection();
+  renderOnboardingSection();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -1161,8 +1235,15 @@ function renderTable() {
     const timeOffBadge = timeOffInfo
       ? `<div style="font-size:0.68rem; color:${timeOffInfo.color}; margin-top:2px;">${timeOffInfo.text}</div>`
       : '';
+    // Only nag about unfinished onboarding - once complete, the badge
+    // disappears rather than sitting there permanently as a "✓ done"
+    // that nobody needs to see again.
+    const onboardingProg = onboardingProgress(m);
+    const onboardingBadge = onboardingProg.done < onboardingProg.total
+      ? `<div style="font-size:0.68rem; color:#f68d5f; margin-top:2px;">Onboarding ${onboardingProg.done}/${onboardingProg.total}</div>`
+      : '';
     let rowHtml = `<tr>
-      <td class="client-cell">${escapeHtml(m.memberName)}${timeOffBadge}</td>
+      <td class="client-cell">${escapeHtml(m.memberName)}${timeOffBadge}${onboardingBadge}</td>
       <td>${escapeHtml(m.role)}${isContractor ? ' <span class="section-tag" style="margin-left:4px;">Contractor</span>' : ''}</td>
       <td>${escapeHtml(m.employmentType)}</td>
       <td>${loadCell}</td>
