@@ -27,21 +27,33 @@
      3. DEAD REFERENCES     - every setIframeAbsoluteSrc(...) call in
                               app.js must point at a folder that
                               actually exists on disk.
-     4. UNGUARDED WRITES    - (advisory only) tools that call a raw
+     4. DISPATCH COVERAGE   - every <section id="tab-X"> in index.html
+                              that contains an <iframe> must have a
+                              matching `case "tab-X":` in
+                              refreshIframeTab()'s switch statement in
+                              app.js, and vice versa. This is the exact
+                              bug class from the "6 tools with hardcoded
+                              iframe src" fix, checked directly instead
+                              of relying on a manual audit next time: a
+                              section can exist with no case (found
+                              exactly this way originally), or a case
+                              can reference a section id that doesn't
+                              exist (typo/renamed tab, dead code).
+     5. UNGUARDED WRITES    - (advisory only) tools that call a raw
                               Firestore setDoc-style write without
                               going through saveVersionedAgencyDoc.
                               Some of these are legitimate (sharded
                               docs like sop-wiki/clientsDb do their
                               own inline version-guard), so this is a
                               list to review, not a hard failure.
-     5. UNKNOWN ELEMENT IDS - (advisory only) a tool's js calling
+     6. UNKNOWN ELEMENT IDS - (advisory only) a tool's js calling
                               el('someId')/getElementById('someId')
                               for an id that doesn't exist anywhere in
                               that tool's own index.html. Can false-
                               positive on dynamically-created ids, so
                               also advisory.
 
-   Exit code is non-zero only for categories 1-3 (real bugs). 4 and 5
+   Exit code is non-zero only for categories 1-4 (real bugs). 5 and 6
    print but never fail the run.
    ============================================================ */
 
@@ -146,7 +158,52 @@ function checkToolWiring() {
   if (dead === 0) ok(`All ${new Set(rawRefs).size} setIframeAbsoluteSrc references resolve to a real file.`);
 }
 
-// ── 4. Advisory: unguarded direct Firestore writes ──
+// ── 4. Iframe dispatch coverage ──
+function checkIframeDispatchCoverage() {
+  console.log('\n── Iframe dispatch coverage ──');
+  const appJs = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+  const indexHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+
+  // Scope the case-label scan to refreshIframeTab() specifically, not the
+  // whole file, in case some other switch statement elsewhere ever uses a
+  // "tab-..." string as a case value for an unrelated reason.
+  const dispatchFnMatch = appJs.match(/function refreshIframeTab\([^)]*\)\s*\{([\s\S]*?)\n\}/);
+  const dispatchBody = dispatchFnMatch ? dispatchFnMatch[1] : '';
+  if (!dispatchFnMatch) {
+    warn('Could not locate function refreshIframeTab() in app.js to check dispatch coverage - skipping this check (app.js may have been restructured; update the regex in verify-hub.js if so).');
+    return;
+  }
+  const dispatchedTabs = new Set([...dispatchBody.matchAll(/case\s+"(tab-[\w-]+)"\s*:/g)].map(m => m[1]));
+
+  // Every <section id="tab-X" ...> ... </section> block that contains an
+  // <iframe> anywhere inside it - non-greedy per-section, then check for
+  // "<iframe" within that slice only.
+  const sectionBlocks = [...indexHtml.matchAll(/<section\s+id="(tab-[\w-]+)"[^>]*>([\s\S]*?)<\/section>/g)];
+  const iframeSections = sectionBlocks.filter(([, , body]) => /<iframe/.test(body)).map(([, id]) => id);
+
+  let missingCase = 0;
+  iframeSections.forEach(id => {
+    if (!dispatchedTabs.has(id)) {
+      fail(`<section id="${id}"> in index.html contains an <iframe> but has no matching case "${id}": in refreshIframeTab()'s switch statement - it will never refresh when the active client changes. (This is exactly the bug fixed for 6 tools earlier - add a case + render function using setIframeAbsoluteSrc, same pattern as its neighbors.)`);
+      missingCase++;
+    }
+  });
+  if (missingCase === 0) ok(`All ${iframeSections.length} iframe-based tab-sections have a matching dispatch case.`);
+
+  // Reverse direction: a case that dispatches a tab id with no matching
+  // section in index.html is dead code (renamed/removed tab, leftover).
+  const sectionIds = new Set(sectionBlocks.map(([, id]) => id));
+  let deadCase = 0;
+  dispatchedTabs.forEach(id => {
+    if (!sectionIds.has(id)) {
+      warn(`refreshIframeTab() has a case for "${id}" but no <section id="${id}"> exists in index.html - likely dead code from a renamed or removed tab.`);
+      deadCase++;
+    }
+  });
+  if (deadCase === 0) ok(`All ${dispatchedTabs.size} dispatch cases correspond to a real section.`);
+}
+
+// ── 5. Advisory: unguarded direct Firestore writes ──
 function checkUnguardedWrites() {
   console.log('\n── Unguarded writes (advisory) ──');
   const jsFiles = walkJsFiles(ROOT).filter(f => f.includes(`${path.sep}js${path.sep}app.js`));
@@ -163,7 +220,7 @@ function checkUnguardedWrites() {
   if (flagged === 0) ok('No tool js/app.js files write directly without going through the shared version-guard helper.');
 }
 
-// ── 5. Advisory: element ids referenced in JS but missing from that tool's HTML ──
+// ── 6. Advisory: element ids referenced in JS but missing from that tool's HTML ──
 function checkElementIds() {
   console.log('\n── Element ID sanity (advisory) ──');
   const jsFiles = walkJsFiles(ROOT).filter(f => f.includes(`${path.sep}js${path.sep}app.js`));
@@ -190,6 +247,7 @@ function checkElementIds() {
 
 checkSyntax();
 checkToolWiring();
+checkIframeDispatchCoverage();
 checkUnguardedWrites();
 checkElementIds();
 
