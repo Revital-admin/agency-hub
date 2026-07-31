@@ -33,6 +33,14 @@ npx wrangler deploy
 
 (Requires `wrangler` to be authenticated against the Cloudflare account this project lives under — run `npx wrangler whoami` to check.)
 
+**Before either, run the smoke test:**
+
+```bash
+node scripts/verify-hub.js
+```
+
+There's no automated test suite or CI for this project - it's ~40k lines of hand-maintained JS with no safety net beyond this script. It statically checks every JS file for syntax errors, confirms every tool folder is actually wired into the nav/reload system (the exact bug class fixed in the "6 tools with hardcoded iframe src" commit — a tool that's never wired in silently never refreshes when you switch clients), and flags a couple of advisory-only concerns (direct Firestore writes that skip the shared version-guard helper, JS referencing an element id that doesn't exist in its own HTML). See the comment at the top of the script for details. Exits non-zero if anything real is broken.
+
 ---
 
 ## Running locally
