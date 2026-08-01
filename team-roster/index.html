@@ -137,6 +137,22 @@
 </div>
 <div class="form-group"><label for="notes">Notes</label><textarea id="notes" rows="2" placeholder="Specialties, availability notes, time off coming up..."></textarea></div>
 
+<!-- Compliance (W-9, insurance) - contractor-only, same show/hide as the
+     capacity fields above (see updateComplianceFieldsVisibility in
+     js/app.js). Full-Time/Part-Time staff don't file a W-9 or carry
+     their own liability insurance for Revital, so this section is
+     meaningless for them. -->
+<div id="complianceSection" style="display:none; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--color-border);">
+<div class="form-grid">
+<div class="form-group checkbox-form-group" style="display:flex; align-items:center; padding-top: 20px;">
+<label for="w9OnFile" style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+<input type="checkbox" id="w9OnFile" style="width:auto;"> W-9 on file
+</label>
+</div>
+<div class="form-group"><label for="insuranceExpirationDate">General Liability Insurance Expires</label><input type="date" id="insuranceExpirationDate"><p style="font-size:0.72rem; color:var(--text-muted); margin:4px 0 0;">Optional - only if this role carries it (e.g. on-location shoots/events).</p></div>
+</div>
+</div>
+
 <!-- Time Off - only shown once a member exists (editingId set), same
      reasoning as Contractor Documents: nothing to attach it to yet for a
      brand-new, not-yet-saved entry. Lightweight on purpose - no accrual,

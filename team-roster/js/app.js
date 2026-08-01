@@ -328,6 +328,28 @@ function onboardingProgress(entry) {
   return { done, total: ONBOARDING_ITEMS.length };
 }
 
+// ── Legal / compliance (contractors only) ──
+// W-9 is a hard requirement for every paid contractor, so it always nags
+// until checked. Insurance is opt-in - plenty of contractor roles (a
+// remote editor, say) never carry a liability policy for Revital, so an
+// empty insuranceExpirationDate stays silent rather than flagging
+// "insurance missing" for people who were never expected to have it.
+function complianceIssues(entry) {
+  if (entry.employmentType !== 'Contractor') return [];
+  const issues = [];
+  if (!entry.w9OnFile) {
+    issues.push({ text: 'W-9 missing', color: '#ef4444' });
+  }
+  if (entry.insuranceExpirationDate) {
+    const days = Math.round((new Date(entry.insuranceExpirationDate) - new Date(new Date().toDateString())) / 86400000);
+    if (!Number.isNaN(days)) {
+      if (days < 0) issues.push({ text: 'Insurance expired', color: '#ef4444' });
+      else if (days <= 30) issues.push({ text: `Insurance expires ${days}d`, color: '#f68d5f' });
+    }
+  }
+  return issues;
+}
+
 function renderOnboardingSection() {
   const section = el('onboardingSection');
   if (!section) return;
@@ -1167,7 +1189,7 @@ async function performSendAgreement() {
   }
 }
 
-const FORM_FIELDS = ['memberName', 'role', 'employmentType', 'email', 'currentClientCount', 'maxClientCount', 'weeklyCapacityHours', 'notes'];
+const FORM_FIELDS = ['memberName', 'role', 'employmentType', 'email', 'currentClientCount', 'maxClientCount', 'weeklyCapacityHours', 'notes', 'insuranceExpirationDate'];
 
 // Account Managers' load is live-computed (see getEffectiveLoad) - the
 // manual "Current Client Load" field is meaningless for them, so hide it
@@ -1185,6 +1207,16 @@ function updateCapacityFieldsVisibility() {
   if (hoursGroup) hoursGroup.style.display = isAM ? 'none' : '';
 }
 
+// W-9 / insurance only make sense for Contractors - Full-Time/Part-Time
+// staff don't file a W-9 with Revital or carry their own liability
+// insurance, so the whole section hides for them (same show/hide pattern
+// as updateCapacityFieldsVisibility above, keyed off a different field).
+function updateComplianceFieldsVisibility() {
+  const isContractor = el('employmentType').value === 'Contractor';
+  const section = el('complianceSection');
+  if (section) section.style.display = isContractor ? '' : 'none';
+}
+
 function resetForm() {
   editingId = null;
   el('memberName').value = '';
@@ -1195,11 +1227,14 @@ function resetForm() {
   el('maxClientCount').value = '';
   el('weeklyCapacityHours').value = '';
   el('notes').value = '';
+  el('w9OnFile').checked = false;
+  el('insuranceExpirationDate').value = '';
   el('formTitle').textContent = 'New Team Member';
   el('saveMemberBtn').textContent = 'Add Team Member';
   el('cancelEditBtn').style.display = 'none';
   el('formCard').style.display = 'none';
   updateCapacityFieldsVisibility();
+  updateComplianceFieldsVisibility();
   renderTimeOffSection();
   renderOnboardingSection();
 }
@@ -1222,6 +1257,7 @@ function gatherForm(base) {
       entry[id] = field.value.trim ? field.value.trim() : field.value;
     }
   });
+  entry.w9OnFile = el('w9OnFile').checked;
   return entry;
 }
 
@@ -1265,11 +1301,13 @@ function startEdit(id) {
   if (!entry) return;
   editingId = id;
   FORM_FIELDS.forEach(fieldId => { el(fieldId).value = entry[fieldId] || ''; });
+  el('w9OnFile').checked = !!entry.w9OnFile;
   el('formTitle').textContent = 'Edit Team Member';
   el('saveMemberBtn').textContent = 'Update Team Member';
   el('cancelEditBtn').style.display = 'inline-block';
   el('formCard').style.display = 'block';
   updateCapacityFieldsVisibility();
+  updateComplianceFieldsVisibility();
   renderTimeOffSection();
   renderOnboardingSection();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1376,8 +1414,11 @@ function renderTable() {
     const onboardingBadge = onboardingProg.done < onboardingProg.total
       ? `<div style="font-size:0.68rem; color:#f68d5f; margin-top:2px;">Onboarding ${onboardingProg.done}/${onboardingProg.total}</div>`
       : '';
+    const complianceBadge = complianceIssues(m)
+      .map(issue => `<div style="font-size:0.68rem; color:${issue.color}; margin-top:2px;">${escapeHtml(issue.text)}</div>`)
+      .join('');
     let rowHtml = `<tr>
-      <td class="client-cell">${escapeHtml(m.memberName)}${timeOffBadge}${onboardingBadge}</td>
+      <td class="client-cell">${escapeHtml(m.memberName)}${timeOffBadge}${onboardingBadge}${complianceBadge}</td>
       <td>${escapeHtml(m.role)}${isContractor ? ' <span class="section-tag" style="margin-left:4px;">Contractor</span>' : ''}</td>
       <td>${escapeHtml(m.employmentType)}</td>
       <td>${loadCell}</td>
@@ -1449,6 +1490,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   el('saveMemberBtn').addEventListener('click', saveMember);
   el('cancelEditBtn').addEventListener('click', resetForm);
   el('role').addEventListener('change', updateCapacityFieldsVisibility);
+  el('employmentType').addEventListener('change', updateComplianceFieldsVisibility);
   el('filterInput').addEventListener('input', refreshViews);
   el('viewListBtn').addEventListener('click', () => switchRosterView('list'));
   el('viewCalendarBtn').addEventListener('click', () => switchRosterView('calendar'));

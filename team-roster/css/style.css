@@ -26,6 +26,7 @@
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 4px 20px;
 }
+.checkbox-form-group { display: flex; align-items: flex-end; padding-bottom: 6px; }
 
 .tracker-controls-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .tracker-controls-row input[type="text"] {
