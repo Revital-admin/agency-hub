@@ -2560,6 +2560,58 @@ async function getAccountManagerCapacitySnapshot() {
   }
 }
 
+// Live hours-based load for every non-Account-Manager role, mirroring
+// getAccountManagerCapacitySnapshot() above but sourced from actual
+// logged hours (agency/hoursLog) instead of client assignments - AMs
+// don't have a comparable "hours this week" signal, so this only ever
+// applies to production/creative roles (see getEffectiveLoad in
+// team-roster/js/app.js). memberName in Hours & Time Log is free text
+// matched via a <datalist>, not a strict foreign key, so this keys by
+// lowercased/trimmed name rather than id.
+//
+// Returns a map keyed by lowercased member name -> { hours, clientNames },
+// hours logged so far this week (Sunday start, same boundary as Hours &
+// Time Log's own isThisWeek helper) and the distinct clients that time
+// was logged against (mirrors clientNames on the AM snapshot above, so
+// Team Roster's expand-to-see-clients affordance works the same way for
+// both live-data branches).
+async function getTeamHoursCapacitySnapshot() {
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return {};
+  try {
+    const ref = window.firebaseDoc(window.firebaseDb, "agency", "hoursLog");
+    const snap = await window.firebaseGetDoc(ref);
+    const data = snap && snap.exists ? snap.data() : null;
+    const entries = (data && data.list) || [];
+
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    startOfWeek.setHours(0, 0, 0, 0);
+    startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday start
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 7);
+
+    const byName = {};
+    entries.forEach(e => {
+      const d = new Date((e.date || '') + 'T00:00:00');
+      if (isNaN(d.getTime()) || d < startOfWeek || d >= endOfWeek) return;
+      const key = (e.memberName || "").trim().toLowerCase();
+      if (!key) return;
+      if (!byName[key]) byName[key] = { hours: 0, clientNames: new Set() };
+      byName[key].hours += (parseFloat(e.hours) || 0);
+      if (e.clientName) byName[key].clientNames.add(e.clientName);
+    });
+
+    const result = {};
+    Object.keys(byName).forEach(key => {
+      result[key] = { hours: byName[key].hours, clientNames: Array.from(byName[key].clientNames).sort() };
+    });
+    return result;
+  } catch (e) {
+    console.warn("Couldn't build the team hours capacity snapshot:", e);
+    return {};
+  }
+}
+
 // Same underlying timeOff data as Team Roster's Calendar view (see
 // team-roster/js/app.js's renderTimeline) - just "today's column" of
 // that same data, surfaced on the dashboard so checking who's out

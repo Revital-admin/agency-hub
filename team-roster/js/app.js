@@ -32,6 +32,13 @@ let isRestrictedUser = false;
 // assignment field in this data model, so they keep the manually-typed
 // currentClientCount instead (see getEffectiveLoad below).
 let amCapacitySnapshot = {};
+// Live hours-logged-this-week data, keyed by lowercased member name,
+// built by the parent's getTeamHoursCapacitySnapshot() (see app.js) -
+// the non-AM equivalent of amCapacitySnapshot above. Only applies to a
+// roster entry once someone sets weeklyCapacityHours on it (opt-in);
+// entries without that field keep using the old manual currentClientCount
+// fallback, so this is purely additive - see getEffectiveLoad below.
+let hoursCapacitySnapshot = {};
 // Which row (by member id) currently has its assigned-client list
 // expanded open - see toggleClientExpand/renderTable.
 let expandedRosterId = null;
@@ -47,13 +54,27 @@ async function refreshCapacitySnapshot() {
   } else {
     amCapacitySnapshot = {};
   }
+
+  if (isEmbedded && window.parent.getTeamHoursCapacitySnapshot) {
+    try {
+      hoursCapacitySnapshot = await window.parent.getTeamHoursCapacitySnapshot();
+    } catch (e) {
+      console.warn("Couldn't refresh the team hours capacity snapshot:", e);
+      hoursCapacitySnapshot = {};
+    }
+  } else {
+    hoursCapacitySnapshot = {};
+  }
 }
 
 // Returns the number that should actually drive the capacity bar/bucket
-// for this member, live-computed for Account Managers (real assigned
-// clients) or falling back to the manually-typed count for every other
-// role. { clientNames: null } means "not live" - Team Roster's stale-
-// data caption only applies to the manual branch.
+// for this member: live-computed for Account Managers (real assigned
+// clients), live-computed from actual logged hours for any other role
+// that's opted in with a weeklyCapacityHours value, or falling back to
+// the manually-typed client count otherwise. { clientNames: null } means
+// "not live" - Team Roster's stale-data caption only applies to that
+// manual branch. `unit` tells renderTable whether to label the bar in
+// clients or hours.
 function getEffectiveLoad(entry) {
   const max = parseInt(entry.maxClientCount) || 0;
   if (entry.role === "Account Manager") {
@@ -61,10 +82,20 @@ function getEffectiveLoad(entry) {
     if (email) {
       const rec = amCapacitySnapshot[email];
       const clientNames = rec ? rec.clientNames : [];
-      return { current: clientNames.length, max, isLive: true, clientNames };
+      return { current: clientNames.length, max, isLive: true, clientNames, unit: 'clients' };
     }
   }
-  return { current: parseInt(entry.currentClientCount) || 0, max, isLive: false, clientNames: null };
+
+  const weeklyCapacityHours = parseFloat(entry.weeklyCapacityHours) || 0;
+  if (weeklyCapacityHours > 0) {
+    const name = (entry.memberName || "").trim().toLowerCase();
+    const rec = name ? hoursCapacitySnapshot[name] : null;
+    const hours = rec ? Math.round(rec.hours * 10) / 10 : 0;
+    const clientNames = rec ? rec.clientNames : [];
+    return { current: hours, max: weeklyCapacityHours, isLive: true, clientNames, unit: 'hrs' };
+  }
+
+  return { current: parseInt(entry.currentClientCount) || 0, max, isLive: false, clientNames: null, unit: 'clients' };
 }
 
 function daysAgoLabel(isoDateStr) {
@@ -1043,17 +1074,22 @@ async function performSendAgreement() {
   }
 }
 
-const FORM_FIELDS = ['memberName', 'role', 'employmentType', 'email', 'currentClientCount', 'maxClientCount', 'notes'];
+const FORM_FIELDS = ['memberName', 'role', 'employmentType', 'email', 'currentClientCount', 'maxClientCount', 'weeklyCapacityHours', 'notes'];
 
 // Account Managers' load is live-computed (see getEffectiveLoad) - the
 // manual "Current Client Load" field is meaningless for them, so hide it
-// and explain why instead of leaving a number nobody should touch.
-function updateCurrentClientCountVisibility() {
+// and explain why instead of leaving a number nobody should touch. The
+// weekly-hours field is the opt-in live alternative for every other
+// role (production/creative) - also not applicable to AMs, so it hides
+// alongside the manual client-count field.
+function updateCapacityFieldsVisibility() {
   const isAM = el('role').value === 'Account Manager';
   const group = el('currentClientCountGroup');
   const note = el('liveLoadNote');
+  const hoursGroup = el('weeklyCapacityHoursGroup');
   if (group) group.style.display = isAM ? 'none' : '';
   if (note) note.style.display = isAM ? '' : 'none';
+  if (hoursGroup) hoursGroup.style.display = isAM ? 'none' : '';
 }
 
 function resetForm() {
@@ -1064,12 +1100,13 @@ function resetForm() {
   el('email').value = '';
   el('currentClientCount').value = '';
   el('maxClientCount').value = '';
+  el('weeklyCapacityHours').value = '';
   el('notes').value = '';
   el('formTitle').textContent = 'New Team Member';
   el('saveMemberBtn').textContent = 'Add Team Member';
   el('cancelEditBtn').style.display = 'none';
   el('formCard').style.display = 'none';
-  updateCurrentClientCountVisibility();
+  updateCapacityFieldsVisibility();
   renderTimeOffSection();
   renderOnboardingSection();
 }
@@ -1086,6 +1123,8 @@ function gatherForm(base) {
     const field = el(id);
     if (id === 'currentClientCount' || id === 'maxClientCount') {
       entry[id] = Math.max(0, parseInt(field.value) || 0);
+    } else if (id === 'weeklyCapacityHours') {
+      entry[id] = Math.max(0, parseFloat(field.value) || 0);
     } else {
       entry[id] = field.value.trim ? field.value.trim() : field.value;
     }
@@ -1137,7 +1176,7 @@ function startEdit(id) {
   el('saveMemberBtn').textContent = 'Update Team Member';
   el('cancelEditBtn').style.display = 'inline-block';
   el('formCard').style.display = 'block';
-  updateCurrentClientCountVisibility();
+  updateCapacityFieldsVisibility();
   renderTimeOffSection();
   renderOnboardingSection();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1201,7 +1240,7 @@ function renderTable() {
     const info = capacityInfo(load.current, load.max);
     const current = load.current;
     const max = load.max;
-    const loadText = max > 0 ? `${current} / ${max}` : (current || '—');
+    const loadText = max > 0 ? `${current} / ${max}${load.unit === 'hrs' ? ' hrs' : ''}` : (current || '—');
     const percent = max > 0 ? Math.min(100, Math.round((current / max) * 100)) : 0;
     const barFillClass = info.cls === 'capacity-unknown' ? '' : info.cls;
     const staleCaption = (!load.isLive && m.manualCurrentClientCountUpdatedAt)
@@ -1225,11 +1264,13 @@ function renderTable() {
         agreementCell = `<span class="section-tag capacity-unknown">Not Sent</span>`;
       }
     }
-    // Only live (Account Manager) rows have a real assigned-client list
-    // behind them worth expanding - manually-tracked roles have no
-    // client-name data to show, so their tag isn't clickable.
+    // Only live rows (Account Manager caseload or hours-tracked roles)
+    // have a real client list behind them worth expanding - manually-
+    // tracked roles have no client-name data to show, so their tag isn't
+    // clickable.
+    const expandTitle = load.unit === 'hrs' ? 'Click to see clients logged this week' : 'Click to see assigned clients';
     const capacityCell = load.isLive
-      ? `<span class="section-tag ${info.cls} roster-capacity-toggle" data-id="${m.id}" style="cursor:pointer;" title="Click to see assigned clients">${info.label} ${expandedRosterId === m.id ? '▴' : '▾'}</span>`
+      ? `<span class="section-tag ${info.cls} roster-capacity-toggle" data-id="${m.id}" style="cursor:pointer;" title="${expandTitle}">${info.label} ${expandedRosterId === m.id ? '▴' : '▾'}</span>`
       : `<span class="section-tag ${info.cls}">${info.label}</span>`;
     const timeOffInfo = timeOffStatus(m);
     const timeOffBadge = timeOffInfo
@@ -1259,10 +1300,12 @@ function renderTable() {
       </td>
     </tr>`;
     if (load.isLive && expandedRosterId === m.id) {
+      const expandLabel = load.unit === 'hrs' ? 'Clients logged this week' : 'Assigned clients';
+      const emptyText = load.unit === 'hrs' ? 'No hours logged against a client yet this week.' : 'No clients assigned yet.';
       const names = load.clientNames.length
         ? load.clientNames.map(escapeHtml).join(', ')
-        : 'No clients assigned yet.';
-      rowHtml += `<tr class="roster-expand-row"><td colspan="8" style="padding:6px 14px 12px; font-size:0.8rem; color:var(--text-muted);"><strong>Assigned clients:</strong> ${names}</td></tr>`;
+        : emptyText;
+      rowHtml += `<tr class="roster-expand-row"><td colspan="8" style="padding:6px 14px 12px; font-size:0.8rem; color:var(--text-muted);"><strong>${expandLabel}:</strong> ${names}</td></tr>`;
     }
     return rowHtml;
   }).join('');
@@ -1312,7 +1355,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   el('saveMemberBtn').addEventListener('click', saveMember);
   el('cancelEditBtn').addEventListener('click', resetForm);
-  el('role').addEventListener('change', updateCurrentClientCountVisibility);
+  el('role').addEventListener('change', updateCapacityFieldsVisibility);
   el('filterInput').addEventListener('input', refreshViews);
   el('viewListBtn').addEventListener('click', () => switchRosterView('list'));
   el('viewCalendarBtn').addEventListener('click', () => switchRosterView('calendar'));
