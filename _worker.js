@@ -42,6 +42,10 @@ export default {
       return handleDocusignSendEnvelope(request, env);
     }
 
+    if (url.pathname === "/api/marketing-news") {
+      return handleMarketingNews(request, env, ctx);
+    }
+
     // Everything else: serve the static site as before.
     return env.ASSETS.fetch(request);
   }
@@ -242,6 +246,160 @@ const CONTRACTS_MAX_BYTES = 20 * 1024 * 1024; // generous ceiling for a handful-
 function isContractRequestAuthorized(request) {
   const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
   return !!accessEmail && accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN);
+}
+
+// ── /api/marketing-news ──
+// Pulls recent headlines from a curated list of marketing/industry RSS
+// feeds server-side and returns them as one merged, sorted JSON list -
+// the Marketing News tool (marketing-news-feed/) just renders this, it
+// never talks to the outside publications directly (avoids CORS entirely,
+// since almost none of these sites send an Access-Control-Allow-Origin
+// header for cross-origin browser fetches).
+//
+// NOTE: these feed URLs were picked from each publication's documented
+// RSS endpoint, but couldn't be live-verified from the environment this
+// was written in (no outbound network access there) - if a source shows
+// up empty or missing after deploy, its URL is the first thing to check
+// and fix in this array. A broken/renamed URL for one feed only drops
+// that one source (see Promise.allSettled below) - it doesn't take the
+// whole feature down.
+const MARKETING_NEWS_FEEDS = [
+  { name: "Marketing Dive", url: "https://www.marketingdive.com/feeds/news/" },
+  { name: "Social Media Today", url: "https://www.socialmediatoday.com/feeds/news" },
+  { name: "Search Engine Land", url: "https://searchengineland.com/feed" },
+  { name: "MarTech", url: "https://martech.org/feed/" },
+  { name: "HubSpot Marketing Blog", url: "https://blog.hubspot.com/marketing/rss.xml" }
+];
+
+const MARKETING_NEWS_CACHE_SECONDS = 1800; // 30 min - see handleMarketingNews
+
+function decodeXmlEntities(str) {
+  if (!str) return "";
+  return str
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;/g, "'");
+}
+
+function stripHtmlTags(str) {
+  return (str || "").replace(/<[^>]*>/g, "").trim();
+}
+
+function extractXmlTag(block, tag) {
+  // [\s\S] instead of . so a description/summary spanning multiple lines
+  // (common with CDATA-wrapped HTML) still matches - a plain . in JS regex
+  // doesn't match newlines without the /s flag, which isn't available in
+  // every engine this could run under.
+  const m = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i"));
+  return m ? decodeXmlEntities(m[1]).trim() : "";
+}
+
+// RSS 2.0 uses a plain <link>URL</link> text node. Atom uses
+// <link href="URL" rel="alternate"/> (rel is sometimes omitted, in which
+// case "alternate" - the actual article - is the correct default per the
+// Atom spec, not a fallback guess). Tries RSS's plain form first since
+// that's the more common feed format among these sources.
+function extractXmlLink(block) {
+  const rssMatch = block.match(/<link>([\s\S]*?)<\/link>/i);
+  if (rssMatch && rssMatch[1].trim()) return decodeXmlEntities(rssMatch[1]).trim();
+
+  const atomLinkTags = block.match(/<link\b[^>]*\/?>/gi) || [];
+  for (const tag of atomLinkTags) {
+    const relMatch = tag.match(/rel="([^"]*)"/i);
+    if (relMatch && relMatch[1] !== "alternate") continue;
+    const hrefMatch = tag.match(/href="([^"]*)"/i);
+    if (hrefMatch) return decodeXmlEntities(hrefMatch[1]).trim();
+  }
+  return "";
+}
+
+function parseFeedItems(xmlText, sourceName) {
+  const blocks = xmlText.match(/<item\b[\s\S]*?<\/item>|<entry\b[\s\S]*?<\/entry>/gi) || [];
+  return blocks.map(block => {
+    const title = stripHtmlTags(extractXmlTag(block, "title"));
+    const link = extractXmlLink(block);
+    const dateStr = extractXmlTag(block, "pubDate") || extractXmlTag(block, "updated")
+      || extractXmlTag(block, "published") || extractXmlTag(block, "dc:date");
+    const date = dateStr ? new Date(dateStr) : null;
+    const rawSummary = extractXmlTag(block, "description") || extractXmlTag(block, "summary")
+      || extractXmlTag(block, "content");
+    const description = stripHtmlTags(rawSummary).slice(0, 220);
+    return {
+      title,
+      link,
+      source: sourceName,
+      date: (date && !isNaN(date.getTime())) ? date.toISOString() : null,
+      description
+    };
+  }).filter(item => item.title && item.link);
+}
+
+function fetchWithTimeout(url, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, {
+    headers: { "User-Agent": "RevitalHubMarketingNews/1.0 (+https://hub.revitalproductions.com)" },
+    signal: controller.signal
+  }).finally(() => clearTimeout(timer));
+}
+
+async function handleMarketingNews(request, env, ctx) {
+  if (!isContractRequestAuthorized(request)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+
+  // Cache across every teammate's request, not per-user - these headlines
+  // are the same for everyone and refetching all 5 feeds on every single
+  // page load would be slow and needlessly hammer the source sites. Keyed
+  // on a fixed URL rather than the real request URL so cache hits work
+  // regardless of any query string a client happens to send.
+  const cache = caches.default;
+  const cacheKey = new Request("https://hub.revitalproductions.com/api/marketing-news");
+  const cached = await cache.match(cacheKey);
+  if (cached) return cached;
+
+  const results = await Promise.allSettled(
+    MARKETING_NEWS_FEEDS.map(async feed => {
+      const res = await fetchWithTimeout(feed.url, 8000);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const text = await res.text();
+      return parseFeedItems(text, feed.name);
+    })
+  );
+
+  let items = [];
+  const failedSources = [];
+  results.forEach((result, i) => {
+    if (result.status === "fulfilled") {
+      items = items.concat(result.value);
+    } else {
+      failedSources.push(MARKETING_NEWS_FEEDS[i].name);
+      console.error(`Marketing news feed failed (${MARKETING_NEWS_FEEDS[i].name}):`, result.reason);
+    }
+  });
+
+  items.sort((a, b) => {
+    if (!a.date && !b.date) return 0;
+    if (!a.date) return 1;
+    if (!b.date) return -1;
+    return new Date(b.date) - new Date(a.date);
+  });
+  items = items.slice(0, 40);
+
+  const response = jsonResponse(
+    { items, failedSources, fetchedAt: new Date().toISOString() },
+    200,
+    { "Cache-Control": `public, max-age=${MARKETING_NEWS_CACHE_SECONDS}` }
+  );
+
+  // Store in the background rather than awaiting it, so the teammate who
+  // triggers a cache-miss fetch doesn't wait any longer for a response
+  // than they would have anyway.
+  ctx.waitUntil(cache.put(cacheKey, response.clone()));
+  return response;
 }
 
 async function handleContractUpload(request, env) {

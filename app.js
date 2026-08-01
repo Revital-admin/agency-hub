@@ -442,6 +442,7 @@ let iframeNeedsReload = {
   "tab-timeline": true,
   "tab-roiprojector": true,
   "tab-sopwiki": true,
+  "tab-marketingnews": true,
   "tab-proposal": true,
   "tab-servicepricing": true,
   "tab-redflag": true,
@@ -1006,6 +1007,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-sopwiki":
       renderSopWiki();
+      break;
+    case "tab-marketingnews":
+      renderMarketingNews();
       break;
     case "tab-proposal":
       renderProposalCalculator();
@@ -2232,6 +2236,10 @@ function renderVendorRentalTab() {
 // ── SOP Wiki Controller ──
 function renderSopWiki() {
   setIframeAbsoluteSrc('#tab-sopwiki iframe', "sop-wiki/index.html?v=1.7");
+}
+
+function renderMarketingNews() {
+  setIframeAbsoluteSrc('#tab-marketingnews iframe', "marketing-news-feed/index.html");
 }
 
 // ── Proposal Calculator Controller ──

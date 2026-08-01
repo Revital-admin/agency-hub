@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marketing News</title>
+<link rel="stylesheet" href="../style.css?v=2">
+<link rel="stylesheet" href="css/style.css?v=1">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<main class="container">
+<div class="brand-bar">
+<div class="brand-logo-container"></div>
+</div>
+
+<header class="site-header">
+<div class="header-eyebrow">
+<span class="dot"></span>
+<span>Agency Globals</span>
+</div>
+<h1 class="site-title">Marketing <em>News</em></h1>
+<p class="site-subtitle">Recent headlines from marketing/advertising industry publications, pulled server-side and cached for everyone — no account or subscription needed, nothing to keep up with manually.</p>
+</header>
+
+<div class="step-card">
+<div class="tracker-controls-row" style="justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+<div style="display:flex; gap:10px; flex-wrap:wrap; flex:1;">
+<input type="text" id="filterInput" placeholder="Filter headlines...">
+<select id="sourceFilter"><option value="">All sources</option></select>
+</div>
+<div style="display:flex; align-items:center; gap:12px;">
+<span id="lastFetchedLabel" class="last-fetched-label"></span>
+<button id="refreshBtn" class="btn-refresh" type="button">Refresh</button>
+</div>
+</div>
+</div>
+
+<div id="failedSourcesNotice" class="failed-notice" style="display:none;"></div>
+
+<div id="loadingState" class="empty-state">Loading headlines…</div>
+<div id="errorState" class="empty-state" style="display:none;"></div>
+<div id="emptyState" class="empty-state" style="display:none;">No headlines match.</div>
+
+<div id="newsList" class="news-list"></div>
+
+</main>
+<script src="js/app.js?v=1"></script>
+</body>
+</html>
