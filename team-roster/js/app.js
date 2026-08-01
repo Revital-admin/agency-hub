@@ -463,6 +463,46 @@ const CONTRACTOR_DOC_DEFS = [
   }
 ];
 
+// Custom contractor docs (uploaded via "Add Another Contractor Document" /
+// "Include As-Is") that need real signer-fillable DocuSign tabs beyond
+// just a signature - matched the same way as CONTRACTOR_DOC_DEFS
+// (matchLabel against the doc's label/filename). Unlike CONTRACTOR_DOC_DEFS'
+// `fields`, which the admin types in here before sending (Effective Date,
+// Rate, etc. - locked once sent), everything listed below is left BLANK
+// on purpose: the contractor fills these in themselves during their own
+// signing session (see blankFields/blankCheckboxFields in
+// handleDocusignSendEnvelope, _worker.js). That's what lets a document
+// like the Direct Deposit/ACH form go out and come back complete without
+// anyone printing, signing, or scanning anything - the tokens below have
+// to match the invisible "[[TOKEN]]" anchors baked into that PDF at
+// generation time (see the ACH form's own build script; the anchor
+// technique itself is the same one bakeAnchorsAtDetection uses).
+const CONTRACTOR_BLANK_FIELD_DEFS = [
+  {
+    matchLabel: 'direct deposit',
+    blankFields: [
+      'ACH_CONTRACTOR_NAME', 'ACH_EFFECTIVE_DATE', 'ACH_EMAIL', 'ACH_PHONE',
+      'ACH_BANK_NAME', 'ACH_BANK_LOCATION', 'ACH_ROUTING_NUMBER', 'ACH_ACCOUNT_NUMBER',
+      'ACH_DEPOSIT_PARTIAL_AMOUNT'
+    ],
+    blankCheckboxFields: ['ACH_CHECKING', 'ACH_SAVINGS', 'ACH_DEPOSIT_FULL', 'ACH_DEPOSIT_PARTIAL']
+  }
+];
+
+function collectBlankFieldsForSelectedDocs(selectedDefs) {
+  const blankFields = new Set();
+  const blankCheckboxFields = new Set();
+  selectedDefs.forEach(def => {
+    const hay = (def.label || '').toLowerCase();
+    CONTRACTOR_BLANK_FIELD_DEFS.forEach(bdef => {
+      if (!hay.includes(bdef.matchLabel)) return;
+      bdef.blankFields.forEach(t => blankFields.add(t));
+      bdef.blankCheckboxFields.forEach(t => blankCheckboxFields.add(t));
+    });
+  });
+  return { blankFields: Array.from(blankFields), blankCheckboxFields: Array.from(blankCheckboxFields) };
+}
+
 // Every entry this tool creates/updates gets docCategory: 'contractor' so
 // the Contract & Invoice Tracker's Send Contract checklist and Manage
 // Contract Templates window (isContractorDoc, contract-invoice-tracker/
@@ -1074,6 +1114,11 @@ async function performSendAgreement() {
       if (input && input.value.trim()) fieldValues[token] = input.value.trim();
     });
 
+    // Signer-fillable fields (e.g. the ACH form's bank details) - see
+    // CONTRACTOR_BLANK_FIELD_DEFS above. Purely a function of which docs
+    // are selected, no admin input involved.
+    const { blankFields, blankCheckboxFields } = collectBlankFieldsForSelectedDocs(sendAgreementSelectedDefs);
+
     sendBtn.textContent = 'Sending for signature...';
     const res = await fetch('/api/docusign/send-envelope', {
       method: 'POST',
@@ -1083,7 +1128,9 @@ async function performSendAgreement() {
         signerName: member.memberName,
         signerEmail: email,
         emailSubject: `Your Agreement with Revital Productions — ${member.memberName}`,
-        fieldValues
+        fieldValues,
+        ...(blankFields.length ? { blankFields } : {}),
+        ...(blankCheckboxFields.length ? { blankCheckboxFields } : {})
       })
     });
     const data = await res.json().catch(() => ({}));

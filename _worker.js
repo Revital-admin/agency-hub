@@ -599,20 +599,22 @@ async function handleDocusignSendEnvelope(request, env) {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
 
-  const { templateId, templateRoleName, signerName, signerEmail, emailSubject, documents, fieldValues } = payload || {};
+  const { templateId, templateRoleName, signerName, signerEmail, emailSubject, documents, fieldValues, blankFields, blankCheckboxFields } = payload || {};
   if (!signerName || !signerEmail) {
     return jsonResponse({ error: "signerName and signerEmail are required" }, 400);
   }
 
   // Optional per-contract data fields (Client Name, Effective Date, Project
-  // Fee, etc). Each of the 6 built-in contract PDFs has an invisible
-  // "[[TOKEN_NAME]]" anchor baked in next to its fill-in-the-blank lines
-  // (same technique as the [[SIG_CLIENT]]/[[DATE_CLIENT]] anchors below).
-  // fieldValues is a flat { TOKEN_NAME: "value" } map from the Contract &
-  // Invoice Tracker's "Fill Contract Details" step - anchorIgnoreIfNotPresent
-  // means a token that isn't in whichever document(s) are actually in this
-  // envelope is silently skipped, so one fieldValues object can cover a
-  // combined send of several different contract types at once.
+  // Fee, etc), admin-supplied and LOCKED (the signer can't edit them).
+  // Each of the 6 built-in contract PDFs has an invisible "[[TOKEN_NAME]]"
+  // anchor baked in next to its fill-in-the-blank lines (same technique as
+  // the [[SIG_CLIENT]]/[[DATE_CLIENT]] anchors below). fieldValues is a
+  // flat { TOKEN_NAME: "value" } map from the Contract & Invoice Tracker's
+  // "Fill Contract Details" step - anchorIgnoreIfNotPresent means a token
+  // that isn't in whichever document(s) are actually in this envelope is
+  // silently skipped, so one fieldValues object can cover a combined send
+  // of several different contract types at once. See blankTextTabs below
+  // for the opposite case - fields the *signer* fills in themselves.
   const textTabs = [];
   if (fieldValues && typeof fieldValues === "object") {
     for (const [token, value] of Object.entries(fieldValues)) {
@@ -628,6 +630,47 @@ async function handleDocusignSendEnvelope(request, env) {
         locked: "true",
         font: "Helvetica",
         fontSize: "Size9"
+      });
+    }
+  }
+
+  // Signer-fillable fields (e.g. a contractor's own bank details on the
+  // Direct Deposit/ACH form) - unlike fieldValues above, these are never
+  // admin-supplied or pre-filled. They're just an anchor string with no
+  // "value" and no "locked" flag, so DocuSign renders them as a blank
+  // box the recipient types into during their own signing session, in
+  // the same signing pass as the actual signature. This is what lets a
+  // document like a bank-details form go out and come back complete
+  // without anyone printing, signing, or scanning anything.
+  const blankTextTabs = [];
+  if (Array.isArray(blankFields)) {
+    for (const token of blankFields) {
+      if (typeof token !== "string" || !/^[A-Z0-9_]+$/.test(token)) continue;
+      blankTextTabs.push({
+        anchorString: `[[${token}]]`,
+        anchorUnits: "pixels",
+        anchorXOffset: "2",
+        anchorYOffset: "-9",
+        anchorIgnoreIfNotPresent: "true",
+        font: "Helvetica",
+        fontSize: "Size9"
+      });
+    }
+  }
+
+  // Same idea as blankTextTabs but for checkbox-style choices (e.g.
+  // Checking vs. Savings) - present, unchecked, and left for the signer
+  // to click during signing.
+  const blankCheckboxTabs = [];
+  if (Array.isArray(blankCheckboxFields)) {
+    for (const token of blankCheckboxFields) {
+      if (typeof token !== "string" || !/^[A-Z0-9_]+$/.test(token)) continue;
+      blankCheckboxTabs.push({
+        anchorString: `[[${token}]]`,
+        anchorUnits: "pixels",
+        anchorXOffset: "2",
+        anchorYOffset: "-2",
+        anchorIgnoreIfNotPresent: "true"
       });
     }
   }
@@ -684,7 +727,8 @@ async function handleDocusignSendEnvelope(request, env) {
           tabs: {
             signHereTabs: [{ anchorString: "[[SIG_CLIENT]]", anchorUnits: "pixels", anchorXOffset: "0", anchorYOffset: "-6", anchorIgnoreIfNotPresent: "true" }],
             dateSignedTabs: [{ anchorString: "[[DATE_CLIENT]]", anchorUnits: "pixels", anchorXOffset: "0", anchorYOffset: "-6", anchorIgnoreIfNotPresent: "true" }],
-            ...(textTabs.length ? { textTabs } : {})
+            ...((textTabs.length || blankTextTabs.length) ? { textTabs: [...textTabs, ...blankTextTabs] } : {}),
+            ...(blankCheckboxTabs.length ? { checkboxTabs: blankCheckboxTabs } : {})
           }
         }]
       },
