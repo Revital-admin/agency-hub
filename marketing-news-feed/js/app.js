@@ -86,14 +86,19 @@ function showFailedSourcesNotice() {
   notice.textContent = `Couldn't load: ${failedSources.join(', ')} — showing headlines from the sources that did load.`;
 }
 
-async function loadNews() {
+async function loadNews(forceRefresh) {
   el('loadingState').style.display = 'block';
   el('errorState').style.display = 'none';
   el('newsList').innerHTML = '';
   el('refreshBtn').disabled = true;
+  if (forceRefresh) el('refreshBtn').textContent = 'Refreshing…';
 
   try {
-    const res = await fetch('/api/marketing-news');
+    // ?refresh=1 tells the Worker to bypass its 30-minute edge cache and
+    // actually re-check every feed right now, instead of just re-serving
+    // whatever was cached from the last time anyone loaded this tool -
+    // see the forceRefresh handling in handleMarketingNews (_worker.js).
+    const res = await fetch(forceRefresh ? '/api/marketing-news?refresh=1' : '/api/marketing-news');
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || `Request failed (${res.status})`);
@@ -116,12 +121,18 @@ async function loadNews() {
   } finally {
     el('loadingState').style.display = 'none';
     el('refreshBtn').disabled = false;
+    el('refreshBtn').textContent = 'Refresh';
   }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  loadNews();
+  loadNews(false);
   el('filterInput').addEventListener('input', renderList);
   el('sourceFilter').addEventListener('change', renderList);
-  el('refreshBtn').addEventListener('click', loadNews);
+  // Wrapped in an arrow function rather than passed directly - a raw
+  // click-event listener would otherwise hand loadNews() the click Event
+  // object as its forceRefresh argument, which is truthy and would force
+  // a full re-check (bypassing the shared cache) on every single page
+  // load's initial call too, not just on this deliberate button click.
+  el('refreshBtn').addEventListener('click', () => loadNews(true));
 });

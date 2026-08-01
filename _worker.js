@@ -364,12 +364,24 @@ async function handleMarketingNews(request, env, ctx) {
   // Cache across every teammate's request, not per-user - these headlines
   // are the same for everyone and refetching all 5 feeds on every single
   // page load would be slow and needlessly hammer the source sites. Keyed
-  // on a fixed URL rather than the real request URL so cache hits work
-  // regardless of any query string a client happens to send.
+  // on a fixed URL (query string stripped) so cache hits work regardless
+  // of the ?refresh=1 bypass below - otherwise ?refresh=1 requests would
+  // each get their own permanent cache slot instead of ever hitting the
+  // one everyone else shares.
   const cache = caches.default;
   const cacheKey = new Request("https://hub.revitalproductions.com/api/marketing-news");
-  const cached = await cache.match(cacheKey);
-  if (cached) return cached;
+
+  // The Marketing News tool's "Refresh" button sends ?refresh=1 to force a
+  // real re-check instead of just re-asking for the same cached response -
+  // without this, "Refresh" was pure theater: a code fix (like the
+  // User-Agent change above) or a source coming back online wouldn't
+  // actually show up until the cache's 30-minute window happened to
+  // expire on its own, no matter how many times someone clicked it.
+  const forceRefresh = new URL(request.url).searchParams.get("refresh") === "1";
+  if (!forceRefresh) {
+    const cached = await cache.match(cacheKey);
+    if (cached) return cached;
+  }
 
   const results = await Promise.allSettled(
     MARKETING_NEWS_FEEDS.map(async feed => {
