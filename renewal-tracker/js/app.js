@@ -127,6 +127,7 @@ function renderTable() {
       <td class="date-cell">${isOpen ? (daysUntil >= 0 ? daysUntil + 'd' : Math.abs(daysUntil) + 'd overdue') : '--'}</td>
       <td class="date-cell">${rec.contractLengthMonths || 12} mo</td>
       <td><select class="status-select" data-client="${name}">${statusOptionsHtml(rec.status)}</select></td>
+      <td>${rec.status === 'Churned' && rec.churnReason ? `<span class="churn-reason-tag">${rec.churnReason}</span>${rec.churnDetail ? `<div style="font-size:0.68rem; color:var(--text-muted); margin-top:4px; max-width:180px;">${rec.churnDetail}</div>` : ''}` : '—'}</td>
       <td><input type="text" class="notes-input" data-client="${name}" value="${(rec.notes || '').replace(/"/g, '&quot;')}" placeholder="Notes..."></td>
       <td>
         <div class="row-actions">
@@ -166,7 +167,7 @@ function wireRowListeners() {
     btn.addEventListener('click', () => markRenewed(btn.getAttribute('data-client')));
   });
   document.querySelectorAll('.churned-btn').forEach(btn => {
-    btn.addEventListener('click', () => markChurned(btn.getAttribute('data-client')));
+    btn.addEventListener('click', () => openChurnReasonPanel(btn.getAttribute('data-client')));
   });
   document.querySelectorAll('.email-client-btn').forEach(btn => {
     btn.addEventListener('click', () => openEmailToClientPanel(btn.getAttribute('data-client')));
@@ -194,11 +195,14 @@ function markRenewed(clientName) {
   }
 }
 
-function markChurned(clientName) {
+function markChurned(clientName, reason, detail) {
   const clients = getClients();
   const rec = clients[clientName].renewal;
   if (!rec) return;
   rec.status = 'Churned';
+  rec.churnReason = reason || '';
+  rec.churnDetail = detail || '';
+  rec.churnedDate = todayStr();
   persist();
   renderTable();
   populateClientSelect();
@@ -206,6 +210,23 @@ function markChurned(clientName) {
   if (isEmbedded && window.parent.showBanner) {
     window.parent.showBanner('success', `Marked ${clientName} as churned.`);
   }
+}
+
+/* ── Churn Reason panel ── */
+let currentChurnClientName = null;
+
+function openChurnReasonPanel(clientName) {
+  currentChurnClientName = clientName;
+  el('churnReasonClientName').textContent = clientName;
+  el('churnReasonSelect').value = 'Budget / Price';
+  el('churnReasonDetail').value = '';
+  el('churnReasonPanel').style.display = 'block';
+  el('churnReasonPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closeChurnReasonPanel() {
+  currentChurnClientName = null;
+  el('churnReasonPanel').style.display = 'none';
 }
 
 function addTrackedRenewal() {
@@ -248,6 +269,14 @@ function addTrackedRenewal() {
 function initListeners() {
   el('addTrackedRenewalBtn').addEventListener('click', addTrackedRenewal);
   el('showClosedToggle').addEventListener('change', renderTable);
+  el('churnReasonCloseBtn').addEventListener('click', closeChurnReasonPanel);
+  el('churnReasonConfirmBtn').addEventListener('click', () => {
+    if (!currentChurnClientName) return;
+    const reason = el('churnReasonSelect').value;
+    const detail = el('churnReasonDetail').value.trim();
+    markChurned(currentChurnClientName, reason, detail);
+    closeChurnReasonPanel();
+  });
 }
 
 /* ── Email to Client (real auto-send via Resend, PDF attached) ──

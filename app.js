@@ -1375,36 +1375,18 @@ function escapeHtmlCore(str) {
 // Dashboard) rather than as an iframe tool, since it needs to scan every
 // client in clientsDb at once, not just the active one.
 //
-// Renewal date isn't on the client object itself - it lives in Contract &
-// Invoice Tracker's own agency/contractInvoices doc (see that tool's
-// header comment for why it's kept separate from clientsDb). Read fresh
-// each time this view opens rather than kept as a live listener, since
-// it's just informational context here, not something this view edits.
-async function fetchContractRenewalsByClientName() {
-  const byName = {};
-  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return byName;
-  try {
-    const ref = window.firebaseDoc(window.firebaseDb, "agency", "contractInvoices");
-    const snap = await window.firebaseGetDoc(ref);
-    const list = (snap.exists && snap.data().list) || [];
-    list.forEach(r => {
-      if (r.clientName && r.contractStatus === "Signed" && r.contractRenewalDate) {
-        byName[r.clientName] = r.contractRenewalDate;
-      }
-    });
-  } catch (e) {
-    console.warn("Couldn't load contract renewal dates for My Clients:", e);
-  }
-  return byName;
-}
-
 // Returns the set of client names with a signed (active) contract in
 // Contract & Invoice Tracker's agency/contractInvoices - used below to
 // exclude already-signed clients from Sales Pipeline Value, since a
 // proposal only counts as open pipeline if the deal hasn't closed yet.
-// Separate read from fetchContractRenewalsByClientName even though it's
-// the same doc - they're used independently and neither is hot-path
-// enough that combining them into one fetch is worth the coupling.
+//
+// Renewal date lookups used to live in a sibling function here
+// (fetchContractRenewalsByClientName) but were removed - Renewal
+// Tracker's own client.renewal is the source of truth for "when does
+// this client renew" (see runRenewalNudgeCheck and renderMyClients'
+// renewalNote), not Contract & Invoice Tracker's contractRenewalDate,
+// which was a second, independent field that wasn't guaranteed to agree
+// with it.
 async function fetchSignedClientNameSet() {
   const signed = new Set();
   if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return signed;
@@ -1491,10 +1473,7 @@ async function renderMyClients() {
     return;
   }
 
-  const [renewalsByName, overdueByName] = await Promise.all([
-    fetchContractRenewalsByClientName(),
-    fetchOverdueInvoiceAmountsByClientName(),
-  ]);
+  const overdueByName = await fetchOverdueInvoiceAmountsByClientName();
 
   listEl.innerHTML = mine.map(c => {
     const checklist = Array.isArray(c.onboardingChecklist) ? c.onboardingChecklist : [];
@@ -1507,10 +1486,15 @@ async function renderMyClients() {
     const pendingApprovals = Array.isArray(c.pendingApprovals) ? c.pendingApprovals.length : 0;
     const stage = (c.portalConfig && c.portalConfig.engagementStage) || "onboarding";
 
+    // Renewal Tracker (client.renewal) is the source of truth for "when
+    // does this client renew" - not Contract & Invoice Tracker's
+    // contractRenewalDate, which used to drive this note and could
+    // silently disagree with whatever Renewal Tracker's own status/date
+    // said. Only an open (On Track/At Risk) tracked renewal counts here.
     let renewalNote = "";
-    const renewalDate = renewalsByName[c.name];
-    if (renewalDate) {
-      const days = Math.round((new Date(renewalDate) - new Date(new Date().toDateString())) / 86400000);
+    const renewalRec = c.renewal;
+    if (renewalRec && renewalRec.renewalDate && (renewalRec.status === 'On Track' || renewalRec.status === 'At Risk')) {
+      const days = Math.round((new Date(renewalRec.renewalDate) - new Date(new Date().toDateString())) / 86400000);
       if (!Number.isNaN(days) && days <= 30) {
         renewalNote = days < 0
           ? ` &middot; <span style="color:#ef4444;">renewal overdue</span>`
@@ -3976,10 +3960,9 @@ const STALE_NUDGE_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000; // don't re-nudge same 
 // Builds a renewal-reminder email draft - same "who's this for" shape as
 // buildStaleNudgeDraftEmail above (sendEnabled:true + a real "from" only
 // when the account manager's name/email and the client's contact email
-// are both on file). Renewal date comes from Contract & Invoice Tracker's
-// own agency/contractInvoices doc via fetchContractRenewalsByClientName
-// (see My Clients, which reads the same doc for the same reason) - it's
-// not on the client object itself.
+// are both on file). Renewal date comes from Renewal Tracker's own
+// client.renewal (see runRenewalNudgeCheck) - the source of truth for
+// this, not Contract & Invoice Tracker's contractRenewalDate.
 function buildRenewalNudgeDraftEmail(client, name, days) {
   const config = client.portalConfig || {};
   if (!config.clientContactEmail) return null;
@@ -4010,21 +3993,26 @@ const RENEWAL_NUDGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // renewals move slow
 
 // Same notification-bell nudge pattern as runStaleClientNudgeCheck below,
 // for contracts coming up (or already overdue) for renewal instead of
-// unread portal approvals. Async (unlike that one) because the renewal
-// date isn't in clientsDb - it's a second doc read, same one My Clients
-// uses. Called fire-and-forget from refreshAllViews, not awaited.
+// unread portal approvals. Synchronous - Renewal Tracker's own
+// client.renewal is the source of truth for this (see renderMyClients'
+// renewalNote for the same switch, and why: Contract & Invoice Tracker's
+// contractRenewalDate is a second, independent field that isn't
+// guaranteed to agree with it), and that's already sitting on clientsDb,
+// no extra doc read needed. Called fire-and-forget from refreshAllViews,
+// not awaited (still fine to call directly now, but kept as a call site
+// rather than inlined so nothing else has to change).
 async function runRenewalNudgeCheck() {
   const now = Date.now();
   if (now - lastRenewalNudgeCheckAt < RENEWAL_NUDGE_CHECK_INTERVAL_MS) return;
   lastRenewalNudgeCheckAt = now;
 
-  const renewalsByName = await fetchContractRenewalsByClientName();
-
-  Object.entries(renewalsByName).forEach(([name, renewalDate]) => {
-    const client = clientsDb[name];
+  Object.entries(clientsDb).forEach(([name, client]) => {
     if (!client || !client.portalConfig || !client.portalConfig.magicToken) return;
+    const rec = client.renewal;
+    if (!rec || !rec.renewalDate) return;
+    if (rec.status !== 'On Track' && rec.status !== 'At Risk') return; // Renewed/Churned - nothing to nudge about
 
-    const days = Math.round((new Date(renewalDate) - new Date(new Date().toDateString())) / 86400000);
+    const days = Math.round((new Date(rec.renewalDate) - new Date(new Date().toDateString())) / 86400000);
     if (Number.isNaN(days) || days > RENEWAL_NUDGE_DAYS_THRESHOLD) return;
 
     const alreadyNudged = adminNotifications.some(n =>

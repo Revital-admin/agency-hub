@@ -5,7 +5,10 @@
      - client.weeklyCheckins[0] (clientsDb, via getAllClients()) for
        Health rating + last check-in date - same data the per-client
        Dashboard's "Client Health" card already reads.
-     - agency/contractInvoices for contractRenewalDate per client.
+     - client.renewal (clientsDb, via getAllClients()) for renewal date/
+       status - same field Renewal Tracker owns, the source of truth for
+       this (not Contract & Invoice Tracker's contractRenewalDate, a
+       second independent field that isn't guaranteed to agree with it).
      - agency/revisionFeedbackLog for open (unresolved) revision counts
        per client.
      - client.budgetPacing (clientsDb) for over/underspend status - same
@@ -34,7 +37,6 @@ try {
 
 const SANDBOX_NAME = "Quick Sandbox (One-Offs)";
 
-let contractRecords = [];
 let revisionRecords = [];
 
 function el(id) { return document.getElementById(id); }
@@ -99,23 +101,6 @@ const STALE_CONTACT_DAYS = 30;
 // things are backing up.
 const HEAVY_OPEN_ACTION_ITEMS = 3;
 
-function listenToContractLog() {
-  if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb || !window.parent.firebaseOnSnapshot) return;
-  // Was pointed at "contractInvoiceLog", a doc name nothing in the Hub ever
-  // writes to - Contract & Invoice Tracker (and everything else that reads
-  // this data: fetchBillingSummaries in the parent app.js, QBR Generator)
-  // all use "contractInvoices". That mismatch meant contractRecords was
-  // always empty, so every row's Renewal column silently showed "--" and
-  // the "Renewals Due" summary count was always 0, no matter how many
-  // renewals were actually coming up.
-  const ref = window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "contractInvoices");
-  window.parent.firebaseOnSnapshot(ref, (docSnap) => {
-    const data = docSnap && docSnap.exists ? docSnap.data() : null;
-    contractRecords = (data && data.list) || [];
-    renderTable();
-  }, (err) => console.error("Contract log listener error:", err));
-}
-
 function listenToRevisionLog() {
   if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb || !window.parent.firebaseOnSnapshot) return;
   const ref = window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "revisionFeedbackLog");
@@ -137,8 +122,13 @@ function buildRows() {
     const daysSinceCheckin = lastCheckinDate ? daysBetween(lastCheckinDate, todayStr()) : null;
     const staleCheckin = daysSinceCheckin === null || daysSinceCheckin > 14;
 
-    const contract = contractRecords.find(r => (r.clientName || '').toLowerCase() === name.toLowerCase());
-    const renewalDate = (contract && contract.contractStatus === 'Signed') ? contract.contractRenewalDate : null;
+    // Renewal Tracker's own client.renewal is the source of truth for
+    // this, not Contract & Invoice Tracker's contractRenewalDate - see
+    // runRenewalNudgeCheck in the parent app.js for the same switch.
+    // Only an open (On Track/At Risk) tracked renewal counts here.
+    const renewalRec = client.renewal;
+    const renewalIsOpen = renewalRec && (renewalRec.status === 'On Track' || renewalRec.status === 'At Risk');
+    const renewalDate = renewalIsOpen ? renewalRec.renewalDate : null;
     const renewalDays = renewalDate ? daysBetween(todayStr(), renewalDate) : null;
     const renewalDueSoon = renewalDays !== null && renewalDays <= 30;
 
@@ -152,6 +142,13 @@ function buildRows() {
     // is null - not "on track" - for any client not being tracked at all.
     const budgetPace = getBudgetPaceClass(client.budgetPacing);
     const overspending = budgetPace === 'pace-danger';
+    // Same underlying fact as "overspending" (spending faster than the
+    // retainer/budget covers), reframed as an opportunity rather than a
+    // risk - but only when the relationship is actually healthy. An
+    // overspending Red-health client is a churn risk, not someone to
+    // pitch a bigger retainer to, so this deliberately excludes that
+    // case rather than just re-badging the same condition.
+    const upsellOpportunity = overspending && healthRating !== 'Red';
 
     const pendingApprovals = Array.isArray(client.pendingApprovals) ? client.pendingApprovals : [];
     const approvalAges = pendingApprovals
@@ -191,7 +188,7 @@ function buildRows() {
       name, healthRating, lastCheckinDate, daysSinceCheckin, staleCheckin,
       renewalDate, renewalDays, renewalDueSoon, openRevisions, heavyRevisions, needsAttention,
       portalLastVisitedAt, daysSinceVisit,
-      budgetPace, overspending,
+      budgetPace, overspending, upsellOpportunity,
       oldestPendingApprovalDays, staleApproval,
       lastMeetingDate, daysSinceMeeting, staleContact,
       openActionItems, heavyOpenActionItems
@@ -229,6 +226,7 @@ function renewalCellHtml(row) {
 // account actually going quiet (see the comment on staleContact above).
 function signalBadgesHtml(row) {
   const badges = [];
+  if (row.upsellOpportunity) badges.push(`<span class="signal-badge signal-opportunity">💡 Upsell Opportunity</span>`);
   if (row.overspending) badges.push(`<span class="signal-badge">⚠ Overspending</span>`);
   if (row.staleApproval) badges.push(`<span class="signal-badge">⏳ Approval waiting ${row.oldestPendingApprovalDays}d</span>`);
   if (row.heavyOpenActionItems) badges.push(`<span class="signal-badge">☑ ${row.openActionItems} open action items</span>`);
@@ -251,6 +249,7 @@ function renderTable() {
     return true;
   });
 
+  el('summaryUpsellOpportunities').textContent = rows.filter(r => r.upsellOpportunity).length;
   el('summaryRedHealth').textContent = rows.filter(r => r.healthRating === 'Red').length;
   el('summaryNoCheckin').textContent = rows.filter(r => r.staleCheckin).length;
   el('summaryRenewalsDue').textContent = rows.filter(r => r.renewalDueSoon).length;
@@ -284,7 +283,6 @@ document.addEventListener('DOMContentLoaded', () => {
   el('filterClientInput').addEventListener('input', renderTable);
   el('showAttentionOnlyToggle').addEventListener('change', renderTable);
 
-  listenToContractLog();
   listenToRevisionLog();
   renderTable();
 
