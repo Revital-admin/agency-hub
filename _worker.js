@@ -341,7 +341,17 @@ function fetchWithTimeout(url, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   return fetch(url, {
-    headers: { "User-Agent": "RevitalHubMarketingNews/1.0 (+https://hub.revitalproductions.com)" },
+    // A custom User-Agent (the original "RevitalHubMarketingNews/1.0")
+    // is exactly the kind of signal bot-protection on the source site
+    // (many of these publications sit behind Cloudflare themselves) uses
+    // to block non-browser requests - MarTech's feed failed in production
+    // with this in place even though the URL itself is correct. A
+    // standard browser UA string sails through the same protection a
+    // real visitor's browser would.
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      "Accept": "application/rss+xml, application/xml, text/xml, */*"
+    },
     signal: controller.signal
   }).finally(() => clearTimeout(timer));
 }
