@@ -568,6 +568,7 @@ async function saveContractorDocToLibrary(defKey, file) {
         docusignAnchorTags: false,
         needsAnchorReview: !!detection,
         anchorDetection: detection || null,
+        flatReference: false,
         docCategory: 'contractor'
       };
       if (idx >= 0) { list[idx] = { ...list[idx], ...entryPatch }; }
@@ -610,6 +611,7 @@ async function addCustomContractorDoc(label, file) {
         docusignAnchorTags: false,
         needsAnchorReview: !!detection,
         anchorDetection: detection || null,
+        flatReference: false,
         docCategory: 'contractor'
       });
       return list;
@@ -643,7 +645,8 @@ async function replaceCustomContractorDoc(id, file) {
           uploadedAt: todayStr(),
           docusignAnchorTags: false,
           needsAnchorReview: !!detection,
-          anchorDetection: detection || null
+          anchorDetection: detection || null,
+          flatReference: false
         };
       }
       return list;
@@ -674,13 +677,40 @@ async function deleteContractorEntry(id) {
 
 function contractorStatusText(entry) {
   if (!entry) return { text: 'Not uploaded yet', color: 'var(--text-muted)' };
+  if (entry.docusignAnchorTags && entry.flatReference) return { text: `✓ Included as-is (${escapeHtml(entry.filename || '')}) — no auto sign tab`, color: 'var(--color-success, #10b981)' };
   if (entry.docusignAnchorTags) return { text: `✓ DocuSign-ready (${escapeHtml(entry.filename || '')})`, color: 'var(--color-success, #10b981)' };
   if (entry.needsAnchorReview) return { text: `Needs Review (${escapeHtml(entry.filename || '')})`, color: '#f68d5f' };
   return { text: `Flat PDF only (${escapeHtml(entry.filename || '')})`, color: 'var(--text-muted)' };
 }
 
+// Single-signer documents (this doc has only the contractor filling it
+// in, no separate "Revital Signature" line) will never trip
+// detectClientAnchors - that heuristic specifically requires two
+// Signature/Date label pairs (client column + Revital column), see
+// shared-contract-pdf-tools.js. Without this manual override, a doc like
+// that would be permanently stuck at "Flat PDF only" with no path to
+// ever showing up in the Send Agreement picker, even though there's
+// nothing actually wrong with it - it just doesn't need an auto-placed
+// signature tab to ride along in the envelope as a reference/fill-in
+// document. flatReference:true just distinguishes this from a real
+// two-party detected+reviewed doc in the status label above.
+async function markContractorDocReadyAsIs(id) {
+  try {
+    await writeContractorEntry((list) => {
+      const idx = list.findIndex(t => t.id === id);
+      if (idx >= 0) list[idx] = { ...list[idx], docusignAnchorTags: true, needsAnchorReview: false, flatReference: true };
+      return list;
+    });
+    renderContractorDocManager();
+  } catch (e) {
+    console.error('Could not mark contractor document ready:', e);
+    if (window.parent.showBanner) window.parent.showBanner('error', "Couldn't update: " + e.message);
+  }
+}
+
 function contractorDocRowHtml(label, entry, fileInputAttr, includeDelete, deleteId) {
   const status = contractorStatusText(entry);
+  const showMarkReady = entry && !entry.needsAnchorReview && !entry.docusignAnchorTags;
   return `
     <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 0; border-bottom:1px solid var(--border-color);">
       <div style="min-width:220px; flex:1;">
@@ -688,6 +718,7 @@ function contractorDocRowHtml(label, entry, fileInputAttr, includeDelete, delete
         <div style="font-size:0.75rem; color:${status.color};">${status.text}</div>
       </div>
       ${entry && entry.needsAnchorReview ? `<button type="button" class="btn btn-secondary contractor-doc-review-btn" data-id="${entry.id}" style="padding:6px 12px; font-size:0.8rem;">Review</button>` : ''}
+      ${showMarkReady ? `<button type="button" class="btn btn-secondary contractor-doc-mark-ready-btn" data-id="${entry.id}" title="For single-signer documents (like a form only the contractor fills in) that will never auto-detect a Revital signature line." style="padding:6px 12px; font-size:0.8rem;">Include As-Is</button>` : ''}
       <label class="btn btn-secondary" style="cursor:pointer; padding:6px 12px; font-size:0.8rem;">
         ${entry ? 'Replace File' : 'Upload File'}
         <input type="file" accept="application/pdf" ${fileInputAttr} class="contractor-doc-file-input" style="display:none;">
@@ -748,6 +779,9 @@ async function renderContractorDocManager() {
       const entry = contractorEntries.find(t => t.id === btn.getAttribute('data-id'));
       if (entry) openAnchorReview(entry);
     });
+  });
+  container.querySelectorAll('.contractor-doc-mark-ready-btn').forEach(btn => {
+    btn.addEventListener('click', () => markContractorDocReadyAsIs(btn.getAttribute('data-id')));
   });
   const addFileInput = el('contractorDocAddFile');
   const addFileName = el('contractorDocAddFileName');
