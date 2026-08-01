@@ -453,6 +453,8 @@ let iframeNeedsReload = {
   "tab-portfolioshowcase": true,
   "tab-emailtemplates": true,
   "tab-subscriptiontracker": true,
+  "tab-expensetracker": true,
+  "tab-cashflowsnapshot": true,
   "tab-activitylog": true,
   "tab-teamroster": true,
   "tab-hourslog": true,
@@ -1040,6 +1042,12 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-subscriptiontracker":
       renderSubscriptionTracker();
+      break;
+    case "tab-expensetracker":
+      renderExpenseTracker();
+      break;
+    case "tab-cashflowsnapshot":
+      renderCashFlowSnapshot();
       break;
     case "tab-activitylog":
       renderActivityLogTab();
@@ -2290,6 +2298,16 @@ function renderEmailTemplateLibrary() {
 // ── Subscription & Tool Cost Tracker Controller ──
 function renderSubscriptionTracker() {
   setIframeAbsoluteSrc('#tab-subscriptiontracker iframe', "subscription-tracker/index.html");
+}
+
+// ── Business Expense Tracker Controller ──
+function renderExpenseTracker() {
+  setIframeAbsoluteSrc('#tab-expensetracker iframe', "expense-tracker/index.html");
+}
+
+// ── Cash Flow Snapshot Controller ──
+function renderCashFlowSnapshot() {
+  setIframeAbsoluteSrc('#tab-cashflowsnapshot iframe', "cash-flow-snapshot/index.html");
 }
 
 // ── Activity Log Controller ──
