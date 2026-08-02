@@ -24,7 +24,7 @@ const TASK_NAME_TEMPLATES = [
     { type: 'text', label: 'Topic', placeholder: 'e.g. 3 Content Mistakes to Avoid' },
     { type: 'date', label: 'Date' },
   ], example: 'IG Reel — 3 Content Mistakes to Avoid — July 5' },
-  { space: 'Delivery', list: 'Active Projects', segments: [
+  { space: 'Delivery', list: 'Active Projects & Tasks', segments: [
     { type: 'text', label: 'Service', placeholder: 'e.g. Website Redesign' },
     { type: 'text', label: 'Project / Client', placeholder: 'e.g. Acme Wellness' },
     { type: 'month', label: 'Month Year' },
@@ -33,7 +33,7 @@ const TASK_NAME_TEMPLATES = [
     { type: 'text', label: 'Recurring Type', placeholder: 'e.g. Monthly Performance Report' },
     { type: 'text', label: 'Client Name', placeholder: 'e.g. Acme Wellness' },
   ], example: 'Monthly Performance Report — Acme Wellness' },
-  { space: 'Delivery', list: 'Feedback & Revisions', segments: [
+  { space: 'Delivery', list: 'Client Feedback & Revisions', segments: [
     { type: 'fixed', value: 'Revision' },
     { type: 'text', label: 'Deliverable Name', placeholder: 'e.g. IG Reel July 5' },
     { type: 'roundnum', label: 'Round #', placeholder: '1' },
@@ -52,11 +52,9 @@ const TASK_NAME_TEMPLATES = [
     { type: 'text', label: 'Description', placeholder: 'e.g. Summer Sale' },
     { type: 'date', label: 'Date' },
   ], example: 'IG Reel — Summer Sale — July 5' },
-  { space: 'Delivery', list: 'Video & Reels Production', segments: [
-    { type: 'text', label: 'Video Type', placeholder: 'e.g. Reel' },
-    { type: 'text', label: 'Title', placeholder: 'e.g. 3 Content Mistakes to Avoid' },
-    { type: 'date', label: 'Date' },
-  ], example: 'Reel — 3 Content Mistakes to Avoid — July 5' },
+  // Note: no separate "Video & Reels Production" list exists under Delivery in
+  // the live ClickUp workspace - only Growth > Content & Social has one (see
+  // below). An earlier version of this file duplicated it here by mistake.
 
   // ── CRM Space ──
   { space: 'CRM', list: 'Deals', segments: [
@@ -105,7 +103,7 @@ const TASK_NAME_TEMPLATES = [
   ], example: 'Acme Wellness — Onboarding Handoff — July 2026' },
 
   // ── Growth Space - Content & Social ──
-  { space: 'Growth', list: 'Social Media Calendar', segments: [
+  { space: 'Growth', list: 'Revital Social Media Calendar', segments: [
     { type: 'text', label: 'Platform + Format', placeholder: 'e.g. IG Reel' },
     { type: 'text', label: 'Topic', placeholder: 'e.g. 3 Content Mistakes to Avoid' },
     { type: 'date', label: 'Date' },
@@ -119,7 +117,7 @@ const TASK_NAME_TEMPLATES = [
     { type: 'text', label: 'Title', placeholder: 'e.g. Why SEO Still Matters' },
     { type: 'month', label: 'Month Year' },
   ], example: 'Blog Post — Why SEO Still Matters — July 2026' },
-  { space: 'Growth', list: 'Video & Reels', segments: [
+  { space: 'Growth', list: 'Video & Reels Production', segments: [
     { type: 'text', label: 'Video Type', placeholder: 'e.g. Reel' },
     { type: 'text', label: 'Title', placeholder: 'e.g. 3 Content Mistakes to Avoid' },
     { type: 'date', label: 'Date' },
@@ -144,21 +142,18 @@ const TASK_NAME_TEMPLATES = [
   ], example: 'Meta Ads — Lead Gen — Free Audit Offer — July 2026' },
 
   // ── Growth Space - Other Folders ──
-  { space: 'Growth', list: 'Lead Magnets', segments: [
-    { type: 'text', label: 'Type', placeholder: 'e.g. Checklist' },
-    { type: 'text', label: 'Name', placeholder: 'e.g. Content Calendar Setup' },
-    { type: 'month', label: 'Launch Month Year' },
-  ], example: 'Checklist — Content Calendar Setup — July 2026' },
-  { space: 'Growth', list: 'Reviews & Testimonials', segments: [
+  // Note: the SOP doc's old "Lead Magnets" and "Monthly Business Metrics"
+  // entries here have been dropped - "Lead Magnets" was a duplicate
+  // reference to the real "Lead Magnets & Freebies" list above (same list,
+  // two names in the doc), and no ClickUp list called "Monthly Business
+  // Metrics" actually exists (that reporting is tracked via the Monthly
+  // Reporting SOP, not a dedicated task list).
+  { space: 'Operations', list: 'Testimonials & Reviews', segments: [
     { type: 'text', label: 'Client Name', placeholder: 'e.g. Acme Wellness' },
     { type: 'text', label: 'Platform', placeholder: 'e.g. Google' },
     { type: 'month', label: 'Month Year' },
   ], example: 'Acme Wellness — Google — July 2026' },
-  { space: 'Growth', list: 'Monthly Business Metrics', segments: [
-    { type: 'fixed', value: 'Monthly Metrics' },
-    { type: 'month', label: 'Month Year' },
-  ], example: 'Monthly Metrics — July 2026' },
-  { space: 'Growth', list: 'Referral Partners', segments: [
+  { space: 'Growth', list: 'Agency Partners', segments: [
     { type: 'text', label: 'Name', placeholder: 'e.g. Jane Smith' },
     { type: 'text', label: 'Company', placeholder: 'e.g. Creative Co' },
     { type: 'text', label: 'Relationship Type', placeholder: 'e.g. Agency Partner' },
