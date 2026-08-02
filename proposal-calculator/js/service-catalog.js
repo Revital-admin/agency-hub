@@ -16,51 +16,51 @@ const SERVICE_CATALOG = [
     "services": [
       {
         "name": "Feed Posts (static images, carousels)",
-        "defaultPrice": 0,
+        "defaultPrice": 350,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 105
       },
       {
         "name": "Reels & Short-Form Video",
-        "defaultPrice": 0,
+        "defaultPrice": 400,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 120
       },
       {
         "name": "Stories",
-        "defaultPrice": 0,
+        "defaultPrice": 150,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 45
       },
       {
         "name": "Community Management (responding to comments, DMs, engaging followers)",
-        "defaultPrice": 0,
+        "defaultPrice": 250,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 75
       },
       {
         "name": "Content Calendar Management",
-        "defaultPrice": 0,
+        "defaultPrice": 200,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 60
       },
       {
         "name": "Hashtag Strategy",
-        "defaultPrice": 0,
+        "defaultPrice": 100,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 30
       },
       {
         "name": "Profile Optimization",
-        "defaultPrice": 0,
+        "defaultPrice": 100,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 30
       },
       {
         "name": "Social Listening & Trend Monitoring",
-        "defaultPrice": 0,
+        "defaultPrice": 150,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 45
       }
     ]
   },
@@ -69,69 +69,69 @@ const SERVICE_CATALOG = [
     "services": [
       {
         "name": "Meta Ads (Facebook + Instagram)",
-        "defaultPrice": 1000,
+        "defaultPrice": 600,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 180
       },
       {
         "name": "TikTok Ads",
-        "defaultPrice": 1200,
+        "defaultPrice": 500,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 150
       },
       {
         "name": "LinkedIn Ads",
-        "defaultPrice": 0,
+        "defaultPrice": 600,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 180
       },
       {
         "name": "Pinterest Ads",
-        "defaultPrice": 0,
+        "defaultPrice": 350,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 105
       },
       {
         "name": "Snapchat Ads",
-        "defaultPrice": 0,
+        "defaultPrice": 350,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 105
       },
       {
         "name": "Audience Research & Targeting",
-        "defaultPrice": 0,
+        "defaultPrice": 200,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 60
       },
       {
         "name": "Ad Creative Production",
-        "defaultPrice": 0,
+        "defaultPrice": 300,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 90
       },
       {
         "name": "Campaign Setup & Management",
-        "defaultPrice": 0,
+        "defaultPrice": 500,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 200
       },
       {
         "name": "A/B Testing",
-        "defaultPrice": 0,
+        "defaultPrice": 150,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 45
       },
       {
         "name": "Retargeting Campaigns",
-        "defaultPrice": 0,
+        "defaultPrice": 250,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 75
       },
       {
         "name": "Budget Management & Reporting",
-        "defaultPrice": 0,
+        "defaultPrice": 150,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 45
       }
     ]
   },
@@ -140,63 +140,63 @@ const SERVICE_CATALOG = [
     "services": [
       {
         "name": "Google Ads — Search",
-        "defaultPrice": 1000,
+        "defaultPrice": 700,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 210
       },
       {
         "name": "Google Ads — Display",
-        "defaultPrice": 0,
+        "defaultPrice": 500,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 150
       },
       {
         "name": "Google Ads — Performance Max",
-        "defaultPrice": 0,
+        "defaultPrice": 600,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 180
       },
       {
         "name": "Google Ads — Shopping",
-        "defaultPrice": 0,
+        "defaultPrice": 500,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 150
       },
       {
         "name": "Keyword Research",
-        "defaultPrice": 0,
+        "defaultPrice": 200,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 60
       },
       {
         "name": "Ad Copywriting",
-        "defaultPrice": 0,
+        "defaultPrice": 200,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 60
       },
       {
         "name": "Landing Page Recommendations",
-        "defaultPrice": 0,
+        "defaultPrice": 150,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 45
       },
       {
         "name": "Bid Strategy Management",
-        "defaultPrice": 0,
+        "defaultPrice": 200,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 60
       },
       {
         "name": "Conversion Tracking Setup",
-        "defaultPrice": 0,
+        "defaultPrice": 350,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 140
       },
       {
         "name": "Quality Score Optimization",
-        "defaultPrice": 0,
+        "defaultPrice": 150,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 45
       }
     ]
   },
@@ -205,57 +205,57 @@ const SERVICE_CATALOG = [
     "services": [
       {
         "name": "On-Page SEO (meta titles, descriptions, headers, content optimization)",
-        "defaultPrice": 0,
+        "defaultPrice": 400,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 120
       },
       {
         "name": "Technical SEO (site speed, crawlability, schema markup)",
-        "defaultPrice": 0,
+        "defaultPrice": 350,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 105
       },
       {
         "name": "Local SEO (Google Business Profile, local citations, NAP consistency)",
-        "defaultPrice": 0,
+        "defaultPrice": 450,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 135
       },
       {
         "name": "Off-Page SEO (link building, backlink outreach)",
-        "defaultPrice": 0,
+        "defaultPrice": 400,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 120
       },
       {
         "name": "Keyword Research & Strategy",
-        "defaultPrice": 0,
+        "defaultPrice": 200,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 60
       },
       {
         "name": "SEO Content Writing (blog posts, landing pages)",
-        "defaultPrice": 0,
+        "defaultPrice": 350,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 105
       },
       {
         "name": "SEO Audits",
-        "defaultPrice": 0,
+        "defaultPrice": 500,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 200
       },
       {
         "name": "Google Search Console Management",
-        "defaultPrice": 0,
+        "defaultPrice": 150,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 45
       },
       {
         "name": "Rank Tracking & Reporting",
-        "defaultPrice": 0,
+        "defaultPrice": 150,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 45
       }
     ]
   },
@@ -264,75 +264,75 @@ const SERVICE_CATALOG = [
     "services": [
       {
         "name": "Newsletter Campaigns",
-        "defaultPrice": 1500,
+        "defaultPrice": 250,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 75
       },
       {
         "name": "Promotional Emails",
-        "defaultPrice": 0,
+        "defaultPrice": 200,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 60
       },
       {
         "name": "Drip / Nurture Sequences",
-        "defaultPrice": 0,
+        "defaultPrice": 300,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 90
       },
       {
         "name": "Welcome Sequences",
-        "defaultPrice": 0,
+        "defaultPrice": 150,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 45
       },
       {
         "name": "Re-engagement Campaigns",
-        "defaultPrice": 0,
+        "defaultPrice": 200,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 60
       },
       {
         "name": "List Building & Growth",
-        "defaultPrice": 0,
+        "defaultPrice": 300,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 120
       },
       {
         "name": "List Segmentation & Hygiene",
-        "defaultPrice": 0,
+        "defaultPrice": 150,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 45
       },
       {
         "name": "Email Copywriting",
-        "defaultPrice": 0,
+        "defaultPrice": 200,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 60
       },
       {
         "name": "Template Design",
-        "defaultPrice": 0,
+        "defaultPrice": 250,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 75
       },
       {
         "name": "A/B Testing (subject lines, send times, CTAs)",
-        "defaultPrice": 0,
+        "defaultPrice": 100,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 30
       },
       {
         "name": "Platform Setup & Integration (Mailchimp, Klaviyo, ActiveCampaign, etc.)",
-        "defaultPrice": 0,
+        "defaultPrice": 400,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 160
       },
       {
         "name": "Performance Reporting",
-        "defaultPrice": 0,
+        "defaultPrice": 100,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 30
       }
     ]
   },
@@ -341,75 +341,75 @@ const SERVICE_CATALOG = [
     "services": [
       {
         "name": "New Website Builds",
-        "defaultPrice": 0,
+        "defaultPrice": 3500,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 1400
       },
       {
         "name": "Website Redesigns",
-        "defaultPrice": 0,
+        "defaultPrice": 500,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 150
       },
       {
         "name": "Landing Page Design & Development",
-        "defaultPrice": 0,
+        "defaultPrice": 600,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 240
       },
       {
         "name": "Website Maintenance & Updates",
-        "defaultPrice": 0,
+        "defaultPrice": 150,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 45
       },
       {
         "name": "UX/UI Optimization",
-        "defaultPrice": 0,
+        "defaultPrice": 300,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 90
       },
       {
         "name": "Conversion Rate Optimization (CRO)",
-        "defaultPrice": 0,
+        "defaultPrice": 300,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 90
       },
       {
         "name": "Speed & Performance Optimization",
-        "defaultPrice": 0,
+        "defaultPrice": 200,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 60
       },
       {
         "name": "Mobile Responsiveness",
-        "defaultPrice": 0,
+        "defaultPrice": 150,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 45
       },
       {
         "name": "Hosting & Domain Management",
-        "defaultPrice": 0,
+        "defaultPrice": 50,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 15
       },
       {
         "name": "Analytics Setup (GA4, Meta Pixel, GTM)",
-        "defaultPrice": 800,
+        "defaultPrice": 300,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 120
       },
       {
         "name": "E-commerce Setup (Shopify, WooCommerce)",
-        "defaultPrice": 0,
+        "defaultPrice": 800,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 320
       },
       {
         "name": "Platform Support: WordPress, Shopify, Webflow, Squarespace, Wix",
-        "defaultPrice": 0,
+        "defaultPrice": 150,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 45
       }
     ]
   },
@@ -418,63 +418,63 @@ const SERVICE_CATALOG = [
     "services": [
       {
         "name": "Content Strategy Development",
-        "defaultPrice": 0,
+        "defaultPrice": 500,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 200
       },
       {
         "name": "Blog Writing & Management",
-        "defaultPrice": 0,
+        "defaultPrice": 300,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 90
       },
       {
         "name": "Lead Magnet Creation (guides, checklists, templates, free audits)",
-        "defaultPrice": 0,
+        "defaultPrice": 400,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 160
       },
       {
         "name": "Landing Page Copywriting",
-        "defaultPrice": 0,
+        "defaultPrice": 250,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 75
       },
       {
         "name": "Lead Capture Form Setup",
-        "defaultPrice": 0,
+        "defaultPrice": 200,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 80
       },
       {
         "name": "Marketing Funnel Build",
-        "defaultPrice": 0,
+        "defaultPrice": 800,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 320
       },
       {
         "name": "CTA Strategy",
-        "defaultPrice": 0,
+        "defaultPrice": 100,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 30
       },
       {
         "name": "Content Distribution",
-        "defaultPrice": 0,
+        "defaultPrice": 200,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 60
       },
       {
         "name": "Organic Lead Generation",
-        "defaultPrice": 0,
+        "defaultPrice": 300,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 90
       },
       {
         "name": "Marketing Automation Setup",
-        "defaultPrice": 0,
+        "defaultPrice": 600,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 240
       }
     ]
   },
@@ -483,63 +483,63 @@ const SERVICE_CATALOG = [
     "services": [
       {
         "name": "Marketing Audit (full assessment of current marketing efforts)",
-        "defaultPrice": 1500,
+        "defaultPrice": 600,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 240
       },
       {
         "name": "Competitor Analysis",
-        "defaultPrice": 0,
+        "defaultPrice": 250,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 75
       },
       {
         "name": "Brand Positioning",
-        "defaultPrice": 0,
+        "defaultPrice": 400,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 120
       },
       {
         "name": "Go-To-Market Strategy",
-        "defaultPrice": 0,
+        "defaultPrice": 500,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 150
       },
       {
         "name": "Quarterly Marketing Planning",
-        "defaultPrice": 0,
+        "defaultPrice": 300,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 90
       },
       {
         "name": "Campaign Strategy",
-        "defaultPrice": 0,
+        "defaultPrice": 300,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 90
       },
       {
         "name": "KPI Framework Development",
-        "defaultPrice": 0,
+        "defaultPrice": 400,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 160
       },
       {
         "name": "Analytics & Data Interpretation",
-        "defaultPrice": 0,
+        "defaultPrice": 200,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 60
       },
       {
         "name": "Marketing Roadmap Development",
-        "defaultPrice": 0,
+        "defaultPrice": 500,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 200
       },
       {
         "name": "Consulting & Advisory",
-        "defaultPrice": 0,
+        "defaultPrice": 250,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 75
       }
     ]
   },
@@ -548,21 +548,21 @@ const SERVICE_CATALOG = [
     "services": [
       {
         "name": "HubSpot Marketing Hub",
-        "defaultPrice": 800,
+        "defaultPrice": 75,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 50
       },
       {
         "name": "Sprout Social Seat",
-        "defaultPrice": 250,
+        "defaultPrice": 249,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 199
       },
       {
         "name": "Klaviyo Base Plan",
-        "defaultPrice": 50,
+        "defaultPrice": 65,
         "defaultFeeType": "monthly",
-        "defaultCost": 0
+        "defaultCost": 45
       }
     ]
   },
@@ -571,51 +571,51 @@ const SERVICE_CATALOG = [
     "services": [
       {
         "name": "Brand Strategy Session",
-        "defaultPrice": 0,
+        "defaultPrice": 300,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 120
       },
       {
         "name": "Primary Logo Design",
-        "defaultPrice": 0,
+        "defaultPrice": 600,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 240
       },
       {
         "name": "Logo Variations & Submark",
-        "defaultPrice": 0,
+        "defaultPrice": 250,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 100
       },
       {
         "name": "Color Palette & Typography System",
-        "defaultPrice": 0,
+        "defaultPrice": 200,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 80
       },
       {
         "name": "Brand Style Guide / Guidelines",
-        "defaultPrice": 0,
+        "defaultPrice": 400,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 160
       },
       {
         "name": "Social Media Profile Graphics",
-        "defaultPrice": 0,
+        "defaultPrice": 150,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 60
       },
       {
         "name": "Branded Social Media Templates",
-        "defaultPrice": 0,
+        "defaultPrice": 300,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 120
       },
       {
         "name": "Business Card / Promotional Design",
-        "defaultPrice": 0,
+        "defaultPrice": 150,
         "defaultFeeType": "setup",
-        "defaultCost": 0
+        "defaultCost": 60
       }
     ]
   }

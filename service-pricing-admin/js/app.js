@@ -118,12 +118,71 @@ function isDirty(svc) {
 
 // Margin is only meaningful once a real cost has been entered - services
 // still sitting at the $0 default cost show "—" rather than a misleading
-// 100% margin.
-function marginDisplayFor(current) {
-  if (!current.cost || current.cost <= 0) return '—';
-  if (!current.price || current.price <= 0) return '—';
-  const marginPct = Math.round(((current.price - current.cost) / current.price) * 100);
-  return marginPct + '%';
+// 100% margin. The 40% cutoff for "low margin" mirrors the Proposal
+// Calculator's own profit-margin flag (proposal-calculator/js/app.js) so
+// the two tools agree on what counts as a thin margin.
+const LOW_MARGIN_THRESHOLD_PCT = 40;
+
+function marginInfoFor(current) {
+  if (!current.cost || current.cost <= 0 || !current.price || current.price <= 0) {
+    return { dollars: null, pct: null };
+  }
+  const marginDollars = current.price - current.cost;
+  const marginPct = Math.round((marginDollars / current.price) * 100);
+  return { dollars: marginDollars, pct: marginPct };
+}
+
+function marginCellHtml(current) {
+  const info = marginInfoFor(current);
+  if (info.dollars === null) return { cls: '', html: '—' };
+  const cls = info.pct < LOW_MARGIN_THRESHOLD_PCT ? 'margin-low' : 'margin-good';
+  return {
+    cls,
+    html: `$${info.dollars.toLocaleString()}<span class="pricing-margin-pct">(${info.pct}%)</span>`
+  };
+}
+
+// Rollup shown in the summary bar at the top of the page. Computed over the
+// *whole* catalog (not the search-filtered rows in the table below) so it
+// always reflects the full pricing picture, and recalculated on every
+// render() so it updates live as an admin edits a price or cost field.
+function computeMarginSummary() {
+  const rows = flatCatalog();
+  let pricedCount = 0;
+  let marginPctTotal = 0;
+  let lowMarginCount = 0;
+
+  rows.forEach(svc => {
+    const current = currentValueFor(svc);
+    const info = marginInfoFor(current);
+    if (info.dollars === null) return;
+    pricedCount++;
+    marginPctTotal += info.pct;
+    if (info.pct < LOW_MARGIN_THRESHOLD_PCT) lowMarginCount++;
+  });
+
+  return {
+    avgMarginPct: pricedCount > 0 ? Math.round(marginPctTotal / pricedCount) : null,
+    pricedCount,
+    totalCount: rows.length,
+    lowMarginCount
+  };
+}
+
+function updateMarginSummary() {
+  const summary = computeMarginSummary();
+
+  const avgEl = el('summaryAvgMargin');
+  if (avgEl) {
+    avgEl.textContent = summary.avgMarginPct === null ? '—' : summary.avgMarginPct + '%';
+    avgEl.classList.toggle('margin-low', summary.avgMarginPct !== null && summary.avgMarginPct < LOW_MARGIN_THRESHOLD_PCT);
+  }
+
+  const pricedEl = el('summaryPricedCount');
+  if (pricedEl) pricedEl.textContent = `${summary.pricedCount} / ${summary.totalCount}`;
+
+  const lowEl = el('summaryLowMarginCount');
+  if (lowEl) lowEl.textContent = summary.lowMarginCount;
 }
 
 function hasUnsavedChanges() {
@@ -173,6 +232,7 @@ function render() {
           ${rows.map(svc => {
             const current = currentValueFor(svc);
             const dirty = isDirty(svc);
+            const margin = marginCellHtml(current);
             return `<tr>
               <td class="pricing-service-name${dirty ? ' is-overridden' : ''}">${svc.name}</td>
               <td><input type="number" class="num-input pricing-price-input" min="0" step="50" value="${current.price}" data-name="${encodeURIComponent(svc.name)}" data-field="price"></td>
@@ -183,7 +243,7 @@ function render() {
                 </select>
               </td>
               <td><input type="number" class="num-input pricing-cost-input" min="0" step="10" value="${current.cost}" data-name="${encodeURIComponent(svc.name)}" data-field="cost" title="What this service actually costs you to deliver (contractor pay, ad-platform fees, software allocation, etc.)"></td>
-              <td class="pricing-margin-cell">${marginDisplayFor(current)}</td>
+              <td class="pricing-margin-cell ${margin.cls}">${margin.html}</td>
               <td><button class="pricing-reset-btn" data-name="${encodeURIComponent(svc.name)}" ${dirty ? '' : 'disabled'}>Reset</button></td>
             </tr>`;
           }).join('')}
@@ -198,6 +258,7 @@ function render() {
 
   container.innerHTML = html;
   el('serviceCount').textContent = `${totalShown} service${totalShown === 1 ? '' : 's'} shown`;
+  updateMarginSummary();
   wireRowEvents();
 }
 
