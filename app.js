@@ -242,6 +242,26 @@ function applyTeamAccessRestrictions(allowedSections) {
     activityLogBtn.style.display = allowedSections ? 'none' : '';
   }
 
+  // Expense Tracker / Cash Flow Snapshot / Profit & Loss Tracker are
+  // financial info too - each one's own iframe already refuses to render
+  // its content for a restricted user (see each tool's initAccessGate),
+  // but the footer button itself was never hidden here like Team Access/
+  // Service Pricing/Subscription Tracker above, so a restricted teammate
+  // could still see the button (just not the data behind it) - fixed to
+  // match the same footer-gating pattern as everything else in this list.
+  const expenseTrackerBtn = document.getElementById('expenseTrackerFooterBtn');
+  if (expenseTrackerBtn) {
+    expenseTrackerBtn.style.display = allowedSections ? 'none' : '';
+  }
+  const cashFlowSnapshotBtn = document.getElementById('cashFlowSnapshotFooterBtn');
+  if (cashFlowSnapshotBtn) {
+    cashFlowSnapshotBtn.style.display = allowedSections ? 'none' : '';
+  }
+  const profitLossTrackerBtn = document.getElementById('profitLossTrackerFooterBtn');
+  if (profitLossTrackerBtn) {
+    profitLossTrackerBtn.style.display = allowedSections ? 'none' : '';
+  }
+
   // If restrictions just hid whatever tab the user was looking at,
   // land them on the first tab they're still allowed to see instead
   // of leaving them on a now-hidden section.
@@ -444,6 +464,7 @@ let iframeNeedsReload = {
   "tab-roiprojector": true,
   "tab-budgetcalculator": true,
   "tab-paybackperiod": true,
+  "tab-pltracker": true,
   "tab-sopwiki": true,
   "tab-tasknamegen": true,
   "tab-marketingnews": true,
@@ -1064,6 +1085,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-cashflowsnapshot":
       renderCashFlowSnapshot();
+      break;
+    case "tab-pltracker":
+      renderProfitLossTracker();
       break;
     case "tab-activitylog":
       renderActivityLogTab();
@@ -2328,6 +2352,10 @@ function renderExpenseTracker() {
 // ── Cash Flow Snapshot Controller ──
 function renderCashFlowSnapshot() {
   setIframeAbsoluteSrc('#tab-cashflowsnapshot iframe', "cash-flow-snapshot/index.html");
+}
+
+function renderProfitLossTracker() {
+  setIframeAbsoluteSrc('#tab-pltracker iframe', "profit-loss-tracker/index.html");
 }
 
 // ── Activity Log Controller ──
