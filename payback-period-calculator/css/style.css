@@ -1,0 +1,71 @@
+/* Same shell rule as ROI Projector/Marketing Budget Calculator/Renewal
+   Tracker - .container isn't defined in the shared ../style.css, only the
+   inner .main-content.split-layout is, so without this the header/logo
+   bar would render flush to the browser edges while the content below it
+   is properly centered. */
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+}
+
+.form-section { margin-bottom: 32px; border-top: 1px solid var(--color-border); padding-top: 24px; }
+.form-section:first-of-type { border-top: none; padding-top: 0; }
+.form-section h3 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--color-text-muted); font-weight: 700; margin-bottom: 16px; }
+.highlight-section { background: var(--color-surface-2); padding: 16px; border-radius: 8px; border: 1px solid var(--color-border); }
+.highlight-section h3 { color: #f68d5f; }
+
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 13px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 6px; }
+.form-group input[type="text"], .form-group input[type="number"], .form-group select {
+  width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px;
+  font-size: 14px; font-family: inherit; background: var(--color-surface); color: var(--color-text-primary);
+}
+.form-group input:focus, .form-group select:focus { outline: none; border-color: #f68d5f; box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1); }
+.help-text { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+
+.slider-container { display: flex; align-items: center; gap: 12px; }
+.slider-container input[type="range"] { flex: 1; accent-color: #f68d5f; }
+.slider-container span { font-weight: 700; font-size: 14px; color: var(--color-text-primary); width: 55px; text-align: right; }
+
+/* Report Document Styles (Designed to look good in PDF) */
+.report-header { text-align: center; margin-bottom: 40px; padding-bottom: 24px; border-bottom: 2px solid var(--color-border); }
+.report-header h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 8px; color: #f68d5f; }
+.report-header h2 { font-size: 20px; font-weight: 500; color: var(--color-text-muted); }
+
+.metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 40px; }
+.metric-card { padding: 24px; border-radius: 8px; border: 1px solid var(--color-border); text-align: center; }
+.baseline-card { background: var(--color-surface-2); }
+.projected-card { background: var(--color-surface-2); border-color: var(--color-border-md); }
+
+.metric-card h3 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--color-text-muted); margin-bottom: 12px; }
+.projected-card h3 { color: #f68d5f; }
+
+.metric-value { font-size: 36px; font-weight: 800; letter-spacing: -1px; margin-bottom: 16px; color: var(--color-text-primary); }
+.highlight-value { color: #f68d5f; }
+
+.metric-details { display: flex; flex-direction: column; gap: 8px; font-size: 15px; font-weight: 500; color: var(--color-text-secondary); }
+.metric-details p { background: var(--color-surface); padding: 6px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+
+.roi-summary { border-top: 2px solid var(--color-border); padding-top: 24px; margin-bottom: 40px; }
+.roi-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; font-size: 16px; border-bottom: 1px solid var(--color-border); }
+.roi-row:last-child { border-bottom: none; }
+.roi-label { font-weight: 500; color: var(--color-text-secondary); }
+.roi-value { font-weight: 700; font-size: 18px; }
+.total-row { margin-top: 12px; padding-top: 16px; border-top: 2px dashed var(--color-border-md); }
+.total-row .roi-label { font-size: 20px; font-weight: 700; color: var(--color-text-primary); }
+.total-row .roi-value { font-size: 22px; }
+
+.channel-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 8px; }
+.channel-table th {
+  text-align: left; padding: 8px 6px; color: var(--color-text-muted); font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--color-border);
+}
+.channel-table td { padding: 8px 6px; border-bottom: 1px solid var(--color-border); color: var(--color-text-primary); }
+.channel-table td:not(:first-child), .channel-table th:not(:first-child) { text-align: right; }
+.channel-table tr:last-child td { border-bottom: none; }
+.channel-table tr.row-payback-hit { background: rgba(34, 197, 94, 0.08); }
+
+.report-footer { text-align: center; font-size: 12px; color: #94a3b8; padding-top: 24px; border-top: 1px solid var(--color-border); }

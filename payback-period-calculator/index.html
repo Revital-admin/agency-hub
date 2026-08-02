@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payback Period Calculator</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="css/style.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+<!-- html2pdf for exporting the analysis as a leave-behind -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<main class="container">
+  <div class="brand-bar">
+    <div class="brand-logo-container"></div>
+    <button class="download-pdf-btn" id="downloadPdfBtn" aria-label="Download PDF Report">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+      <span>Export PDF</span>
+    </button>
+  </div>
+
+  <header class="site-header">
+    <div class="header-eyebrow">
+      <span class="dot"></span>
+      <span>Sales &amp; Pitch</span>
+    </div>
+    <h1 class="site-title">Payback<br /><em>Period Calculator</em></h1>
+    <p class="site-subtitle">Model how many months until a prospect's investment with Revital breaks even, accounting for a realistic ramp-up in results.</p>
+  </header>
+
+  <div class="main-content split-layout">
+    <div class="step-card">
+
+      <div class="form-section">
+        <h3>Investment</h3>
+        <div class="form-group">
+          <label for="clientName">Prospect Name</label>
+          <input type="text" id="clientName" placeholder="e.g. Acme Corp">
+        </div>
+        <div class="form-group">
+          <label for="setupCost">One-Time Setup / Onboarding Cost ($)</label>
+          <input type="number" id="setupCost" value="0" min="0" step="100">
+          <p class="help-text">Leave at 0 if this engagement has no separate setup fee.</p>
+        </div>
+        <div class="form-group">
+          <label for="monthlyFee">Revital Monthly Fee ($)</label>
+          <input type="number" id="monthlyFee" value="3000" min="0" step="100">
+        </div>
+      </div>
+
+      <div class="form-section highlight-section">
+        <h3>Projected Return</h3>
+        <div class="form-group">
+          <label for="monthlyValue">Projected Monthly Value at Full Ramp ($)</label>
+          <input type="number" id="monthlyValue" value="6000" min="0" step="100">
+          <p class="help-text">Steady-state monthly revenue lift or cost savings once the engagement is fully up to speed.</p>
+        </div>
+        <div class="form-group">
+          <label for="rampMonths">Ramp-Up Period (months)</label>
+          <div class="slider-container">
+            <input type="range" id="rampMonths" value="3" min="0" max="12" step="1">
+            <span id="rampMonthsVal">3 mo</span>
+          </div>
+          <p class="help-text">Months until full value is realized. Assumes a straight-line ramp from $0 to full value - set to 0 for an immediate/flat return.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-card" style="position: sticky; top: 24px;">
+      <h2 style="font-family: var(--font-heading); margin-bottom: 16px;">Live Analysis</h2>
+      <div class="preview-scroll" style="max-height: 80vh; overflow-y: auto;">
+        <div id="paybackReport" class="proposal-container">
+          <div class="report-header">
+            <h1>Payback Period Analysis</h1>
+            <h2 id="outClientName">Acme Corp</h2>
+          </div>
+
+          <div class="metrics-grid">
+            <div class="metric-card baseline-card">
+              <h3>Monthly Investment</h3>
+              <div class="metric-value" id="outMonthlyFee">$3,000</div>
+              <div class="metric-details">
+                <p>+ <span id="outSetupCost">$0</span> setup</p>
+              </div>
+            </div>
+
+            <div class="metric-card projected-card">
+              <h3>Monthly Value at Full Ramp</h3>
+              <div class="metric-value highlight-value" id="outMonthlyValue">$6,000</div>
+              <div class="metric-details">
+                <p id="outRampLabel">3-month ramp</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="roi-summary">
+            <div class="roi-row total-row">
+              <span class="roi-label">Payback Period</span>
+              <span class="roi-value highlight-value" id="outPayback">2.5 months</span>
+            </div>
+            <div class="roi-row">
+              <span class="roi-label">Total Invested by Payback</span>
+              <span class="roi-value" id="outTotalInvested">$10,500</span>
+            </div>
+          </div>
+
+          <div class="form-section" style="border-top: 2px solid var(--color-border); padding-top: 20px; margin-bottom: 0;">
+            <h3 style="color: var(--color-text-muted);">Month-by-Month Cash Flow</h3>
+            <table class="channel-table">
+              <thead>
+                <tr><th>Month</th><th>Value Realized</th><th>Fee</th><th>Net</th><th>Cumulative</th></tr>
+              </thead>
+              <tbody id="cashFlowTableBody">
+              </tbody>
+            </table>
+          </div>
+
+          <div class="report-footer">
+            <p>Generated by Revital Productions &bull; Confidential</p>
+            <p><em>*Assumes a straight-line ramp to the full projected monthly value and a constant monthly fee. Actual results depend on scope, market conditions, and execution - this is a planning estimate, not a guarantee.</em></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="js/logo.js"></script>
+<script src="js/app.js?v=1"></script>
+</body>
+</html>

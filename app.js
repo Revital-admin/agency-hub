@@ -442,6 +442,7 @@ let iframeNeedsReload = {
   "tab-timeline": true,
   "tab-roiprojector": true,
   "tab-budgetcalculator": true,
+  "tab-paybackperiod": true,
   "tab-sopwiki": true,
   "tab-marketingnews": true,
   "tab-proposal": true,
@@ -965,6 +966,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-budgetcalculator":
       renderBudgetCalculator();
+      break;
+    case "tab-paybackperiod":
+      renderPaybackPeriodCalculator();
       break;
     case "tab-contractinvoice":
       renderContractInvoiceTracker();
@@ -2157,6 +2161,11 @@ function renderRoiProjector() {
 // ── Marketing Budget Calculator Controller ──
 function renderBudgetCalculator() {
   setIframeAbsoluteSrc('#tab-budgetcalculator iframe', "marketing-budget-calculator/index.html");
+}
+
+// ── Payback Period Calculator Controller ──
+function renderPaybackPeriodCalculator() {
+  setIframeAbsoluteSrc('#tab-paybackperiod iframe', "payback-period-calculator/index.html");
 }
 
 // ── Contract & Invoice Status Tracker Controller ──
