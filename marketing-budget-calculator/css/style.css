@@ -31,7 +31,11 @@
    without the highlight box getting too tall. */
 .channel-input-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .channel-input-row label { margin-bottom: 0; flex: 1; }
-.channel-input-row input { width: 70px; flex: none; text-align: right; }
+/* Selector needs to match/exceed the specificity of
+   ".form-group input[type=number]" above (which sets width: 100%) -
+   otherwise that rule wins and these boxes stretch to fill the row
+   instead of staying a fixed 70px, overflowing past the card edge. */
+.form-group.channel-input-row input[type="number"] { width: 70px; flex: none; text-align: right; }
 
 /* Report Document Styles (Designed to look good in PDF) */
 .report-header { text-align: center; margin-bottom: 40px; padding-bottom: 24px; border-bottom: 2px solid var(--color-border); }
