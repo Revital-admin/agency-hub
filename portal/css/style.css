@@ -139,6 +139,17 @@ body {
   gap: 10px;
   min-width: 0;
 }
+/* #brandName was previously only ever shown alone (logo, when set, hid
+   it entirely) so it never needed its own sizing - default <h1> size
+   wrapped to 2-3 lines once it had to sit next to the logo icon in the
+   280px sidebar. Sized down to read as a compact wordmark alongside the
+   icon instead of a full heading. */
+#brandName {
+  font-size: 16px;
+  line-height: 1.25;
+  margin: 0;
+  min-width: 0;
+}
 
 /* Notification bell + dropdown - client-facing heads-up for new approvals
    and newly published reports, without relying solely on email. The

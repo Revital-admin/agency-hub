@@ -153,14 +153,20 @@ function renderPortal() {
   const config = clientData.portalConfig;
   
   // Branding
+  // Company name used to be hidden entirely whenever a logo was set, on
+  // the assumption the logo alone was enough branding - in practice a
+  // small/generic logo (or one that's just an icon/monogram, no text)
+  // left the portal with no readable company name anywhere. Now the logo
+  // and name always show together (.sidebar-header-brand is already a
+  // flex row with gap, so this doesn't need new layout work) - only the
+  // logo's own visibility depends on whether one's been uploaded.
   brandName.textContent = clientName + " Portal";
+  brandName.style.display = "block";
   if (config.clientLogoUrl) {
     brandLogo.src = config.clientLogoUrl;
     brandLogo.style.display = "block";
-    brandName.style.display = "none";
   } else {
     brandLogo.style.display = "none";
-    brandName.style.display = "block";
   }
   
   if (config.clientContactName) {
