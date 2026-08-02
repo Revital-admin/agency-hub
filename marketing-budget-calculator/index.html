@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marketing Budget Calculator</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="css/style.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+<!-- html2pdf for exporting the recommendation as a leave-behind -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<main class="container">
+  <div class="brand-bar">
+    <div class="brand-logo-container"></div>
+    <button class="download-pdf-btn" id="downloadPdfBtn" aria-label="Download PDF Report">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+      <span>Export PDF</span>
+    </button>
+  </div>
+
+  <header class="site-header">
+    <div class="header-eyebrow">
+      <span class="dot"></span>
+      <span>Sales &amp; Pitch</span>
+    </div>
+    <h1 class="site-title">Marketing<br /><em>Budget Calculator</em></h1>
+    <p class="site-subtitle">Enter a prospect's revenue and industry to recommend a marketing budget and channel split for pitch/proposal conversations.</p>
+  </header>
+
+  <div class="main-content split-layout">
+    <div class="step-card">
+
+      <div class="form-section">
+        <h3>Company Profile</h3>
+        <div class="form-group">
+          <label for="clientName">Prospect Name</label>
+          <input type="text" id="clientName" placeholder="e.g. Acme Corp">
+        </div>
+        <div class="form-group">
+          <label for="annualRevenue">Annual Revenue ($)</label>
+          <input type="number" id="annualRevenue" value="2000000" min="0" step="10000">
+        </div>
+        <div class="form-group">
+          <label for="industry">Industry</label>
+          <select id="industry">
+            <option value="b2bSaas">B2B Product / SaaS</option>
+            <option value="b2bServices" selected>B2B Services</option>
+            <option value="professionalServices">Professional Services (legal, financial, consulting)</option>
+            <option value="b2cRetail">B2C Product / Retail / eCommerce</option>
+            <option value="cpg">Consumer Packaged Goods</option>
+            <option value="hospitality">Hospitality / Restaurant / Events</option>
+            <option value="healthcare">Healthcare</option>
+            <option value="energyIndustrial">Energy / Industrial</option>
+            <option value="other">Other / Not Sure</option>
+          </select>
+          <p class="help-text" id="industryBenchmarkNote"></p>
+        </div>
+        <div class="form-group">
+          <label for="growthStage">Growth Stage</label>
+          <select id="growthStage">
+            <option value="aggressive">Aggressive Growth / Launch</option>
+            <option value="steady" selected>Steady Growth</option>
+            <option value="mature">Maintain / Mature</option>
+          </select>
+          <p class="help-text">Adjusts the benchmark up or down - launching or pushing hard for growth costs more than defending an existing base.</p>
+        </div>
+      </div>
+
+      <div class="form-section highlight-section">
+        <h3>Channel Split (Adjustable %)</h3>
+        <p class="help-text" style="margin-top:-8px; margin-bottom: 14px;">Defaults reflect a typical full-service mix. Adjust to match what this prospect actually needs - totals don't have to hit exactly 100%.</p>
+        <div class="form-group channel-input-row">
+          <label for="chPaidMedia">Paid Media (Social + Search)</label>
+          <input type="number" id="chPaidMedia" value="40" min="0" max="100" step="1">
+        </div>
+        <div class="form-group channel-input-row">
+          <label for="chCreative">Creative &amp; Content Production</label>
+          <input type="number" id="chCreative" value="20" min="0" max="100" step="1">
+        </div>
+        <div class="form-group channel-input-row">
+          <label for="chSeo">SEO / Organic &amp; Content Marketing</label>
+          <input type="number" id="chSeo" value="15" min="0" max="100" step="1">
+        </div>
+        <div class="form-group channel-input-row">
+          <label for="chEmail">Email / CRM &amp; Retention</label>
+          <input type="number" id="chEmail" value="10" min="0" max="100" step="1">
+        </div>
+        <div class="form-group channel-input-row">
+          <label for="chTools">Tools &amp; Martech</label>
+          <input type="number" id="chTools" value="8" min="0" max="100" step="1">
+        </div>
+        <div class="form-group channel-input-row">
+          <label for="chContingency">Contingency / Testing</label>
+          <input type="number" id="chContingency" value="7" min="0" max="100" step="1">
+        </div>
+        <p class="help-text" id="channelTotalNote"></p>
+      </div>
+    </div>
+
+    <div class="step-card" style="position: sticky; top: 24px;">
+      <h2 style="font-family: var(--font-heading); margin-bottom: 16px;">Live Recommendation</h2>
+      <div class="preview-scroll" style="max-height: 80vh; overflow-y: auto;">
+        <div id="budgetReport" class="proposal-container">
+          <div class="report-header">
+            <h1>Marketing Budget Recommendation</h1>
+            <h2 id="outClientName">Acme Corp</h2>
+          </div>
+
+          <div class="metrics-grid">
+            <div class="metric-card baseline-card">
+              <h3>Industry Benchmark</h3>
+              <div class="metric-value" id="outBenchmarkPct">9.0%</div>
+              <div class="metric-details">
+                <p id="outIndustryLabel">B2B Services</p>
+                <p>of annual revenue</p>
+              </div>
+            </div>
+
+            <div class="metric-card projected-card">
+              <h3>Recommended for This Prospect</h3>
+              <div class="metric-value highlight-value" id="outRecPct">9.0%</div>
+              <div class="metric-details">
+                <p id="outStageLabel">Steady Growth</p>
+                <p>adjusted for growth stage</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="roi-summary">
+            <div class="roi-row">
+              <span class="roi-label">Recommended Annual Budget</span>
+              <span class="roi-value highlight-value" id="outAnnualBudget">$180,000</span>
+            </div>
+            <div class="roi-row">
+              <span class="roi-label">Recommended Monthly Budget</span>
+              <span class="roi-value" id="outMonthlyBudget">$15,000</span>
+            </div>
+            <div class="roi-row total-row">
+              <span class="roi-label">Suggested Range (Annual)</span>
+              <span class="roi-value" id="outRange">$153,000 &ndash; $207,000</span>
+            </div>
+          </div>
+
+          <div class="form-section" style="border-top: 2px solid var(--color-border); padding-top: 20px; margin-bottom: 0;">
+            <h3 style="color: var(--color-text-muted);">Suggested Channel Allocation</h3>
+            <table class="channel-table">
+              <thead>
+                <tr><th>Channel</th><th>%</th><th>Monthly</th><th>Annual</th></tr>
+              </thead>
+              <tbody id="channelTableBody">
+              </tbody>
+            </table>
+          </div>
+
+          <div class="report-footer">
+            <p>Generated by Revital Productions &bull; Confidential</p>
+            <p><em>*Benchmarked against 2025 Gartner CMO Spend Survey and Deloitte/Duke CMO Survey figures by industry. Figures are directional planning estimates, not a quote - actual scope depends on goals, timeline, and competitive landscape.</em></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="js/logo.js"></script>
+<script src="js/app.js?v=1"></script>
+</body>
+</html>

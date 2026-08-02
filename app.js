@@ -441,6 +441,7 @@ let iframeNeedsReload = {
   "tab-campaignlaunch": true,
   "tab-timeline": true,
   "tab-roiprojector": true,
+  "tab-budgetcalculator": true,
   "tab-sopwiki": true,
   "tab-marketingnews": true,
   "tab-proposal": true,
@@ -961,6 +962,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-roiprojector":
       renderRoiProjector();
+      break;
+    case "tab-budgetcalculator":
+      renderBudgetCalculator();
       break;
     case "tab-contractinvoice":
       renderContractInvoiceTracker();
@@ -2148,6 +2152,11 @@ function renderFollowUpTracker() {
 // ── ROI Projector Controller ──
 function renderRoiProjector() {
   setIframeAbsoluteSrc('#tab-roiprojector iframe', "roi-projector/index.html");
+}
+
+// ── Marketing Budget Calculator Controller ──
+function renderBudgetCalculator() {
+  setIframeAbsoluteSrc('#tab-budgetcalculator iframe', "marketing-budget-calculator/index.html");
 }
 
 // ── Contract & Invoice Status Tracker Controller ──
