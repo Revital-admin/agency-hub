@@ -634,8 +634,8 @@ async function handleDocusignSendEnvelope(request, env) {
     }
   }
 
-  // Signer-fillable fields (e.g. a contractor's own bank details on the
-  // Direct Deposit/ACH form) - unlike fieldValues above, these are never
+  // Signer-fillable fields (e.g. a contractor's own contact details on the
+  // Vendor Information Sheet) - unlike fieldValues above, these are never
   // admin-supplied or pre-filled. They're just an anchor string with no
   // "value" and no "locked" flag, so DocuSign renders them as a blank
   // box the recipient types into during their own signing session, in

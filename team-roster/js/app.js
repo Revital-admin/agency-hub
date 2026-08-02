@@ -494,21 +494,20 @@ const CONTRACTOR_DOC_DEFS = [
 // on purpose: the contractor fills these in themselves during their own
 // signing session (see blankFields/blankCheckboxFields in
 // handleDocusignSendEnvelope, _worker.js). That's what lets a document
-// like the Direct Deposit/ACH form go out and come back complete without
+// like the Vendor Information Sheet go out and come back complete without
 // anyone printing, signing, or scanning anything - the tokens below have
 // to match the invisible "[[TOKEN]]" anchors baked into that PDF at
-// generation time (see the ACH form's own build script; the anchor
-// technique itself is the same one bakeAnchorsAtDetection uses).
+// generation time (the anchor technique itself is the same one
+// bakeAnchorsAtDetection uses).
+//
+// NOTE: a Direct Deposit / ACH Authorization Form used to live here too,
+// collecting a contractor's routing/account number via this same
+// blank-signer-fillable-PDF mechanism. It was retired (Aug 2026) now that
+// QuickBooks Contractor Payments collects and stores that banking info
+// directly - contractors self-enter it in QuickBooks' own portal, which is
+// both more secure than routing bank numbers through a PDF/DocuSign packet
+// and avoids Revital handling/storing that data at all.
 const CONTRACTOR_BLANK_FIELD_DEFS = [
-  {
-    matchLabel: 'direct deposit',
-    blankFields: [
-      'ACH_CONTRACTOR_NAME', 'ACH_EFFECTIVE_DATE', 'ACH_EMAIL', 'ACH_PHONE',
-      'ACH_BANK_NAME', 'ACH_BANK_LOCATION', 'ACH_ROUTING_NUMBER', 'ACH_ACCOUNT_NUMBER',
-      'ACH_DEPOSIT_PARTIAL_AMOUNT'
-    ],
-    blankCheckboxFields: ['ACH_CHECKING', 'ACH_SAVINGS', 'ACH_DEPOSIT_FULL', 'ACH_DEPOSIT_PARTIAL']
-  },
   {
     matchLabel: 'vendor information sheet',
     blankFields: [
@@ -1148,9 +1147,9 @@ async function performSendAgreement() {
       if (input && input.value.trim()) fieldValues[token] = input.value.trim();
     });
 
-    // Signer-fillable fields (e.g. the ACH form's bank details) - see
-    // CONTRACTOR_BLANK_FIELD_DEFS above. Purely a function of which docs
-    // are selected, no admin input involved.
+    // Signer-fillable fields (e.g. the Vendor Information Sheet's contact
+    // details) - see CONTRACTOR_BLANK_FIELD_DEFS above. Purely a function
+    // of which docs are selected, no admin input involved.
     const { blankFields, blankCheckboxFields } = collectBlankFieldsForSelectedDocs(sendAgreementSelectedDefs);
 
     sendBtn.textContent = 'Sending for signature...';
