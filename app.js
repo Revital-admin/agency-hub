@@ -235,6 +235,14 @@ function applyTeamAccessRestrictions(allowedSections) {
     subscriptionTrackerBtn.style.display = allowedSections ? 'none' : '';
   }
 
+  // Business Insurance Tracker (Revital's own GL/E&O/Equipment/Cyber
+  // policies) is financial info too - same admin/leadership-only footer
+  // gating as Subscription Tracker right next to it.
+  const businessInsuranceBtn = document.getElementById('businessInsuranceFooterBtn');
+  if (businessInsuranceBtn) {
+    businessInsuranceBtn.style.display = allowedSections ? 'none' : '';
+  }
+
   // Activity Log shows who did what across every client - same
   // admin/leadership-only gating as the rest of the footer tools.
   const activityLogBtn = document.getElementById('activityLogFooterBtn');
@@ -457,6 +465,7 @@ let iframeNeedsReload = {
   "tab-portfolioshowcase": true,
   "tab-emailtemplates": true,
   "tab-subscriptiontracker": true,
+  "tab-businessinsurance": true,
   "tab-activitylog": true,
   "tab-teamroster": true,
   "tab-hourslog": true,
@@ -1056,6 +1065,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-subscriptiontracker":
       renderSubscriptionTracker();
+      break;
+    case "tab-businessinsurance":
+      renderBusinessInsuranceTracker();
       break;
     case "tab-activitylog":
       renderActivityLogTab();
@@ -2310,6 +2322,11 @@ function renderEmailTemplateLibrary() {
 // ── Subscription & Tool Cost Tracker Controller ──
 function renderSubscriptionTracker() {
   setIframeAbsoluteSrc('#tab-subscriptiontracker iframe', "subscription-tracker/index.html");
+}
+
+// ── Business Insurance Tracker Controller ──
+function renderBusinessInsuranceTracker() {
+  setIframeAbsoluteSrc('#tab-businessinsurance iframe', "business-insurance-tracker/index.html");
 }
 
 // ── Activity Log Controller ──
