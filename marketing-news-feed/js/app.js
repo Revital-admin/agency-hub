@@ -83,7 +83,13 @@ function showFailedSourcesNotice() {
     return;
   }
   notice.style.display = 'block';
-  notice.textContent = `Couldn't load: ${failedSources.join(', ')} — showing headlines from the sources that did load.`;
+  // Each entry is now { name, error } (was just a name string before) so
+  // the actual failure reason - a real HTTP status, a timeout, whatever -
+  // shows up here instead of a bare "couldn't load" with no clue why.
+  const summary = failedSources
+    .map(f => (f && typeof f === 'object') ? `${f.name} (${f.error})` : f)
+    .join(', ');
+  notice.textContent = `Couldn't load: ${summary} — showing headlines from the sources that did load.`;
 }
 
 async function loadNews(forceRefresh) {

@@ -393,13 +393,22 @@ async function handleMarketingNews(request, env, ctx) {
   );
 
   let items = [];
+  // failedSources used to be just an array of names ("MarTech") with no way
+  // to tell WHY a source failed short of digging through `wrangler tail`
+  // logs - which meant every retry was a guess (wrong UA? dead URL? bot
+  // block?). Now each entry carries the actual error/status so the reason
+  // is visible right in the API response and in the tool's own UI.
   const failedSources = [];
   results.forEach((result, i) => {
     if (result.status === "fulfilled") {
       items = items.concat(result.value);
     } else {
-      failedSources.push(MARKETING_NEWS_FEEDS[i].name);
-      console.error(`Marketing news feed failed (${MARKETING_NEWS_FEEDS[i].name}):`, result.reason);
+      const reason = result.reason;
+      const errorMessage = (reason && reason.name === "AbortError")
+        ? "Timed out"
+        : (reason && reason.message) ? reason.message : String(reason);
+      failedSources.push({ name: MARKETING_NEWS_FEEDS[i].name, error: errorMessage });
+      console.error(`Marketing news feed failed (${MARKETING_NEWS_FEEDS[i].name}):`, reason);
     }
   });
 
