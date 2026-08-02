@@ -267,9 +267,21 @@ const MARKETING_NEWS_FEEDS = [
   { name: "Marketing Dive", url: "https://www.marketingdive.com/feeds/news/" },
   { name: "Social Media Today", url: "https://www.socialmediatoday.com/feeds/news" },
   { name: "Search Engine Land", url: "https://searchengineland.com/feed" },
-  { name: "MarTech", url: "https://martech.org/feed/" },
+  // Confirmed via the failedSources error detail (added separately) that
+  // this one fails with a hard HTTP 403 - not a dead URL, a bot-protection
+  // block on martech.org's side that a browser-like User-Agent alone
+  // wasn't enough to get past. Routed through a public CORS/passthrough
+  // proxy (allorigins.win) instead of fetching directly, so the request
+  // originates from the proxy's IP rather than this Worker's - same raw
+  // XML comes back either way, so parseFeedItems doesn't need to change.
+  // If the proxy itself is ever down, this just fails like any other
+  // source (see Promise.allSettled below) - it doesn't take anything else
+  // with it.
+  { name: "MarTech", url: "https://martech.org/feed/", viaProxy: true },
   { name: "HubSpot Marketing Blog", url: "https://blog.hubspot.com/marketing/rss.xml" }
 ];
+
+const RSS_CORS_PROXY = "https://api.allorigins.win/raw?url=";
 
 const MARKETING_NEWS_CACHE_SECONDS = 1800; // 30 min - see handleMarketingNews
 
@@ -385,7 +397,8 @@ async function handleMarketingNews(request, env, ctx) {
 
   const results = await Promise.allSettled(
     MARKETING_NEWS_FEEDS.map(async feed => {
-      const res = await fetchWithTimeout(feed.url, 8000);
+      const fetchUrl = feed.viaProxy ? (RSS_CORS_PROXY + encodeURIComponent(feed.url)) : feed.url;
+      const res = await fetchWithTimeout(fetchUrl, 8000);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const text = await res.text();
       return parseFeedItems(text, feed.name);
