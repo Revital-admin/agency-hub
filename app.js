@@ -434,6 +434,7 @@ let iframeNeedsReload = {
   "tab-welcomeguide": true,
   "tab-emailsig": true,
   "tab-creativebrief": true,
+  "tab-adcampaignbrief": true,
   "tab-creativestrategy": true,
   "tab-contentaudit": true,
   "tab-paidads": true,
@@ -927,6 +928,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-creativebrief":
       renderCreativeBrief();
+      break;
+    case "tab-adcampaignbrief":
+      renderAdCampaignBrief();
       break;
     case "tab-creativestrategy":
       renderCreativeStrategyBuilder();
@@ -2087,6 +2091,11 @@ function renderEmailSigGenerator() {
 // ── Creative Brief Generator Controller ──
 function renderCreativeBrief() {
   setIframeAbsoluteSrc('#tab-creativebrief iframe', "creative-brief-generator/index.html");
+}
+
+// ── Ad Campaign Brief Generator Controller ──
+function renderAdCampaignBrief() {
+  setIframeAbsoluteSrc('#tab-adcampaignbrief iframe', "ad-campaign-brief/index.html");
 }
 
 // ── Creative Strategy Builder Controller ──

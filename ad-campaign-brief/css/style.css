@@ -1,0 +1,39 @@
+/* Same fix as Creative Brief Generator - .container isn't defined
+   anywhere shared, and <main class="container"> is this tool's entire
+   page wrapper, so without this the page renders edge-to-edge instead of
+   matching every other tool's centered/padded layout. */
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+}
+
+.markdown-preview { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 40px; width: 100%; max-width: 800px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+
+/* Rendered Markdown Styles - identical to Creative Brief Generator so the
+   two brief types feel like a matched pair, not two different tools. */
+.markdown-preview h1 { font-size: 24px; font-weight: 800; border-bottom: 2px solid var(--color-border); padding-bottom: 8px; margin-bottom: 16px; margin-top: 24px; }
+.markdown-preview h1:first-child { margin-top: 0; }
+.markdown-preview h2 { font-size: 18px; font-weight: 700; margin-top: 24px; margin-bottom: 8px; }
+.markdown-preview p { margin-bottom: 16px; color: var(--color-text-secondary); }
+.markdown-preview ul { margin-left: 24px; margin-bottom: 16px; color: var(--color-text-secondary); }
+.markdown-preview li { margin-bottom: 4px; }
+.markdown-preview strong { color: var(--color-text-primary); }
+.markdown-preview blockquote { border-left: 4px solid #f68d5f; padding-left: 16px; margin-left: 0; margin-bottom: 16px; color: var(--color-text-muted); font-style: italic; }
+
+/* Platform checkboxes - a pill grid reads faster than a bare checkbox
+   list for an 8-item "pick any that apply" field. */
+.checkbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.checkbox-pill {
+  display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500;
+  color: var(--color-text-secondary); background: var(--color-surface-2); border: 1px solid var(--color-border);
+  border-radius: 6px; padding: 8px 10px; cursor: pointer;
+}
+.checkbox-pill input { width: auto; margin: 0; accent-color: #f68d5f; }
+
+/* Flight Start / Flight End side by side - same two-column pattern as
+   other date-range fields in the hub. */
+.form-group.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-group.two-col label { margin-bottom: 6px; }

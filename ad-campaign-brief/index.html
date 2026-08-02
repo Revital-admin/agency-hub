@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ad Campaign Brief Generator</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+  <!-- Use marked to compile the preview visually -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <div class="bg-grid"></div>
+
+  <main class="container">
+    <div class="brand-bar">
+      <div class="brand-logo-container"></div>
+      <button class="download-pdf-btn" id="copyBtn" aria-label="Copy Markdown">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+        <span>Copy for ClickUp</span>
+      </button>
+    </div>
+
+    <header class="site-header">
+      <div class="header-eyebrow">
+        <span class="dot"></span>
+        <span>Campaign setup</span>
+      </div>
+      <h1 class="site-title">Ad Campaign<br /><em>Brief Generator</em></h1>
+      <p class="site-subtitle">The media-planning counterpart to the Creative Brief - platforms, budget, targeting, flight dates, and KPIs, formatted for ClickUp.</p>
+    </header>
+
+    <div class="main-content split-layout">
+      <div class="step-card">
+
+        <div class="form-group">
+          <label for="campaignName">Campaign Name</label>
+          <input type="text" id="campaignName" placeholder="e.g. Summer Sale 2026">
+        </div>
+
+        <div class="form-group">
+          <label for="clientName">Client / Brand</label>
+          <input type="text" id="clientName" placeholder="e.g. Acme Corp">
+        </div>
+
+        <div class="form-group">
+          <label for="objective">Campaign Objective</label>
+          <select id="objective">
+            <option value="Brand Awareness">Brand Awareness</option>
+            <option value="Traffic">Traffic</option>
+            <option value="Lead Generation">Lead Generation</option>
+            <option value="Conversions / Sales">Conversions / Sales</option>
+            <option value="Retargeting">Retargeting</option>
+            <option value="App Installs">App Installs</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Platforms</label>
+          <div class="checkbox-grid">
+            <label class="checkbox-pill"><input type="checkbox" value="Meta (Facebook/Instagram)" class="platform-check"> Meta (FB/IG)</label>
+            <label class="checkbox-pill"><input type="checkbox" value="Google Search" class="platform-check"> Google Search</label>
+            <label class="checkbox-pill"><input type="checkbox" value="Google Display" class="platform-check"> Google Display</label>
+            <label class="checkbox-pill"><input type="checkbox" value="YouTube" class="platform-check"> YouTube</label>
+            <label class="checkbox-pill"><input type="checkbox" value="TikTok" class="platform-check"> TikTok</label>
+            <label class="checkbox-pill"><input type="checkbox" value="LinkedIn" class="platform-check"> LinkedIn</label>
+            <label class="checkbox-pill"><input type="checkbox" value="Pinterest" class="platform-check"> Pinterest</label>
+            <label class="checkbox-pill"><input type="checkbox" value="Programmatic / Other" class="platform-check"> Programmatic / Other</label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="totalBudget">Total Budget ($)</label>
+          <input type="number" id="totalBudget" min="0" step="100" placeholder="e.g. 10000">
+        </div>
+
+        <div class="form-group">
+          <label for="budgetSplit">Budget Split by Platform</label>
+          <textarea id="budgetSplit" rows="2" placeholder="e.g. Meta 60% / Google Search 30% / YouTube 10%"></textarea>
+        </div>
+
+        <div class="form-group two-col">
+          <div>
+            <label for="startDate">Flight Start</label>
+            <input type="date" id="startDate">
+          </div>
+          <div>
+            <label for="endDate">Flight End</label>
+            <input type="date" id="endDate">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="targeting">Targeting Parameters</label>
+          <textarea id="targeting" rows="3" placeholder="e.g. Homeowners 35-55, top 20 metro areas, exclude existing customer list."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="kpis">KPIs / Success Metrics</label>
+          <textarea id="kpis" rows="2" placeholder="e.g. Target CPA under $45, ROAS 3.5x, CTR benchmark 1.2%"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="adFormats">Ad Formats / Placements</label>
+          <textarea id="adFormats" rows="2" placeholder="e.g. Static feed, Stories/Reels, 15s video, Search text ads (3 headlines/2 descriptions)"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="destinationUrl">Landing Page / Destination URL</label>
+          <input type="text" id="destinationUrl" placeholder="e.g. https://acmecorp.com/summer-sale">
+        </div>
+
+        <div class="form-group">
+          <label for="trackingNotes">Tracking &amp; UTM Notes</label>
+          <textarea id="trackingNotes" rows="2" placeholder="e.g. UTM source/medium/campaign convention, pixel/conversion events to fire, GA4 events."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="specialNotes">Special Instructions</label>
+          <textarea id="specialNotes" rows="2" placeholder="Anything else the media buyer or creative team needs to know."></textarea>
+        </div>
+
+      </div>
+
+      <div class="step-card" style="position: sticky; top: 24px;">
+        <h2 style="font-family: var(--font-heading); margin-bottom: 16px;">Live Preview</h2>
+        <div id="previewContainer" class="preview-panel markdown-preview" style="font-family: var(--font-body); font-size: 14px; line-height: 1.6; color: var(--color-text-primary);">
+          <!-- Markdown renders here -->
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="js/logo.js"></script>
+  <script src="js/app.js?v=1"></script>
+</body>
+</html>
