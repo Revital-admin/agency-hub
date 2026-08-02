@@ -445,6 +445,7 @@ let iframeNeedsReload = {
   "tab-budgetcalculator": true,
   "tab-paybackperiod": true,
   "tab-sopwiki": true,
+  "tab-tasknamegen": true,
   "tab-marketingnews": true,
   "tab-proposal": true,
   "tab-servicepricing": true,
@@ -1021,6 +1022,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-sopwiki":
       renderSopWiki();
+      break;
+    case "tab-tasknamegen":
+      renderTaskNameGenerator();
       break;
     case "tab-marketingnews":
       renderMarketingNews();
@@ -2255,6 +2259,11 @@ function renderVendorRentalTab() {
 // ── SOP Wiki Controller ──
 function renderSopWiki() {
   setIframeAbsoluteSrc('#tab-sopwiki iframe', "sop-wiki/index.html?v=1.7");
+}
+
+// ── Task Name Generator Controller ──
+function renderTaskNameGenerator() {
+  setIframeAbsoluteSrc('#tab-tasknamegen iframe', "task-name-generator/index.html");
 }
 
 function renderMarketingNews() {

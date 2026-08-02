@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task Name Generator</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="bg-grid"></div>
+
+  <main class="container">
+    <div class="brand-bar">
+      <div class="brand-logo-container"></div>
+      <button class="download-pdf-btn" id="copyBtn" aria-label="Copy Task Name">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+        <span>Copy Task Name</span>
+      </button>
+    </div>
+
+    <header class="site-header">
+      <div class="header-eyebrow">
+        <span class="dot"></span>
+        <span>Agency Process</span>
+      </div>
+      <h1 class="site-title">Task Name<br /><em>Generator</em></h1>
+      <p class="site-subtitle">Pick the list, fill in the blanks, get a correctly formatted ClickUp task name - built from SOP Wiki Section 23 (Task Naming Conventions).</p>
+    </header>
+
+    <div class="main-content split-layout">
+      <div class="step-card">
+
+        <div class="form-group">
+          <label for="spaceSelect">Space</label>
+          <select id="spaceSelect">
+            <option value="Delivery">🚀 Delivery</option>
+            <option value="CRM">💼 CRM</option>
+            <option value="Growth">📈 Growth</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="listSelect">List</label>
+          <select id="listSelect"></select>
+        </div>
+
+        <p class="format-hint" id="formatHint"></p>
+
+        <div id="dynamicFields"></div>
+
+        <button class="btn-secondary" id="clearFieldsBtn" type="button">Clear Fields</button>
+      </div>
+
+      <div class="step-card" style="position: sticky; top: 24px;">
+        <h2 style="font-family: var(--font-heading); margin-bottom: 16px;">Generated Task Name</h2>
+        <div class="task-name-output" id="taskNameOutput">[Fill in the fields]</div>
+        <p class="format-hint" id="exampleHint" style="margin-top: 14px;"></p>
+        <p class="help-text" style="margin-top: 20px;">Always use the em dash <strong>—</strong> (Option + Shift + - on Mac), never a regular hyphen. This generator handles that for you automatically.</p>
+      </div>
+    </div>
+  </main>
+
+  <script src="js/logo.js"></script>
+  <script src="js/app.js?v=1"></script>
+</body>
+</html>
