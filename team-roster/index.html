@@ -130,6 +130,7 @@
 </select>
 </div>
 <div class="form-group"><label for="email">Email</label><input type="email" id="email" placeholder="name@revitalproductions.com"></div>
+<div class="form-group"><label for="startDate">Start Date</label><input type="date" id="startDate"><p style="font-size:0.72rem; color:var(--text-muted); margin:4px 0 0;">Optional. Applies to everyone (Contractor, Full-Time, Part-Time) - blank for existing members until backfilled.</p></div>
 <div class="form-group" id="currentClientCountGroup"><label for="currentClientCount">Current Client Load</label><input type="number" id="currentClientCount" min="0" step="1" placeholder="0"></div>
 <div class="form-group" id="liveLoadNote" style="display:none;"><label>Current Client Load</label><p style="font-size:0.78rem; color:var(--text-muted); margin:0; padding-top:8px;">Calculated automatically from clients whose account manager email matches this person - no manual entry needed.</p></div>
 <div class="form-group"><label for="maxClientCount">Max Capacity</label><input type="number" id="maxClientCount" min="0" step="1" placeholder="0"></div>
@@ -212,6 +213,7 @@
 <th>Name</th>
 <th>Role</th>
 <th>Type</th>
+<th>Start Date</th>
 <th>Load</th>
 <th>Capacity</th>
 <th>Agreement</th>
@@ -241,6 +243,6 @@
 </div>
 
 </main>
-<script src="js/app.js?v=7"></script>
+<script src="js/app.js?v=8"></script>
 </body>
 </html>

@@ -1188,7 +1188,20 @@ async function performSendAgreement() {
   }
 }
 
-const FORM_FIELDS = ['memberName', 'role', 'employmentType', 'email', 'currentClientCount', 'maxClientCount', 'weeklyCapacityHours', 'notes', 'insuranceExpirationDate'];
+const FORM_FIELDS = ['memberName', 'role', 'employmentType', 'email', 'startDate', 'currentClientCount', 'maxClientCount', 'weeklyCapacityHours', 'notes', 'insuranceExpirationDate'];
+
+// Full month/day/year date display (e.g. "Jan 5, 2024") - used for Start
+// Date in the roster table. Distinct from formatShortDate above (no year,
+// used for time-off badges where the year is always "now-ish" and would
+// just be clutter) - same { month, day, year } shape used repo-wide for
+// dates where the year actually matters (see e.g. Subscription Tracker's
+// formatDateNice, Renewal Tracker).
+function formatDateNice(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
 
 // Account Managers' load is live-computed (see getEffectiveLoad) - the
 // manual "Current Client Load" field is meaningless for them, so hide it
@@ -1222,6 +1235,7 @@ function resetForm() {
   el('role').value = 'Account Manager';
   el('employmentType').value = 'Full-Time';
   el('email').value = '';
+  el('startDate').value = '';
   el('currentClientCount').value = '';
   el('maxClientCount').value = '';
   el('weeklyCapacityHours').value = '';
@@ -1420,6 +1434,7 @@ function renderTable() {
       <td class="client-cell">${escapeHtml(m.memberName)}${timeOffBadge}${onboardingBadge}${complianceBadge}</td>
       <td>${escapeHtml(m.role)}${isContractor ? ' <span class="section-tag" style="margin-left:4px;">Contractor</span>' : ''}</td>
       <td>${escapeHtml(m.employmentType)}</td>
+      <td>${escapeHtml(formatDateNice(m.startDate)) || '—'}</td>
       <td>${loadCell}</td>
       <td>${capacityCell}</td>
       <td>${agreementCell}</td>
@@ -1438,7 +1453,7 @@ function renderTable() {
       const names = load.clientNames.length
         ? load.clientNames.map(escapeHtml).join(', ')
         : emptyText;
-      rowHtml += `<tr class="roster-expand-row"><td colspan="8" style="padding:6px 14px 12px; font-size:0.8rem; color:var(--text-muted);"><strong>${expandLabel}:</strong> ${names}</td></tr>`;
+      rowHtml += `<tr class="roster-expand-row"><td colspan="9" style="padding:6px 14px 12px; font-size:0.8rem; color:var(--text-muted);"><strong>${expandLabel}:</strong> ${names}</td></tr>`;
     }
     return rowHtml;
   }).join('');
