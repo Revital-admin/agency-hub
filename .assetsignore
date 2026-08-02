@@ -39,15 +39,10 @@ node_modules/**
 sops
 sops/**
 
-# One-off internal business documents that ended up at the repo root
-# (pricing drafts, contractor agreement templates, planning docs) -
-# never linked to or fetched by any tool, so there's no reason for these
-# to be reachable as static files either.
+# Internal business/reference documents (pricing drafts, contractor
+# agreement templates, planning docs, setup guides) - consolidated under
+# reference-docs/. Never linked to or fetched by any tool, so there's no
+# reason for these to be reachable as static files either.
 *.docx
 *.xlsx
-Freelancer_Contractor_Agreement_Template.docx
-Revital_Service_Pricing_Draft.xlsx
-av_production_software_roadmap.pdf
-business_phase_roadmap.pdf
-where_to_log_what_hub_vs_clickup.pdf
-Media Storage & Review Tools.pdf
+reference-docs/**

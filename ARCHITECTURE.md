@@ -85,7 +85,7 @@ There's no shared component library beyond CSS (`style.css`, `vars.css`, `shared
 
 ## Related docs (don't duplicate — read these instead)
 
-- **`where_to_log_what_hub_vs_clickup.pdf`** — the *external* system boundary: which lifecycle events belong in the Hub vs. ClickUp. Complements this doc, which is about the *internal* boundary (core vs. tool).
+- **`reference-docs/where_to_log_what_hub_vs_clickup.pdf`** — the *external* system boundary: which lifecycle events belong in the Hub vs. ClickUp. Complements this doc, which is about the *internal* boundary (core vs. tool).
 - **`data-loss-prevention-plan.md`** — accurate, still current. The full story behind the shard-load-completeness guard described above.
 - **`Auto-Send Email Integration Plan.md`** — **stale**. It says "there is no email-sending backend anywhere in the Hub" and proposes building `/api/send-email`. That route has since been fully built and is in production use by 8 tools (see above). This doc should be deleted or marked superseded so nobody re-reads it as current state.
 - **`README.md`** — **stale**. Describes an early localStorage-only, GitHub-Pages-hosted prototype with no Firebase/Firestore/R2/Cloudflare Worker/DocuSign at all. Worth a rewrite pointing here instead, since right now it actively misdescribes the stack to anyone opening the repo fresh.
