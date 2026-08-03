@@ -19,6 +19,7 @@
   --bg-sidebar: #1a1a17;
   --bg-card: rgba(34, 34, 32, 0.55);
   --bg-card-hover: rgba(42, 40, 35, 0.7);
+  --bg-card-opaque: #201d17; /* Flat, solid card surface - used where blur/glass would otherwise be, per the Marquee Studio flat-card reference */
   --border-color: rgba(255, 255, 255, 0.07);
   --border-focus: rgba(246, 141, 95, 0.6);
 
@@ -950,36 +951,17 @@ body {
 }
 
 .dashboard-hero-card {
+  /* Flattened per the Marquee Studio reference (flat cards, no blur/glow/
+     motion) - kept the warm palette, dropped the glass blur, floating
+     gradient blob, and drop-shadow so the card reads as a plain, static
+     panel instead of a glassmorphic one. */
   grid-column: 1 / -1;
-  background: rgba(20, 20, 30, 0.6);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-card-opaque, #201d17);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 40px;
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
   position: relative;
   overflow: hidden;
-
-}
-
-.dashboard-hero-card::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -20%;
-  width: 300px;
-  height: 300px;
-  background: radial-gradient(circle, rgba(216, 90, 48, 0.25) 0%, transparent 70%);
-  pointer-events: none;
-  animation: floatGradient 8s ease-in-out infinite;
-}
-
-@keyframes floatGradient {
-  0% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(50px, -30px) scale(1.2); }
-  66% { transform: translate(-30px, 40px) scale(0.9); }
-  100% { transform: translate(0, 0) scale(1); }
 }
 
 .dashboard-hero-card h2 {
@@ -1068,49 +1050,24 @@ body {
   transform: translateY(-1px);
 }
 
-/* ── Tool Cards (Dashboard) ── */
+/* ── Tool Cards (Dashboard) ──
+   Flattened per the Marquee Studio reference: no glass blur, no
+   entrance animation, no hover lift/glow - a plain static card that
+   just gets a subtle border/background shift on hover. */
 .tool-progress-card {
-  background: var(--bg-card);
+  background: var(--bg-card-opaque);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 24px;
-  backdrop-filter: blur(12px);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-  animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-/* Add staggered animation delays for cards */
-.dashboard-grid .tool-progress-card:nth-child(1) { animation-delay: 0.05s; }
-.dashboard-grid .tool-progress-card:nth-child(2) { animation-delay: 0.1s; }
-.dashboard-grid .tool-progress-card:nth-child(3) { animation-delay: 0.15s; }
-.dashboard-grid .tool-progress-card:nth-child(4) { animation-delay: 0.2s; }
-.dashboard-grid .tool-progress-card:nth-child(5) { animation-delay: 0.25s; }
-.dashboard-grid .tool-progress-card:nth-child(6) { animation-delay: 0.3s; }
-.dashboard-grid .tool-progress-card:nth-child(7) { animation-delay: 0.35s; }
-.dashboard-grid .tool-progress-card:nth-child(8) { animation-delay: 0.4s; }
-.dashboard-grid .tool-progress-card:nth-child(9) { animation-delay: 0.45s; }
-.dashboard-grid .tool-progress-card:nth-child(10) { animation-delay: 0.5s; }
-.dashboard-grid .tool-progress-card:nth-child(11) { animation-delay: 0.55s; }
-.dashboard-grid .tool-progress-card:nth-child(12) { animation-delay: 0.6s; }
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
 .tool-progress-card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(216, 90, 48, 0.4);
-  box-shadow: 0 12px 24px -8px rgba(216, 90, 48, 0.25);
+  border-color: rgba(255, 255, 255, 0.16);
+  background: var(--bg-card-hover);
 }
 
 .tool-card-header {
