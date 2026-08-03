@@ -9,8 +9,8 @@
    as having this problem) with a more opaque, slightly lighter navy
    so cards actually read as distinct panels. */
 :root {
-  --bg-card: rgba(23, 31, 50, 0.92);
-  --bg-card-hover: rgba(30, 40, 63, 0.95);
+  --bg-card: rgba(40, 37, 30, 0.92);
+  --bg-card-hover: rgba(48, 45, 37, 0.95);
 }
 
 body {

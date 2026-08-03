@@ -91,9 +91,9 @@
 .section-tag.status-declined { border-color: #ef4444; color: #ef4444; }
 
 .btn-generate-pdf {
-  background: rgba(99, 102, 241, 0.12);
-  border: 1px solid rgba(99, 102, 241, 0.35);
-  color: #818cf8;
+  background: rgba(246, 141, 95, 0.12);
+  border: 1px solid rgba(246, 141, 95, 0.35);
+  color: #f6b088;
   font-family: inherit;
   font-size: 11px;
   font-weight: 600;
@@ -102,7 +102,7 @@
   cursor: pointer;
   white-space: nowrap;
 }
-.btn-generate-pdf:hover { background: rgba(99, 102, 241, 0.22); }
+.btn-generate-pdf:hover { background: rgba(246, 141, 95, 0.22); }
 
 .row-actions { display: flex; flex-direction: column; gap: 4px; min-width: 90px; }
 .row-actions button {

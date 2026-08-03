@@ -5,17 +5,17 @@
    ============================================================ */
 
 :root {
-  /* Color Palette */
+  /* Color Palette - Warm Editorial (matches the Hub shell + tracker tools) */
   --color-bg: transparent; /* Since it's in an iframe, let the hub background show through */
-  --bg-sidebar: rgba(13, 17, 29, 0.4);
-  --bg-card: rgba(17, 24, 39, 0.6);
-  --bg-card-hover: rgba(31, 41, 55, 0.7);
-  --border-color: rgba(255, 255, 255, 0.08);
-  --border-focus: rgba(99, 102, 241, 0.6);
+  --bg-sidebar: rgba(26, 26, 23, 0.4);
+  --bg-card: rgba(34, 34, 32, 0.6);
+  --bg-card-hover: rgba(42, 40, 35, 0.7);
+  --border-color: rgba(255, 255, 255, 0.07);
+  --border-focus: rgba(246, 141, 95, 0.6);
 
-  --color-text-primary: #ffffff;
-  --color-text-secondary: #94a3b8;
-  --color-accent: #6366f1; /* Indigo */
+  --color-text-primary: #f5f1e8;
+  --color-text-secondary: #8a887f;
+  --color-accent: #f68d5f; /* Warm orange */
   --color-accent-money: #10b981; /* Teal for money */
 
   /* These names were referenced throughout this file and index.html
@@ -39,17 +39,17 @@
   --primary: var(--color-accent);
   --text-secondary: var(--color-text-secondary);
   --color-brand-primary: var(--color-accent);
-  --color-brand-secondary: #f68d5f; /* Coral - distinct from the indigo Copy button */
+  --color-brand-secondary: #d85a30; /* Rust - distinct from the orange accent used elsewhere */
 
-  --font-heading: 'Space Grotesk', sans-serif;
-  --font-body: 'Plus Jakarta Sans', -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-heading: 'Fraunces', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'DM Mono', 'Courier New', monospace;
 
-  --radius-lg: 16px;
+  --radius-lg: 14px;
   --radius-md: 10px;
   --radius-sm: 6px;
-  
-  --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.15);
+
+  --shadow-glow: 0 0 20px rgba(246, 141, 95, 0.15);
   --shadow-glow-money: 0 0 20px rgba(16, 185, 129, 0.15);
 }
 
@@ -120,7 +120,7 @@ body {
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #818cf8; /* Soft Indigo */
+  color: #f6b088; /* Soft Indigo */
   margin-bottom: 8px;
 }
 
@@ -351,7 +351,7 @@ body {
   font-size: 0.9rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #a5b4fc; /* Soft pastel indigo */
+  color: #e0b48f; /* Soft pastel indigo */
   margin-bottom: 24px;
 }
 
@@ -396,12 +396,12 @@ body {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+  box-shadow: 0 4px 12px rgba(246, 141, 95, 0.2);
 }
 
 .btn-copy:hover {
   background: var(--border-focus);
-  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 4px 16px rgba(246, 141, 95, 0.4);
   transform: translateY(-1px);
 }
 

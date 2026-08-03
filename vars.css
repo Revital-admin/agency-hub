@@ -1,3 +1,11 @@
+/* Fraunces is used as --font-display below AND as the local --font-heading
+   override in several tool folders (Mood Board Builder, Brand Asset Kit,
+   Case Study Builder, etc.) - none of those individually load a Google
+   Fonts link for it, so without this shared import 'Fraunces' silently
+   fell back to Georgia everywhere. Loaded once here since every one of
+   those tools already links this file. */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,300;1,9..144,400&display=swap');
+
 :root {
   --color-surface:    #1a1a17;
   --color-surface-2:  #222220;

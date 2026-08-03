@@ -5,29 +5,29 @@
    ============================================================ */
 
 :root {
-  /* Color Palette */
+  /* Color Palette - Warm Editorial (matches the Hub shell + tracker tools) */
   --color-bg: transparent; /* Since it's in an iframe, let the hub background show through */
-  --bg-sidebar: rgba(13, 17, 29, 0.4);
-  --bg-card: rgba(17, 24, 39, 0.6);
-  --bg-card-hover: rgba(31, 41, 55, 0.7);
-  --border-color: rgba(255, 255, 255, 0.08);
-  --border-focus: rgba(99, 102, 241, 0.6);
+  --bg-sidebar: rgba(26, 26, 23, 0.4);
+  --bg-card: rgba(34, 34, 32, 0.6);
+  --bg-card-hover: rgba(42, 40, 35, 0.7);
+  --border-color: rgba(255, 255, 255, 0.07);
+  --border-focus: rgba(246, 141, 95, 0.6);
 
-  --color-text-primary: #ffffff;
-  --color-text-secondary: #94a3b8;
-  --color-accent: #6366f1; /* Indigo */
-  --primary-hover: #4f46e5;
-  --secondary-accent: #a855f7; /* Purple */
-  
-  --font-heading: 'Space Grotesk', sans-serif;
-  --font-sans: 'Plus Jakarta Sans', -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --color-text-primary: #f5f1e8;
+  --color-text-secondary: #8a887f;
+  --color-accent: #f68d5f; /* Warm orange */
+  --primary-hover: #f4794a;
+  --secondary-accent: #d85a30; /* Rust */
 
-  --radius-lg: 16px;
+  --font-heading: 'Fraunces', Georgia, serif;
+  --font-sans: 'DM Sans', -apple-system, sans-serif;
+  --font-mono: 'DM Mono', 'Courier New', monospace;
+
+  --radius-lg: 14px;
   --radius-md: 10px;
   --radius-sm: 6px;
-  
-  --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.15);
+
+  --shadow-glow: 0 0 20px rgba(246, 141, 95, 0.15);
 }
 
 /* Base Styles */
@@ -156,7 +156,7 @@ body {
 }
 
 .sop-item.active {
-  background: rgba(99, 102, 241, 0.15);
+  background: rgba(246, 141, 95, 0.15);
   color: var(--color-accent);
   border-left: 3px solid var(--color-accent);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
@@ -223,9 +223,9 @@ body {
   font-family: var(--font-mono);
   font-size: 0.75rem;
   font-weight: 500;
-  color: #818cf8; /* Soft Indigo */
-  background: rgba(99, 102, 241, 0.08); /* Very subtle indigo tint */
-  border: 1px solid rgba(99, 102, 241, 0.15);
+  color: #f6b088; /* Soft Indigo */
+  background: rgba(246, 141, 95, 0.08); /* Very subtle indigo tint */
+  border: 1px solid rgba(246, 141, 95, 0.15);
   padding: 4px 12px;
   border-radius: 100px;
   margin-bottom: 16px;
@@ -270,21 +270,21 @@ body {
    some pasted headings look oversized compared to h2/h3. */
 .doc-body h1 {
   font-size: 1.9rem;
-  border-bottom: 1px solid rgba(99, 102, 241, 0.15);
+  border-bottom: 1px solid rgba(246, 141, 95, 0.15);
   padding-bottom: 10px;
   margin-top: 0;
 }
 
 .doc-body h2 { 
   font-size: 1.6rem; 
-  border-bottom: 1px solid rgba(99, 102, 241, 0.15); /* Soft indigo divider */
+  border-bottom: 1px solid rgba(246, 141, 95, 0.15); /* Soft indigo divider */
   padding-bottom: 8px; 
   margin-top: 2em; 
 }
 
 .doc-body h3 { 
   font-size: 1.3rem; 
-  color: #a5b4fc; /* Very soft pastel indigo/blue */
+  color: #e0b48f; /* Very soft pastel indigo/blue */
   margin-top: 2em; 
   margin-bottom: 1em; 
 }
@@ -332,13 +332,13 @@ body {
 }
 
 .doc-body blockquote {
-  border-left: 4px solid rgba(99, 102, 241, 0.4); /* Subtle indigo border */
+  border-left: 4px solid rgba(246, 141, 95, 0.4); /* Subtle indigo border */
   padding-left: 16px;
   margin-left: 0;
   margin-bottom: 1.5em;
   color: var(--color-text-secondary);
   font-style: italic;
-  background: rgba(99, 102, 241, 0.03); /* Whisper of indigo */
+  background: rgba(246, 141, 95, 0.03); /* Whisper of indigo */
   padding: 16px;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
@@ -362,7 +362,7 @@ body {
 }
 
 .doc-body th {
-  background: rgba(99, 102, 241, 0.06); /* Very subtle indigo header */
+  background: rgba(246, 141, 95, 0.06); /* Very subtle indigo header */
   color: #e0e7ff; /* Soft indigo-white text */
   font-weight: 600;
   font-family: var(--font-heading);
@@ -399,8 +399,8 @@ body {
    Kept visually distinct from .alert-warning (amber/caution) since this
    is a friendly orientation box, not a warning. */
 .doc-body .quick-start-box {
-  border: 1px solid rgba(99, 102, 241, 0.25);
-  background: rgba(99, 102, 241, 0.06);
+  border: 1px solid rgba(246, 141, 95, 0.25);
+  background: rgba(246, 141, 95, 0.06);
   border-radius: var(--radius-md);
   padding: 18px 20px;
   margin-bottom: 2em;
@@ -409,7 +409,7 @@ body {
 .doc-body .quick-start-box h4 {
   font-family: var(--font-heading);
   font-size: 0.95rem;
-  color: #a5b4fc;
+  color: #e0b48f;
   margin: 0 0 10px;
   text-transform: uppercase;
   letter-spacing: 0.4px;
@@ -462,8 +462,8 @@ body {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  background: rgba(99, 102, 241, 0.12);
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  background: rgba(246, 141, 95, 0.12);
+  border: 1px solid rgba(246, 141, 95, 0.3);
   color: var(--color-accent);
   font-family: var(--font-sans);
   font-size: 0.78rem;
@@ -475,8 +475,8 @@ body {
 }
 
 .btn-new-sop:hover {
-  background: rgba(99, 102, 241, 0.22);
-  border-color: rgba(99, 102, 241, 0.5);
+  background: rgba(246, 141, 95, 0.22);
+  border-color: rgba(246, 141, 95, 0.5);
 }
 
 .doc-header-top {
@@ -757,7 +757,7 @@ body {
    content looked oversized in the editor too, before you'd even saved it. */
 .editor-richtext h1 { font-size: 1.5rem; }
 .editor-richtext h2 { font-size: 1.3rem; }
-.editor-richtext h3 { font-size: 1.1rem; color: #a5b4fc; }
+.editor-richtext h3 { font-size: 1.1rem; color: #e0b48f; }
 .editor-richtext h4 { font-size: 1rem; }
 
 .editor-richtext p {
@@ -774,7 +774,7 @@ body {
 }
 
 .editor-richtext blockquote {
-  border-left: 3px solid rgba(99, 102, 241, 0.4);
+  border-left: 3px solid rgba(246, 141, 95, 0.4);
   padding-left: 12px;
   margin: 0.8em 0;
   color: var(--color-text-secondary);
@@ -806,7 +806,7 @@ body {
    read view (.doc-body) rendered a proper header row - bring them in
    line with each other. */
 .editor-richtext th {
-  background: rgba(99, 102, 241, 0.06);
+  background: rgba(246, 141, 95, 0.06);
   color: #e0e7ff;
   font-weight: 600;
   font-family: var(--font-heading);
@@ -829,8 +829,8 @@ body {
   gap: 10px;
   margin-top: 16px;
   padding: 10px 12px;
-  background: rgba(99, 102, 241, 0.05);
-  border: 1px solid rgba(99, 102, 241, 0.15);
+  background: rgba(246, 141, 95, 0.05);
+  border: 1px solid rgba(246, 141, 95, 0.15);
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
@@ -851,9 +851,9 @@ body {
 }
 
 .btn-doc-action-active {
-  background: rgba(99, 102, 241, 0.18);
-  border-color: rgba(99, 102, 241, 0.4);
-  color: #a5b4fc;
+  background: rgba(246, 141, 95, 0.18);
+  border-color: rgba(246, 141, 95, 0.4);
+  color: #e0b48f;
 }
 
 .checklist-view {
@@ -944,7 +944,7 @@ body {
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #a5b4fc;
+  color: #e0b48f;
   margin: 24px 0 8px;
 }
 
@@ -1026,8 +1026,8 @@ body {
 }
 
 .checklist-history-row.is-active {
-  background: rgba(99, 102, 241, 0.1);
-  border: 1px solid rgba(99, 102, 241, 0.25);
+  background: rgba(246, 141, 95, 0.1);
+  border: 1px solid rgba(246, 141, 95, 0.25);
 }
 
 .checklist-history-meta {

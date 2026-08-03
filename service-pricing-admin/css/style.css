@@ -313,8 +313,8 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--primary);
-  background: rgba(99, 102, 241, 0.12);
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  background: rgba(246, 141, 95, 0.12);
+  border: 1px solid rgba(246, 141, 95, 0.3);
   padding: 2px 8px;
   border-radius: 999px;
 }

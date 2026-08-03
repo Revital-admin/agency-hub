@@ -1,9 +1,9 @@
 :root {
-  --primary: #6366f1;
-  --secondary: #a855f7;
-  --text-bright: #ffffff;
-  --text-muted: #94a3b8;
-  --font-heading: 'Space Grotesk', sans-serif;
+  --primary: #f68d5f;
+  --secondary: #d85a30;
+  --text-bright: #f5f1e8;
+  --text-muted: #8a887f;
+  --font-heading: 'Fraunces', Georgia, serif;
 }
 
 .site-header { margin-bottom: 0; }
@@ -12,8 +12,8 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: rgba(99, 102, 241, 0.08);
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  background: rgba(246, 141, 95, 0.08);
+  border: 1px solid rgba(246, 141, 95, 0.2);
   border-radius: 100px;
   padding: 4px 12px;
   font-family: var(--font-mono, monospace);
@@ -189,8 +189,8 @@
 }
 .board-category-badge {
   display: inline-block;
-  background: rgba(99, 102, 241, 0.12);
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  background: rgba(246, 141, 95, 0.12);
+  border: 1px solid rgba(246, 141, 95, 0.3);
   color: var(--primary);
   font-size: 11px;
   font-weight: 600;
