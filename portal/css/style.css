@@ -1490,6 +1490,40 @@ body {
   margin: 4px 8px 4px 0;
 }
 .moodboard-embed-link:hover { text-decoration: underline; }
+.moodboard-scale-wrap {
+  margin: 14px 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+.moodboard-scale-row {
+  display: grid;
+  grid-template-columns: 70px 1fr 70px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.moodboard-scale-row:last-child { margin-bottom: 0; }
+.moodboard-scale-label {
+  font-size: 0.72rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+.moodboard-scale-track {
+  position: relative;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.1);
+}
+.moodboard-scale-dot {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  transform: translate(-50%, -50%);
+}
 .approval-checklist li {
   font-size: 0.85rem;
   color: var(--color-text-secondary);

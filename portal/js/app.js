@@ -1476,6 +1476,7 @@ function renderMoodBoards() {
       ${board.ideaSummary ? `<p>${escapeHtml(board.ideaSummary)}</p>` : ""}
       ${board.visualDirection ? `<div class="moodboard-section-label">Visual Direction</div><p>${escapeHtml(board.visualDirection)}</p>` : ""}
       ${board.keyElements ? `<div class="moodboard-section-label">Key Elements</div><p>${escapeHtml(board.keyElements)}</p>` : ""}
+      ${renderMoodBoardStyleScale(board)}
       ${images.length ? `
         <div class="moodboard-section-label">Reference Images</div>
         <div class="moodboard-image-grid">
@@ -1509,6 +1510,31 @@ function renderMoodBoards() {
 
 function isMoodBoardImage(l) {
   return !!(l && (l.isImage || (l.url || "").startsWith("data:image")));
+}
+
+// Same fixed axes as the admin Mood Board Builder (mood-board-builder/js/app.js) -
+// read-only here, the client just sees where the agency positioned this
+// board's direction, they don't drag anything themselves.
+const PORTAL_STYLE_AXES = [
+  { key: "traditionalModern", left: "Traditional", right: "Modern" },
+  { key: "minimalBold", left: "Minimal", right: "Bold" },
+  { key: "mutedVibrant", left: "Muted", right: "Vibrant" },
+  { key: "playfulSerious", left: "Playful", right: "Serious" }
+];
+
+function renderMoodBoardStyleScale(board) {
+  const scale = board.styleScale;
+  if (!scale) return "";
+  const rows = PORTAL_STYLE_AXES.map(axis => {
+    const val = scale[axis.key] !== undefined ? scale[axis.key] : 50;
+    return `
+      <div class="moodboard-scale-row">
+        <span class="moodboard-scale-label">${axis.left}</span>
+        <div class="moodboard-scale-track"><div class="moodboard-scale-dot" style="left:${val}%;"></div></div>
+        <span class="moodboard-scale-label">${axis.right}</span>
+      </div>`;
+  }).join("");
+  return `<div class="moodboard-scale-wrap">${rows}</div>`;
 }
 
 // ── Mood board image lightbox ──

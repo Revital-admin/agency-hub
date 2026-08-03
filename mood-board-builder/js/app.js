@@ -51,6 +51,17 @@ function populateClientSelect() {
 let editingBoardId = null;
 let draftEmbedLinks = [];
 
+// Fixed set of style axes so boards are comparable to each other over time
+// (a client's taste pattern only becomes visible if every board is scored
+// on the same scale) - see also STYLE_AXES-equivalent duplicated in the
+// Portal's app.js for read-only rendering there.
+const STYLE_AXES = [
+  { key: 'traditionalModern', left: 'Traditional', right: 'Modern', id: 'mbScaleTraditionalModern' },
+  { key: 'minimalBold', left: 'Minimal', right: 'Bold', id: 'mbScaleMinimalBold' },
+  { key: 'mutedVibrant', left: 'Muted', right: 'Vibrant', id: 'mbScaleMutedVibrant' },
+  { key: 'playfulSerious', left: 'Playful', right: 'Serious', id: 'mbScalePlayfulSerious' }
+];
+
 function uid() { return 'mb-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8); }
 
 function currentClientName() { return el('clientSelect').value; }
@@ -70,6 +81,9 @@ function resetForm() {
   el('mbIdeaSummary').value = '';
   el('mbVisualDirection').value = '';
   el('mbKeyElements').value = '';
+  STYLE_AXES.forEach(axis => { el(axis.id).value = 50; });
+  el('mbOverallRating').value = 5;
+  el('mbOverallRatingValue').textContent = '5/10';
   el('mbShared').checked = false;
   el('embedLabel').value = '';
   el('embedUrl').value = '';
@@ -356,6 +370,9 @@ function saveBoard() {
 
   if (!Array.isArray(client.moodBoards)) client.moodBoards = [];
 
+  const styleScale = {};
+  STYLE_AXES.forEach(axis => { styleScale[axis.key] = parseInt(el(axis.id).value, 10); });
+
   const board = {
     id: editingBoardId || uid(),
     title,
@@ -363,6 +380,8 @@ function saveBoard() {
     ideaSummary: el('mbIdeaSummary').value.trim(),
     visualDirection: el('mbVisualDirection').value.trim(),
     keyElements: el('mbKeyElements').value.trim(),
+    styleScale,
+    overallRating: parseInt(el('mbOverallRating').value, 10),
     embedLinks: draftEmbedLinks,
     sharedWithClient: el('mbShared').checked,
     createdDate: editingBoardId
@@ -398,6 +417,10 @@ function startEditBoard(id) {
   el('mbIdeaSummary').value = board.ideaSummary || '';
   el('mbVisualDirection').value = board.visualDirection || '';
   el('mbKeyElements').value = board.keyElements || '';
+  const scale = board.styleScale || {};
+  STYLE_AXES.forEach(axis => { el(axis.id).value = (scale[axis.key] !== undefined ? scale[axis.key] : 50); });
+  el('mbOverallRating').value = board.overallRating || 5;
+  el('mbOverallRatingValue').textContent = `${el('mbOverallRating').value}/10`;
   el('mbShared').checked = !!board.sharedWithClient;
   draftEmbedLinks = (board.embedLinks || []).map(l => ({ ...l }));
   renderEmbedLinksList();
@@ -444,6 +467,22 @@ function toggleShare(id) {
   }
 }
 
+function renderStyleScaleMini(board) {
+  const scale = board.styleScale;
+  if (!scale) return '';
+  const rows = STYLE_AXES.map(axis => {
+    const val = scale[axis.key] !== undefined ? scale[axis.key] : 50;
+    return `
+      <div class="scale-mini-row">
+        <span class="scale-mini-label">${axis.left}</span>
+        <div class="scale-mini-track"><div class="scale-mini-dot" style="left:${val}%;"></div></div>
+        <span class="scale-mini-label">${axis.right}</span>
+      </div>`;
+  }).join('');
+  const overall = board.overallRating ? `<div class="scale-mini-overall">Overall Fit: <strong>${board.overallRating}/10</strong></div>` : '';
+  return `<div class="scale-mini-wrap">${rows}${overall}</div>`;
+}
+
 const BOARD_CARD_THUMB_LIMIT = 5;
 
 function renderBoardCardThumbs(board) {
@@ -487,6 +526,7 @@ function renderBoardsList() {
       </div>
       ${board.ideaSummary ? `<p style="margin:12px 0 0; font-size:13px; color:var(--color-text-secondary);">${escapeHtml(board.ideaSummary)}</p>` : ''}
       ${renderBoardCardThumbs(board)}
+      ${renderStyleScaleMini(board)}
     </div>
   `).join('');
 
@@ -514,6 +554,9 @@ document.addEventListener('DOMContentLoaded', () => {
   el('saveBoardBtn').addEventListener('click', saveBoard);
   el('cancelEditBtn').addEventListener('click', resetForm);
   el('addEmbedBtn').addEventListener('click', addDraftEmbedLink);
+  el('mbOverallRating').addEventListener('input', () => {
+    el('mbOverallRatingValue').textContent = `${el('mbOverallRating').value}/10`;
+  });
   wireDropZone(el('imageDropZone'), el('imageFileInput'), handleDroppedImage);
 
   // Same iframe-race fix used across the other client-aware modules: the

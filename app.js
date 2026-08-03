@@ -432,6 +432,7 @@ let iframeNeedsReload = {
   // tabs fixed alongside these two.
   "tab-brandguidelines": true,
   "tab-moodboard": true,
+  "tab-contentcalendar": true,
 
   // These tool tabs previously had a hardcoded iframe src in index.html and
   // were never wired into the reload system at all, so switching client
@@ -1127,6 +1128,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-moodboard":
       renderMoodBoard();
+      break;
+    case "tab-contentcalendar":
+      renderContentCalendar();
       break;
     case "tab-reportarchive":
       renderReportArchive();
@@ -2358,6 +2362,9 @@ function renderMeetingNotes() {
 }
 function renderMoodBoard() {
   setIframeAbsoluteSrc('#tab-moodboard iframe', "mood-board-builder/index.html");
+}
+function renderContentCalendar() {
+  setIframeAbsoluteSrc('#tab-contentcalendar iframe', "content-calendar/index.html");
 }
 function renderReportArchive() {
   setIframeAbsoluteSrc('#tab-reportarchive iframe', "monthly-report-archive/index.html");
