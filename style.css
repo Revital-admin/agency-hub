@@ -1085,14 +1085,25 @@ body {
 }
 
 .dashboard-section-title {
+  /* Restyled to match the muted, small-caps "accordion bar" section
+     labels from the Marquee Studio reference (e.g. "SCREEN HEALTH") -
+     a quiet full-width strip rather than a large serif heading, so the
+     Agency-Wide/Account Health/etc breaks in the tool-card grid below
+     read as the same kind of restrained section divider instead of
+     competing visually with the page's own h1. */
   grid-column: 1 / -1;
   font-family: var(--font-heading);
-  font-size: 1.2rem;
-  color: var(--text-bright);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: rgba(255, 255, 255, 0.45);
+  background: var(--bg-card-opaque);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
   margin-top: 24px;
   margin-bottom: 8px;
-  border-bottom: 1px solid var(--border-color);
-  padding-bottom: 8px;
+  padding: 10px 14px;
 }
 
 .progress-bar-container {
