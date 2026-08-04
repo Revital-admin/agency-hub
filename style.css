@@ -463,6 +463,25 @@ body {
   gap: 6px;
 }
 
+/* Ambient "who last edited this client" note - see renderClientLastEditedNote
+   in app.js. Deliberately a quiet static line, not a toast/popup: it just
+   sits under the client switcher and updates whenever the active client
+   changes or gets saved, so a teammate notices before they start editing
+   rather than only finding out after a save gets rejected. Only escalates
+   to .warning styling when someone ELSE edited very recently - otherwise
+   it stays this same muted tone as workspace-label above. */
+.client-last-edited-note {
+  display: none;
+  margin-top: 8px;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+.client-last-edited-note.warning {
+  color: #f59e0b;
+  font-weight: 500;
+}
+
 .btn-client-action {
   flex: 1;
   display: flex;

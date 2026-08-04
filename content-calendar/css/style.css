@@ -161,5 +161,19 @@
 }
 .row-actions button.posted-btn:hover { border-color: #22c55e; color: #22c55e; box-shadow: 0 3px 8px rgba(34, 197, 94, 0.2); }
 .row-actions button.delete-item-btn:hover { border-color: #ef4444; color: #ef4444; box-shadow: 0 3px 8px rgba(239, 68, 68, 0.2); }
+.row-actions button.candidate-btn:hover { border-color: #f59e0b; color: #f59e0b; box-shadow: 0 3px 8px rgba(245, 158, 11, 0.2); }
+.row-actions button.candidate-btn.active { background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.4); color: #f59e0b; }
+
+.candidate-badge {
+  display: inline-block;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #f59e0b;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
 
 .empty-state { text-align: center; padding: 40px 20px; color: var(--color-text-muted); font-size: 14px; }

@@ -767,6 +767,63 @@ function getActiveClient() {
   return clientsDb[activeClientName];
 }
 
+// Friendly-name fallback for the "who last edited this client" ambient
+// note (see renderClientLastEditedNote below) - there's no existing
+// login-email -> display-name mapping anywhere in the Hub (Team Roster's
+// names aren't keyed by login email), so rather than add a new async
+// lookup into the hot saveDatabase() path, this just derives something
+// readable from the email's own local part. "sarah.jones@..." -> "Sarah
+// Jones". Good enough for an ambient hint, not meant to be authoritative.
+function friendlyNameFromEmail(email) {
+  if (!email) return "Someone";
+  const local = String(email).split("@")[0] || "";
+  const parts = local.split(/[._]+/).filter(Boolean);
+  if (!parts.length) return "Someone";
+  return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+}
+
+// How recent a DIFFERENT teammate's edit has to be before the ambient
+// note below escalates from a quiet "last edited by" line into a warning.
+// Deliberately NOT a popup, and deliberately not the same mechanism as
+// commitDatabaseToCloud's hard-block-and-ask (see its own comment) - that
+// one already guarantees no save can silently overwrite another admin's
+// work, it just only speaks up AFTER a save gets rejected. This is
+// earlier, ambient awareness so a teammate notices BEFORE they start
+// editing on top of a very recent change in the first place.
+const RECENT_EDIT_WARNING_WINDOW_MS = 20 * 60 * 1000;
+
+// Reads the active client's lastEditedBy/lastEditedByEmail/lastEditedAt
+// (stamped in saveDatabase() below) and updates the quiet note under the
+// sidebar's client switcher. Called on client switch (refreshAllViews)
+// and right after every save, not on any kind of polling/interval - so
+// it reflects what's true as of the last time YOU touched or loaded this
+// client, same "no live polling" scope as the rest of the Hub's per-
+// client UI.
+function renderClientLastEditedNote() {
+  const noteEl = document.getElementById("clientLastEditedNote");
+  if (!noteEl) return;
+  const client = getActiveClient();
+
+  if (!client || !client.lastEditedAt) {
+    noteEl.style.display = "none";
+    noteEl.classList.remove("warning");
+    return;
+  }
+
+  const isOwnEdit = !!(client.lastEditedByEmail && window.currentAdminEmail &&
+    client.lastEditedByEmail === window.currentAdminEmail);
+  const ageMs = Date.now() - new Date(client.lastEditedAt).getTime();
+  const isRecentOther = !isOwnEdit && ageMs >= 0 && ageMs < RECENT_EDIT_WARNING_WINDOW_MS;
+  const timeAgo = adminNotifTimeAgo(client.lastEditedAt);
+  const who = isOwnEdit ? "you" : (client.lastEditedBy || "someone");
+
+  noteEl.style.display = "block";
+  noteEl.classList.toggle("warning", isRecentOther);
+  noteEl.textContent = isRecentOther
+    ? `⚠ Edited by ${who} ${timeAgo} — check before you save over it`
+    : `Last edited by ${who} ${timeAgo}`;
+}
+
 // Cross-client accessor for tools that need to see every client at once
 // (e.g. the Proposal Follow-Up Tracker), rather than just the active one.
 function getAllClients() {
@@ -1365,6 +1422,8 @@ function refreshAllViews() {
   try {
     renderBrandVault();
   } catch(e) { const hero = document.getElementById("dashHeroClientName"); if (hero) hero.textContent = "Error in renderBrandVault: " + e.message; }
+
+  try { renderClientLastEditedNote(); } catch (e) {}
 
   // Mark all iframes as needing reload
   Object.keys(iframeNeedsReload).forEach(key => {
@@ -3443,6 +3502,22 @@ function saveDatabase() {
   // is lost even if the tab closes before the debounced cloud write below
   // fires.
   backfillMissingClientChecklists();
+
+  // Attribution stamp for the ambient "who last edited this client" note
+  // (see renderClientLastEditedNote) - travels with the client's own
+  // record through the same versioned shard save/load path as everything
+  // else in clientsDb, no separate doc or write needed. Only the
+  // currently active client gets stamped: virtually every tool that ends
+  // up calling saveDatabase() got here by mutating getActiveClient()'s own
+  // fields, so this is accurate for the case that actually matters (a
+  // teammate about to edit the same client someone else just touched).
+  const activeClientForEditStamp = getActiveClient();
+  if (activeClientForEditStamp) {
+    activeClientForEditStamp.lastEditedBy = friendlyNameFromEmail(window.currentAdminEmail);
+    activeClientForEditStamp.lastEditedByEmail = window.currentAdminEmail || "";
+    activeClientForEditStamp.lastEditedAt = new Date().toISOString();
+    try { renderClientLastEditedNote(); } catch (e) {}
+  }
   // Second line of defense (see rebuildClientsDbFromShards): never let
   // this overwrite the local cache with a clientsDb we know is still
   // mid-sync. In the normal case clientsDb is never in that state by

@@ -115,10 +115,12 @@ function renderSummary(rows) {
     const d = daysBetween(todayStr(), r.item.postDate);
     return d >= 0 && d <= 7;
   });
+  const candidates = rows.filter(r => r.item.caseStudyCandidate);
 
   el('summaryOverdue').textContent = overdue.length;
   el('summaryThisWeek').textContent = thisWeek.length;
   el('summaryScheduled').textContent = unposted.length;
+  el('summaryCandidates').textContent = candidates.length;
 }
 
 function renderTable() {
@@ -126,10 +128,12 @@ function renderTable() {
   renderSummary(allRows);
 
   const showPosted = el('showPostedToggle').checked;
+  const candidatesOnly = el('showCandidatesOnlyToggle').checked;
   const filterText = el('filterClientInput').value.trim().toLowerCase();
 
   const rows = allRows
     .filter(r => showPosted || r.item.status !== 'Posted')
+    .filter(r => !candidatesOnly || r.item.caseStudyCandidate)
     .filter(r => !filterText || r.clientName.toLowerCase().includes(filterText))
     .sort((a, b) => (a.item.postDate || '9999').localeCompare(b.item.postDate || '9999'));
 
@@ -146,7 +150,7 @@ function renderTable() {
 
     tr.innerHTML = `
       <td class="client-cell">${escapeHtml(clientName)}</td>
-      <td>${escapeHtml(item.title || '')}</td>
+      <td>${escapeHtml(item.title || '')}${item.caseStudyCandidate ? ' <span class="candidate-badge" title="Flagged as a case study candidate">★ Candidate</span>' : ''}</td>
       <td>${escapeHtml(item.platform || 'Other')}</td>
       <td class="date-cell">${item.postDate || '--'}</td>
       <td>${statusBadge(item)}</td>
@@ -155,6 +159,7 @@ function renderTable() {
       <td>
         <div class="row-actions">
           <button class="posted-btn" data-client="${escapeHtml(clientName)}" data-id="${item.id}" ${!isOpen ? 'disabled' : ''}>Mark Posted</button>
+          <button class="candidate-btn${item.caseStudyCandidate ? ' active' : ''}" data-client="${escapeHtml(clientName)}" data-id="${item.id}" title="Flag this as worth writing up as a case study later">${item.caseStudyCandidate ? '★ Unflag' : '☆ Flag for Case Study'}</button>
           <button class="delete-item-btn" data-client="${escapeHtml(clientName)}" data-id="${item.id}">Delete</button>
         </div>
       </td>
@@ -186,9 +191,33 @@ function wireRowListeners() {
     btn.addEventListener('click', () => markPosted(btn.getAttribute('data-client'), btn.getAttribute('data-id')));
   });
 
+  document.querySelectorAll('.candidate-btn').forEach(btn => {
+    btn.addEventListener('click', () => toggleCaseStudyCandidate(btn.getAttribute('data-client'), btn.getAttribute('data-id')));
+  });
+
   document.querySelectorAll('.delete-item-btn').forEach(btn => {
     btn.addEventListener('click', () => deleteItem(btn.getAttribute('data-client'), btn.getAttribute('data-id')));
   });
+}
+
+// Content that performs well is exactly the kind of proof Phase 1 of the
+// Business Phase Roadmap needs for Case Study Builder - the problem is
+// noticing it at the time and remembering by the time you actually sit
+// down to write one up. This just marks the item; nothing auto-creates a
+// case study from it (Case Study Builder's own fields - challenge/
+// solution/results/testimonial - need a real narrative, not something to
+// template out of a content item's title and platform).
+function toggleCaseStudyCandidate(clientName, itemId) {
+  const item = findItem(clientName, itemId);
+  if (!item) return;
+  item.caseStudyCandidate = !item.caseStudyCandidate;
+  persist();
+  renderTable();
+  if (isEmbedded && window.parent.showBanner) {
+    window.parent.showBanner('success', item.caseStudyCandidate
+      ? `Flagged "${item.title}" as a case study candidate.`
+      : `Unflagged "${item.title}".`);
+  }
 }
 
 function markPosted(clientName, itemId) {

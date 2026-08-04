@@ -57,7 +57,7 @@
 
   <!-- Central references and Application State Controller -->
   <script src="data-store.js?v=3"></script>
-  <script src="app.js?v=84"></script>
+  <script src="app.js?v=85"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
 </head>
@@ -156,6 +156,11 @@
             <span>New</span>
           </button>
         </div>
+        <!-- Populated by renderClientLastEditedNote() in app.js - quiet
+             "last edited by / when" note for the active client, escalating
+             to a warning style only if a teammate other than you edited it
+             very recently. -->
+        <div id="clientLastEditedNote" class="client-last-edited-note"></div>
       </div>
 
       <!-- Sidebar Navigation Menu -->
