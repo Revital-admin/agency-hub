@@ -1469,6 +1469,8 @@ body {
 @media (max-width: 640px) {
   .moodboard-lightbox { padding: 16px; }
   .moodboard-lightbox-nav { width: 36px; height: 36px; font-size: 18px; }
+  .moodboard-scale-row { grid-template-columns: 56px 1fr 56px; gap: 6px; }
+  .moodboard-scale-overall-row { grid-template-columns: 56px 1fr 40px; gap: 6px; }
 }
 .moodboard-embed-wrapper {
   margin-top: 8px;
@@ -1492,16 +1494,30 @@ body {
 .moodboard-embed-link:hover { text-decoration: underline; }
 .moodboard-scale-wrap {
   margin: 14px 0;
-  padding: 12px 0;
+  padding: 14px 16px;
   border-top: 1px solid var(--color-border);
   border-bottom: 1px solid var(--color-border);
+  background: rgba(255,255,255,0.02);
+  border-radius: 8px;
+}
+.moodboard-scale-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 4px;
+}
+.moodboard-scale-hint {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  margin: 0 0 12px;
+  line-height: 1.4;
 }
 .moodboard-scale-row {
   display: grid;
   grid-template-columns: 70px 1fr 70px;
   align-items: center;
   gap: 10px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 .moodboard-scale-row:last-child { margin-bottom: 0; }
 .moodboard-scale-label {
@@ -1509,21 +1525,51 @@ body {
   color: var(--color-text-secondary);
   white-space: nowrap;
 }
-.moodboard-scale-track {
-  position: relative;
-  height: 4px;
-  border-radius: 2px;
-  background: rgba(255,255,255,0.1);
+.moodboard-scale-input,
+.moodboard-scale-overall-input {
+  width: 100%;
+  accent-color: var(--color-primary);
+  cursor: pointer;
 }
-.moodboard-scale-dot {
-  position: absolute;
-  top: 50%;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
+.moodboard-scale-overall-row {
+  display: grid;
+  grid-template-columns: 70px 1fr 48px;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border);
+}
+.moodboard-scale-overall-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  text-align: right;
+  white-space: nowrap;
+}
+.moodboard-scale-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+.moodboard-scale-save-btn {
   background: var(--color-primary);
-  transform: translate(-50%, -50%);
+  color: #1a1a17;
+  border: none;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 100px;
+  cursor: pointer;
+  white-space: nowrap;
 }
+.moodboard-scale-save-btn:hover { opacity: 0.9; }
+.moodboard-scale-save-status {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+.moodboard-scale-save-status-ok { color: #22c55e; }
 .approval-checklist li {
   font-size: 0.85rem;
   color: var(--color-text-secondary);

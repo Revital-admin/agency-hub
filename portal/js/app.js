@@ -1506,6 +1506,24 @@ function renderMoodBoards() {
       openMoodBoardLightbox(btn.getAttribute("data-board-id"), parseInt(btn.getAttribute("data-idx"), 10));
     });
   });
+
+  // Live-update the "X/10" readout next to the overall-fit slider as it's
+  // dragged - the per-axis sliders don't get a numeric readout, the
+  // Left/Right labels either side are enough context for those.
+  container.querySelectorAll(".moodboard-scale-overall-input").forEach(input => {
+    input.addEventListener("input", () => {
+      const valEl = input.parentElement.querySelector(".moodboard-scale-overall-value");
+      if (valEl) valEl.textContent = `${input.value}/10`;
+    });
+  });
+
+  container.querySelectorAll(".moodboard-scale-save-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const wrap = btn.closest(".moodboard-scale-wrap");
+      const boardId = btn.getAttribute("data-board-id");
+      if (wrap && boardId) saveMoodBoardStyleFeedback(boardId, wrap);
+    });
+  });
 }
 
 function isMoodBoardImage(l) {
@@ -1513,8 +1531,14 @@ function isMoodBoardImage(l) {
 }
 
 // Same fixed axes as the admin Mood Board Builder (mood-board-builder/js/app.js) -
-// read-only here, the client just sees where the agency positioned this
-// board's direction, they don't drag anything themselves.
+// but interactive here: the CLIENT drags these to show how a board's
+// reference images feel to them. The agency no longer sets these itself
+// (see STYLE_AXES / renderStyleScaleMini in the admin app, which now
+// reads this feedback back out read-only instead of writing it). Saved to
+// clientData.moodBoardStyleFeedback[board.id] - same write-once-keyed-by-
+// id-outside-the-array pattern as clientData.moodBoardViews above, since
+// a save here only ever needs to touch one board's entry, not rewrite the
+// whole moodBoards array.
 const PORTAL_STYLE_AXES = [
   { key: "traditionalModern", left: "Traditional", right: "Modern" },
   { key: "minimalBold", left: "Minimal", right: "Bold" },
@@ -1523,18 +1547,73 @@ const PORTAL_STYLE_AXES = [
 ];
 
 function renderMoodBoardStyleScale(board) {
-  const scale = board.styleScale;
-  if (!scale) return "";
+  if (!board.id) return "";
+  const feedback = (clientData.moodBoardStyleFeedback && clientData.moodBoardStyleFeedback[board.id]) || null;
+  const scale = (feedback && feedback.styleScale) || {};
+  const overallVal = feedback && feedback.overallRating ? feedback.overallRating : 5;
+  const boardId = escapeHtml(board.id);
+
   const rows = PORTAL_STYLE_AXES.map(axis => {
     const val = scale[axis.key] !== undefined ? scale[axis.key] : 50;
     return `
       <div class="moodboard-scale-row">
         <span class="moodboard-scale-label">${axis.left}</span>
-        <div class="moodboard-scale-track"><div class="moodboard-scale-dot" style="left:${val}%;"></div></div>
+        <input type="range" class="moodboard-scale-input" min="0" max="100" step="1" value="${val}" data-axis="${axis.key}">
         <span class="moodboard-scale-label">${axis.right}</span>
       </div>`;
   }).join("");
-  return `<div class="moodboard-scale-wrap">${rows}</div>`;
+
+  return `
+    <div class="moodboard-scale-wrap" data-board-id="${boardId}">
+      <div class="moodboard-scale-title">How does this feel to you?</div>
+      <p class="moodboard-scale-hint">Drag each slider to show how these reference images strike you - there's no right answer, it just helps us tune future boards to your taste.</p>
+      ${rows}
+      <div class="moodboard-scale-overall-row">
+        <span class="moodboard-scale-label">Overall Fit</span>
+        <input type="range" class="moodboard-scale-overall-input" min="1" max="10" step="1" value="${overallVal}" data-board-id="${boardId}">
+        <span class="moodboard-scale-overall-value">${overallVal}/10</span>
+      </div>
+      <div class="moodboard-scale-footer">
+        <button type="button" class="moodboard-scale-save-btn" data-board-id="${boardId}">Save My Feedback</button>
+        <span class="moodboard-scale-save-status${feedback ? " moodboard-scale-save-status-ok" : ""}">${feedback ? "Saved ✓" : ""}</span>
+      </div>
+    </div>`;
+}
+
+// Mirrors recordMoodBoardViews' write pattern above: merge-write scoped to
+// just the moodBoardStyleFeedback field, keyed by board id so this never
+// needs to touch the (agency-owned) moodBoards array itself.
+function saveMoodBoardStyleFeedback(boardId, wrap) {
+  const styleScale = {};
+  wrap.querySelectorAll(".moodboard-scale-input").forEach(input => {
+    styleScale[input.getAttribute("data-axis")] = parseInt(input.value, 10);
+  });
+  const overallInput = wrap.querySelector(".moodboard-scale-overall-input");
+  const overallRating = overallInput ? parseInt(overallInput.value, 10) : 5;
+
+  if (!clientData.moodBoardStyleFeedback) clientData.moodBoardStyleFeedback = {};
+  clientData.moodBoardStyleFeedback[boardId] = {
+    styleScale,
+    overallRating,
+    updatedAt: new Date().toISOString()
+  };
+
+  const statusEl = wrap.querySelector(".moodboard-scale-save-status");
+  if (statusEl) {
+    statusEl.textContent = "Saving...";
+    statusEl.classList.remove("moodboard-scale-save-status-ok");
+  }
+
+  const docRef = db.collection("clients").doc(clientToken);
+  docRef.set({ moodBoardStyleFeedback: clientData.moodBoardStyleFeedback }, { merge: true }).then(() => {
+    if (statusEl) {
+      statusEl.textContent = "Saved ✓";
+      statusEl.classList.add("moodboard-scale-save-status-ok");
+    }
+  }).catch(err => {
+    console.error("Error saving mood board style feedback:", err);
+    if (statusEl) statusEl.textContent = "Couldn't save - try again";
+  });
 }
 
 // ── Mood board image lightbox ──
