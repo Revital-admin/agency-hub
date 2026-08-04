@@ -2680,6 +2680,14 @@ function showBanner(type, message) {
   // Close other banners
   document.getElementById("successBanner").style.display = "none";
   document.getElementById("errorBanner").style.display = "none";
+  // Also hide the save-conflict banner's own action row (see
+  // showSaveConflictBanner below) - it shares this same errorBanner
+  // element, and an ordinary showBanner("error", ...) call elsewhere
+  // shouldn't leave a stale "Reload Now" button showing from an earlier
+  // conflict.
+  const errorActions = document.getElementById("errorBannerActions");
+  if (errorActions) errorActions.style.display = "none";
+  if (_conflictBannerHideTimer) { clearTimeout(_conflictBannerHideTimer); _conflictBannerHideTimer = null; }
 
   msgSpan.textContent = message;
   activeBanner.style.display = "flex";
@@ -2687,6 +2695,39 @@ function showBanner(type, message) {
   setTimeout(() => {
     activeBanner.style.display = "none";
   }, 4000);
+}
+
+// Same errorBanner element as showBanner("error", ...) above, but for the
+// one case where the standard 4-second auto-vanish is actively harmful:
+// commitDatabaseToCloud's save-conflict rejection (see its own comment
+// for why this is a hard-block-and-ask, not a silent auto-merge - that's
+// deliberate and stays as-is here). Missing that banner used to mean the
+// person just kept editing into a save that would silently keep failing
+// until they thought to reload themselves, then had to remember exactly
+// what they'd just typed to redo it. This version stays on screen until
+// they actually act on it, and "Reload Now" does the recovery step for
+// them instead of just telling them to go do it.
+let _conflictBannerHideTimer = null;
+function showSaveConflictBanner(message) {
+  const banner = document.getElementById("errorBanner");
+  const msgSpan = document.getElementById("errorBannerMsg");
+  const actions = document.getElementById("errorBannerActions");
+  if (!banner || !msgSpan) return;
+
+  const successBanner = document.getElementById("successBanner");
+  if (successBanner) successBanner.style.display = "none";
+  if (_conflictBannerHideTimer) { clearTimeout(_conflictBannerHideTimer); _conflictBannerHideTimer = null; }
+
+  msgSpan.textContent = message;
+  banner.style.display = "flex";
+  if (actions) actions.style.display = "flex";
+}
+
+function hideSaveConflictBanner() {
+  const banner = document.getElementById("errorBanner");
+  const actions = document.getElementById("errorBannerActions");
+  if (banner) banner.style.display = "none";
+  if (actions) actions.style.display = "none";
 }
 
 // ── Shared optimistic-concurrency save for agency-wide list/library docs ──
@@ -3029,6 +3070,20 @@ function initParentEventListeners() {
       renderDashboard();
       showBanner("success", "Onboarding checklist reset to template.");
     });
+  }
+
+  // Save-conflict banner actions (see showSaveConflictBanner/
+  // hideSaveConflictBanner) - a real page reload rather than trying to
+  // programmatically resync in place, since that's the one guaranteed
+  // way every open tool's own local form state ends up consistent with
+  // the fresh clientsDb, not just the top-level object itself.
+  const errorBannerReloadBtn = document.getElementById("errorBannerReloadBtn");
+  if (errorBannerReloadBtn) {
+    errorBannerReloadBtn.addEventListener("click", () => window.location.reload());
+  }
+  const errorBannerDismissBtn = document.getElementById("errorBannerDismissBtn");
+  if (errorBannerDismissBtn) {
+    errorBannerDismissBtn.addEventListener("click", hideSaveConflictBanner);
   }
 
   // Print Buttons
@@ -3790,9 +3845,13 @@ function commitDatabaseToCloud() {
         clientsDbDocVersion + " vs cloud v" + freshVersion + ").");
       if (indicator) {
         indicator.innerHTML = "Save Skipped ⚠️";
-        setTimeout(() => { indicator.style.opacity = "0"; }, 5000);
+        // No auto-fade-out here (unlike the normal 2s/3s/5s cases just
+        // above/below) - matches showSaveConflictBanner not auto-hiding,
+        // so the sidebar's own little status text stays consistent with
+        // the banner instead of quietly reverting to normal while the
+        // real problem (banner still up, edit still unsaved) persists.
       }
-      showBanner("error", "Someone else saved changes to the client database while you had this open. Reload the page to see their changes, then redo your last edit.");
+      showSaveConflictBanner("Someone else just saved changes to the client database while you had this open, so your last change wasn't saved - saving it now would have overwritten theirs. Click Reload Now to pick up their update (the Hub already reflects it live in the background), then redo your last edit.");
       return;
     }
 

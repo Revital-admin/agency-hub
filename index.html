@@ -57,7 +57,7 @@
 
   <!-- Central references and Application State Controller -->
   <script src="data-store.js?v=3"></script>
-  <script src="app.js?v=85"></script>
+  <script src="app.js?v=86"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
 </head>
@@ -1859,7 +1859,16 @@
 
   <div id="errorBanner" class="banner banner-error" role="alert">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-    <span id="errorBannerMsg" class="banner-msg">An error occurred!</span>
+    <div class="banner-body">
+      <span id="errorBannerMsg" class="banner-msg">An error occurred!</span>
+      <!-- Only shown for the clientsDb save-conflict case (see
+           showSaveConflictBanner in app.js) - a plain showBanner("error", ...)
+           call leaves this hidden and auto-dismisses as before. -->
+      <div id="errorBannerActions" class="banner-actions" style="display:none;">
+        <button id="errorBannerReloadBtn" type="button" class="banner-action-btn">Reload Now</button>
+        <button id="errorBannerDismissBtn" type="button" class="banner-dismiss-btn">Dismiss</button>
+      </div>
+    </div>
   </div>
 
 
