@@ -4656,6 +4656,17 @@ async function syncPublicPortalDocs(dbSnapshot) {
       // existing doc above first, so this save doesn't stomp a rating that
       // just came in.
       moodBoardStyleFeedback: client.moodBoardStyleFeedback || {},
+      // Same missing-field bug as moodBoards above, caught in the same
+      // audit pass: the Portal's Brand Kit widget reads clientData.brandKit
+      // (see renderBrandKit in portal/js/app.js) and its Action Items
+      // widget reads clientData.meetingNotes (renderActionItems) - both
+      // admin-authored (brandKit synced from the Brand Identity Vault just
+      // above this function; meetingNotes written by Meeting Notes Logger)
+      // and both absent from this projection, so neither ever reached the
+      // doc the Portal actually loads from. Clients never write either
+      // field, so no fold-in-existing-progress step is needed.
+      brandKit: client.brandKit || {},
+      meetingNotes: client.meetingNotes || [],
       // Carried forward as-is (see preservedLastVisitedAt above) - the
       // admin never writes this, only preserves whatever the portal itself
       // already recorded so a Hub save doesn't erase it.
