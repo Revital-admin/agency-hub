@@ -2814,6 +2814,24 @@ function initParentEventListeners() {
     });
   }
 
+  // Onboarding checklist All/Incomplete/Complete filter buttons. These
+  // read onboardingFilter (declared just above renderOnboardingChecklist)
+  // to decide which items to show, but nothing ever set that variable or
+  // called renderOnboardingChecklist() on click - the buttons existed in
+  // the HTML with .active styling but had no listener at all, so clicking
+  // them visibly did nothing.
+  const onboardingFilterBtns = document.querySelectorAll(".filter-group .filter-btn");
+  if (onboardingFilterBtns.length) {
+    onboardingFilterBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        onboardingFilterBtns.forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        onboardingFilter = btn.getAttribute("data-filter") || "all";
+        renderOnboardingChecklist();
+      });
+    });
+  }
+
   // Add custom onboarding item
   const addCustomObBtn = document.getElementById("addCustomObBtn");
   if (addCustomObBtn) {
