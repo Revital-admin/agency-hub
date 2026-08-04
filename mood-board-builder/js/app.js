@@ -438,6 +438,18 @@ function toggleShare(id) {
   if (!board) return;
   board.sharedWithClient = !board.sharedWithClient;
 
+  // Reset every time sharing turns ON (not write-once, unlike most other
+  // "first happened" timestamps in this codebase) - re-sharing a board
+  // that was unshared and shared again restarts the "how long has this
+  // been waiting for feedback" clock, since the client couldn't see or
+  // rate it while it was hidden. Drives the "Awaiting feedback" badge
+  // below and the agency-wide dashboard card (renderMoodBoardsAwaitingFeedback
+  // in the root app.js). Boards shared before this field existed just
+  // won't show a day count - no way to know retroactively.
+  if (board.sharedWithClient) {
+    board.sharedAt = new Date().toISOString();
+  }
+
   // Same pattern as Client Portal Manager (new approval) and Monthly
   // Report Archive (new report) - the client's own portal bell should
   // light up when there's something new to look at, not just have the
@@ -483,6 +495,109 @@ function renderStyleScaleMini(board, client) {
   return `<div class="scale-mini-wrap">${rows}${overall}</div>`;
 }
 
+// Same threshold as the agency-wide dashboard card
+// (MOODBOARD_AWAITING_DAYS_THRESHOLD in root app.js) - kept as a separate
+// literal here rather than imported, matching how STYLE_AXES is
+// duplicated into the Portal's own app.js elsewhere in this codebase
+// (each tool's js/app.js is self-contained, nothing shared/imported).
+const MOODBOARD_AWAITING_DAYS_THRESHOLD = 7;
+
+function daysSince(isoString) {
+  if (!isoString) return null;
+  return Math.floor((Date.now() - new Date(isoString).getTime()) / 86400000);
+}
+
+// A small companion to renderStyleScaleMini's empty state - that one
+// covers "still waiting" in general, this one specifically flags a board
+// that's been shared a while with nothing back yet, so a slow-to-respond
+// client stands out at a glance in the board list instead of needing a
+// trip to the dashboard card to notice.
+function renderAwaitingBadge(board, client) {
+  if (!board.sharedWithClient) return '';
+  const feedback = client && client.moodBoardStyleFeedback && client.moodBoardStyleFeedback[board.id];
+  if (feedback) return '';
+  const days = daysSince(board.sharedAt);
+  if (days === null || days < MOODBOARD_AWAITING_DAYS_THRESHOLD) return '';
+  return `<span class="board-awaiting-badge">Awaiting feedback — ${days}d</span>`;
+}
+
+// Averages a client's style-scale ratings across every board they've
+// rated so far, using the same fixed STYLE_AXES every board is scored on
+// (see the comment above that constant) - the average is only meaningful
+// because every board shares the same 4 axes. Meant to be read before
+// starting a NEW board's concept, not just after the fact: if a client
+// consistently rates toward Modern/Bold/Vibrant, that's worth knowing
+// before pitching something Traditional/Muted.
+function computeTasteProfile(client) {
+  const feedbackMap = (client && client.moodBoardStyleFeedback) || {};
+  const entries = Object.values(feedbackMap).filter(fb => fb && fb.styleScale);
+  if (!entries.length) return null;
+
+  const sums = {};
+  const counts = {};
+  STYLE_AXES.forEach(axis => { sums[axis.key] = 0; counts[axis.key] = 0; });
+  let overallSum = 0;
+  let overallCount = 0;
+
+  entries.forEach(fb => {
+    STYLE_AXES.forEach(axis => {
+      const val = fb.styleScale[axis.key];
+      if (typeof val === 'number') {
+        sums[axis.key] += val;
+        counts[axis.key]++;
+      }
+    });
+    if (typeof fb.overallRating === 'number') {
+      overallSum += fb.overallRating;
+      overallCount++;
+    }
+  });
+
+  const axisAverages = {};
+  STYLE_AXES.forEach(axis => {
+    axisAverages[axis.key] = counts[axis.key] ? Math.round(sums[axis.key] / counts[axis.key]) : 50;
+  });
+
+  return {
+    axisAverages,
+    overallAverage: overallCount ? overallSum / overallCount : null,
+    boardCount: entries.length
+  };
+}
+
+function renderTasteProfile() {
+  const container = el('tasteProfileCard');
+  if (!container) return;
+  const client = currentClient();
+  const profile = client ? computeTasteProfile(client) : null;
+
+  if (!profile) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+
+  const rows = STYLE_AXES.map(axis => {
+    const val = profile.axisAverages[axis.key];
+    return `
+      <div class="scale-mini-row">
+        <span class="scale-mini-label">${axis.left}</span>
+        <div class="scale-mini-track"><div class="scale-mini-dot" style="left:${val}%;"></div></div>
+        <span class="scale-mini-label">${axis.right}</span>
+      </div>`;
+  }).join('');
+  const overallText = profile.overallAverage !== null ? profile.overallAverage.toFixed(1) + '/10' : '—';
+  const boardWord = profile.boardCount === 1 ? 'board' : 'boards';
+
+  container.style.display = 'block';
+  container.innerHTML = `
+    <h3>Client Taste Profile</h3>
+    <p class="taste-profile-hint">Averaged from ${profile.boardCount} rated ${boardWord} - use this to steer new concepts before you start building them.</p>
+    ${rows}
+    <div class="scale-mini-overall">Average Overall Fit: <strong>${overallText}</strong></div>
+  `;
+}
+
 const BOARD_CARD_THUMB_LIMIT = 5;
 
 function renderBoardCardThumbs(board) {
@@ -516,6 +631,7 @@ function renderBoardsList() {
           <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap;">
             <span class="board-category-badge">${escapeHtml(board.category || 'Other')}</span>
             ${board.sharedWithClient ? '<span class="board-shared-badge">Shared with client</span>' : ''}
+            ${renderAwaitingBadge(board, client)}
           </div>
         </div>
         <div class="board-actions">
@@ -545,6 +661,7 @@ function renderState() {
   el('emptyState').style.display = 'none';
   el('moodBoardInterface').style.display = 'block';
   resetForm();
+  renderTasteProfile();
   renderBoardsList();
 }
 

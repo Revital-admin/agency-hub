@@ -57,7 +57,7 @@
 
   <!-- Central references and Application State Controller -->
   <script src="data-store.js?v=3"></script>
-  <script src="app.js?v=80"></script>
+  <script src="app.js?v=81"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
 </head>
@@ -846,6 +846,27 @@
             </div>
             <div class="tool-card-actions">
               <button class="btn-card-go" data-go="tab-proposal">Go to Proposal Calculator &rarr;</button>
+            </div>
+          </div>
+
+          <!-- Mood Boards Awaiting Feedback: agency-wide, same shape as
+               Sales Pipeline Value above - counts every shared mood board
+               across every client with no entry yet in
+               client.moodBoardStyleFeedback. See
+               renderMoodBoardsAwaitingFeedback in app.js. -->
+          <div class="tool-progress-card">
+            <div class="tool-card-header">
+              <span class="tool-card-title">Mood Boards Awaiting Feedback</span>
+              <div class="tool-card-icon-wrap icon-purple">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5L5 21"></path></svg>
+              </div>
+            </div>
+            <div class="tool-card-stat">
+              <div id="dashMoodBoardsAwaitingVal" class="tool-stat-value">0</div>
+              <div id="dashMoodBoardsAwaitingDesc" class="tool-stat-desc">all shared boards rated</div>
+            </div>
+            <div class="tool-card-actions">
+              <button class="btn-card-go" data-go="tab-moodboard">Go to Mood Board Builder &rarr;</button>
             </div>
           </div>
 

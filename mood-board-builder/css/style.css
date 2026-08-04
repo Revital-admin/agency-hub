@@ -209,6 +209,17 @@
   border-radius: 100px;
   white-space: nowrap;
 }
+.board-awaiting-badge {
+  display: inline-block;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #f59e0b;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
 .mb-image-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
@@ -378,6 +389,15 @@
   font-style: italic;
   color: var(--color-text-secondary);
 }
+
+#tasteProfileCard h3 { margin: 0 0 4px; }
+.taste-profile-hint {
+  font-size: 12.5px;
+  color: var(--color-text-secondary);
+  margin: 0 0 14px;
+  line-height: 1.4;
+}
+#tasteProfileCard .scale-mini-row:first-of-type { margin-top: 4px; }
 
 @media (max-width: 768px) {
   .form-row { flex-direction: column; gap: 8px; }

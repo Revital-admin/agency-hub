@@ -99,6 +99,12 @@
         </div>
       </div>
 
+      <!-- Populated by renderTasteProfile() in js/app.js - averages this
+           client's style-scale ratings across every board they've rated so
+           far. Hidden (display:none, set by that function) until there's
+           at least one rated board. -->
+      <div class="step-card mt-4" id="tasteProfileCard" style="display:none;"></div>
+
       <div class="step-card mt-4">
         <h3>Mood Boards for This Client</h3>
         <div id="boardsList" style="display:flex; flex-direction:column; gap:12px; margin-top:16px;"></div>

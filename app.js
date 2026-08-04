@@ -319,6 +319,7 @@ function boot() {
   // tab - needs its own explicit first call here.
   renderSalesPipelineValue().catch(e => console.error("SalesPipelineValue Error:", e));
   renderWhosOutToday().catch(e => console.error("WhosOutToday Error:", e));
+  try { renderMoodBoardsAwaitingFeedback(); } catch (e) { console.error("MoodBoardsAwaitingFeedback Error:", e); }
 
   const resetSandboxBtn = document.getElementById("resetSandboxBtn");
   if (resetSandboxBtn) {
@@ -1209,6 +1210,7 @@ function initTabNavigation() {
       if (targetTab === "tab-dashboard") {
         renderSalesPipelineValue().catch(e => console.error("Error in renderSalesPipelineValue:", e));
         renderWhosOutToday().catch(e => console.error("Error in renderWhosOutToday:", e));
+        try { renderMoodBoardsAwaitingFeedback(); } catch (e) { console.error("Error in renderMoodBoardsAwaitingFeedback:", e); }
       }
     });
   });
@@ -1452,6 +1454,49 @@ async function renderSalesPipelineValue() {
 
   valueEl.textContent = "$" + Math.round(total).toLocaleString("en-US");
   if (countEl) countEl.textContent = count + (count === 1 ? " open proposal" : " open proposals");
+}
+
+// Same "days since" cadence as STALE_NUDGE_DAYS_THRESHOLD above - a board
+// shared this recently isn't worth flagging as slow yet, clients don't
+// always open a portal link the same day it's shared.
+const MOODBOARD_AWAITING_DAYS_THRESHOLD = 7;
+
+// Agency-wide, same reasoning as Sales Pipeline Value above: scans every
+// client's shared mood boards for ones with no entry yet in
+// moodBoardStyleFeedback (see mood-board-builder/js/app.js's saveBoard/
+// toggleShare for how boards get shared, and portal/js/app.js's
+// saveMoodBoardStyleFeedback for how a rating arrives). board.sharedAt is
+// only set going forward (added alongside this card) - a board shared
+// before that change has no sharedAt and so never counts toward the
+// "waiting Nd" figure, only toward the plain awaiting-count.
+function renderMoodBoardsAwaitingFeedback() {
+  const valueEl = document.getElementById("dashMoodBoardsAwaitingVal");
+  const descEl = document.getElementById("dashMoodBoardsAwaitingDesc");
+  if (!valueEl) return;
+
+  let awaitingCount = 0;
+  let staleCount = 0;
+  Object.values(clientsDb).forEach(client => {
+    if (!client || !Array.isArray(client.moodBoards)) return;
+    const feedbackMap = client.moodBoardStyleFeedback || {};
+    client.moodBoards.forEach(board => {
+      if (!board.sharedWithClient || feedbackMap[board.id]) return;
+      awaitingCount++;
+      const days = board.sharedAt ? Math.floor((Date.now() - new Date(board.sharedAt).getTime()) / 86400000) : null;
+      if (days !== null && days >= MOODBOARD_AWAITING_DAYS_THRESHOLD) staleCount++;
+    });
+  });
+
+  valueEl.textContent = String(awaitingCount);
+  if (descEl) {
+    if (awaitingCount === 0) {
+      descEl.textContent = "all shared boards rated";
+    } else if (staleCount > 0) {
+      descEl.textContent = `${staleCount} waiting ${MOODBOARD_AWAITING_DAYS_THRESHOLD}+ days`;
+    } else {
+      descEl.textContent = awaitingCount === 1 ? "board shared, no rating yet" : "boards shared, no rating yet";
+    }
+  }
 }
 
 // Same doc as fetchContractRenewalsByClientName, different signal: which
@@ -3755,6 +3800,28 @@ function foldInMoodBoardViews(target, publicData) {
   return changed;
 }
 
+// Same idea as foldInMoodBoardViews just above, for the style-scale
+// sliders the client drags in their Portal (see saveMoodBoardStyleFeedback
+// in portal/js/app.js). Keyed by boardId same as moodBoardViews, but this
+// one isn't strictly write-once - a client can re-rate a board after
+// changing their mind, so an incoming entry always overwrites (compared
+// by updatedAt, so an older/duplicate snapshot fire doesn't count as a
+// "change" and re-trigger a notification).
+function foldInMoodBoardStyleFeedback(target, publicData) {
+  if (!target || !publicData || !publicData.moodBoardStyleFeedback) return false;
+  if (!target.moodBoardStyleFeedback) target.moodBoardStyleFeedback = {};
+  let changed = false;
+  Object.keys(publicData.moodBoardStyleFeedback).forEach(boardId => {
+    const incoming = publicData.moodBoardStyleFeedback[boardId];
+    const current = target.moodBoardStyleFeedback[boardId];
+    if (!current || current.updatedAt !== incoming.updatedAt) {
+      target.moodBoardStyleFeedback[boardId] = incoming;
+      changed = true;
+    }
+  });
+  return changed;
+}
+
 // Appends one entry to a client's notification feed (the bell icon on
 // their portal). Admin-only to create - called from wherever the hub
 // pushes something the client needs to know about (a new approval request,
@@ -4501,6 +4568,16 @@ async function syncPublicPortalDocs(dbSnapshot) {
         foldInOnboardingChecked(localChecklist, existingData.onboardingChecklist);
         foldInApprovalDecisions(approvalsWrapper, existingData);
         foldInTestimonialSubmission(client, existingData);
+        // Same story as testimonialSubmission just above: a client's style
+        // rating is written straight to this same public doc (see
+        // saveMoodBoardStyleFeedback in portal/js/app.js), so fold in
+        // anything that arrived there before this non-merge .set() below
+        // would otherwise wipe it out. ensureClientPortalListeners also
+        // folds this into the live clientsDb continuously (same as
+        // moodBoardViews), so by the time a save happens client's own copy
+        // usually already has it too - this is the safety net for the case
+        // where a rating arrives in the gap between listener ticks.
+        foldInMoodBoardStyleFeedback(client, existingData);
         foldInNotificationReadState(localNotifications, existingData.notifications);
         // lastVisitedAt is written directly by the portal on load (see
         // portal/js/app.js) and read back into clientsDb by
@@ -4548,6 +4625,19 @@ async function syncPublicPortalDocs(dbSnapshot) {
       // from both sides - no separate fold-in-existing-doc step needed
       // here, just carry the current value forward.
       moodBoardViews: client.moodBoardViews || {},
+      // The actual mood board content (title, category, reference images/
+      // links, sharedWithClient) built in the Mood Board Builder tool.
+      // This was missing here entirely until this field was added - shared
+      // boards were never actually reaching the client-facing doc the
+      // Portal reads from, so the Portal's Mood Boards tab had nothing to
+      // show. Admin-only to create/edit, same as reportArchive above, so
+      // no fold-in-existing-progress step is needed.
+      moodBoards: client.moodBoards || [],
+      // The client's style-scale ratings for those boards (see
+      // saveMoodBoardStyleFeedback in portal/js/app.js). Folded in from the
+      // existing doc above first, so this save doesn't stomp a rating that
+      // just came in.
+      moodBoardStyleFeedback: client.moodBoardStyleFeedback || {},
       // Carried forward as-is (see preservedLastVisitedAt above) - the
       // admin never writes this, only preserves whatever the portal itself
       // already recorded so a Hub save doesn't erase it.
@@ -4649,6 +4739,24 @@ function ensureClientPortalListeners() {
           });
       }
 
+      // Same before/after-diff approach, this time capturing each board's
+      // updatedAt (not just presence) so a client re-rating a board they'd
+      // already rated still counts as new and gets its own notification.
+      const priorFeedbackStamps = {};
+      Object.entries(currentClient.moodBoardStyleFeedback || {}).forEach(([boardId, fb]) => {
+        priorFeedbackStamps[boardId] = fb && fb.updatedAt;
+      });
+      const changedMoodBoardStyleFeedback = foldInMoodBoardStyleFeedback(currentClient, data);
+      if (changedMoodBoardStyleFeedback) {
+        Object.entries(currentClient.moodBoardStyleFeedback || {})
+          .filter(([boardId, fb]) => priorFeedbackStamps[boardId] !== (fb && fb.updatedAt))
+          .forEach(([boardId, fb]) => {
+            const board = (currentClient.moodBoards || []).find(b => b.id === boardId);
+            const ratingPhrase = fb && fb.overallRating ? ` (rated ${fb.overallRating}/10)` : "";
+            pushAdminNotification("moodboard_feedback", `${name} rated the style of "${board ? board.title : "Untitled"}"${ratingPhrase}.`, name);
+          });
+      }
+
       // Portal last-visited tracking - the portal writes lastVisitedAt to
       // its own public doc on load (see portal/js/app.js); pull it into
       // clientsDb here the same way everything else client-driven arrives,
@@ -4659,10 +4767,13 @@ function ensureClientPortalListeners() {
         currentClient.portalLastVisitedAt = data.lastVisitedAt;
       }
 
-      if (changedOnboarding || changedClientChecklist || changedApprovals || changedTestimonial || changedVisit || changedMoodBoardViews || changedPendingComments) {
+      if (changedOnboarding || changedClientChecklist || changedApprovals || changedTestimonial || changedVisit || changedMoodBoardViews || changedMoodBoardStyleFeedback || changedPendingComments) {
         localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
         try { renderOnboardingChecklist(); } catch (e) {}
         try { renderDashboard(); } catch (e) {}
+        if (changedMoodBoardStyleFeedback) {
+          try { renderMoodBoardsAwaitingFeedback(); } catch (e) {}
+        }
         try {
           if (typeof iframeNeedsReload !== "undefined" && iframeNeedsReload["tab-portal"] !== undefined) {
             iframeNeedsReload["tab-portal"] = true;
@@ -4673,6 +4784,24 @@ function ensureClientPortalListeners() {
             }
           }
         } catch (e) {}
+        // A client rating/viewing a board is the one piece of this listener
+        // that's specific to the Mood Board Builder tool itself (the admin's
+        // read-only feedback summary lives there, see renderStyleScaleMini) -
+        // reload it the same way tab-portal gets reloaded above, so a
+        // rating that comes in while that tab happens to be open shows up
+        // without needing a manual client-switch to force a re-render.
+        if (changedMoodBoardViews || changedMoodBoardStyleFeedback) {
+          try {
+            if (typeof iframeNeedsReload !== "undefined" && iframeNeedsReload["tab-moodboard"] !== undefined) {
+              iframeNeedsReload["tab-moodboard"] = true;
+              const activeTabBtn = document.querySelector(".nav-item-btn.active");
+              const activeTab = activeTabBtn ? activeTabBtn.getAttribute("data-tab") : "";
+              if (activeTab === "tab-moodboard" && activeClientName === name) {
+                refreshIframeTab("tab-moodboard");
+              }
+            }
+          } catch (e) {}
+        }
       }
     }, (err) => {
       console.error("Portal listener error for", name, err);
