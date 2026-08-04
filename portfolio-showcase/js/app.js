@@ -180,8 +180,35 @@ async function generatePortfolioPdf() {
   if (typeof html2pdf !== 'undefined') {
     await html2pdf().set(opt).from(container).save();
     if (isEmbedded && window.parent.showBanner) window.parent.showBanner('success', `Generated a ${selected.length}-case-study portfolio PDF.`);
+    recordPortfolioPdfGenerated(selected.length, preparedFor);
   } else if (isEmbedded && window.parent.showBanner) {
     window.parent.showBanner('error', 'PDF library failed to load.');
+  }
+}
+
+// This tool has no Firestore doc of its own (see the file header) since
+// every case study it pulls from already lives on its client - but the
+// dashboard's Phase 1 Progress card (renderPhaseProgress in root app.js)
+// needs to know WHETHER a portfolio PDF has ever been generated at all,
+// and there's nowhere else that signal could come from (the PDF itself
+// saves straight to the browser's downloads, nothing persists). One
+// small agency-wide doc just for that. Uses firebaseSetDocFromJSON, not
+// firebaseSetDoc - see its comment in index.html for why a plain object
+// built inside this iframe's own JS realm has to cross as a JSON string.
+function recordPortfolioPdfGenerated(caseStudyCount, preparedFor) {
+  if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb || !window.parent.firebaseSetDocFromJSON) return;
+  try {
+    const ref = window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "portfolioShowcase");
+    const payload = {
+      lastGeneratedAt: new Date().toISOString(),
+      caseStudyCount: caseStudyCount,
+      preparedFor: preparedFor || ""
+    };
+    window.parent.firebaseSetDocFromJSON(ref, JSON.stringify(payload)).catch(e => {
+      console.warn("Couldn't record portfolio PDF generation:", e);
+    });
+  } catch (e) {
+    console.warn("Couldn't record portfolio PDF generation:", e);
   }
 }
 

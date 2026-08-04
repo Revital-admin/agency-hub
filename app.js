@@ -320,6 +320,7 @@ function boot() {
   renderSalesPipelineValue().catch(e => console.error("SalesPipelineValue Error:", e));
   renderWhosOutToday().catch(e => console.error("WhosOutToday Error:", e));
   try { renderMoodBoardsAwaitingFeedback(); } catch (e) { console.error("MoodBoardsAwaitingFeedback Error:", e); }
+  renderPhaseProgress().catch(e => console.error("PhaseProgress Error:", e));
 
   const resetSandboxBtn = document.getElementById("resetSandboxBtn");
   if (resetSandboxBtn) {
@@ -1211,6 +1212,7 @@ function initTabNavigation() {
         renderSalesPipelineValue().catch(e => console.error("Error in renderSalesPipelineValue:", e));
         renderWhosOutToday().catch(e => console.error("Error in renderWhosOutToday:", e));
         try { renderMoodBoardsAwaitingFeedback(); } catch (e) { console.error("Error in renderMoodBoardsAwaitingFeedback:", e); }
+        renderPhaseProgress().catch(e => console.error("Error in renderPhaseProgress:", e));
       }
     });
   });
@@ -1496,6 +1498,84 @@ function renderMoodBoardsAwaitingFeedback() {
     } else {
       descEl.textContent = awaitingCount === 1 ? "board shared, no rating yet" : "boards shared, no rating yet";
     }
+  }
+}
+
+// Tracks Phase 1 ("Prove It") of reference-docs/business_phase_roadmap.pdf
+// against its own exit trigger wording: "1-2 polished case studies with
+// testimonials, plus a real Portfolio Showcase PDF ready to hand to a
+// prospect." Deliberately NOT a literal checklist of that doc's numbered
+// tasks (those name specific clients by name and will drift as the roadmap
+// gets updated) - this tracks the same underlying signal in a way that
+// keeps working regardless of which clients are active. Re-check this
+// card's target/copy once the agency is actually through Phase 1; it's
+// written for where the business is today, not built to auto-advance
+// itself into Phase 2/3/4.
+const PHASE1_CASE_STUDY_TARGET = 2;
+
+// "Polished" mirrors the roadmap's own phrasing - not just cs.featured
+// (Portfolio Showcase's own "include in PDF" flag, a separate concern),
+// but actually having challenge/solution/results/testimonial content
+// filled in, since a case study flagged featured with empty fields isn't
+// what the roadmap means by done.
+function isPolishedCaseStudy(cs) {
+  return !!(cs && cs.challenge && cs.solution && cs.results && cs.testimonial);
+}
+
+async function renderPhaseProgress() {
+  const valueEl = document.getElementById("dashPhaseVal");
+  const descEl = document.getElementById("dashPhaseDesc");
+  const fillEl = document.getElementById("dashPhaseProgressFill");
+  const breakdownEl = document.getElementById("dashPhaseBreakdown");
+  if (!valueEl) return;
+
+  let polishedCount = 0;
+  let testimonialCount = 0;
+  Object.values(clientsDb).forEach(client => {
+    if (!client) return;
+    (client.caseStudies || []).forEach(cs => {
+      if (isPolishedCaseStudy(cs)) polishedCount++;
+    });
+    if (client.testimonialSubmission && client.testimonialSubmission.quote) testimonialCount++;
+  });
+
+  let servicesPricedCount = 0;
+  let portfolioInfo = null;
+  if (window.firebaseDb && window.firebaseDb.collection) {
+    try {
+      const pricingSnap = await window.firebaseDb.collection("agency").doc("servicePricing").get();
+      const prices = (pricingSnap.exists && pricingSnap.data().prices) || {};
+      servicesPricedCount = Object.keys(prices).length;
+    } catch (e) {
+      console.warn("Couldn't load service pricing for Phase 1 Progress:", e);
+    }
+    try {
+      const portfolioSnap = await window.firebaseDb.collection("agency").doc("portfolioShowcase").get();
+      portfolioInfo = portfolioSnap.exists ? portfolioSnap.data() : null;
+    } catch (e) {
+      console.warn("Couldn't load portfolio showcase status for Phase 1 Progress:", e);
+    }
+  }
+
+  valueEl.textContent = `${Math.min(polishedCount, PHASE1_CASE_STUDY_TARGET)}/${PHASE1_CASE_STUDY_TARGET}`;
+  if (descEl) {
+    descEl.textContent = polishedCount >= PHASE1_CASE_STUDY_TARGET
+      ? "polished case studies ready"
+      : "polished case studies (challenge/solution/results/testimonial all filled in)";
+  }
+  if (fillEl) {
+    fillEl.style.width = `${Math.min(100, Math.round((polishedCount / PHASE1_CASE_STUDY_TARGET) * 100))}%`;
+  }
+
+  if (breakdownEl) {
+    const pdfLine = portfolioInfo && portfolioInfo.lastGeneratedAt
+      ? `Portfolio Showcase PDF generated ${new Date(portfolioInfo.lastGeneratedAt).toLocaleDateString()}`
+      : "Portfolio Showcase PDF not generated yet";
+    breakdownEl.innerHTML = `
+      <div>${testimonialCount} client${testimonialCount === 1 ? "" : "s"} with a submitted testimonial</div>
+      <div>${pdfLine}</div>
+      <div>${servicesPricedCount} service${servicesPricedCount === 1 ? "" : "s"} priced in Service Pricing Admin</div>
+    `;
   }
 }
 
