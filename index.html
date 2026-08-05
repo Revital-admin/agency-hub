@@ -57,7 +57,7 @@
 
   <!-- Central references and Application State Controller -->
   <script src="data-store.js?v=3"></script>
-  <script src="app.js?v=88"></script>
+  <script src="app.js?v=89"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
 </head>
@@ -736,6 +736,10 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"></path><circle cx="12" cy="12" r="9"></circle></svg>
           <span>Activity Log</span>
         </button>
+        <button class="footer-btn btn-secondary-outline nav-item-btn" data-tab="tab-businessroadmap" id="businessRoadmapFooterBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"></path></svg>
+          <span>Business Roadmap</span>
+        </button>
         <button id="exportDataBtn" class="footer-btn btn-secondary-outline">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           <span>Export Full Backup</span>
@@ -824,33 +828,6 @@
           <!-- Activity Feed -->
 
           <h3 class="dashboard-section-title">Agency-Wide</h3>
-          <!-- Phase 1 Progress: tracks the current phase of
-               reference-docs/business_phase_roadmap.pdf's exit trigger
-               ("1-2 polished case studies with testimonials, plus a real
-               Portfolio Showcase PDF ready to hand to a prospect"), not a
-               literal copy of that doc's task list. See renderPhaseProgress
-               in app.js - revisit this card's target/copy once the agency
-               moves into Phase 2. -->
-          <div class="tool-progress-card">
-            <div class="tool-card-header">
-              <span class="tool-card-title">Phase 1 Progress: Prove It</span>
-              <div class="tool-card-icon-wrap icon-purple">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"></path></svg>
-              </div>
-            </div>
-            <div class="tool-card-stat">
-              <div id="dashPhaseVal" class="tool-stat-value">0/2</div>
-              <div id="dashPhaseDesc" class="tool-stat-desc">polished case studies (challenge/solution/results/testimonial all filled in)</div>
-            </div>
-            <div class="progress-bar-container">
-              <div class="progress-fill" style="width: 0%;" id="dashPhaseProgressFill"></div>
-            </div>
-            <div id="dashPhaseBreakdown" style="margin-top: 10px; font-size: 0.8rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 3px;"></div>
-            <div class="tool-card-actions">
-              <button class="btn-card-go" data-go="tab-casestudy">Go to Case Study Builder &rarr;</button>
-            </div>
-          </div>
-
           <!-- Sales Pipeline Value: agency-wide, unlike every other card on
                this dashboard (which are all scoped to the active client) -
                sums Proposal Calculator's computedMonthly across every
@@ -1269,6 +1246,47 @@
         <p id="myClientsEmpty" style="display:none; color:var(--text-muted); font-size:0.9rem; max-width:600px;">
           No clients are assigned to you yet - the Account Manager Name/Email on a client's Client Portal Manager page decides who shows up here.
         </p>
+      </section>
+
+      <!-- ── SECTION: BUSINESS ROADMAP (admin/leadership-only - gated in
+           applyTeamAccessRestrictions alongside Team Access, Service
+           Pricing Admin, Subscription Tracker, Business Insurance, and
+           Activity Log; see businessRoadmapFooterBtn in the sidebar
+           footer) ── Moved off the Overview Dashboard's Agency-Wide
+           section: the Hub is for doing client work, and a business-
+           strategy milestone card didn't belong mixed in with day-to-day
+           operational cards like Sales Pipeline Value. Same
+           renderPhaseProgress() in app.js and same dashPhase* element ids
+           as before - just its own page now instead of a dashboard card. -->
+      <section id="tab-businessroadmap" class="tab-section">
+        <div class="site-header">
+          <div class="header-eyebrow">
+            <span class="dot"></span>
+            <span>Leadership</span>
+          </div>
+          <h1 class="site-title">Business <em>Roadmap</em></h1>
+          <p class="site-subtitle">Where the agency stands against the Business Phase Roadmap's current phase. Internal only - never shown to clients.</p>
+        </div>
+
+        <div class="tool-progress-card" style="max-width: 480px;">
+          <div class="tool-card-header">
+            <span class="tool-card-title">Phase 1 Progress: Prove It</span>
+            <div class="tool-card-icon-wrap icon-purple">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"></path></svg>
+            </div>
+          </div>
+          <div class="tool-card-stat">
+            <div id="dashPhaseVal" class="tool-stat-value">0/2</div>
+            <div id="dashPhaseDesc" class="tool-stat-desc">polished case studies (challenge/solution/results/testimonial all filled in)</div>
+          </div>
+          <div class="progress-bar-container">
+            <div class="progress-fill" style="width: 0%;" id="dashPhaseProgressFill"></div>
+          </div>
+          <div id="dashPhaseBreakdown" style="margin-top: 10px; font-size: 0.8rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 3px;"></div>
+          <div class="tool-card-actions">
+            <button class="btn-card-go" data-go="tab-casestudy">Go to Case Study Builder &rarr;</button>
+          </div>
+        </div>
       </section>
 
       <!-- ── SECTION: INTAKE REQUEST GEN ── -->

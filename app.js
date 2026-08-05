@@ -250,6 +250,14 @@ function applyTeamAccessRestrictions(allowedSections) {
     activityLogBtn.style.display = allowedSections ? 'none' : '';
   }
 
+  // Business Roadmap is a leadership status view, not client-work
+  // tooling - same admin/leadership-only footer gating as the rest of
+  // this list.
+  const businessRoadmapBtn = document.getElementById('businessRoadmapFooterBtn');
+  if (businessRoadmapBtn) {
+    businessRoadmapBtn.style.display = allowedSections ? 'none' : '';
+  }
+
   // If restrictions just hid whatever tab the user was looking at,
   // land them on the first tab they're still allowed to see instead
   // of leaving them on a now-hidden section.
@@ -320,7 +328,10 @@ function boot() {
   renderSalesPipelineValue().catch(e => console.error("SalesPipelineValue Error:", e));
   renderWhosOutToday().catch(e => console.error("WhosOutToday Error:", e));
   try { renderMoodBoardsAwaitingFeedback(); } catch (e) { console.error("MoodBoardsAwaitingFeedback Error:", e); }
-  renderPhaseProgress().catch(e => console.error("PhaseProgress Error:", e));
+  // renderPhaseProgress() no longer needs a boot-time call here - it
+  // moved off the (default-active-at-boot) dashboard onto its own
+  // tab-businessroadmap page, which renders lazily like every other
+  // non-default tab (see the tab-click handler in initTabNavigation).
 
   const resetSandboxBtn = document.getElementById("resetSandboxBtn");
   if (resetSandboxBtn) {
@@ -1269,6 +1280,12 @@ function initTabNavigation() {
         renderSalesPipelineValue().catch(e => console.error("Error in renderSalesPipelineValue:", e));
         renderWhosOutToday().catch(e => console.error("Error in renderWhosOutToday:", e));
         try { renderMoodBoardsAwaitingFeedback(); } catch (e) { console.error("Error in renderMoodBoardsAwaitingFeedback:", e); }
+      }
+      // Moved off the dashboard onto its own admin-only page (see
+      // tab-businessroadmap in index.html) - rendered on open rather than
+      // as part of every dashboard save, same reasoning as My Clients/
+      // Activity Log above.
+      if (targetTab === "tab-businessroadmap") {
         renderPhaseProgress().catch(e => console.error("Error in renderPhaseProgress:", e));
       }
     });
