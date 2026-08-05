@@ -5315,72 +5315,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// ── Activity Feed Logic ──
-window.addActivityLog = function(action, clientName) {
-  if (window.firebaseSetDoc && window.firebaseDoc && window.firebaseDb) {
-    const log = {
-      action: action,
-      client: clientName || activeClientName,
-      timestamp: Date.now()
-    };
-    
-    // We store an array of the last 50 logs in a separate document
-    const docRef = window.firebaseDoc(window.firebaseDb, "agency", "activityLog");
-    
-    // Read current first, then append. To prevent race conditions in a real production app we'd use arrayUnion, 
-    // but for this MVP we'll just push locally and save, because we have a snapshot listener anyway.
-    
-    if (!window.agencyActivityLogs) window.agencyActivityLogs = [];
-    window.agencyActivityLogs.unshift(log);
-    if (window.agencyActivityLogs.length > 50) window.agencyActivityLogs.pop();
-    
-    window.firebaseSetDoc(docRef, { logs: window.agencyActivityLogs }).catch(err => console.error("Log error", err));
-  }
-};
-
-document.addEventListener("DOMContentLoaded", () => {
-  // Listen to Activity Feed
-  setTimeout(() => {
-    if (window.firebaseOnSnapshot && window.firebaseDoc && window.firebaseDb) {
-      const docRef = window.firebaseDoc(window.firebaseDb, "agency", "activityLog");
-      window.firebaseOnSnapshot(docRef, (docSnap) => {
-        const listEl = document.getElementById('activityFeedList');
-        if (!listEl) return;
-        
-        if (docSnap.exists) {
-          const data = docSnap.data();
-          window.agencyActivityLogs = data.logs || [];
-          
-          if (window.agencyActivityLogs.length === 0) {
-            listEl.innerHTML = '<div style="color: var(--color-text-secondary); font-size: 0.9rem;">No recent activity.</div>';
-            return;
-          }
-          
-          listEl.innerHTML = window.agencyActivityLogs.map(log => {
-            const timeStr = new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            return `
-              <div style="display: flex; gap: 8px; align-items: flex-start; padding-bottom: 8px; border-bottom: 1px solid var(--border-color);">
-                <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--color-primary); margin-top: 5px; flex-shrink: 0;"></div>
-                <div style="flex: 1; min-width: 0;">
-                  <div style="color: var(--color-text); font-size: 0.82rem;">${log.action}</div>
-                  <div style="color: var(--color-text-secondary); font-size: 0.7rem; margin-top: 2px;">
-                    <span style="color: var(--color-primary);">${log.client}</span> &bull; ${timeStr}
-                  </div>
-                </div>
-              </div>
-            `;
-          }).join('');
-        } else {
-          listEl.innerHTML = '<div style="color: var(--color-text-secondary); font-size: 0.9rem;">No recent activity.</div>';
-        }
-      });
-    }
-  }, 2000); // slight delay to wait for Firebase init
-});
-
-// Hook into critical actions
-const originalCreateClient = window.createClientBlankState;
-window.createClientBlankState = function(name) {
-  if (window.addActivityLog) window.addActivityLog("Created new client workspace", name);
-  return originalCreateClient(name);
-};
+// The dashboard's old "Live Activity Feed" card (and this whole
+// agency/activityLog doc + createClientBlankState hook that fed it) was
+// removed - it only ever logged one event ("Created new client
+// workspace"), and that same event is already captured with more detail
+// in agency/adminActivityLog (see logAdminActivity, called from
+// createNewClient with the client's name as `details`) and viewable in
+// the Activity Log tool. Nothing else in the Hub read agency/activityLog
+// or window.agencyActivityLogs, so removing the writer here loses no
+// data that wasn't already duplicated elsewhere. The old Firestore
+// document itself (agency/activityLog) is simply orphaned now, not
+// deleted - harmless, nothing reads or writes it anymore.
