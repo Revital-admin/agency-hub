@@ -328,6 +328,7 @@ function boot() {
   renderSalesPipelineValue().catch(e => console.error("SalesPipelineValue Error:", e));
   renderWhosOutToday().catch(e => console.error("WhosOutToday Error:", e));
   try { renderMoodBoardsAwaitingFeedback(); } catch (e) { console.error("MoodBoardsAwaitingFeedback Error:", e); }
+  renderNeedsAttention().catch(e => console.error("NeedsAttention Error:", e));
   // renderPhaseProgress() no longer needs a boot-time call here - it
   // moved off the (default-active-at-boot) dashboard onto its own
   // tab-businessroadmap page, which renders lazily like every other
@@ -1280,6 +1281,7 @@ function initTabNavigation() {
         renderSalesPipelineValue().catch(e => console.error("Error in renderSalesPipelineValue:", e));
         renderWhosOutToday().catch(e => console.error("Error in renderWhosOutToday:", e));
         try { renderMoodBoardsAwaitingFeedback(); } catch (e) { console.error("Error in renderMoodBoardsAwaitingFeedback:", e); }
+        renderNeedsAttention().catch(e => console.error("Error in renderNeedsAttention:", e));
       }
       // Moved off the dashboard onto its own admin-only page (see
       // tab-businessroadmap in index.html) - rendered on open rather than
@@ -1576,6 +1578,100 @@ function renderMoodBoardsAwaitingFeedback() {
       descEl.textContent = awaitingCount === 1 ? "board shared, no rating yet" : "boards shared, no rating yet";
     }
   }
+}
+
+// Needs Attention: consolidates three signals that already exist as
+// separate mechanisms elsewhere - runStaleClientNudgeCheck's stale-portal
+// check, runRenewalNudgeCheck's upcoming-renewal check, and
+// renderMoodBoardsAwaitingFeedback's per-board threshold - into one
+// glanceable agency-wide list instead of three separate places to check.
+// Deliberately reads clientsDb directly rather than adminNotifications:
+// the bell's nudge history is cooldown-gated (STALE_NUDGE_COOLDOWN_MS /
+// RENEWAL_NUDGE_COOLDOWN_MS - so it won't re-show something you were
+// already pinged about recently), but this card answers "what's
+// outstanding right now", so it should always reflect current state
+// regardless of nudge cooldowns. Thresholds/constants (STALE_NUDGE_
+// DAYS_THRESHOLD, RENEWAL_NUDGE_DAYS_THRESHOLD, MOODBOARD_AWAITING_
+// DAYS_THRESHOLD) are shared with those existing checks further down
+// this file - referencing them here rather than duplicating the numbers
+// keeps this card in lockstep with whatever those nudges consider
+// "worth flagging".
+async function renderNeedsAttention() {
+  const el = document.getElementById("needsAttentionList");
+  if (!el) return;
+
+  const now = Date.now();
+  const sandboxName = "Quick Sandbox (One-Offs)";
+  const items = [];
+
+  Object.entries(clientsDb).forEach(([name, client]) => {
+    if (!client || name === sandboxName) return;
+
+    if (client.portalConfig && client.portalConfig.magicToken) {
+      // Same signal as runStaleClientNudgeCheck.
+      const pendingCount = Array.isArray(client.pendingApprovals) ? client.pendingApprovals.length : 0;
+      if (pendingCount > 0) {
+        const lastVisited = client.portalLastVisitedAt ? new Date(client.portalLastVisitedAt).getTime() : null;
+        const daysSinceVisit = lastVisited ? Math.floor((now - lastVisited) / 86400000) : null;
+        if (daysSinceVisit === null || daysSinceVisit >= STALE_NUDGE_DAYS_THRESHOLD) {
+          const visitPhrase = daysSinceVisit === null ? "never opened portal" : `no portal visit in ${daysSinceVisit}d`;
+          const approvalPhrase = pendingCount === 1 ? "1 approval" : `${pendingCount} approvals`;
+          items.push({ name, urgency: daysSinceVisit === null ? 9999 : 1000 + daysSinceVisit, message: `${approvalPhrase} waiting, ${visitPhrase}` });
+        }
+      }
+
+      // Same signal as runRenewalNudgeCheck.
+      const rec = client.renewal;
+      if (rec && rec.renewalDate && (rec.status === 'On Track' || rec.status === 'At Risk')) {
+        const days = Math.round((new Date(rec.renewalDate) - new Date(new Date().toDateString())) / 86400000);
+        if (!Number.isNaN(days) && days <= RENEWAL_NUDGE_DAYS_THRESHOLD) {
+          const phrase = days < 0 ? `renewal overdue by ${Math.abs(days)}d` : days === 0 ? "renews today" : `renews in ${days}d`;
+          items.push({ name, urgency: days < 0 ? 2000 + Math.abs(days) : (RENEWAL_NUDGE_DAYS_THRESHOLD - days), message: phrase });
+        }
+      }
+    }
+
+    // Same per-board threshold as renderMoodBoardsAwaitingFeedback, rolled
+    // up per client here instead of as a single agency-wide count.
+    if (Array.isArray(client.moodBoards)) {
+      const feedbackMap = client.moodBoardStyleFeedback || {};
+      let staleBoards = 0;
+      let oldestDays = 0;
+      client.moodBoards.forEach(board => {
+        if (!board.sharedWithClient || feedbackMap[board.id]) return;
+        const days = board.sharedAt ? Math.floor((now - new Date(board.sharedAt).getTime()) / 86400000) : null;
+        if (days !== null && days >= MOODBOARD_AWAITING_DAYS_THRESHOLD) {
+          staleBoards++;
+          oldestDays = Math.max(oldestDays, days);
+        }
+      });
+      if (staleBoards > 0) {
+        const boardPhrase = staleBoards === 1 ? "1 mood board" : `${staleBoards} mood boards`;
+        items.push({ name, urgency: oldestDays, message: `${boardPhrase} awaiting feedback ${oldestDays}+ days` });
+      }
+    }
+  });
+
+  if (items.length === 0) {
+    el.innerHTML = `<div style="color: var(--color-text-muted);">Nothing needs attention right now.</div>`;
+    return;
+  }
+
+  items.sort((a, b) => b.urgency - a.urgency);
+
+  el.innerHTML = items.map(item => `
+    <div class="needs-attention-row" data-client="${escapeHtmlCore(item.name)}" style="padding:5px 0; cursor:pointer; display:flex; justify-content:space-between; gap:10px; align-items:baseline; border-bottom:1px solid var(--border-color, rgba(255,255,255,0.06));">
+      <span><strong>${escapeHtmlCore(item.name)}</strong> &middot; ${escapeHtmlCore(item.message)}</span>
+      <span style="color:var(--color-text-muted); font-size:0.72rem; white-space:nowrap;">Open &rarr;</span>
+    </div>
+  `).join("");
+
+  el.querySelectorAll(".needs-attention-row").forEach(row => {
+    row.addEventListener("click", () => {
+      switchClient(row.getAttribute("data-client"));
+      navigateToTab("tab-dashboard");
+    });
+  });
 }
 
 // Tracks Phase 1 ("Prove It") of reference-docs/business_phase_roadmap.pdf

@@ -57,7 +57,7 @@
 
   <!-- Central references and Application State Controller -->
   <script src="data-store.js?v=3"></script>
-  <script src="app.js?v=90"></script>
+  <script src="app.js?v=91"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
 </head>
@@ -828,6 +828,21 @@
           <!-- Activity Feed -->
 
           <h3 class="dashboard-section-title">Agency-Wide</h3>
+          <!-- Needs Attention: consolidates three signals that already
+               exist as separate mechanisms elsewhere (stale-portal nudge,
+               upcoming-renewal nudge, mood boards awaiting feedback) into
+               one glanceable list instead of three places to check. See
+               renderNeedsAttention in app.js. -->
+          <div class="tool-progress-card">
+            <div class="tool-card-header">
+              <span class="tool-card-title">Needs Attention</span>
+              <div class="tool-card-icon-wrap icon-purple">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+              </div>
+            </div>
+            <div id="needsAttentionList" style="font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 8px;">Loading...</div>
+          </div>
+
           <!-- Sales Pipeline Value: agency-wide, unlike every other card on
                this dashboard (which are all scoped to the active client) -
                sums Proposal Calculator's computedMonthly across every
