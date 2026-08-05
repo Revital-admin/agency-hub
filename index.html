@@ -57,7 +57,7 @@
 
   <!-- Central references and Application State Controller -->
   <script src="data-store.js?v=3"></script>
-  <script src="app.js?v=92"></script>
+  <script src="app.js?v=93"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
 </head>
@@ -861,6 +861,25 @@
             </div>
             <div class="tool-card-actions">
               <button class="btn-card-go" data-go="tab-proposal">Go to Proposal Calculator &rarr;</button>
+            </div>
+          </div>
+
+          <!-- Lead Source ROI: combines Client Intake Pre-Qualifier's
+               leadSource field (client.intakeQualifier.data.leadSource) with
+               Contract & Invoice Tracker's Signed+paying clients to show
+               which lead sources actually turn into revenue - closes the
+               loop those two tools never connected before. See
+               renderLeadSourceRoi in app.js. -->
+          <div class="tool-progress-card">
+            <div class="tool-card-header">
+              <span class="tool-card-title">Lead Source ROI</span>
+              <div class="tool-card-icon-wrap icon-purple">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              </div>
+            </div>
+            <div id="leadSourceRoiList" style="font-size: 0.85rem; color: var(--color-text-secondary); margin-top: 8px;">Loading...</div>
+            <div class="tool-card-actions">
+              <button class="btn-card-go" data-go="tab-intakequalifier">Go to Intake Pre-Qualifier &rarr;</button>
             </div>
           </div>
 

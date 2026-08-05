@@ -345,6 +345,7 @@ function boot() {
   renderWhosOutToday().catch(e => console.error("WhosOutToday Error:", e));
   try { renderMoodBoardsAwaitingFeedback(); } catch (e) { console.error("MoodBoardsAwaitingFeedback Error:", e); }
   renderNeedsAttention().catch(e => console.error("NeedsAttention Error:", e));
+  renderLeadSourceRoi().catch(e => console.error("LeadSourceRoi Error:", e));
   // renderPhaseProgress() no longer needs a boot-time call here - it
   // moved off the (default-active-at-boot) dashboard onto its own
   // tab-businessroadmap page, which renders lazily like every other
@@ -1298,6 +1299,7 @@ function initTabNavigation() {
         renderWhosOutToday().catch(e => console.error("Error in renderWhosOutToday:", e));
         try { renderMoodBoardsAwaitingFeedback(); } catch (e) { console.error("Error in renderMoodBoardsAwaitingFeedback:", e); }
         renderNeedsAttention().catch(e => console.error("Error in renderNeedsAttention:", e));
+        renderLeadSourceRoi().catch(e => console.error("Error in renderLeadSourceRoi:", e));
       }
       // Moved off the dashboard onto its own admin-only page (see
       // tab-businessroadmap in index.html) - rendered on open rather than
@@ -1435,6 +1437,7 @@ function refreshAllViews() {
   runProposalFollowupNudgeCheck().catch(e => console.error("Error in runProposalFollowupNudgeCheck:", e));
   runInsuranceRenewalNudgeCheck().catch(e => console.error("Error in runInsuranceRenewalNudgeCheck:", e));
   runSubscriptionRenewalNudgeCheck().catch(e => console.error("Error in runSubscriptionRenewalNudgeCheck:", e));
+  runScopeCreepNudgeCheck().catch(e => console.error("Error in runScopeCreepNudgeCheck:", e));
 
   // Toggle Sandbox Banner
   const sandboxName = "Quick Sandbox (One-Offs)";
@@ -1600,6 +1603,82 @@ function renderMoodBoardsAwaitingFeedback() {
   }
 }
 
+// Matches Client Intake Pre-Qualifier's leadSource <select> options
+// (intake-prequalifier/index.html) - kept here rather than imported
+// across the iframe boundary, same "each caller stays self-contained"
+// convention as parsePhaseAmountToNumber above.
+const LEAD_SOURCE_LABELS = {
+  referral: "Referral",
+  cold_outreach: "Cold Outreach",
+  website: "Website",
+  social_media: "Social Media",
+  networking: "Networking",
+  partner: "Partner",
+  other: "Other"
+};
+
+// Lead Source ROI: closes a loop nothing previously connected. Client
+// Intake Pre-Qualifier already captures leadSource per client
+// (client.intakeQualifier.data.leadSource - only set for clients who
+// actually went through that tool, so clients onboarded without it
+// simply don't contribute a source rather than counting as
+// unattributed noise), and Contract & Invoice Tracker already knows
+// who's Signed with a real invoiceAmount (same "paying, not just
+// signed at $0" filter as renderPhase2Preview's parsePhaseAmountToNumber
+// use). Shows win rate + attributed MRR per source so it's visible
+// which channels are actually worth the effort.
+async function renderLeadSourceRoi() {
+  const el = document.getElementById("leadSourceRoiList");
+  if (!el) return;
+
+  const sandboxName = "Quick Sandbox (One-Offs)";
+  const bySource = {};
+  Object.entries(clientsDb).forEach(([name, client]) => {
+    if (!client || name === sandboxName) return;
+    const source = client.intakeQualifier && client.intakeQualifier.data && client.intakeQualifier.data.leadSource;
+    if (!source) return;
+    if (!bySource[source]) bySource[source] = { total: 0, names: [] };
+    bySource[source].total++;
+    bySource[source].names.push(name);
+  });
+
+  if (Object.keys(bySource).length === 0) {
+    el.innerHTML = `<div style="color: var(--color-text-muted);">No lead source data yet - run new prospects through the Client Intake Pre-Qualifier to start tracking this.</div>`;
+    return;
+  }
+
+  let revenueByName = {};
+  if (window.firebaseDb && window.firebaseDb.collection) {
+    try {
+      const snap = await window.firebaseDb.collection("agency").doc("contractInvoices").get();
+      const list = (snap.exists && snap.data().list) || [];
+      list.forEach(r => {
+        if (r.contractStatus !== 'Signed') return;
+        const amt = parsePhaseAmountToNumber(r.invoiceAmount);
+        if (amt > 0) revenueByName[r.clientName] = amt;
+      });
+    } catch (e) {
+      console.warn("Couldn't load contract data for Lead Source ROI:", e);
+    }
+  }
+
+  const rows = Object.entries(bySource).map(([source, data]) => {
+    const won = data.names.filter(name => Object.prototype.hasOwnProperty.call(revenueByName, name));
+    const revenue = won.reduce((sum, name) => sum + revenueByName[name], 0);
+    return { label: LEAD_SOURCE_LABELS[source] || source, total: data.total, wonCount: won.length, revenue };
+  }).sort((a, b) => b.revenue - a.revenue || b.wonCount - a.wonCount);
+
+  el.innerHTML = rows.map(r => {
+    const pct = r.total > 0 ? Math.round((r.wonCount / r.total) * 100) : 0;
+    return `
+      <div style="padding:4px 0; display:flex; justify-content:space-between; gap:10px; align-items:baseline; border-bottom:1px solid var(--border-color, rgba(255,255,255,0.06));">
+        <span><strong>${escapeHtmlCore(r.label)}</strong> &middot; ${r.wonCount}/${r.total} signed (${pct}%)</span>
+        <span style="color:var(--color-text-muted); font-size:0.78rem; white-space:nowrap;">${r.revenue > 0 ? '$' + r.revenue.toLocaleString() + '/mo' : '--'}</span>
+      </div>
+    `;
+  }).join("");
+}
+
 // Needs Attention: consolidates three signals that already exist as
 // separate mechanisms elsewhere - runStaleClientNudgeCheck's stale-portal
 // check, runRenewalNudgeCheck's upcoming-renewal check, and
@@ -1704,6 +1783,51 @@ async function renderNeedsAttention() {
     }
   }
 
+  // Scope creep: same signal as runScopeCreepNudgeCheck - a client with
+  // SCOPE_CREEP_OPEN_REVISIONS_THRESHOLD+ open revisions (matching Agency
+  // Health Dashboard's heavyRevisions bar) and no Pending/Approved change
+  // order already covering them. goTab sends this row straight to Change
+  // Order Generator instead of the dashboard, since that's the actual next
+  // action - see the goTab handling in the click wiring below.
+  if (window.firebaseDb && window.firebaseDb.collection) {
+    try {
+      const [revSnap, coSnap] = await Promise.all([
+        window.firebaseDb.collection("agency").doc("revisionFeedbackLog").get(),
+        window.firebaseDb.collection("agency").doc("changeOrders").get()
+      ]);
+      const revisions = (revSnap.exists && revSnap.data().list) || [];
+      const changeOrders = (coSnap.exists && coSnap.data().list) || [];
+
+      const openByClient = {};
+      revisions.forEach(r => {
+        if (!r.clientName || r.dateResolved) return;
+        if (!openByClient[r.clientName]) openByClient[r.clientName] = [];
+        openByClient[r.clientName].push(r);
+      });
+
+      Object.entries(openByClient).forEach(([clientName, openRows]) => {
+        if (openRows.length < SCOPE_CREEP_OPEN_REVISIONS_THRESHOLD) return;
+
+        const oldestRequestDate = openRows.map(r => r.dateRequested).filter(Boolean).sort()[0];
+        const alreadyCovered = changeOrders.some(co =>
+          co.clientName === clientName &&
+          (co.status === 'Pending' || co.status === 'Approved') &&
+          (!oldestRequestDate || !co.dateCreated || co.dateCreated >= oldestRequestDate)
+        );
+        if (alreadyCovered) return;
+
+        items.push({
+          name: clientName,
+          urgency: 900 + openRows.length,
+          message: `${openRows.length} open revisions, no change order in motion`,
+          goTab: 'tab-changeorder'
+        });
+      });
+    } catch (e) {
+      console.warn("Couldn't load revisions/change orders for Needs Attention:", e);
+    }
+  }
+
   if (items.length === 0) {
     el.innerHTML = `<div style="color: var(--color-text-muted);">Nothing needs attention right now.</div>`;
     return;
@@ -1712,7 +1836,7 @@ async function renderNeedsAttention() {
   items.sort((a, b) => b.urgency - a.urgency);
 
   el.innerHTML = items.map(item => `
-    <div class="needs-attention-row" data-client="${escapeHtmlCore(item.name)}" style="padding:5px 0; cursor:pointer; display:flex; justify-content:space-between; gap:10px; align-items:baseline; border-bottom:1px solid var(--border-color, rgba(255,255,255,0.06));">
+    <div class="needs-attention-row" data-client="${escapeHtmlCore(item.name)}" data-go-tab="${escapeHtmlCore(item.goTab || 'tab-dashboard')}" style="padding:5px 0; cursor:pointer; display:flex; justify-content:space-between; gap:10px; align-items:baseline; border-bottom:1px solid var(--border-color, rgba(255,255,255,0.06));">
       <span><strong>${escapeHtmlCore(item.name)}</strong> &middot; ${escapeHtmlCore(item.message)}</span>
       <span style="color:var(--color-text-muted); font-size:0.72rem; white-space:nowrap;">Open &rarr;</span>
     </div>
@@ -1721,7 +1845,7 @@ async function renderNeedsAttention() {
   el.querySelectorAll(".needs-attention-row").forEach(row => {
     row.addEventListener("click", () => {
       switchClient(row.getAttribute("data-client"));
-      navigateToTab("tab-dashboard");
+      navigateToTab(row.getAttribute("data-go-tab") || "tab-dashboard");
     });
   });
 }
@@ -4800,6 +4924,73 @@ async function runSubscriptionRenewalNudgeCheck() {
     const phrase = days === 0 ? "renews today" : `renews in ${days}d`;
     const cost = Math.round(parseFloat(entry.monthlyCost) || 0);
     pushAdminNotification('subscription_renewal', `${entry.toolName || 'Subscription'} ${phrase} ($${cost}/mo) - review in Subscription Tracker.`, entry.id, null);
+  });
+}
+
+// Matches Agency Health Dashboard's heavyRevisions bar exactly (see
+// buildRows there: "const heavyRevisions = openRevisions >= 3").
+const SCOPE_CREEP_OPEN_REVISIONS_THRESHOLD = 3;
+
+const SCOPE_CREEP_NUDGE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const SCOPE_CREEP_NUDGE_COOLDOWN_MS = 5 * 24 * 60 * 60 * 1000; // shorter than most - active scope disputes move faster than renewals/insurance
+let lastScopeCreepNudgeCheckAt = 0;
+
+// Agency Health Dashboard already flags 3+ open revisions as "heavy" (a
+// badge in its table), but nothing ever prompted anyone toward the tool
+// that actually generates the paperwork for it. Reads
+// agency/revisionFeedbackLog (open = !dateResolved, same as that
+// dashboard) and agency/changeOrders directly since revisions aren't
+// clientsDb data. A client is only flagged if there's no Pending/Approved
+// change order already covering the current batch - "covering" means
+// created on or after the oldest still-open revision's request date, so
+// an old change order from a previous, already-resolved dispute doesn't
+// silently suppress a fresh one.
+async function runScopeCreepNudgeCheck() {
+  const now = Date.now();
+  if (now - lastScopeCreepNudgeCheckAt < SCOPE_CREEP_NUDGE_CHECK_INTERVAL_MS) return;
+  lastScopeCreepNudgeCheckAt = now;
+  if (!window.firebaseDb || !window.firebaseDb.collection) return;
+
+  let revisions = [];
+  let changeOrders = [];
+  try {
+    const [revSnap, coSnap] = await Promise.all([
+      window.firebaseDb.collection("agency").doc("revisionFeedbackLog").get(),
+      window.firebaseDb.collection("agency").doc("changeOrders").get()
+    ]);
+    revisions = (revSnap.exists && revSnap.data().list) || [];
+    changeOrders = (coSnap.exists && coSnap.data().list) || [];
+  } catch (e) {
+    console.warn("Couldn't load revisions/change orders for scope-creep nudge check:", e);
+    return;
+  }
+
+  const openByClient = {};
+  revisions.forEach(r => {
+    if (!r.clientName || r.dateResolved) return;
+    if (!openByClient[r.clientName]) openByClient[r.clientName] = [];
+    openByClient[r.clientName].push(r);
+  });
+
+  Object.entries(openByClient).forEach(([name, openRows]) => {
+    if (openRows.length < SCOPE_CREEP_OPEN_REVISIONS_THRESHOLD) return;
+
+    const oldestRequestDate = openRows.map(r => r.dateRequested).filter(Boolean).sort()[0];
+    const alreadyCovered = changeOrders.some(co =>
+      co.clientName === name &&
+      (co.status === 'Pending' || co.status === 'Approved') &&
+      (!oldestRequestDate || !co.dateCreated || co.dateCreated >= oldestRequestDate)
+    );
+    if (alreadyCovered) return;
+
+    const alreadyNudged = adminNotifications.some(n =>
+      n.type === 'scope_creep' &&
+      n.clientName === name &&
+      (now - new Date(n.createdAt).getTime()) < SCOPE_CREEP_NUDGE_COOLDOWN_MS
+    );
+    if (alreadyNudged) return;
+
+    pushAdminNotification('scope_creep', `${name} has ${openRows.length} open revisions and no change order in motion - may be worth a scope conversation.`, name, null);
   });
 }
 
