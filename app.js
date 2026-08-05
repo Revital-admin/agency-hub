@@ -1438,6 +1438,9 @@ function refreshAllViews() {
   runInsuranceRenewalNudgeCheck().catch(e => console.error("Error in runInsuranceRenewalNudgeCheck:", e));
   runSubscriptionRenewalNudgeCheck().catch(e => console.error("Error in runSubscriptionRenewalNudgeCheck:", e));
   runScopeCreepNudgeCheck().catch(e => console.error("Error in runScopeCreepNudgeCheck:", e));
+  try { runStaleApprovalNudgeCheck(); } catch (e) { console.error("Error in runStaleApprovalNudgeCheck:", e); }
+  try { runHeavyActionItemsNudgeCheck(); } catch (e) { console.error("Error in runHeavyActionItemsNudgeCheck:", e); }
+  try { runStaleContactNudgeCheck(); } catch (e) { console.error("Error in runStaleContactNudgeCheck:", e); }
 
   // Toggle Sandbox Banner
   const sandboxName = "Quick Sandbox (One-Offs)";
@@ -1728,6 +1731,16 @@ async function renderNeedsAttention() {
           items.push({ name, urgency: days < 0 ? 2000 + Math.abs(days) : (RENEWAL_NUDGE_DAYS_THRESHOLD - days), message: phrase });
         }
       }
+
+      // Same signal as runStaleApprovalNudgeCheck - distinct from the
+      // portal-visit-based check above, this keys off the approval's own
+      // age (a client can visit regularly and still leave one sitting).
+      const pendingApprovals = Array.isArray(client.pendingApprovals) ? client.pendingApprovals : [];
+      const approvalAges = pendingApprovals.filter(a => a && a.createdAt).map(a => Math.floor((now - new Date(a.createdAt).getTime()) / 86400000));
+      const oldestApprovalDays = approvalAges.length ? Math.max(...approvalAges) : null;
+      if (oldestApprovalDays !== null && oldestApprovalDays >= STALE_APPROVAL_NUDGE_DAYS_THRESHOLD) {
+        items.push({ name, urgency: 600 + oldestApprovalDays, message: `an approval has been sitting for ${oldestApprovalDays}d` });
+      }
     }
 
     // Same per-board threshold as renderMoodBoardsAwaitingFeedback, rolled
@@ -1772,6 +1785,32 @@ async function renderNeedsAttention() {
     // mid-range urgency rather than a days-based one.
     if (isOverBudgetPace(client.budgetPacing) && healthRating !== 'Red') {
       items.push({ name, urgency: 40, message: "pacing over budget - possible upsell opportunity" });
+    }
+
+    // Same two signals as runHeavyActionItemsNudgeCheck / runStaleContactNudgeCheck
+    // below, and Agency Health Dashboard's heavyOpenActionItems/staleContact
+    // badges - both read client.meetingNotes directly, not gated by
+    // portalConfig since Meeting Notes Logger isn't portal-dependent.
+    const meetingNotes = Array.isArray(client.meetingNotes) ? client.meetingNotes : [];
+    const openActionItems = meetingNotes.reduce((sum, m) =>
+      sum + (Array.isArray(m.actionItems) ? m.actionItems.filter(ai => !ai.completed).length : 0), 0);
+    if (openActionItems >= HEAVY_ACTION_ITEMS_THRESHOLD) {
+      items.push({ name, urgency: 500 + openActionItems, message: `${openActionItems} open action items across meeting notes`, goTab: 'tab-meetingnotes' });
+    }
+
+    // A client with zero meeting notes ever logged is deliberately NOT
+    // flagged here - same reasoning as Agency Health Dashboard's own
+    // staleContact (a quiet, report-only retainer might genuinely have
+    // none and be perfectly healthy). Only a client who WAS being logged
+    // and then went quiet counts.
+    if (meetingNotes.length > 0) {
+      const lastMeetingDate = meetingNotes.map(m => m.date).filter(Boolean).sort().slice(-1)[0];
+      if (lastMeetingDate) {
+        const daysSinceMeeting = Math.floor((now - new Date(lastMeetingDate).getTime()) / 86400000);
+        if (daysSinceMeeting >= STALE_CONTACT_NUDGE_DAYS_THRESHOLD) {
+          items.push({ name, urgency: 300 + daysSinceMeeting, message: `no meeting logged in ${daysSinceMeeting}d`, goTab: 'tab-meetingnotes' });
+        }
+      }
     }
   });
 
@@ -5003,6 +5042,110 @@ async function runScopeCreepNudgeCheck() {
     if (alreadyNudged) return;
 
     pushAdminNotification('scope_creep', `${name} has ${openRows.length} open revisions and no change order in motion - may be worth a scope conversation.`, name, null);
+  });
+}
+
+// The remaining three of Agency Health Dashboard's seven needsAttention
+// conditions that had never been closed the loop on (healthRating ===
+// 'Red', renewalDueSoon, heavyRevisions, and overspending already have
+// nudges above/elsewhere) - staleApproval, heavyOpenActionItems, and
+// staleContact. All three read straight off clientsDb (pendingApprovals,
+// meetingNotes) so no extra Firestore doc fetch is needed, unlike most of
+// the nudge checks above.
+
+const STALE_APPROVAL_NUDGE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const STALE_APPROVAL_NUDGE_DAYS_THRESHOLD = 5; // matches Agency Health Dashboard's STALE_APPROVAL_DAYS
+const STALE_APPROVAL_NUDGE_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000; // same cadence as the stale-client nudge
+let lastStaleApprovalNudgeCheckAt = 0;
+
+// Distinct from runStaleClientNudgeCheck above: that one keys off portal
+// visit recency, so a client visiting regularly never triggers it even if
+// an approval sits untouched. This one keys off the approval's own age
+// directly - Agency Health Dashboard's staleApproval badge, which never
+// nudged anyone before this.
+function runStaleApprovalNudgeCheck() {
+  const now = Date.now();
+  if (now - lastStaleApprovalNudgeCheckAt < STALE_APPROVAL_NUDGE_CHECK_INTERVAL_MS) return;
+  lastStaleApprovalNudgeCheckAt = now;
+
+  Object.entries(clientsDb).forEach(([name, client]) => {
+    if (!client || !client.portalConfig || !client.portalConfig.magicToken) return;
+    const pendingApprovals = Array.isArray(client.pendingApprovals) ? client.pendingApprovals : [];
+    const ages = pendingApprovals.filter(a => a && a.createdAt).map(a => Math.floor((now - new Date(a.createdAt).getTime()) / 86400000));
+    const oldest = ages.length ? Math.max(...ages) : null;
+    if (oldest === null || oldest < STALE_APPROVAL_NUDGE_DAYS_THRESHOLD) return;
+
+    const alreadyNudged = adminNotifications.some(n =>
+      n.type === 'stale_approval' &&
+      n.clientName === name &&
+      (now - new Date(n.createdAt).getTime()) < STALE_APPROVAL_NUDGE_COOLDOWN_MS
+    );
+    if (alreadyNudged) return;
+
+    pushAdminNotification('stale_approval', `${name} has an approval that's been sitting for ${oldest}d.`, name, null);
+  });
+}
+
+const HEAVY_ACTION_ITEMS_NUDGE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const HEAVY_ACTION_ITEMS_THRESHOLD = 3; // matches Agency Health Dashboard's HEAVY_OPEN_ACTION_ITEMS
+const HEAVY_ACTION_ITEMS_NUDGE_COOLDOWN_MS = 5 * 24 * 60 * 60 * 1000; // same cadence as the scope-creep nudge
+let lastHeavyActionItemsNudgeCheckAt = 0;
+
+function runHeavyActionItemsNudgeCheck() {
+  const now = Date.now();
+  if (now - lastHeavyActionItemsNudgeCheckAt < HEAVY_ACTION_ITEMS_NUDGE_CHECK_INTERVAL_MS) return;
+  lastHeavyActionItemsNudgeCheckAt = now;
+
+  Object.entries(clientsDb).forEach(([name, client]) => {
+    if (!client) return;
+    const meetingNotes = Array.isArray(client.meetingNotes) ? client.meetingNotes : [];
+    const openActionItems = meetingNotes.reduce((sum, m) =>
+      sum + (Array.isArray(m.actionItems) ? m.actionItems.filter(ai => !ai.completed).length : 0), 0);
+    if (openActionItems < HEAVY_ACTION_ITEMS_THRESHOLD) return;
+
+    const alreadyNudged = adminNotifications.some(n =>
+      n.type === 'heavy_action_items' &&
+      n.clientName === name &&
+      (now - new Date(n.createdAt).getTime()) < HEAVY_ACTION_ITEMS_NUDGE_COOLDOWN_MS
+    );
+    if (alreadyNudged) return;
+
+    pushAdminNotification('heavy_action_items', `${name} has ${openActionItems} open action items piling up across meeting notes.`, name, null);
+  });
+}
+
+const STALE_CONTACT_NUDGE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const STALE_CONTACT_NUDGE_DAYS_THRESHOLD = 30; // matches Agency Health Dashboard's STALE_CONTACT_DAYS
+const STALE_CONTACT_NUDGE_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000; // contact cadence is slower than approvals/revisions
+let lastStaleContactNudgeCheckAt = 0;
+
+// A client with zero meeting notes ever logged is deliberately NOT
+// flagged - same reasoning as Agency Health Dashboard's own staleContact
+// (a quiet, report-only retainer might genuinely have none and be
+// perfectly healthy). Only a client who WAS being logged and then went
+// quiet counts.
+function runStaleContactNudgeCheck() {
+  const now = Date.now();
+  if (now - lastStaleContactNudgeCheckAt < STALE_CONTACT_NUDGE_CHECK_INTERVAL_MS) return;
+  lastStaleContactNudgeCheckAt = now;
+
+  Object.entries(clientsDb).forEach(([name, client]) => {
+    if (!client) return;
+    const meetingNotes = Array.isArray(client.meetingNotes) ? client.meetingNotes : [];
+    if (meetingNotes.length === 0) return;
+    const lastMeetingDate = meetingNotes.map(m => m.date).filter(Boolean).sort().slice(-1)[0];
+    if (!lastMeetingDate) return;
+    const daysSinceMeeting = Math.floor((now - new Date(lastMeetingDate).getTime()) / 86400000);
+    if (daysSinceMeeting < STALE_CONTACT_NUDGE_DAYS_THRESHOLD) return;
+
+    const alreadyNudged = adminNotifications.some(n =>
+      n.type === 'stale_contact' &&
+      n.clientName === name &&
+      (now - new Date(n.createdAt).getTime()) < STALE_CONTACT_NUDGE_COOLDOWN_MS
+    );
+    if (alreadyNudged) return;
+
+    pushAdminNotification('stale_contact', `${name} hasn't had a meeting logged in ${daysSinceMeeting}d.`, name, null);
   });
 }
 
