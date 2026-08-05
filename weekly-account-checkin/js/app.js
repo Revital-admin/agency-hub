@@ -106,6 +106,17 @@ function saveCheckin() {
       : null;
     window.parent.pushAdminNotification('testimonial_prompt', `${client.name}'s health just turned Green — good time to ask for a testimonial.`, client.name, draftEmail);
   }
+
+  // Same flip-detection idea as the Green case above, opposite direction:
+  // health just turned Red - the single most urgent churn-risk signal this
+  // tool produces, but previously it only surfaced if someone happened to
+  // open this client's check-in history or Agency Health Dashboard's
+  // table. No draft email here (unlike the testimonial ask) - this is an
+  // internal heads-up for the account manager to act on, not something
+  // meant to go out to the client.
+  if (isLatestEntry && entry.healthRating === 'Red' && priorRating !== 'Red' && window.parent.pushAdminNotification) {
+    window.parent.pushAdminNotification('health_red_flip', `${client.name}'s health just turned Red - worth a look.`, client.name, null);
+  }
 }
 
 function deleteCheckin(date) {

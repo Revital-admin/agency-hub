@@ -1750,16 +1750,28 @@ async function renderNeedsAttention() {
       }
     }
 
+    // Latest health rating, shared by the Red-health row and the upsell
+    // check right below - same "checkins[0] is most recent" convention as
+    // Agency Health Dashboard's buildRows.
+    const checkins = Array.isArray(client.weeklyCheckins) ? client.weeklyCheckins : [];
+    const healthRating = checkins.length ? checkins[0].healthRating : null;
+
+    // Same current-state signal as Agency Health Dashboard's needsAttention
+    // (healthRating === 'Red' is the first condition there) and the
+    // health_red_flip nudge in weekly-account-checkin - but this is a
+    // persistent "is it Red right now" check rather than a one-time flip
+    // event, so a lingering Red client keeps showing here even if the flip
+    // itself happened days ago and its nudge already cooled down.
+    if (healthRating === 'Red') {
+      items.push({ name, urgency: 700, message: "health check-in is Red", goTab: 'tab-weeklycheckin' });
+    }
+
     // Same overspending+healthy signal as Agency Health Dashboard's
     // upsellOpportunity / runUpsellNudgeCheck - not a risk to flag urgently,
     // just a heads-up worth a bigger-retainer conversation, so a flat
     // mid-range urgency rather than a days-based one.
-    if (isOverBudgetPace(client.budgetPacing)) {
-      const checkins = Array.isArray(client.weeklyCheckins) ? client.weeklyCheckins : [];
-      const healthRating = checkins.length ? checkins[0].healthRating : null;
-      if (healthRating !== 'Red') {
-        items.push({ name, urgency: 40, message: "pacing over budget - possible upsell opportunity" });
-      }
+    if (isOverBudgetPace(client.budgetPacing) && healthRating !== 'Red') {
+      items.push({ name, urgency: 40, message: "pacing over budget - possible upsell opportunity" });
     }
   });
 

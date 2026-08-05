@@ -210,6 +210,16 @@ function markChurned(clientName, reason, detail) {
   if (isEmbedded && window.parent.showBanner) {
     window.parent.showBanner('success', `Marked ${clientName} as churned.`);
   }
+
+  // Nothing previously connected this moment to Client Offboarding
+  // Checklist - whoever churned the client had to separately remember to
+  // go start it themselves (access revocation, final invoice, asset
+  // handoff, etc.). No draft email here, same reasoning as the health-Red
+  // flip nudge in weekly-account-checkin - this is an internal
+  // follow-through reminder, not something meant to go out to the client.
+  if (isEmbedded && window.parent.pushAdminNotification) {
+    window.parent.pushAdminNotification('client_churned', `${clientName} was marked churned - start Client Offboarding Checklist.`, clientName, null);
+  }
 }
 
 /* ── Churn Reason panel ── */
