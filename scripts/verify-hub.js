@@ -232,13 +232,29 @@ function checkElementIds() {
     const js = fs.readFileSync(f, 'utf8');
     const html = fs.readFileSync(htmlPath, 'utf8');
     const htmlIds = new Set([...html.matchAll(/\bid="([\w-]+)"/g)].map(m => m[1]));
+    // Confirmed by hand across every tool this flagged (team-roster,
+    // testimonial-tracker, timeline-scheduler, email-template-library,
+    // sop-wiki): all were false positives, not dead code - a real, common
+    // pattern in this codebase is building markup dynamically
+    // (container.innerHTML = `...id="x"...`) and wiring listeners
+    // immediately after inserting it, so the id only ever exists in the
+    // JS file's own template literals, never in the static index.html.
+    // Also covers the ensureToastContainer() idiom (container.id = 'x'
+    // as a property assignment rather than an HTML attribute string).
+    // Scanning the JS file's own source for both forms means an id that's
+    // only ever defined dynamically no longer gets flagged as missing.
+    const jsDefinedIds = new Set([
+      ...[...js.matchAll(/\bid=["']([\w-]+)["']/g)].map(m => m[1]),
+      ...[...js.matchAll(/\.id\s*=\s*["']([\w-]+)["']/g)].map(m => m[1]),
+    ]);
+    const knownIds = new Set([...htmlIds, ...jsDefinedIds]);
     const referenced = new Set([
       ...[...js.matchAll(/\bel\(\s*['"]([\w-]+)['"]\s*\)/g)].map(m => m[1]),
       ...[...js.matchAll(/getElementById\(\s*['"]([\w-]+)['"]\s*\)/g)].map(m => m[1]),
     ]);
-    const missing = [...referenced].filter(id => !htmlIds.has(id));
+    const missing = [...referenced].filter(id => !knownIds.has(id));
     if (missing.length) {
-      warn(`${path.relative(ROOT, f)} references id(s) not found in its own index.html: ${missing.join(', ')} (may be a false positive if built dynamically or read from a shared/parent page).`);
+      warn(`${path.relative(ROOT, f)} references id(s) not found in its own index.html or its own dynamically-built markup: ${missing.join(', ')} (may still be a false positive if read from a shared/parent page).`);
       flaggedFiles++;
     }
   });

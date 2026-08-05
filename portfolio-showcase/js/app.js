@@ -192,29 +192,65 @@ async function generatePortfolioPdf() {
 // needs to know WHETHER a portfolio PDF has ever been generated at all,
 // and there's nowhere else that signal could come from (the PDF itself
 // saves straight to the browser's downloads, nothing persists). One
-// small agency-wide doc just for that. Uses firebaseSetDocFromJSON, not
-// firebaseSetDoc - see its comment in index.html for why a plain object
-// built inside this iframe's own JS realm has to cross as a JSON string.
-function recordPortfolioPdfGenerated(caseStudyCount, preparedFor) {
-  if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb || !window.parent.firebaseSetDocFromJSON) return;
+// small agency-wide doc just for that, written through the same shared
+// saveVersionedAgencyDoc optimistic-concurrency helper every other
+// agency/* doc in the Hub uses (see its comment in root app.js) - keeps
+// this consistent with the rest of the Hub rather than a one-off raw
+// write, even though this doc's own stakes are low (a "last generated"
+// status stamp, not user-edited field data).
+let portfolioDocVersion = 0;
+
+function getPortfolioShowcaseDocRef() {
+  if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb) return null;
+  return window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "portfolioShowcase");
+}
+
+async function loadPortfolioShowcaseDocVersion() {
+  const ref = getPortfolioShowcaseDocRef();
+  if (!ref || !window.parent.firebaseGetDoc) return;
   try {
-    const ref = window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "portfolioShowcase");
-    const payload = {
-      lastGeneratedAt: new Date().toISOString(),
-      caseStudyCount: caseStudyCount,
-      preparedFor: preparedFor || ""
-    };
-    window.parent.firebaseSetDocFromJSON(ref, JSON.stringify(payload)).catch(e => {
-      console.warn("Couldn't record portfolio PDF generation:", e);
-    });
+    const snap = await window.parent.firebaseGetDoc(ref);
+    portfolioDocVersion = (snap && snap.exists && typeof snap.data().version === 'number') ? snap.data().version : 0;
   } catch (e) {
-    console.warn("Couldn't record portfolio PDF generation:", e);
+    console.warn("Couldn't load portfolio showcase doc version:", e);
   }
+}
+
+async function recordPortfolioPdfGenerated(caseStudyCount, preparedFor) {
+  const ref = getPortfolioShowcaseDocRef();
+  if (!ref || !window.parent.saveVersionedAgencyDoc) return;
+
+  const buildPayload = (nextVersion) => ({
+    lastGeneratedAt: new Date().toISOString(),
+    caseStudyCount: caseStudyCount,
+    preparedFor: preparedFor || "",
+    version: nextVersion
+  });
+
+  let result = await window.parent.saveVersionedAgencyDoc({ docRef: ref, currentVersion: portfolioDocVersion, buildPayload });
+  if (result.ok) {
+    portfolioDocVersion = result.version;
+    return;
+  }
+  if (result.reason === "conflict") {
+    // Unlike clientsDb's hard-block-and-ask (which protects real,
+    // user-edited data), this doc is just a status stamp nobody directly
+    // edits - safe to retry once with the fresh version instead of
+    // bothering the person with a banner over something this low-stakes.
+    portfolioDocVersion = result.freshVersion;
+    result = await window.parent.saveVersionedAgencyDoc({ docRef: ref, currentVersion: portfolioDocVersion, buildPayload });
+    if (result.ok) {
+      portfolioDocVersion = result.version;
+      return;
+    }
+  }
+  console.warn("Couldn't record portfolio PDF generation:", result.error || result.reason);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   loadItems();
   renderList();
+  loadPortfolioShowcaseDocVersion();
 
   el('selectAllBtn').addEventListener('click', selectAll);
   el('selectNoneBtn').addEventListener('click', selectNone);
