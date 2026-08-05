@@ -57,7 +57,7 @@
 
   <!-- Central references and Application State Controller -->
   <script src="data-store.js?v=3"></script>
-  <script src="app.js?v=89"></script>
+  <script src="app.js?v=90"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
 </head>
@@ -1285,6 +1285,26 @@
           <div id="dashPhaseBreakdown" style="margin-top: 10px; font-size: 0.8rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 3px;"></div>
           <div class="tool-card-actions">
             <button class="btn-card-go" data-go="tab-casestudy">Go to Case Study Builder &rarr;</button>
+          </div>
+        </div>
+
+        <div class="tool-progress-card" style="max-width: 480px; margin-top: 16px; opacity: 0.85;">
+          <div class="tool-card-header">
+            <span class="tool-card-title">Phase 2 Preview: First Paid Clients</span>
+            <div class="tool-card-icon-wrap icon-purple">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4l2.5 2.5"></path></svg>
+            </div>
+          </div>
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin: -4px 0 10px;">Preview only - Phase 2 doesn't officially start until Phase 1's exit trigger is met. Shown early as a heads-up.</p>
+          <div class="tool-card-stat">
+            <div id="dashPhase2Val" class="tool-stat-value">0/3</div>
+            <div id="dashPhase2Desc" class="tool-stat-desc">paying clients signed (Signed status + a real invoice amount)</div>
+          </div>
+          <div class="progress-bar-container">
+            <div class="progress-fill" style="width: 0%;" id="dashPhase2ProgressFill"></div>
+          </div>
+          <div class="tool-card-actions">
+            <button class="btn-card-go" data-go="tab-contractinvoice">Go to Contract &amp; Invoice Tracker &rarr;</button>
           </div>
         </div>
       </section>

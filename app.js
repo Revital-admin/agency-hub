@@ -1287,6 +1287,7 @@ function initTabNavigation() {
       // Activity Log above.
       if (targetTab === "tab-businessroadmap") {
         renderPhaseProgress().catch(e => console.error("Error in renderPhaseProgress:", e));
+        renderPhase2Preview().catch(e => console.error("Error in renderPhase2Preview:", e));
       }
     });
   });
@@ -1652,6 +1653,64 @@ async function renderPhaseProgress() {
       <div>${pdfLine}</div>
       <div>${servicesPricedCount} service${servicesPricedCount === 1 ? "" : "s"} priced in Service Pricing Admin</div>
     `;
+  }
+}
+
+// Phase 2 ("First Paid Clients") exit trigger is "first 2-3 paying
+// marketing clients signed" - upper bound (3) used as the target, same
+// convention as Phase 1's target using the upper bound of "1-2". This is
+// a PREVIEW shown alongside Phase 1 Progress, not an active tracker -
+// Phase 2 doesn't start until Phase 1's exit trigger is actually met, but
+// showing it early means a heads-up before you're already there instead
+// of only describing where you are once it's true.
+const PHASE2_SIGNED_CLIENT_TARGET = 3;
+
+// Local copy of contract-invoice-tracker/js/app.js's parseAmountToNumber -
+// each tool's js/app.js stays self-contained in this codebase (nothing
+// shared/imported between them), so this is duplicated rather than
+// referenced across the iframe boundary.
+function parsePhaseAmountToNumber(v) {
+  if (!v) return 0;
+  const n = parseFloat(String(v).replace(/[^0-9.-]/g, ''));
+  return isNaN(n) ? 0 : n;
+}
+
+async function renderPhase2Preview() {
+  const valueEl = document.getElementById("dashPhase2Val");
+  const descEl = document.getElementById("dashPhase2Desc");
+  const fillEl = document.getElementById("dashPhase2ProgressFill");
+  if (!valueEl) return;
+
+  let payingCount = 0;
+  if (window.firebaseDb && window.firebaseDb.collection) {
+    try {
+      const snap = await window.firebaseDb.collection("agency").doc("contractInvoices").get();
+      const list = (snap.exists && snap.data().list) || [];
+      const sandboxName = "Quick Sandbox (One-Offs)";
+      const payingClientNames = new Set();
+      list.forEach(r => {
+        if (!r.clientName || r.clientName === sandboxName) return;
+        // Signed alone isn't enough - a contract can be signed at $0 for
+        // free/portfolio-building work (exactly what Phase 1 itself is),
+        // and that's not what Phase 2's "paying" clients means.
+        if (r.contractStatus !== "Signed") return;
+        if (parsePhaseAmountToNumber(r.invoiceAmount) <= 0) return;
+        payingClientNames.add(r.clientName);
+      });
+      payingCount = payingClientNames.size;
+    } catch (e) {
+      console.warn("Couldn't load contract data for Phase 2 preview:", e);
+    }
+  }
+
+  valueEl.textContent = `${Math.min(payingCount, PHASE2_SIGNED_CLIENT_TARGET)}/${PHASE2_SIGNED_CLIENT_TARGET}`;
+  if (descEl) {
+    descEl.textContent = payingCount >= PHASE2_SIGNED_CLIENT_TARGET
+      ? "paying clients signed"
+      : "paying clients signed (Signed status + a real invoice amount)";
+  }
+  if (fillEl) {
+    fillEl.style.width = `${Math.min(100, Math.round((payingCount / PHASE2_SIGNED_CLIENT_TARGET) * 100))}%`;
   }
 }
 
