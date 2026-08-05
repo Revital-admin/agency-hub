@@ -194,7 +194,23 @@ function recordLastSeen(email) {
 // sidebar sections client-side - it is not a data-security boundary,
 // by design (see Team Access panel copy), so it's meant for trusted
 // internal teammates rather than outside parties.
+// Whether the currently logged-in teammate has a restricted (non-full)
+// agency/teamAccess entry - set by applyTeamAccessRestrictions below.
+// Defaults to false (full access) until the teamAccess snapshot resolves,
+// same "visible until proven otherwise" default the footer buttons
+// themselves use. Read by renderAdminNotifications to hold back
+// admin-only notification types (see ADMIN_ONLY_NOTIF_TYPES) from
+// restricted teammates, since the shared adminNotifications doc is one
+// list every logged-in teammate reads - the gating has to happen at
+// render time, per viewer, not at write time.
+let isRestrictedTeamMember = false;
+
 function applyTeamAccessRestrictions(allowedSections) {
+  isRestrictedTeamMember = !!allowedSections;
+  // Notifications may already be rendered from before this resolved (or
+  // this may re-fire later if teamAccess changes) - re-filter now either way.
+  try { renderAdminNotifications(); } catch (e) {}
+
   const navSections = document.querySelectorAll('.nav-section[data-section]');
   let activeItemHidden = false;
 
@@ -1415,6 +1431,10 @@ function refreshAllViews() {
   try { ensureClientPortalListeners(); } catch (e) {}
   try { runStaleClientNudgeCheck(); } catch (e) {}
   runRenewalNudgeCheck().catch(e => console.error("Error in runRenewalNudgeCheck:", e));
+  runUpsellNudgeCheck().catch(e => console.error("Error in runUpsellNudgeCheck:", e));
+  runProposalFollowupNudgeCheck().catch(e => console.error("Error in runProposalFollowupNudgeCheck:", e));
+  runInsuranceRenewalNudgeCheck().catch(e => console.error("Error in runInsuranceRenewalNudgeCheck:", e));
+  runSubscriptionRenewalNudgeCheck().catch(e => console.error("Error in runSubscriptionRenewalNudgeCheck:", e));
 
   // Toggle Sandbox Banner
   const sandboxName = "Quick Sandbox (One-Offs)";
@@ -1650,7 +1670,39 @@ async function renderNeedsAttention() {
         items.push({ name, urgency: oldestDays, message: `${boardPhrase} awaiting feedback ${oldestDays}+ days` });
       }
     }
+
+    // Same overspending+healthy signal as Agency Health Dashboard's
+    // upsellOpportunity / runUpsellNudgeCheck - not a risk to flag urgently,
+    // just a heads-up worth a bigger-retainer conversation, so a flat
+    // mid-range urgency rather than a days-based one.
+    if (isOverBudgetPace(client.budgetPacing)) {
+      const checkins = Array.isArray(client.weeklyCheckins) ? client.weeklyCheckins : [];
+      const healthRating = checkins.length ? checkins[0].healthRating : null;
+      if (healthRating !== 'Red') {
+        items.push({ name, urgency: 40, message: "pacing over budget - possible upsell opportunity" });
+      }
+    }
   });
+
+  // Overdue proposal follow-ups: same signal as
+  // runProposalFollowupNudgeCheck. A separate agency doc (not on
+  // clientsDb), so fetched here rather than inside the loop above -
+  // matches renderPhase2Preview's contractInvoices fetch pattern.
+  if (window.firebaseDb && window.firebaseDb.collection) {
+    try {
+      const snap = await window.firebaseDb.collection("agency").doc("proposalFollowUps").get();
+      const list = (snap.exists && snap.data().list) || [];
+      const today = new Date().toDateString();
+      list.forEach(p => {
+        if (p.status !== 'open' || !p.nextFollowUpDate || !p.prospectName) return;
+        const daysOverdue = Math.round((new Date(today) - new Date(p.nextFollowUpDate)) / 86400000);
+        if (daysOverdue < 1) return;
+        items.push({ name: p.prospectName, urgency: 1800 + daysOverdue, message: `proposal follow-up ${daysOverdue}d overdue (${p.followUpStage || 'no stage set'})` });
+      });
+    } catch (e) {
+      console.warn("Couldn't load proposal follow-ups for Needs Attention:", e);
+    }
+  }
 
   if (items.length === 0) {
     el.innerHTML = `<div style="color: var(--color-text-muted);">Nothing needs attention right now.</div>`;
@@ -4571,6 +4623,186 @@ function runStaleClientNudgeCheck() {
   });
 }
 
+// Mirrors agency-health-dashboard/js/app.js's getBudgetPaceClass
+// (pace-danger branch) - duplicated here rather than reached across the
+// iframe boundary, same convention as parsePhaseAmountToNumber above.
+function isOverBudgetPace(p) {
+  if (!p || !p.totalBudget || p.totalBudget <= 0) return false;
+  const start = new Date(p.startDate);
+  const end = new Date(p.endDate);
+  const now = new Date();
+  if (now > end) return true;
+  if (now < start) return false;
+  const totalDays = (end - start) / 86400000;
+  const daysPassed = (now - start) / 86400000;
+  const expectedPacingRatio = totalDays > 0 ? daysPassed / totalDays : 1;
+  const actualPacingRatio = p.spentToDate / p.totalBudget;
+  return actualPacingRatio > expectedPacingRatio * 1.15;
+}
+
+const UPSELL_NUDGE_CHECK_INTERVAL_MS = 60 * 60 * 1000; // same hourly cadence as the other nudge checks
+const UPSELL_NUDGE_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000; // upsell conversations are infrequent - avoid repeat pings
+let lastUpsellNudgeCheckAt = 0;
+
+// Same signal as Agency Health Dashboard's upsellOpportunity: overspending
+// (per isOverBudgetPace above) AND not a Red-health client - an
+// overspending Red-health client is a churn risk, not someone to pitch a
+// bigger retainer to.
+async function runUpsellNudgeCheck() {
+  const now = Date.now();
+  if (now - lastUpsellNudgeCheckAt < UPSELL_NUDGE_CHECK_INTERVAL_MS) return;
+  lastUpsellNudgeCheckAt = now;
+
+  Object.entries(clientsDb).forEach(([name, client]) => {
+    if (!client || !client.portalConfig || !client.portalConfig.magicToken) return;
+    if (!isOverBudgetPace(client.budgetPacing)) return;
+
+    const checkins = Array.isArray(client.weeklyCheckins) ? client.weeklyCheckins : [];
+    const healthRating = checkins.length ? checkins[0].healthRating : null;
+    if (healthRating === 'Red') return;
+
+    const alreadyNudged = adminNotifications.some(n =>
+      n.type === 'upsell_opportunity' &&
+      n.clientName === name &&
+      (now - new Date(n.createdAt).getTime()) < UPSELL_NUDGE_COOLDOWN_MS
+    );
+    if (alreadyNudged) return;
+
+    pushAdminNotification('upsell_opportunity', `${name} is pacing over budget and healthy - worth a bigger-retainer conversation.`, name, null);
+  });
+}
+
+const PROPOSAL_FOLLOWUP_NUDGE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const PROPOSAL_FOLLOWUP_NUDGE_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000; // same cadence as the stale-client nudge
+let lastProposalFollowupNudgeCheckAt = 0;
+
+// Proposal Follow-up Tracker's own "overdue" count (summaryOverdue in
+// proposal-followup-tracker/js/app.js) was display-only - nothing ever
+// nudged about it. Reads agency/proposalFollowUps directly since this
+// isn't clientsDb data (these are prospects, not necessarily clients yet).
+async function runProposalFollowupNudgeCheck() {
+  const now = Date.now();
+  if (now - lastProposalFollowupNudgeCheckAt < PROPOSAL_FOLLOWUP_NUDGE_CHECK_INTERVAL_MS) return;
+  lastProposalFollowupNudgeCheckAt = now;
+  if (!window.firebaseDb || !window.firebaseDb.collection) return;
+
+  let list = [];
+  try {
+    const snap = await window.firebaseDb.collection("agency").doc("proposalFollowUps").get();
+    list = (snap.exists && snap.data().list) || [];
+  } catch (e) {
+    console.warn("Couldn't load proposal follow-ups for nudge check:", e);
+    return;
+  }
+
+  const today = new Date().toDateString();
+  list.forEach(p => {
+    if (p.status !== 'open' || !p.nextFollowUpDate || !p.prospectName) return;
+    const daysOverdue = Math.round((new Date(today) - new Date(p.nextFollowUpDate)) / 86400000);
+    if (daysOverdue < 1) return;
+
+    const alreadyNudged = adminNotifications.some(n =>
+      n.type === 'proposal_followup' &&
+      n.clientName === p.prospectName &&
+      (now - new Date(n.createdAt).getTime()) < PROPOSAL_FOLLOWUP_NUDGE_COOLDOWN_MS
+    );
+    if (alreadyNudged) return;
+
+    pushAdminNotification('proposal_followup', `${p.prospectName}'s follow-up is ${daysOverdue}d overdue (stage: ${p.followUpStage || 'not set'}).`, p.prospectName, null);
+  });
+}
+
+const INSURANCE_RENEWAL_NUDGE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const INSURANCE_RENEWAL_NUDGE_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000; // policies renew slowly - avoid repeat pings
+let lastInsuranceRenewalNudgeCheckAt = 0;
+
+// Mirrors business-insurance-tracker/js/app.js's EXPIRING_SOON_DAYS (60)
+// and deriveStatus - duplicated here per this codebase's "each caller
+// stays self-contained" convention rather than reaching across the
+// iframe boundary. ADMIN-ONLY (see ADMIN_ONLY_NOTIF_TYPES near
+// renderAdminNotifications): Business Insurance Tracker's own footer
+// button is already leadership-gated in applyTeamAccessRestrictions, so
+// a nudge about a policy a restricted teammate can't even open would
+// leak financial info they're not supposed to see. clientName is
+// repurposed here as the policy's own id, purely for dedupe matching -
+// renderAdminNotifications never displays it, only compares it.
+async function runInsuranceRenewalNudgeCheck() {
+  const now = Date.now();
+  if (now - lastInsuranceRenewalNudgeCheckAt < INSURANCE_RENEWAL_NUDGE_CHECK_INTERVAL_MS) return;
+  lastInsuranceRenewalNudgeCheckAt = now;
+  if (!window.firebaseDb || !window.firebaseDb.collection) return;
+
+  let list = [];
+  try {
+    const snap = await window.firebaseDb.collection("agency").doc("businessInsurance").get();
+    list = (snap.exists && snap.data().list) || [];
+  } catch (e) {
+    console.warn("Couldn't load business insurance for renewal nudge check:", e);
+    return;
+  }
+
+  const EXPIRING_SOON_DAYS = 60;
+  list.forEach(entry => {
+    if (!entry.expirationDate || !entry.id) return;
+    const days = Math.round((new Date(entry.expirationDate) - new Date(new Date().toDateString())) / 86400000);
+    if (Number.isNaN(days) || days > EXPIRING_SOON_DAYS) return;
+
+    const alreadyNudged = adminNotifications.some(n =>
+      n.type === 'insurance_renewal' &&
+      n.clientName === entry.id &&
+      (now - new Date(n.createdAt).getTime()) < INSURANCE_RENEWAL_NUDGE_COOLDOWN_MS
+    );
+    if (alreadyNudged) return;
+
+    const label = `${entry.coverageType || 'Policy'}${entry.carrier ? ' with ' + entry.carrier : ''}`;
+    const phrase = days < 0 ? `expired ${Math.abs(days)}d ago` : days === 0 ? "expires today" : `expires in ${days}d`;
+    pushAdminNotification('insurance_renewal', `${label} ${phrase} - renew in Business Insurance Tracker.`, entry.id, null);
+  });
+}
+
+const SUBSCRIPTION_RENEWAL_NUDGE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const SUBSCRIPTION_RENEWAL_NUDGE_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
+let lastSubscriptionRenewalNudgeCheckAt = 0;
+
+// Mirrors subscription-tracker/js/app.js's 30-day "renewing soon" window
+// (updateSummary's renewingSoon - days between 0 and 30, negative treated
+// as stale data rather than urgent, same as that tool's own definition).
+// ADMIN-ONLY, same reasoning as the insurance nudge above - Subscription
+// Tracker is leadership-gated too.
+async function runSubscriptionRenewalNudgeCheck() {
+  const now = Date.now();
+  if (now - lastSubscriptionRenewalNudgeCheckAt < SUBSCRIPTION_RENEWAL_NUDGE_CHECK_INTERVAL_MS) return;
+  lastSubscriptionRenewalNudgeCheckAt = now;
+  if (!window.firebaseDb || !window.firebaseDb.collection) return;
+
+  let list = [];
+  try {
+    const snap = await window.firebaseDb.collection("agency").doc("subscriptionTracker").get();
+    list = (snap.exists && snap.data().list) || [];
+  } catch (e) {
+    console.warn("Couldn't load subscriptions for renewal nudge check:", e);
+    return;
+  }
+
+  const RENEWING_SOON_DAYS = 30;
+  list.forEach(entry => {
+    if (!entry.id || entry.status === 'Cancelled' || !entry.renewalDate) return;
+    const days = Math.round((new Date(entry.renewalDate) - new Date(new Date().toDateString())) / 86400000);
+    if (Number.isNaN(days) || days < 0 || days > RENEWING_SOON_DAYS) return;
+
+    const alreadyNudged = adminNotifications.some(n =>
+      n.type === 'subscription_renewal' &&
+      n.clientName === entry.id &&
+      (now - new Date(n.createdAt).getTime()) < SUBSCRIPTION_RENEWAL_NUDGE_COOLDOWN_MS
+    );
+    if (alreadyNudged) return;
+
+    const phrase = days === 0 ? "renews today" : `renews in ${days}d`;
+    const cost = Math.round(parseFloat(entry.monthlyCost) || 0);
+    pushAdminNotification('subscription_renewal', `${entry.toolName || 'Subscription'} ${phrase} ($${cost}/mo) - review in Subscription Tracker.`, entry.id, null);
+  });
+}
+
 function adminNotifTimeAgo(isoString) {
   if (!isoString) return "";
   const diffMs = Date.now() - new Date(isoString).getTime();
@@ -4584,12 +4816,24 @@ function adminNotifTimeAgo(isoString) {
   return new Date(isoString).toLocaleDateString();
 }
 
+// Notification types that surface financial info gated to full-access/
+// unrestricted accounts elsewhere in the Hub (Business Insurance Tracker
+// and Subscription Tracker's footer buttons are both hidden from
+// restricted teammates - see applyTeamAccessRestrictions). Filtered out
+// below for anyone currently restricted, so the shared notification
+// stream doesn't leak what those two tools already keep hidden.
+const ADMIN_ONLY_NOTIF_TYPES = new Set(['insurance_renewal', 'subscription_renewal']);
+
 function renderAdminNotifications() {
   const badge = document.getElementById("adminNotifBellBadge");
   const list = document.getElementById("adminNotifList");
   if (!badge || !list) return;
 
-  const unreadCount = adminNotifications.filter(n => !n.read).length;
+  const visibleNotifications = isRestrictedTeamMember
+    ? adminNotifications.filter(n => !ADMIN_ONLY_NOTIF_TYPES.has(n.type))
+    : adminNotifications;
+
+  const unreadCount = visibleNotifications.filter(n => !n.read).length;
   if (unreadCount > 0) {
     badge.textContent = unreadCount > 9 ? "9+" : String(unreadCount);
     badge.style.display = "flex";
@@ -4598,7 +4842,7 @@ function renderAdminNotifications() {
   }
 
   list.innerHTML = "";
-  if (adminNotifications.length === 0) {
+  if (visibleNotifications.length === 0) {
     const empty = document.createElement("div");
     empty.className = "admin-notif-empty";
     empty.textContent = "Nothing yet - you'll see client activity here as it happens.";
@@ -4606,7 +4850,7 @@ function renderAdminNotifications() {
     return;
   }
 
-  adminNotifications.forEach(item => {
+  visibleNotifications.forEach(item => {
     const row = document.createElement("div");
     row.className = "admin-notif-item" + (item.read ? " read" : "");
 
