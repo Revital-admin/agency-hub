@@ -5359,11 +5359,11 @@ document.addEventListener("DOMContentLoaded", () => {
           listEl.innerHTML = window.agencyActivityLogs.map(log => {
             const timeStr = new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             return `
-              <div style="display: flex; gap: 12px; align-items: flex-start; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
-                <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--color-primary); margin-top: 6px;"></div>
-                <div style="flex: 1;">
-                  <div style="color: var(--color-text); font-size: 0.95rem;">${log.action}</div>
-                  <div style="color: var(--color-text-secondary); font-size: 0.8rem; margin-top: 4px;">
+              <div style="display: flex; gap: 8px; align-items: flex-start; padding-bottom: 8px; border-bottom: 1px solid var(--border-color);">
+                <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--color-primary); margin-top: 5px; flex-shrink: 0;"></div>
+                <div style="flex: 1; min-width: 0;">
+                  <div style="color: var(--color-text); font-size: 0.82rem;">${log.action}</div>
+                  <div style="color: var(--color-text-secondary); font-size: 0.7rem; margin-top: 2px;">
                     <span style="color: var(--color-primary);">${log.client}</span> &bull; ${timeStr}
                   </div>
                 </div>
