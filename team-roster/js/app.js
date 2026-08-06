@@ -308,7 +308,7 @@ function renderTimeline() {
 // enough to cover both contractors and employees rather than two
 // separate lists.
 const ONBOARDING_ITEMS = [
-  { key: 'email', label: 'Company email created' },
+  { key: 'email', label: 'Company email created', sopId: 'sop-new-hire-email-access-setup' },
   { key: 'clickup', label: 'Added to ClickUp' },
   { key: 'passwordmanager', label: 'Password manager access granted' },
   { key: 'agreement', label: 'Agreement sent (contractor) or offer signed (employee)' },
@@ -370,12 +370,27 @@ function renderOnboardingSection() {
       <label style="display:flex; align-items:center; gap:8px; font-size:0.82rem; padding:5px 0; border-bottom:1px solid var(--color-border); cursor:pointer;">
         <input type="checkbox" class="onboarding-item-checkbox" data-key="${item.key}" ${itemState.done ? 'checked' : ''} style="width:auto;">
         <span style="flex:1;">${escapeHtml(item.label)}</span>
+        ${item.sopId ? `<button type="button" class="onboarding-sop-link-btn" data-sop-id="${item.sopId}" style="background:none; border:none; color:var(--color-accent); font-size:0.72rem; text-decoration:underline; cursor:pointer; padding:0; white-space:nowrap;">How to set this up</button>` : ''}
         ${itemState.done && itemState.doneDate ? `<span style="font-size:0.7rem; color:var(--color-text-muted);">${formatShortDate(itemState.doneDate)}</span>` : ''}
       </label>`;
   }).join('');
 
   listEl.querySelectorAll('.onboarding-item-checkbox').forEach(cb => {
     cb.addEventListener('change', () => toggleOnboardingItem(cb.getAttribute('data-key'), cb.checked));
+  });
+
+  // Jumps to the SOP Wiki tab for the referenced doc (e.g. New Hire Email
+  // & Access Setup) - doesn't deep-link to the exact entry (SOP Wiki has
+  // no URL-param support for that), just gets you to the right tool with
+  // the doc one click/search away.
+  listEl.querySelectorAll('.onboarding-sop-link-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (isEmbedded && window.parent.navigateToTab) {
+        window.parent.navigateToTab('tab-sopwiki');
+      }
+    });
   });
 }
 
