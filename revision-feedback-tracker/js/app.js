@@ -119,6 +119,60 @@ function resetForm() {
   el('revisionRound').value = '1';
   el('dateRequested').value = todayStr();
   el('saveEntryBtn').textContent = 'Log Revision';
+  updateClientNameHint();
+}
+
+// ── Client name near-match warning ──
+// Agency Health Dashboard's "open revisions" flag and QBR Generator's
+// Open Revisions count both match this field against a real Client
+// Workspace name by exact, case-insensitive string - no shared ID. A
+// typo here silently drops the entry out of both. Not a hard block - a
+// client with no Workspace yet is a valid (if unusual) case here, so
+// this only fires when the typed name is close enough to a real one to
+// look like a typo.
+function levenshteinDistance(a, b) {
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const row = [i];
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      row[j] = Math.min(row[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+    }
+    prev = row;
+  }
+  return prev[n];
+}
+
+function findNearMatchClientName(typedName, realNames) {
+  const typed = (typedName || '').trim().toLowerCase();
+  if (!typed) return null;
+  if (realNames.some(n => n.toLowerCase() === typed)) return null; // exact match - already correct
+  let best = null, bestDist = Infinity;
+  realNames.forEach(n => {
+    const dist = levenshteinDistance(typed, n.toLowerCase());
+    if (dist < bestDist) { bestDist = dist; best = n; }
+  });
+  if (!best) return null;
+  const threshold = Math.max(1, Math.floor(best.length * 0.25));
+  return (bestDist > 0 && bestDist <= threshold) ? best : null;
+}
+
+function updateClientNameHint() {
+  const hintEl = el('clientNameMatchHint');
+  const nameInput = el('clientName');
+  if (!hintEl || !nameInput) return;
+  const clients = getClients();
+  const realNames = Object.keys(clients).filter(n => n !== SANDBOX_NAME);
+  const match = findNearMatchClientName(nameInput.value, realNames);
+  if (match) {
+    hintEl.textContent = `Did you mean "${match}"? Matching their Client Workspace name exactly keeps this counted in Agency Health Dashboard and QBR Generator.`;
+    hintEl.style.display = 'block';
+  } else {
+    hintEl.style.display = 'none';
+  }
 }
 
 function gatherForm() {
@@ -248,6 +302,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   el('saveEntryBtn').addEventListener('click', saveEntry);
   el('showResolvedToggle').addEventListener('change', renderTable);
   el('filterClientInput').addEventListener('input', renderTable);
+  el('clientName').addEventListener('input', updateClientNameHint);
 
   // Same iframe-race fix used across the other cross-client tools: the
   // client datalist can be empty if this loads before the parent Hub's

@@ -110,6 +110,62 @@ function populateReferrerDatalist() {
   });
 }
 
+// ── Referrer name near-match warning ──
+// findClientRecordByName() below (used to auto-fill the referrer's
+// email) and QBR Generator's referral counts both match this field
+// against a real Client Workspace name by exact, case-insensitive
+// string - no shared ID. A typo here means the email won't auto-fill
+// AND the referral silently won't count toward that client's QBR. Not a
+// hard block - a referrer who legitimately isn't an existing client yet
+// is the normal case, so this only fires when the typed name is close
+// enough to a real one to look like a typo.
+function levenshteinDistance(a, b) {
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const row = [i];
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      row[j] = Math.min(row[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+    }
+    prev = row;
+  }
+  return prev[n];
+}
+
+function findNearMatchClientName(typedName, realNames) {
+  const typed = (typedName || '').trim().toLowerCase();
+  if (!typed) return null;
+  if (realNames.some(n => n.toLowerCase() === typed)) return null; // exact match - already correct
+  let best = null, bestDist = Infinity;
+  realNames.forEach(n => {
+    const dist = levenshteinDistance(typed, n.toLowerCase());
+    if (dist < bestDist) { bestDist = dist; best = n; }
+  });
+  if (!best) return null;
+  const threshold = Math.max(1, Math.floor(best.length * 0.25));
+  return (bestDist > 0 && bestDist <= threshold) ? best : null;
+}
+
+function updateReferrerNameHint() {
+  const hintEl = el('referrerNameMatchHint');
+  const referrerInput = el('newReferrerName');
+  if (!hintEl || !referrerInput) return;
+  if (!isEmbedded || typeof window.parent.getAllClients !== 'function') { hintEl.style.display = 'none'; return; }
+  let clients = {};
+  try { clients = window.parent.getAllClients() || {}; } catch (e) { clients = {}; }
+  const realNames = Object.keys(clients).filter(n => n !== SANDBOX_NAME);
+  const match = findNearMatchClientName(referrerInput.value, realNames);
+  if (match) {
+    hintEl.textContent = `Did you mean "${match}"? Matching their Client Workspace name exactly auto-fills their email and keeps QBR Generator's referral count linked to this client.`;
+    hintEl.style.display = 'block';
+  } else {
+    hintEl.style.display = 'none';
+  }
+}
+
 function renderSummary() {
   const pending = referrals.filter(r => r.status === 'Pending');
   const won = referrals.filter(r => r.status === 'Became Client');
@@ -278,6 +334,7 @@ async function addReferral() {
   referrerInput.value = '';
   referredInput.value = '';
   dateInput.value = '';
+  updateReferrerNameHint();
   renderTable();
 
   if (isEmbedded && window.parent.showBanner) {
@@ -522,6 +579,8 @@ function initListeners() {
   el('addReferralBtn').addEventListener('click', addReferral);
   const composeAskBtn = el('composeAskReferralBtn');
   if (composeAskBtn) composeAskBtn.addEventListener('click', openAskReferralPanel);
+  const referrerInput = el('newReferrerName');
+  if (referrerInput) referrerInput.addEventListener('input', updateReferrerNameHint);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

@@ -171,6 +171,66 @@ function getUrgency(r) {
   return 'green';
 }
 
+// ── Client name near-match warning ──
+// QBR Generator, Agency Health Dashboard, and Client Portal Manager's
+// billing visibility all match this tool's clientName field against a
+// real Client Workspace name by exact (case-insensitive) string - there's
+// no shared ID. A typo here doesn't error anywhere downstream, it just
+// silently shows zero/blank data in those other tools. This is a
+// lightweight "did you mean" check, not a hard block - typing a name
+// that legitimately doesn't have a Workspace yet (a prospect) is the
+// normal, expected case for this standalone tracker.
+function levenshteinDistance(a, b) {
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const row = [i];
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      row[j] = Math.min(row[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+    }
+    prev = row;
+  }
+  return prev[n];
+}
+
+function findNearMatchClientName(typedName, realNames) {
+  const typed = (typedName || '').trim().toLowerCase();
+  if (!typed) return null;
+  if (realNames.some(n => n.toLowerCase() === typed)) return null; // exact match - already correct
+  let best = null, bestDist = Infinity;
+  realNames.forEach(n => {
+    const dist = levenshteinDistance(typed, n.toLowerCase());
+    if (dist < bestDist) { bestDist = dist; best = n; }
+  });
+  if (!best) return null;
+  // Allow more edit distance for longer names - "Acme Wellness Co" with
+  // one typo shouldn't need a near-perfect match to trigger, but a short
+  // name like "Nova" needs to be very close to avoid false positives
+  // against every unrelated short prospect name.
+  const threshold = Math.max(1, Math.floor(best.length * 0.25));
+  return (bestDist > 0 && bestDist <= threshold) ? best : null;
+}
+
+function updateClientNameHint() {
+  const hintEl = el('clientNameMatchHint');
+  const nameInput = el('newClientName');
+  if (!hintEl || !nameInput) return;
+  if (!isEmbedded || typeof window.parent.getAllClients !== 'function') { hintEl.style.display = 'none'; return; }
+  let clients = {};
+  try { clients = window.parent.getAllClients() || {}; } catch (e) { clients = {}; }
+  const realNames = Object.keys(clients).filter(n => n !== SANDBOX_NAME);
+  const match = findNearMatchClientName(nameInput.value, realNames);
+  if (match) {
+    hintEl.textContent = `Did you mean "${match}"? Matching their Client Workspace name exactly keeps QBR Generator, Agency Health Dashboard, and their portal Billing tab linked to this client.`;
+    hintEl.style.display = 'block';
+  } else {
+    hintEl.style.display = 'none';
+  }
+}
+
 function populateClientDatalist() {
   const list = el('trackerClientOptions');
   if (!list) return;
@@ -1788,6 +1848,7 @@ async function addTrackedClient() {
   }
 
   nameInput.value = '';
+  updateClientNameHint();
   renderTable();
 
   if (isEmbedded && window.parent.showBanner) {
@@ -1798,6 +1859,8 @@ async function addTrackedClient() {
 function initListeners() {
   el('addTrackedClientBtn').addEventListener('click', addTrackedClient);
   el('showClosedToggle').addEventListener('change', renderTable);
+  const nameInput = el('newClientName');
+  if (nameInput) nameInput.addEventListener('input', updateClientNameHint);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

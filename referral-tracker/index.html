@@ -39,6 +39,12 @@
 <input type="date" id="newReferralDate">
 <button id="addReferralBtn" class="btn-primary">+ Add Referral</button>
 </div>
+<!-- Matches the referrer against a real Client Workspace name to
+     auto-fill their email (see findClientRecordByName in js/app.js) and
+     also feeds QBR Generator's referral counts for that client - both by
+     exact string match, no shared ID. A typo here means no auto-filled
+     email AND a silently missed QBR count. See updateReferrerNameHint(). -->
+<div id="referrerNameMatchHint" class="tracker-name-hint" style="display:none; font-size: 0.78rem; color: var(--color-warning, #f5a623); margin-top: 6px;"></div>
 </div>
 
 <!-- Ask for a Referral - proactive outreach to an existing client, not

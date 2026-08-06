@@ -37,7 +37,13 @@
 </div>
 
 <div class="form-grid">
-<div class="form-group"><label for="clientName">Client Name</label><input type="text" id="clientName" list="clientOptions" placeholder="Client / company name..."><datalist id="clientOptions"></datalist></div>
+<div class="form-group"><label for="clientName">Client Name</label><input type="text" id="clientName" list="clientOptions" placeholder="Client / company name..."><datalist id="clientOptions"></datalist>
+<!-- Agency Health Dashboard's "open revisions" flag and QBR Generator's
+     Open Revisions count both match this field against a real Client
+     Workspace name by exact string - a typo here silently drops this
+     entry out of both. See updateClientNameHint() in js/app.js. -->
+<div id="clientNameMatchHint" class="tracker-name-hint" style="display:none; font-size: 0.75rem; color: var(--color-warning, #f5a623); margin-top: 4px;"></div>
+</div>
 <div class="form-group"><label for="deliverableName">Deliverable</label><input type="text" id="deliverableName" placeholder="e.g. IG Reel — Summer Sale"></div>
 <div class="form-group"><label for="revisionRound">Revision Round</label><input type="number" id="revisionRound" min="1" step="1" value="1"></div>
 <div class="form-group"><label for="requestedBy">Requested By</label><input type="text" id="requestedBy" placeholder="Client contact name"></div>

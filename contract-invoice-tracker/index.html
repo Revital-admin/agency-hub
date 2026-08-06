@@ -203,6 +203,13 @@ Choose File
 <input type="checkbox" id="showClosedToggle"> Show fully settled
 </label>
 </div>
+<!-- Several other tools (QBR Generator, Agency Health Dashboard, Client
+     Portal Manager's billing visibility) match this free-text name
+     against a real Client Workspace name by exact string - a typo here
+     silently breaks that link with no error anywhere. This hint warns
+     before it happens rather than after. See updateClientNameHint() in
+     js/app.js. -->
+<div id="clientNameMatchHint" class="tracker-name-hint" style="display:none; font-size: 0.78rem; color: var(--color-warning, #f5a623); margin-top: 6px;"></div>
 </div>
 
 <div class="step-card table-card">
