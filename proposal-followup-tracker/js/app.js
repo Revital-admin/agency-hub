@@ -20,6 +20,14 @@ try {
 
 const SANDBOX_NAME = "Quick Sandbox (One-Offs)";
 
+// Safety net for the fallback-sender case (no matched client's Account
+// Manager on file, so this sends as whoever's currently logged in) - a
+// reply lands in that teammate's real inbox either way since "from" is
+// always a real mailbox, but Reply-To also pointing at the shared inbox
+// means a departed teammate's old sends, or one nobody's actively
+// monitoring, still surface somewhere a reply won't be missed.
+const FALLBACK_REPLY_TO = 'clients@revitalproductions.com';
+
 let proposals = [];
 let docVersion = 0; // optimistic-concurrency guard, see persist() below
 
@@ -285,10 +293,12 @@ function wireRowListeners() {
    assigned Account Manager. This resolves "from" two ways: if the
    prospect name matches an existing client (the occasional
    upsell/expansion case), send as that client's real Account Manager;
-   otherwise fall back to the currently logged-in team member's own
-   @revitalproductions.com address, since any teammate working proposals
-   is a legitimate sender for their own outreach. Copy/mailto always
-   work regardless of which (or neither) resolves. */
+   otherwise fall back to the shared clientcare@ inbox below, so replies
+   always land somewhere the whole team can see rather than in whichever
+   individual happened to be logged in when the send went out. Copy/mailto
+   always work regardless of which (or neither) resolves. */
+
+const FALLBACK_SENDER = { name: 'Revital Productions Client Care', email: 'clientcare@revitalproductions.com' };
 
 function findClientRecordByName(name) {
   if (!isEmbedded || typeof window.parent.getAllClients !== 'function') return null;
@@ -300,11 +310,7 @@ function findClientRecordByName(name) {
 }
 
 function resolveFollowupSender() {
-  if (!isEmbedded) return null;
-  const currentEmail = (window.parent.currentAdminEmail || '').trim();
-  if (!currentEmail) return null;
-  const name = window.parent.friendlyNameFromEmail ? window.parent.friendlyNameFromEmail(currentEmail) : currentEmail.split('@')[0];
-  return { name, email: currentEmail };
+  return { name: FALLBACK_SENDER.name, email: FALLBACK_SENDER.email };
 }
 
 const STAGE_FOLLOWUP_COPY = {
@@ -375,6 +381,7 @@ function openSendFollowupPanel(id) {
   const clientConfig = matchedClient && matchedClient.portalConfig;
 
   let from = null;
+  let isFallbackSender = false;
   let senderDisplayName = 'the Revital Productions team';
   if (clientConfig && clientConfig.accountManagerEmail && clientConfig.accountManagerName) {
     from = `${clientConfig.accountManagerName} <${clientConfig.accountManagerEmail}>`;
@@ -384,6 +391,7 @@ function openSendFollowupPanel(id) {
     if (sender) {
       from = `${sender.name} <${sender.email}>`;
       senderDisplayName = sender.name.split(' ')[0];
+      isFallbackSender = true;
     }
   }
 
@@ -396,7 +404,7 @@ function openSendFollowupPanel(id) {
   sendFollowupBody.value = body;
   refreshSendFollowupMailto();
 
-  currentFollowupContext = { id: p.id, from };
+  currentFollowupContext = { id: p.id, from, isFallbackSender };
 
   if (sendFollowupSendBtn) {
     sendFollowupSendBtn.style.display = from ? 'inline-block' : 'none';
@@ -430,7 +438,8 @@ if (sendFollowupSendBtn) {
           to: sendFollowupTo.value,
           subject: sendFollowupSubject.value,
           body: sendFollowupBody.value,
-          from: currentFollowupContext.from
+          from: currentFollowupContext.from,
+          replyTo: currentFollowupContext.isFallbackSender ? FALLBACK_REPLY_TO : undefined
         })
       });
       const data = await res.json().catch(() => ({}));

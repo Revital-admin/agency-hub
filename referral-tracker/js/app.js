@@ -294,9 +294,8 @@ async function addReferral() {
        row's Referred By, with copy that adapts to the referral's status
        and reward. Same as Proposal Follow-Up/Testimonial Tracker, "from"
        prefers the referrer's own Account Manager (when they're an
-       existing client) and falls back to the current logged-in team
-       member's address otherwise. Copy/mailto always available either
-       way. */
+       existing client) and falls back to the shared clientcare@ inbox
+       otherwise. Copy/mailto always available either way. */
 
 function findClientRecordByName(name) {
   if (!isEmbedded || typeof window.parent.getAllClients !== 'function') return null;
@@ -307,12 +306,15 @@ function findClientRecordByName(name) {
   return key ? clients[key] : null;
 }
 
+// Shared fallback inbox for sends with no per-client Account Manager on
+// file (e.g. asking a client with no AM assigned yet, or thanking a
+// referrer who isn't a client at all) - replies land somewhere the whole
+// team can see, rather than in whichever individual happened to be
+// logged in when the send went out.
+const FALLBACK_SENDER = { name: 'Revital Productions Client Care', email: 'clientcare@revitalproductions.com' };
+
 function resolveReferralSender() {
-  if (!isEmbedded) return null;
-  const currentEmail = (window.parent.currentAdminEmail || '').trim();
-  if (!currentEmail) return null;
-  const name = window.parent.friendlyNameFromEmail ? window.parent.friendlyNameFromEmail(currentEmail) : currentEmail.split('@')[0];
-  return { name, email: currentEmail };
+  return { name: FALLBACK_SENDER.name, email: FALLBACK_SENDER.email };
 }
 
 function populateAskReferralClientSelect() {
@@ -384,11 +386,11 @@ if (sendReferralCopyBtn) {
 function resolveSenderFor(clientRecord) {
   const config = clientRecord && clientRecord.portalConfig;
   if (config && config.accountManagerEmail && config.accountManagerName) {
-    return { from: `${config.accountManagerName} <${config.accountManagerEmail}>`, firstName: config.accountManagerName.split(' ')[0] };
+    return { from: `${config.accountManagerName} <${config.accountManagerEmail}>`, firstName: config.accountManagerName.split(' ')[0], isFallback: false };
   }
   const sender = resolveReferralSender();
-  if (sender) return { from: `${sender.name} <${sender.email}>`, firstName: sender.name.split(' ')[0] };
-  return { from: null, firstName: 'the Revital Productions team' };
+  if (sender) return { from: `${sender.name} <${sender.email}>`, firstName: sender.name.split(' ')[0], isFallback: true };
+  return { from: null, firstName: 'the Revital Productions team', isFallback: false };
 }
 
 function openAskReferralPanel() {
@@ -406,7 +408,7 @@ function openAskReferralPanel() {
   }
 
   const contactFirstName = (config.clientContactName || clientName).split(' ')[0];
-  const { from, firstName } = resolveSenderFor(client);
+  const { from, firstName, isFallback } = resolveSenderFor(client);
 
   const subject = `Know anyone who could use us?`;
   const body = `Hi ${contactFirstName},\n\nThings have been going great, and it's always a huge compliment when a happy client sends someone our way. If you know anyone who could use help with what we do for you, we'd love an introduction - and we'll make sure it's worth your while.\n\nNo pressure at all, just wanted to plant the seed!\n\nThanks,\n${firstName}`;
@@ -416,7 +418,7 @@ function openAskReferralPanel() {
   sendReferralBody.value = body;
   refreshSendReferralMailto();
 
-  currentReferralSendContext = { kind: 'ask', from };
+  currentReferralSendContext = { kind: 'ask', from, isFallback };
   if (sendReferralPanelLabel) sendReferralPanelLabel.textContent = `Referral ask ready to send to ${clientName}:`;
   showSendReferralPanel(from, clientName);
 }
@@ -432,7 +434,7 @@ function openThankYouPanel(id) {
 
   const referrerFirstName = r.referrerName.split(' ')[0];
   const matchedClient = findClientRecordByName(r.referrerName);
-  const { from, firstName } = resolveSenderFor(matchedClient);
+  const { from, firstName, isFallback } = resolveSenderFor(matchedClient);
 
   let body;
   if (r.status === 'Became Client') {
@@ -449,7 +451,7 @@ function openThankYouPanel(id) {
   sendReferralBody.value = body;
   refreshSendReferralMailto();
 
-  currentReferralSendContext = { kind: 'thankyou', referralId: r.id, from };
+  currentReferralSendContext = { kind: 'thankyou', referralId: r.id, from, isFallback };
   if (sendReferralPanelLabel) sendReferralPanelLabel.textContent = `Thank-you email ready to send to ${r.referrerName}:`;
   showSendReferralPanel(from, r.referrerName);
 }
