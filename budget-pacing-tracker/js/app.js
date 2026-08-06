@@ -109,11 +109,11 @@ function renderTable() {
       <div class="card-actions">
         <div class="form-group" style="margin:0">
           <label style="font-size:10px">Spent to Date</label>
-          <input type="number" class="form-control spent-input" data-client="${name}" value="${p.spentToDate}">
+          <input type="text" inputmode="decimal" class="form-control spent-input" data-client="${name}" value="${formatNumberWithCommas(p.spentToDate)}">
         </div>
         <div class="form-group" style="margin:0">
           <label style="font-size:10px">Total Budget</label>
-          <input type="number" class="form-control total-input" data-client="${name}" value="${p.totalBudget}">
+          <input type="text" inputmode="decimal" class="form-control total-input" data-client="${name}" value="${formatNumberWithCommas(p.totalBudget)}">
         </div>
       </div>
       <div class="form-row mt-2">
@@ -137,18 +137,20 @@ function wireListeners() {
   const clients = getClients();
 
   document.querySelectorAll('.spent-input').forEach(inp => {
+    if (typeof attachCommaFormatting === 'function') attachCommaFormatting(inp);
     inp.addEventListener('change', (e) => {
       const c = e.target.getAttribute('data-client');
-      clients[c].budgetPacing.spentToDate = Number(e.target.value) || 0;
+      clients[c].budgetPacing.spentToDate = parseFormattedNumber(e.target.value);
       persist();
       renderTable();
     });
   });
 
   document.querySelectorAll('.total-input').forEach(inp => {
+    if (typeof attachCommaFormatting === 'function') attachCommaFormatting(inp);
     inp.addEventListener('change', (e) => {
       const c = e.target.getAttribute('data-client');
-      clients[c].budgetPacing.totalBudget = Number(e.target.value) || 0;
+      clients[c].budgetPacing.totalBudget = parseFormattedNumber(e.target.value);
       persist();
       renderTable();
     });

@@ -43,7 +43,7 @@
 <div class="form-group"><label for="jobReference">Job / Event Reference</label><input type="text" id="jobReference" list="clientOptions" placeholder="Client or event this is tied to..."><datalist id="clientOptions"></datalist></div>
 <div class="form-group"><label for="startDate">Start / Rental Date</label><input type="date" id="startDate"></div>
 <div class="form-group"><label for="endDate">Return / End Date</label><input type="date" id="endDate"></div>
-<div class="form-group"><label for="cost">Cost ($)</label><input type="number" id="cost" min="0" step="1" placeholder="0"></div>
+<div class="form-group"><label for="cost">Cost ($)</label><input type="text" inputmode="decimal" id="cost" placeholder="0"></div>
 <div class="form-group"><label for="status">Status</label><select id="status"><option>Active</option><option>Returned / Completed</option><option>Cancelled</option></select></div>
 <div class="form-group"><label for="coiStatus">COI Status</label><select id="coiStatus"><option>Not Required</option><option>On File</option><option>Missing</option><option>Expired</option></select></div>
 <div class="form-group"><label for="coiExpiration">COI Expiration Date</label><input type="date" id="coiExpiration"></div>
@@ -81,6 +81,7 @@
 </div>
 
 </main>
-<script src="js/app.js?v=1"></script>
+<script src="../shared-number-format.js"></script>
+<script src="js/app.js?v=2"></script>
 </body>
 </html>

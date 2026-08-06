@@ -201,7 +201,7 @@ function renderTable() {
       <td class="date-cell">${r.dateReferred || '--'}</td>
       <td><select class="status-select" data-id="${r.id}">${optionsHtml(STATUS_OPTIONS, r.status)}</select></td>
       <td><select class="reward-select" data-id="${r.id}">${optionsHtml(REWARD_OPTIONS, r.rewardStatus)}</select></td>
-      <td><input type="number" class="reward-amount-input" data-id="${r.id}" value="${r.rewardAmount || ''}" placeholder="$"></td>
+      <td><input type="text" inputmode="decimal" class="reward-amount-input" data-id="${r.id}" value="${r.rewardAmount ? formatNumberWithCommas(r.rewardAmount) : ''}" placeholder="$"></td>
       <td><input type="text" class="notes-input" data-id="${r.id}" value="${(r.notes || '').replace(/"/g, '&quot;')}" placeholder="Notes..."></td>
       <td>
         <div class="row-actions">
@@ -248,10 +248,11 @@ function wireRowListeners() {
   });
 
   document.querySelectorAll('.reward-amount-input').forEach(inp => {
+    if (typeof attachCommaFormatting === 'function') attachCommaFormatting(inp);
     inp.addEventListener('change', async () => {
       const r = findReferral(inp.getAttribute('data-id'));
       if (!r) return;
-      r.rewardAmount = inp.value;
+      r.rewardAmount = inp.value ? parseFormattedNumber(inp.value) : '';
       await persist();
     });
   });

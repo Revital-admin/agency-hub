@@ -51,8 +51,8 @@
 </div>
 <div class="form-group"><label for="carrier">Carrier / Insurer</label><input type="text" id="carrier" placeholder="e.g. Hiscox, The Hartford..."></div>
 <div class="form-group"><label for="policyNumber">Policy Number</label><input type="text" id="policyNumber" placeholder="Policy #"></div>
-<div class="form-group"><label for="coverageAmount">Coverage Amount ($)</label><input type="number" id="coverageAmount" min="0" step="1" placeholder="0"></div>
-<div class="form-group"><label for="annualPremium">Annual Premium ($)</label><input type="number" id="annualPremium" min="0" step="1" placeholder="0"></div>
+<div class="form-group"><label for="coverageAmount">Coverage Amount ($)</label><input type="text" inputmode="decimal" id="coverageAmount" placeholder="0"></div>
+<div class="form-group"><label for="annualPremium">Annual Premium ($)</label><input type="text" inputmode="decimal" id="annualPremium" placeholder="0"></div>
 <div class="form-group"><label for="effectiveDate">Effective Date</label><input type="date" id="effectiveDate"></div>
 <div class="form-group"><label for="expirationDate">Renewal / Expiration Date</label><input type="date" id="expirationDate"></div>
 </div>
@@ -92,6 +92,7 @@
 
 </main>
 <script src="js/logo.js"></script>
-<script src="js/app.js?v=1"></script>
+<script src="../shared-number-format.js"></script>
+<script src="js/app.js?v=2"></script>
 </body>
 </html>

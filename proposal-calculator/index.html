@@ -62,7 +62,7 @@
         <div style="display: flex; gap: 12px;">
           <div style="flex: 1;">
             <label>Current AOV ($)</label>
-            <input type="number" id="propAov" class="num-input" placeholder="500">
+            <input type="text" inputmode="decimal" id="propAov" class="num-input" placeholder="500">
           </div>
           <div style="flex: 1;">
             <label>Current Conv Rate (%)</label>
@@ -86,7 +86,7 @@
         <h3>1. Baseline Retainer</h3>
         <p class="section-desc">The minimum monthly fee to manage the account.</p>
         <label>Base Fee ($)</label>
-        <input type="number" id="baseFee" value="2500" step="500" class="num-input">
+        <input type="text" inputmode="decimal" id="baseFee" value="2,500" class="num-input">
       </div>
 
       <div class="input-section" style="margin-top: -16px;">
@@ -563,7 +563,7 @@
           <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 12px;">
             <input type="text" id="customName" class="num-input" placeholder="Item Name (e.g. Ad-hoc Consulting)">
             <div style="display: flex; gap: 10px;">
-              <input type="number" id="customPrice" class="num-input" placeholder="Price ($)" style="flex: 1;">
+              <input type="text" inputmode="decimal" id="customPrice" class="num-input" placeholder="Price ($)" style="flex: 1;">
               <select id="customType" class="select-input" style="flex: 1;">
                 <option value="monthly">Monthly</option>
                 <option value="setup">One-Time</option>
@@ -645,6 +645,7 @@
 
   </div>
 
-  <script src="js/app.js?v=68"></script>
+  <script src="../shared-number-format.js"></script>
+  <script src="js/app.js?v=69"></script>
 </body>
 </html>

@@ -251,14 +251,14 @@ function render() {
             const margin = marginCellHtml(current);
             return `<tr>
               <td class="pricing-service-name${dirty ? ' is-overridden' : ''}">${svc.name}</td>
-              <td><input type="number" class="num-input pricing-price-input" min="0" step="50" value="${current.price}" data-name="${encodeURIComponent(svc.name)}" data-field="price"></td>
+              <td><input type="text" inputmode="decimal" class="num-input pricing-price-input" value="${formatNumberWithCommas(current.price)}" data-name="${encodeURIComponent(svc.name)}" data-field="price"></td>
               <td>
                 <select class="select-input pricing-fee-select" data-name="${encodeURIComponent(svc.name)}" data-field="feeType">
                   <option value="monthly" ${current.feeType === 'monthly' ? 'selected' : ''}>Monthly</option>
                   <option value="setup" ${current.feeType === 'setup' ? 'selected' : ''}>One-Time</option>
                 </select>
               </td>
-              <td><input type="number" class="num-input pricing-cost-input" min="0" step="10" value="${current.cost}" data-name="${encodeURIComponent(svc.name)}" data-field="cost" title="What this service actually costs you to deliver (contractor pay, ad-platform fees, software allocation, etc.)"></td>
+              <td><input type="text" inputmode="decimal" class="num-input pricing-cost-input" value="${formatNumberWithCommas(current.cost)}" data-name="${encodeURIComponent(svc.name)}" data-field="cost" title="What this service actually costs you to deliver (contractor pay, ad-platform fees, software allocation, etc.)"></td>
               <td class="pricing-margin-cell ${margin.cls}">${margin.html}</td>
               <td><button class="pricing-reset-btn" data-name="${encodeURIComponent(svc.name)}" ${dirty ? '' : 'disabled'}>Reset</button></td>
             </tr>`;
@@ -284,16 +284,17 @@ function wireRowEvents() {
   catalog.forEach(svc => { byName[svc.name] = svc; });
 
   document.querySelectorAll('.pricing-price-input').forEach(input => {
+    if (typeof attachCommaFormatting === 'function') attachCommaFormatting(input);
     input.addEventListener('change', () => {
       const name = decodeURIComponent(input.getAttribute('data-name'));
       const svc = byName[name];
       if (!svc) return;
-      const price = Math.max(0, parseInt(input.value) || 0);
-      input.value = price;
+      const price = Math.max(0, parseFormattedNumber(input.value));
+      input.value = formatNumberWithCommas(price);
       const feeSelect = document.querySelector(`.pricing-fee-select[data-name="${input.getAttribute('data-name')}"]`);
       const costInput = document.querySelector(`.pricing-cost-input[data-name="${input.getAttribute('data-name')}"]`);
       const feeType = feeSelect ? feeSelect.value : svc.defaultFeeType;
-      const cost = costInput ? (Math.max(0, parseInt(costInput.value) || 0)) : (svc.defaultCost || 0);
+      const cost = costInput ? Math.max(0, parseFormattedNumber(costInput.value)) : (svc.defaultCost || 0);
       setWorkingValue(name, price, feeType, cost, svc);
       render();
     });
@@ -306,23 +307,24 @@ function wireRowEvents() {
       if (!svc) return;
       const priceInput = document.querySelector(`.pricing-price-input[data-name="${select.getAttribute('data-name')}"]`);
       const costInput = document.querySelector(`.pricing-cost-input[data-name="${select.getAttribute('data-name')}"]`);
-      const price = priceInput ? (Math.max(0, parseInt(priceInput.value) || 0)) : svc.defaultPrice;
-      const cost = costInput ? (Math.max(0, parseInt(costInput.value) || 0)) : (svc.defaultCost || 0);
+      const price = priceInput ? Math.max(0, parseFormattedNumber(priceInput.value)) : svc.defaultPrice;
+      const cost = costInput ? Math.max(0, parseFormattedNumber(costInput.value)) : (svc.defaultCost || 0);
       setWorkingValue(name, price, select.value, cost, svc);
       render();
     });
   });
 
   document.querySelectorAll('.pricing-cost-input').forEach(input => {
+    if (typeof attachCommaFormatting === 'function') attachCommaFormatting(input);
     input.addEventListener('change', () => {
       const name = decodeURIComponent(input.getAttribute('data-name'));
       const svc = byName[name];
       if (!svc) return;
-      const cost = Math.max(0, parseInt(input.value) || 0);
-      input.value = cost;
+      const cost = Math.max(0, parseFormattedNumber(input.value));
+      input.value = formatNumberWithCommas(cost);
       const priceInput = document.querySelector(`.pricing-price-input[data-name="${input.getAttribute('data-name')}"]`);
       const feeSelect = document.querySelector(`.pricing-fee-select[data-name="${input.getAttribute('data-name')}"]`);
-      const price = priceInput ? (Math.max(0, parseInt(priceInput.value) || 0)) : svc.defaultPrice;
+      const price = priceInput ? Math.max(0, parseFormattedNumber(priceInput.value)) : svc.defaultPrice;
       const feeType = feeSelect ? feeSelect.value : svc.defaultFeeType;
       setWorkingValue(name, price, feeType, cost, svc);
       render();
@@ -526,7 +528,7 @@ function startEditPreset(id) {
   } else {
     draftSelectedServices = [];
     el('presetItemNameInput').value = preset.itemName || '';
-    el('presetPriceInput').value = preset.price || '';
+    setFormattedValue(el('presetPriceInput'), preset.price || '');
     el('presetFeeTypeInput').value = preset.feeType || 'setup';
   }
   el('addPresetBtn').textContent = 'Update Preset';
@@ -565,7 +567,7 @@ function savePresetFromForm() {
     preset = { id: editingPresetId || presetUid(), name, type: 'services', services: [...draftSelectedServices] };
   } else {
     const itemName = el('presetItemNameInput').value.trim() || name;
-    const price = Math.max(0, parseInt(el('presetPriceInput').value) || 0);
+    const price = Math.max(0, parseFormattedNumber(el('presetPriceInput').value));
     const feeType = el('presetFeeTypeInput').value;
     if (price <= 0) {
       showBanner('error', 'Enter a price greater than $0.');
@@ -617,6 +619,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadPresetsData();
   renderPresetsList();
   resetPresetForm();
+
+  if (typeof attachCommaFormatting === 'function') attachCommaFormatting(el('presetPriceInput'));
 
   el('presetTypeInput').addEventListener('change', togglePresetTypeFields);
   el('presetServiceSearch').addEventListener('input', renderServiceChecklist);

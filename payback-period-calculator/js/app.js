@@ -26,9 +26,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function calculate() {
     const cName = clientNameIn.value || 'Acme Corp';
-    const setupCost = Math.max(0, parseFloat(setupCostIn.value) || 0);
-    const fee = Math.max(0, parseFloat(monthlyFeeIn.value) || 0);
-    const fullValue = Math.max(0, parseFloat(monthlyValueIn.value) || 0);
+    const setupCost = Math.max(0, parseFormattedNumber(setupCostIn.value));
+    const fee = Math.max(0, parseFormattedNumber(monthlyFeeIn.value));
+    const fullValue = Math.max(0, parseFormattedNumber(monthlyValueIn.value));
     const ramp = Math.max(0, parseInt(rampMonthsIn.value) || 0);
 
     rampMonthsVal.innerText = ramp === 0 ? 'Flat' : `${ramp} mo`;
@@ -104,6 +104,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const allInputs = [clientNameIn, setupCostIn, monthlyFeeIn, monthlyValueIn, rampMonthsIn];
   allInputs.forEach(input => input.addEventListener('input', calculate));
+  if (typeof attachCommaFormatting === 'function') {
+    attachCommaFormatting(setupCostIn);
+    attachCommaFormatting(monthlyFeeIn);
+    attachCommaFormatting(monthlyValueIn);
+  }
 
   calculate();
 

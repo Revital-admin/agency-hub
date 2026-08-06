@@ -79,7 +79,7 @@
         <label>Line item text (shown on the proposal)</label>
         <input type="text" id="presetItemNameInput" class="num-input" placeholder="e.g. Basic Website Package (up to 5 pages...)">
         <div style="display:flex; gap:10px; margin-top:10px;">
-          <input type="number" id="presetPriceInput" class="num-input" placeholder="Price ($)" style="flex:1;">
+          <input type="text" inputmode="decimal" id="presetPriceInput" class="num-input" placeholder="Price ($)" style="flex:1;">
           <select id="presetFeeTypeInput" class="select-input" style="flex:1;">
             <option value="setup">One-Time</option>
             <option value="monthly">Monthly</option>
@@ -97,6 +97,7 @@
 </div>
 
 <script src="../proposal-calculator/js/service-catalog.js"></script>
-<script src="js/app.js?v=6"></script>
+<script src="../shared-number-format.js"></script>
+<script src="js/app.js?v=7"></script>
 </body>
 </html>

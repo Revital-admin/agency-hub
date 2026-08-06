@@ -129,7 +129,7 @@ function gatherForm() {
   FORM_FIELDS.forEach(id => {
     const field = el(id);
     if (id === 'coverageAmount' || id === 'annualPremium') {
-      entry[id] = Math.max(0, parseFloat(field.value) || 0);
+      entry[id] = Math.max(0, parseFormattedNumber(field.value));
     } else {
       entry[id] = field.value.trim ? field.value.trim() : field.value;
     }
@@ -164,7 +164,13 @@ function startEdit(id) {
   const entry = entries.find(e => e.id === id);
   if (!entry) return;
   editingId = id;
-  FORM_FIELDS.forEach(fieldId => { el(fieldId).value = entry[fieldId] || ''; });
+  FORM_FIELDS.forEach(fieldId => {
+    if (fieldId === 'coverageAmount' || fieldId === 'annualPremium') {
+      setFormattedValue(el(fieldId), entry[fieldId] || '');
+    } else {
+      el(fieldId).value = entry[fieldId] || '';
+    }
+  });
   el('saveEntryBtn').textContent = 'Update Policy';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -295,4 +301,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   el('saveEntryBtn').addEventListener('click', saveEntry);
   el('filterInput').addEventListener('input', renderTable);
+  if (typeof attachCommaFormatting === 'function') {
+    attachCommaFormatting(el('coverageAmount'));
+    attachCommaFormatting(el('annualPremium'));
+  }
 });

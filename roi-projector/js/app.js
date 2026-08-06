@@ -50,11 +50,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const cName = clientNameIn.value || 'Acme Corp';
     const cTraffic = parseFloat(currentTrafficIn.value) || 0;
     const cConvRate = parseFloat(currentConvRateIn.value) || 0;
-    const cAOV = parseFloat(currentAOVIn.value) || 0;
-    
+    const cAOV = parseFormattedNumber(currentAOVIn.value);
+
     const pTrafficInc = parseFloat(projTrafficIncIn.value) || 0;
     const pConvInc = parseFloat(projConvIncIn.value) || 0;
-    const fee = parseFloat(monthlyFeeIn.value) || 0;
+    const fee = parseFormattedNumber(monthlyFeeIn.value);
 
     // 2. Update Slider text
     projTrafficIncVal.innerText = `+${pTrafficInc}%`;
@@ -99,6 +99,10 @@ document.addEventListener('DOMContentLoaded', () => {
   [clientNameIn, currentTrafficIn, currentConvRateIn, currentAOVIn, projTrafficIncIn, projConvIncIn, monthlyFeeIn].forEach(input => {
     input.addEventListener('input', calculate);
   });
+  if (typeof attachCommaFormatting === 'function') {
+    attachCommaFormatting(currentAOVIn);
+    attachCommaFormatting(monthlyFeeIn);
+  }
 
   // Initial calculation
   calculate();

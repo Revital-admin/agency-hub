@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const state = parentClient.adCampaignBrief;
     if (state.campaignName) document.getElementById('campaignName').value = state.campaignName;
     if (state.objective) document.getElementById('objective').value = state.objective;
-    if (state.totalBudget) document.getElementById('totalBudget').value = state.totalBudget;
+    if (state.totalBudget) setFormattedValue(document.getElementById('totalBudget'), state.totalBudget);
     if (state.budgetSplit) document.getElementById('budgetSplit').value = state.budgetSplit;
     if (state.startDate) document.getElementById('startDate').value = state.startDate;
     if (state.endDate) document.getElementById('endDate').value = state.endDate;
@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentMarkdown = '';
 
   const formatCurrency = (num) => {
-    const n = parseFloat(num);
+    const n = parseFormattedNumber(num);
     if (!n && n !== 0) return '';
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
   };
@@ -125,6 +125,7 @@ ${specialNotes}
 
   inputs.forEach(input => input.addEventListener('input', generateMarkdown));
   platformChecks.forEach(cb => cb.addEventListener('change', generateMarkdown));
+  if (typeof attachCommaFormatting === 'function') attachCommaFormatting(document.getElementById('totalBudget'));
 
   generateMarkdown();
 

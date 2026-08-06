@@ -147,7 +147,13 @@ function startEdit(id) {
   const entry = entries.find(e => e.id === id);
   if (!entry) return;
   editingId = id;
-  FORM_FIELDS.forEach(fieldId => { el(fieldId).value = entry[fieldId] || ''; });
+  FORM_FIELDS.forEach(fieldId => {
+    if (fieldId === 'additionalCost') {
+      setFormattedValue(el(fieldId), entry[fieldId] || '');
+    } else {
+      el(fieldId).value = entry[fieldId] || '';
+    }
+  });
   el('saveEntryBtn').textContent = 'Update Change Order';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -189,7 +195,7 @@ function buildChangeOrderPdfPayload(entry) {
     <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px; margin-bottom: 8px;">Why This Falls Outside the Signed SOW</h3>
     <p style="font-size: 13px; line-height: 1.6; margin-bottom: 18px;">${entry.reasonOutOfScope || '—'}</p>
     <table style="width:100%; border-collapse: collapse; margin: 24px 0; font-size: 13px;">
-      <tr><td style="padding:8px 12px; background:#f4f4f8; font-weight:700; width:50%;">Additional Cost</td><td style="padding:8px 12px; background:#f4f4f8;">${entry.additionalCost ? '$' + Number(entry.additionalCost).toLocaleString() : '$0'}</td></tr>
+      <tr><td style="padding:8px 12px; background:#f4f4f8; font-weight:700; width:50%;">Additional Cost</td><td style="padding:8px 12px; background:#f4f4f8;">${entry.additionalCost ? '$' + parseFormattedNumber(entry.additionalCost).toLocaleString() : '$0'}</td></tr>
       <tr><td style="padding:8px 12px; font-weight:700;">Additional Timeline</td><td style="padding:8px 12px;">${entry.additionalTimelineDays ? entry.additionalTimelineDays + ' day(s)' : '0 days'}</td></tr>
     </table>
     <div style="margin-top: 60px; display:flex; gap:40px;">
@@ -426,7 +432,7 @@ function renderTable() {
       <td class="client-cell">${entry.clientName}</td>
       <td>${entry.deliverableName}</td>
       <td>${(entry.requestedChange || '').slice(0, 80)}${(entry.requestedChange || '').length > 80 ? '…' : ''}</td>
-      <td>${entry.additionalCost ? '$' + Number(entry.additionalCost).toLocaleString() : '—'}</td>
+      <td>${entry.additionalCost ? '$' + parseFormattedNumber(entry.additionalCost).toLocaleString() : '—'}</td>
       <td>${entry.additionalTimelineDays ? entry.additionalTimelineDays + 'd' : '—'}</td>
       <td><span class="section-tag ${statusTagClass(entry.status)}">${entry.status || 'Pending'}</span></td>
       <td>
@@ -456,6 +462,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   el('saveEntryBtn').addEventListener('click', saveEntry);
   el('showResolvedToggle').addEventListener('change', renderTable);
   el('filterClientInput').addEventListener('input', renderTable);
+  if (typeof attachCommaFormatting === 'function') attachCommaFormatting(el('additionalCost'));
 
   // Same iframe-race fix used across the other cross-client tools: the
   // client datalist can be empty if this loads before the parent Hub's

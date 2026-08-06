@@ -170,7 +170,7 @@ function applyHeaderAndPostCallToForm() {
   el('timelineSummary').value = pc.timeline || '';
   el('redFlagsSummary').value = pc.redFlags || '';
   el('recommendedPackage').value = pc.recommendedPackage || '';
-  el('estimatedRetainer').value = pc.estimatedRetainer || '';
+  setFormattedValue(el('estimatedRetainer'), pc.estimatedRetainer || '');
   el('nextAction').value = pc.nextAction || '';
   el('nextActionDate').value = pc.nextActionDate || '';
   el('postCallNotes').value = pc.notes || '';
@@ -209,6 +209,7 @@ function initListeners() {
   ['clientNameField', 'companyField', 'callDateField'].forEach(id => {
     el(id).addEventListener('input', onFormChange);
   });
+  if (typeof attachCommaFormatting === 'function') attachCommaFormatting(el('estimatedRetainer'));
   ['budgetConfirmed', 'budgetAmount', 'decisionMakerSummary', 'timelineSummary', 'redFlagsSummary', 'recommendedPackage', 'estimatedRetainer', 'nextAction', 'nextActionDate', 'postCallNotes'].forEach(id => {
     el(id).addEventListener('input', onFormChange);
     el(id).addEventListener('change', onFormChange);

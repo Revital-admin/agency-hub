@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function calculate() {
     const cName = clientNameIn.value || 'Acme Corp';
-    const revenue = Math.max(0, parseFloat(annualRevenueIn.value) || 0);
+    const revenue = Math.max(0, parseFormattedNumber(annualRevenueIn.value));
     const industryKey = industryIn.value;
     const stageKey = growthStageIn.value;
 
@@ -109,6 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const allInputs = [clientNameIn, annualRevenueIn, industryIn, growthStageIn, ...CHANNEL_FIELDS.map(ch => el(ch.id))];
   allInputs.forEach(input => input.addEventListener('input', calculate));
+  if (typeof attachCommaFormatting === 'function') attachCommaFormatting(annualRevenueIn);
 
   calculate();
 

@@ -343,6 +343,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderPresetButtons();
 
   // Bind events
+  if (typeof attachCommaFormatting === 'function') {
+    attachCommaFormatting(baseFee);
+    if (customPrice) attachCommaFormatting(customPrice);
+    if (propAov) attachCommaFormatting(propAov);
+  }
   baseFee.addEventListener('input', calculate);
   if (spendTier) spendTier.addEventListener('change', calculate);
   if (blogCount) blogCount.addEventListener('input', calculate);
@@ -371,7 +376,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (addCustomBtn) {
     addCustomBtn.addEventListener('click', () => {
       const name = customName.value.trim();
-      const price = parseInt(customPrice.value) || 0;
+      const price = parseFormattedNumber(customPrice.value);
       const type = customType.value;
       if (name && price > 0) {
         customItemsArray.push({ id: Date.now(), name, price, type });
@@ -433,7 +438,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // ── Core Calculation ──
   function calculate() {
-    let monthly = parseInt(baseFee.value) || 0;
+    let monthly = parseFormattedNumber(baseFee.value);
     let setup = 0;
     let hardCosts = 0; // Cost of goods sold (freelancers, software)
     let pricedServiceCount = 0; // how many selected services have a real per-service cost set
@@ -657,7 +662,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (saved) {
       try {
         const state = JSON.parse(saved);
-        baseFee.value = state.baseFee !== undefined ? state.baseFee : 2500;
+        setFormattedValue(baseFee, state.baseFee !== undefined ? state.baseFee : 2500);
         if (spendTier && state.spendTier) spendTier.value = state.spendTier;
         if (blogCount && state.blogCount) blogCount.value = state.blogCount;
         if (socialCount && state.socialCount) socialCount.value = state.socialCount;
@@ -671,7 +676,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (propWorking && state.working) propWorking.value = state.working;
         if (propOpps && state.opps) propOpps.value = state.opps;
         if (propStripeUrl && state.stripe) propStripeUrl.value = state.stripe;
-        if (propAov && state.aov) propAov.value = state.aov;
+        if (propAov && state.aov) setFormattedValue(propAov, state.aov);
         if (propConvRate && state.convRate) propConvRate.value = state.convRate;
         if (propStartDate && state.startDate) propStartDate.value = state.startDate;
         if (propMeetingRecap && state.meetingRecap) propMeetingRecap.value = state.meetingRecap;
@@ -721,7 +726,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ROI projection math
     let roiHtml = "";
     if (propAov && propAov.value && propConvRate && propConvRate.value && monthlyNum > 0) {
-      const aov = parseFloat(propAov.value);
+      const aov = parseFormattedNumber(propAov.value);
       const cr = parseFloat(propConvRate.value) / 100;
       const salesNeeded = Math.ceil(monthlyNum / aov);
       const trafficNeeded = Math.ceil(salesNeeded / cr);

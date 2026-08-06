@@ -154,7 +154,13 @@ function startEdit(id) {
   const entry = entries.find(e => e.id === id);
   if (!entry) return;
   editingId = id;
-  FORM_FIELDS.forEach(fieldId => { el(fieldId).value = entry[fieldId] || ''; });
+  FORM_FIELDS.forEach(fieldId => {
+    if (fieldId === 'cost') {
+      setFormattedValue(el(fieldId), entry[fieldId] || '');
+    } else {
+      el(fieldId).value = entry[fieldId] || '';
+    }
+  });
   el('saveEntryBtn').textContent = 'Update Entry';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -195,7 +201,7 @@ function renderTable() {
     const tr = document.createElement('tr');
     tr.className = flagged ? 'row-coi-flag' : '';
     const dateRange = [entry.startDate, entry.endDate].filter(Boolean).join(' → ') || '--';
-    const costText = entry.cost ? `$${Number(entry.cost).toLocaleString()}` : '';
+    const costText = entry.cost ? `$${parseFormattedNumber(entry.cost).toLocaleString()}` : '';
     tr.innerHTML = `
       <td class="client-cell">${escapeHtml(entry.vendorName)}</td>
       <td><span class="section-tag">${escapeHtml(entry.recordType) || '--'}</span></td>
@@ -225,6 +231,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   el('saveEntryBtn').addEventListener('click', saveEntry);
   el('filterInput').addEventListener('input', renderTable);
+  if (typeof attachCommaFormatting === 'function') attachCommaFormatting(el('cost'));
 
   let pollAttempts = 0;
   const pollTimer = setInterval(() => {

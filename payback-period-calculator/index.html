@@ -42,12 +42,12 @@
         </div>
         <div class="form-group">
           <label for="setupCost">One-Time Setup / Onboarding Cost ($)</label>
-          <input type="number" id="setupCost" value="0" min="0" step="100">
+          <input type="text" inputmode="decimal" id="setupCost" value="0">
           <p class="help-text">Leave at 0 if this engagement has no separate setup fee.</p>
         </div>
         <div class="form-group">
           <label for="monthlyFee">Revital Monthly Fee ($)</label>
-          <input type="number" id="monthlyFee" value="3000" min="0" step="100">
+          <input type="text" inputmode="decimal" id="monthlyFee" value="3,000">
         </div>
       </div>
 
@@ -55,7 +55,7 @@
         <h3>Projected Return</h3>
         <div class="form-group">
           <label for="monthlyValue">Projected Monthly Value at Full Ramp ($)</label>
-          <input type="number" id="monthlyValue" value="6000" min="0" step="100">
+          <input type="text" inputmode="decimal" id="monthlyValue" value="6,000">
           <p class="help-text">Steady-state monthly revenue lift or cost savings once the engagement is fully up to speed.</p>
         </div>
         <div class="form-group">
@@ -129,6 +129,7 @@
 </main>
 
 <script src="js/logo.js"></script>
-<script src="js/app.js?v=1"></script>
+<script src="../shared-number-format.js"></script>
+<script src="js/app.js?v=2"></script>
 </body>
 </html>

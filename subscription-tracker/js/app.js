@@ -128,7 +128,7 @@ function gatherForm() {
   FORM_FIELDS.forEach(id => {
     const field = el(id);
     if (id === 'monthlyCost') {
-      entry[id] = Math.max(0, parseFloat(field.value) || 0);
+      entry[id] = Math.max(0, parseFormattedNumber(field.value));
     } else {
       entry[id] = field.value.trim ? field.value.trim() : field.value;
     }
@@ -163,7 +163,13 @@ function startEdit(id) {
   const entry = entries.find(e => e.id === id);
   if (!entry) return;
   editingId = id;
-  FORM_FIELDS.forEach(fieldId => { el(fieldId).value = entry[fieldId] || ''; });
+  FORM_FIELDS.forEach(fieldId => {
+    if (fieldId === 'monthlyCost') {
+      setFormattedValue(el(fieldId), entry[fieldId] || '');
+    } else {
+      el(fieldId).value = entry[fieldId] || '';
+    }
+  });
   el('saveEntryBtn').textContent = 'Update Subscription';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -181,7 +187,7 @@ function removeEntry(id) {
 }
 
 function monthlyEquivalent(entry) {
-  const cost = parseFloat(entry.monthlyCost) || 0;
+  const cost = parseFormattedNumber(entry.monthlyCost);
   return entry.billingCycle === 'Annual' ? cost / 12 : cost;
 }
 
@@ -234,7 +240,7 @@ function renderTable() {
     return `<tr class="${renewalSoon ? 'row-renewal-soon' : ''}">
       <td class="client-cell">${escapeHtml(e.toolName)}</td>
       <td>${escapeHtml(e.category)}</td>
-      <td>$${Math.round(parseFloat(e.monthlyCost) || 0).toLocaleString()}</td>
+      <td>$${Math.round(parseFormattedNumber(e.monthlyCost)).toLocaleString()}</td>
       <td>${escapeHtml(e.billingCycle)}</td>
       <td class="date-cell">${e.renewalDate ? escapeHtml(e.renewalDate) : '—'}</td>
       <td>${escapeHtml(e.owner) || '—'}</td>
@@ -284,4 +290,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   el('saveEntryBtn').addEventListener('click', saveEntry);
   el('filterInput').addEventListener('input', renderTable);
   el('showCancelledToggle').addEventListener('change', renderTable);
+  if (typeof attachCommaFormatting === 'function') attachCommaFormatting(el('monthlyCost'));
 });
