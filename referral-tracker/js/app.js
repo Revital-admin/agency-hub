@@ -140,6 +140,7 @@ function renderTable() {
 
     tr.innerHTML = `
       <td class="name-cell">${r.referrerName}</td>
+      <td><input type="email" class="referrer-email-input" data-id="${r.id}" value="${(r.referrerEmail || '').replace(/"/g, '&quot;')}" placeholder="referrer@..."></td>
       <td class="name-cell">${r.referredName}</td>
       <td class="date-cell">${r.dateReferred || '--'}</td>
       <td><select class="status-select" data-id="${r.id}">${optionsHtml(STATUS_OPTIONS, r.status)}</select></td>
@@ -148,6 +149,7 @@ function renderTable() {
       <td><input type="text" class="notes-input" data-id="${r.id}" value="${(r.notes || '').replace(/"/g, '&quot;')}" placeholder="Notes..."></td>
       <td>
         <div class="row-actions">
+          <button class="send-thankyou-btn" data-id="${r.id}">Send Thank You</button>
           <button class="delete-btn" data-id="${r.id}">Delete</button>
         </div>
       </td>
@@ -207,6 +209,18 @@ function wireRowListeners() {
     });
   });
 
+  document.querySelectorAll('.referrer-email-input').forEach(inp => {
+    inp.addEventListener('input', async () => {
+      const r = findReferral(inp.getAttribute('data-id'));
+      if (!r) return;
+      r.referrerEmail = inp.value.trim();
+      await persist();
+    });
+  });
+
+  document.querySelectorAll('.send-thankyou-btn').forEach(btn => {
+    btn.addEventListener('click', () => openThankYouPanel(btn.getAttribute('data-id')));
+  });
   document.querySelectorAll('.delete-btn').forEach(btn => {
     btn.addEventListener('click', () => deleteReferral(btn.getAttribute('data-id')));
   });
@@ -235,9 +249,17 @@ async function addReferral() {
     return;
   }
 
+  // Auto-fill the referrer's email from a matching client if one exists
+  // (the referrer datalist is sourced from clientsDb, so this usually
+  // hits) - still fully editable afterward for referrers who aren't an
+  // existing client, or whose contact email isn't set yet.
+  const matchedReferrer = findClientRecordByName(referrerName);
+  const referrerEmail = (matchedReferrer && matchedReferrer.portalConfig && matchedReferrer.portalConfig.clientContactEmail) || '';
+
   referrals.push({
     id: uid(),
     referrerName,
+    referrerEmail,
     referredName,
     dateReferred: dateInput.value || todayStr(),
     status: 'Pending',
@@ -263,12 +285,246 @@ async function addReferral() {
   }
 }
 
+/* ── Ask for a Referral / Send Thank You (real auto-send via Resend) ──
+   Two different sends sharing one panel (see currentReferralSendContext
+   below), since only one is ever open at a time:
+     - "Ask": proactive, not tied to any logged referral - pick an
+       existing client and ask if they know anyone who could use us.
+     - "Thank You": tied to a specific row - thanks whoever's in that
+       row's Referred By, with copy that adapts to the referral's status
+       and reward. Same as Proposal Follow-Up/Testimonial Tracker, "from"
+       prefers the referrer's own Account Manager (when they're an
+       existing client) and falls back to the current logged-in team
+       member's address otherwise. Copy/mailto always available either
+       way. */
+
+function findClientRecordByName(name) {
+  if (!isEmbedded || typeof window.parent.getAllClients !== 'function') return null;
+  let clients = {};
+  try { clients = window.parent.getAllClients() || {}; } catch (e) { return null; }
+  const target = (name || '').trim().toLowerCase();
+  const key = Object.keys(clients).find(k => k.trim().toLowerCase() === target);
+  return key ? clients[key] : null;
+}
+
+function resolveReferralSender() {
+  if (!isEmbedded) return null;
+  const currentEmail = (window.parent.currentAdminEmail || '').trim();
+  if (!currentEmail) return null;
+  const name = window.parent.friendlyNameFromEmail ? window.parent.friendlyNameFromEmail(currentEmail) : currentEmail.split('@')[0];
+  return { name, email: currentEmail };
+}
+
+function populateAskReferralClientSelect() {
+  const select = el('askReferralClientSelect');
+  if (!select) return;
+  const previousValue = select.value;
+  select.innerHTML = '<option value="">Select a client...</option>';
+  if (!isEmbedded || typeof window.parent.getAllClients !== 'function') return;
+  let clients = {};
+  try { clients = window.parent.getAllClients() || {}; } catch (e) { clients = {}; }
+  Object.keys(clients).sort().forEach(name => {
+    if (name === SANDBOX_NAME) return;
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    select.appendChild(opt);
+  });
+  if (previousValue) select.value = previousValue;
+}
+
+const sendReferralPanel = el('sendReferralPanel');
+const sendReferralPanelLabel = el('sendReferralPanelLabel');
+const sendReferralTo = el('sendReferralTo');
+const sendReferralSubject = el('sendReferralSubject');
+const sendReferralBody = el('sendReferralBody');
+const sendReferralOpenBtn = el('sendReferralOpenBtn');
+const sendReferralCopyBtn = el('sendReferralCopyBtn');
+const sendReferralSendBtn = el('sendReferralSendBtn');
+const sendReferralStatus = el('sendReferralStatus');
+const sendReferralCloseBtn = el('sendReferralCloseBtn');
+
+let currentReferralSendContext = null; // { kind: 'ask'|'thankyou', referralId?, from }
+
+function refreshSendReferralMailto() {
+  if (!sendReferralOpenBtn || !sendReferralTo) return;
+  sendReferralOpenBtn.href = `mailto:${encodeURIComponent(sendReferralTo.value)}?subject=${encodeURIComponent(sendReferralSubject.value)}&body=${encodeURIComponent(sendReferralBody.value)}`;
+}
+
+if (sendReferralCloseBtn) {
+  sendReferralCloseBtn.addEventListener('click', () => {
+    if (sendReferralPanel) sendReferralPanel.style.display = 'none';
+  });
+}
+
+[sendReferralTo, sendReferralSubject, sendReferralBody].forEach(elx => {
+  if (elx) elx.addEventListener('input', refreshSendReferralMailto);
+});
+
+if (sendReferralCopyBtn) {
+  sendReferralCopyBtn.addEventListener('click', async () => {
+    const text = `To: ${sendReferralTo.value}\nSubject: ${sendReferralSubject.value}\n\n${sendReferralBody.value}`;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        sendReferralBody.select();
+        document.execCommand('copy');
+      }
+      const original = sendReferralCopyBtn.textContent;
+      sendReferralCopyBtn.textContent = 'Copied!';
+      setTimeout(() => { sendReferralCopyBtn.textContent = original; }, 2000);
+    } catch (err) {
+      console.error('Failed to copy referral email', err);
+      alert('Failed to copy. Please manually select and copy the text.');
+    }
+  });
+}
+
+function resolveSenderFor(clientRecord) {
+  const config = clientRecord && clientRecord.portalConfig;
+  if (config && config.accountManagerEmail && config.accountManagerName) {
+    return { from: `${config.accountManagerName} <${config.accountManagerEmail}>`, firstName: config.accountManagerName.split(' ')[0] };
+  }
+  const sender = resolveReferralSender();
+  if (sender) return { from: `${sender.name} <${sender.email}>`, firstName: sender.name.split(' ')[0] };
+  return { from: null, firstName: 'the Revital Productions team' };
+}
+
+function openAskReferralPanel() {
+  const select = el('askReferralClientSelect');
+  const clientName = select ? select.value : '';
+  if (!clientName) {
+    alert('Select a client first.');
+    return;
+  }
+  const client = findClientRecordByName(clientName);
+  const config = client && client.portalConfig;
+  if (!config || !config.clientContactEmail) {
+    alert(`${clientName} has no Contact Email set in Client Portal Manager yet - add one before sending an ask.`);
+    return;
+  }
+
+  const contactFirstName = (config.clientContactName || clientName).split(' ')[0];
+  const { from, firstName } = resolveSenderFor(client);
+
+  const subject = `Know anyone who could use us?`;
+  const body = `Hi ${contactFirstName},\n\nThings have been going great, and it's always a huge compliment when a happy client sends someone our way. If you know anyone who could use help with what we do for you, we'd love an introduction - and we'll make sure it's worth your while.\n\nNo pressure at all, just wanted to plant the seed!\n\nThanks,\n${firstName}`;
+
+  sendReferralTo.value = config.clientContactEmail;
+  sendReferralSubject.value = subject;
+  sendReferralBody.value = body;
+  refreshSendReferralMailto();
+
+  currentReferralSendContext = { kind: 'ask', from };
+  if (sendReferralPanelLabel) sendReferralPanelLabel.textContent = `Referral ask ready to send to ${clientName}:`;
+  showSendReferralPanel(from, clientName);
+}
+
+function openThankYouPanel(id) {
+  const r = findReferral(id);
+  if (!r) return;
+
+  if (!r.referrerEmail) {
+    alert(`Add ${r.referrerName}'s email first (the Referrer Email column) before sending a thank you.`);
+    return;
+  }
+
+  const referrerFirstName = r.referrerName.split(' ')[0];
+  const matchedClient = findClientRecordByName(r.referrerName);
+  const { from, firstName } = resolveSenderFor(matchedClient);
+
+  let body;
+  if (r.status === 'Became Client') {
+    const rewardLine = r.rewardStatus === 'Paid'
+      ? "Your referral reward has already gone out - thank you again!"
+      : "We'll be sending your referral reward your way shortly - thank you again!";
+    body = `Hi ${referrerFirstName},\n\nJust wanted to say a huge thank you for referring ${r.referredName} our way - they're now a client! We really appreciate you thinking of us.\n\n${rewardLine}\n\nThanks,\n${firstName}`;
+  } else {
+    body = `Hi ${referrerFirstName},\n\nJust wanted to say thank you for referring ${r.referredName} our way - we really appreciate you thinking of us, and it means a lot either way it turns out.\n\nThanks,\n${firstName}`;
+  }
+
+  sendReferralTo.value = r.referrerEmail;
+  sendReferralSubject.value = `Thank you for the referral!`;
+  sendReferralBody.value = body;
+  refreshSendReferralMailto();
+
+  currentReferralSendContext = { kind: 'thankyou', referralId: r.id, from };
+  if (sendReferralPanelLabel) sendReferralPanelLabel.textContent = `Thank-you email ready to send to ${r.referrerName}:`;
+  showSendReferralPanel(from, r.referrerName);
+}
+
+function showSendReferralPanel(from, recipientLabel) {
+  if (sendReferralSendBtn) {
+    sendReferralSendBtn.style.display = from ? 'inline-block' : 'none';
+    sendReferralSendBtn.disabled = false;
+    sendReferralSendBtn.textContent = 'Send';
+  }
+  if (sendReferralStatus) {
+    sendReferralStatus.textContent = from ? '' : "Couldn't determine a sender address - use Copy or \"Open in Email App\" instead.";
+    sendReferralStatus.style.color = 'var(--text-muted)';
+  }
+  if (sendReferralPanel) {
+    sendReferralPanel.style.display = 'block';
+    sendReferralPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+if (sendReferralSendBtn) {
+  sendReferralSendBtn.addEventListener('click', async () => {
+    if (!currentReferralSendContext || !currentReferralSendContext.from) return;
+
+    sendReferralSendBtn.disabled = true;
+    sendReferralSendBtn.textContent = 'Sending...';
+    if (sendReferralStatus) sendReferralStatus.textContent = '';
+
+    try {
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: sendReferralTo.value,
+          subject: sendReferralSubject.value,
+          body: sendReferralBody.value,
+          from: currentReferralSendContext.from
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `Send failed (${res.status})`);
+      }
+
+      sendReferralSendBtn.textContent = 'Sent ✓';
+      if (sendReferralStatus) {
+        sendReferralStatus.textContent = 'Sent successfully.';
+        sendReferralStatus.style.color = 'var(--color-success, #10b981)';
+      }
+      if (isEmbedded && window.parent.showBanner) {
+        window.parent.showBanner('success', currentReferralSendContext.kind === 'ask'
+          ? 'Referral ask sent.'
+          : 'Thank-you email sent.');
+      }
+    } catch (e) {
+      console.error('Send referral email failed:', e);
+      sendReferralSendBtn.disabled = false;
+      sendReferralSendBtn.textContent = 'Send';
+      if (sendReferralStatus) {
+        sendReferralStatus.textContent = "Couldn't send automatically (" + e.message + ") - use Copy or \"Open in Email App\" instead.";
+        sendReferralStatus.style.color = 'var(--color-error, #f68d5f)';
+      }
+    }
+  });
+}
+
 function initListeners() {
   el('addReferralBtn').addEventListener('click', addReferral);
+  const composeAskBtn = el('composeAskReferralBtn');
+  if (composeAskBtn) composeAskBtn.addEventListener('click', openAskReferralPanel);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
   populateReferrerDatalist();
+  populateAskReferralClientSelect();
   await loadReferrals();
   renderTable();
   initListeners();
@@ -285,6 +541,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try { clientCount = isEmbedded ? Object.keys(window.parent.getAllClients() || {}).length : 0; } catch (e) {}
     if (clientCount > 0) {
       populateReferrerDatalist();
+      populateAskReferralClientSelect();
       clearInterval(pollTimer);
     } else if (pollAttempts >= 30) {
       clearInterval(pollTimer);

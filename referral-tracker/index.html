@@ -41,12 +41,27 @@
 </div>
 </div>
 
+<!-- Ask for a Referral - proactive outreach to an existing client, not
+     tied to any logged referral row (there's nothing to log yet - this
+     is what prompts one). Separate from the per-row Send Thank You flow
+     below. -->
+<div class="step-card">
+<h3 style="margin-top:0;">Ask a Client for a Referral</h3>
+<div class="tracker-controls-row">
+<select id="askReferralClientSelect" style="flex:1; min-width:220px; padding: 8px 12px; border: 1px solid var(--color-border-md); border-radius: 6px; font-size: 14px; font-family: inherit; background: var(--color-surface); color: var(--color-text-primary);">
+<option value="">Select a client...</option>
+</select>
+<button id="composeAskReferralBtn" class="btn-secondary" type="button">Compose Ask Email</button>
+</div>
+</div>
+
 <div class="step-card table-card">
 <div class="tracker-table-wrap">
 <table class="tracker-table">
 <thead>
 <tr>
 <th>Referred By</th>
+<th>Referrer Email</th>
 <th>Referred Prospect</th>
 <th>Date</th>
 <th>Status</th>
@@ -62,8 +77,37 @@
 <p id="emptyState" class="empty-state" style="display: none;">No referrals logged yet. Add one above.</p>
 </div>
 </div>
+
+<!-- Shared send panel - reused by both Ask a Client for a Referral above
+     and each row's Send Thank You button (see currentReferralSendContext
+     in js/app.js). Only one send is ever in progress at a time, so one
+     panel populated fresh per click is simpler than two near-identical
+     copies. Same To/Subject/Body/Copy/Open/Send layout used across the
+     Hub's other real-send flows. -->
+<div id="sendReferralPanel" style="display:none; max-width: 640px; margin: 0 auto 24px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md, 10px); padding: 20px; position: relative;">
+<button type="button" id="sendReferralCloseBtn" aria-label="Close" style="position: absolute; top: 14px; right: 14px; background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 4px;">&times;</button>
+<p id="sendReferralPanelLabel" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; padding-right: 24px;">Email ready to send:</p>
+<div class="form-group">
+<label for="sendReferralTo">To</label>
+<input type="text" id="sendReferralTo">
+</div>
+<div class="form-group">
+<label for="sendReferralSubject">Subject</label>
+<input type="text" id="sendReferralSubject">
+</div>
+<div class="form-group">
+<label for="sendReferralBody">Body</label>
+<textarea id="sendReferralBody" rows="8"></textarea>
+</div>
+<div style="display:flex; gap:8px; flex-wrap: wrap; align-items: center;">
+<a href="#" id="sendReferralOpenBtn" class="download-pdf-btn" style="padding: 10px 20px; text-decoration:none;" target="_blank" rel="noopener">Open in Email App</a>
+<button class="btn-secondary" id="sendReferralCopyBtn" type="button" style="padding: 10px 20px;">Copy Text</button>
+<button class="download-pdf-btn" id="sendReferralSendBtn" type="button" style="padding: 10px 20px; display:none;">Send</button>
+</div>
+<div id="sendReferralStatus" style="font-size: 0.8rem; margin-top: 8px;"></div>
+</div>
 </main>
 
-<script src="js/app.js?v=2"></script>
+<script src="js/app.js?v=3"></script>
 </body>
 </html>
