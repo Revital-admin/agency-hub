@@ -294,7 +294,7 @@ async function addReferral() {
        row's Referred By, with copy that adapts to the referral's status
        and reward. Same as Proposal Follow-Up/Testimonial Tracker, "from"
        prefers the referrer's own Account Manager (when they're an
-       existing client) and falls back to the shared clientcare@ inbox
+       existing client) and falls back to the shared hello@ inbox
        otherwise. Copy/mailto always available either way. */
 
 function findClientRecordByName(name) {
@@ -311,7 +311,7 @@ function findClientRecordByName(name) {
 // referrer who isn't a client at all) - replies land somewhere the whole
 // team can see, rather than in whichever individual happened to be
 // logged in when the send went out.
-const FALLBACK_SENDER = { name: 'Revital Productions Client Care', email: 'clientcare@revitalproductions.com' };
+const FALLBACK_SENDER = { name: 'Revital Productions', email: 'hello@revitalproductions.com' };
 
 function resolveReferralSender() {
   return { name: FALLBACK_SENDER.name, email: FALLBACK_SENDER.email };

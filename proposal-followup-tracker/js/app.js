@@ -293,12 +293,12 @@ function wireRowListeners() {
    assigned Account Manager. This resolves "from" two ways: if the
    prospect name matches an existing client (the occasional
    upsell/expansion case), send as that client's real Account Manager;
-   otherwise fall back to the shared clientcare@ inbox below, so replies
+   otherwise fall back to the shared hello@ inbox below, so replies
    always land somewhere the whole team can see rather than in whichever
    individual happened to be logged in when the send went out. Copy/mailto
    always work regardless of which (or neither) resolves. */
 
-const FALLBACK_SENDER = { name: 'Revital Productions Client Care', email: 'clientcare@revitalproductions.com' };
+const FALLBACK_SENDER = { name: 'Revital Productions', email: 'hello@revitalproductions.com' };
 
 function findClientRecordByName(name) {
   if (!isEmbedded || typeof window.parent.getAllClients !== 'function') return null;
