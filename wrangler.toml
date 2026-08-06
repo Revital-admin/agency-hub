@@ -39,3 +39,24 @@ bucket_name = "revital-contracts"
 [[r2_buckets]]
 binding = "CONTRACTS_BACKUP_BUCKET"
 bucket_name = "revital-contracts-backup"
+
+# Weekly Agency Health Digest - runs runWeeklyHealthDigest() in _worker.js
+# on a schedule with no request/user involved, emailing the same
+# needs-attention list Agency Health Dashboard shows live in the Hub.
+# Cron Triggers deploy automatically with this Worker on the next push;
+# verify it under Cloudflare dashboard -> Workers & Pages -> this Worker ->
+# Triggers -> Cron Triggers afterward.
+#
+# "0 13 * * 1" = every Monday at 13:00 UTC (~8-9am US Eastern depending on
+# DST). Cron Triggers always run in UTC - adjust the hour here if the team
+# is elsewhere or wants a different day/time. Cron syntax: minute hour
+# day-of-month month day-of-week (1 = Monday).
+#
+# Requires two secrets already set for other features in this file:
+#   FIREBASE_SERVICE_ACCOUNT_KEY (same one /api/mint-firebase-token uses)
+#   RESEND_API_KEY (same one /api/send-email uses)
+# Plus one optional new one - comma-separated recipient list, defaults to
+# admin@revitalproductions.com if unset:
+#   wrangler secret put HEALTH_DIGEST_RECIPIENTS
+[triggers]
+crons = ["0 13 * * 1"]

@@ -13,6 +13,15 @@
 const ADMIN_EMAIL_DOMAIN = "revitalproductions.com";
 
 export default {
+  // Cron Trigger (see [triggers] in wrangler.toml) - runs the Weekly
+  // Agency Health Digest on a schedule with no request/user involved, so
+  // it's a separate entry point from fetch() above. Deploys automatically
+  // alongside the rest of this Worker; see runWeeklyHealthDigest below for
+  // what it actually does.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runWeeklyHealthDigest(env));
+  },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
@@ -920,8 +929,368 @@ function jsonResponse(body, status = 200, extraHeaders = {}) {
   });
 }
 
-// ── Shared RS256 JWT-signing helpers (used by both the Firebase custom
-// token minter above and the Docusign JWT Grant above) ──
+// ── Weekly Agency Health Digest (Cron Trigger, see scheduled() above) ──
+//
+// Server-side reimplementation of agency-health-dashboard/js/app.js's
+// buildRows() - same fields, same thresholds, same needsAttention logic -
+// so the emailed digest never disagrees with what the dashboard shows
+// live in the Hub. Kept as an intentional duplicate rather than a shared
+// import: the dashboard's version reads clientsDb via
+// window.parent.getAllClients() in a browser tab, this version has to
+// read Firestore directly over the REST API since a Cron Trigger has no
+// browser, no window.parent, and no active Hub session at all.
+//
+// Auth: reuses the same FIREBASE_SERVICE_ACCOUNT_KEY secret already set
+// for /api/mint-firebase-token, just exchanged for a Google OAuth2 access
+// token (scope: https://www.googleapis.com/auth/datastore) instead of a
+// Firebase custom token - same RS256-JWT-signing approach as that route
+// and the Docusign JWT Grant, pointed at Google's own token endpoint.
+// This is a direct Firestore REST read that bypasses client-side security
+// rules entirely (as a trusted server), the same trust level the Hub's
+// browser-side Firebase SDK already has once signed in via that route.
+//
+// Recipients: comma-separated list in the optional HEALTH_DIGEST_RECIPIENTS
+// secret/var; defaults to admin@revitalproductions.com if unset:
+//   wrangler secret put HEALTH_DIGEST_RECIPIENTS
+// (or Cloudflare dashboard -> Workers & Pages -> this Worker -> Settings ->
+// Variables and Secrets - can be a plain Variable instead of a Secret
+// since it's not sensitive, just easier to set via the same `secret put`
+// flow already used for everything else in this file.)
+const HEALTH_DIGEST_SANDBOX_NAME = "Quick Sandbox (One-Offs)";
+const HEALTH_DIGEST_STALE_APPROVAL_DAYS = 5;
+const HEALTH_DIGEST_STALE_CONTACT_DAYS = 30;
+const HEALTH_DIGEST_HEAVY_OPEN_ACTION_ITEMS = 3;
+
+async function getGoogleAccessToken(env, scope) {
+  const keyJson = env.FIREBASE_SERVICE_ACCOUNT_KEY;
+  if (!keyJson) throw new Error("Server missing FIREBASE_SERVICE_ACCOUNT_KEY secret");
+  let serviceAccount;
+  try {
+    serviceAccount = JSON.parse(keyJson);
+  } catch (e) {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY is not valid JSON");
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: "RS256", typ: "JWT" };
+  const payload = {
+    iss: serviceAccount.client_email,
+    scope,
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600
+  };
+  const unsigned = `${base64urlStr(JSON.stringify(header))}.${base64urlStr(JSON.stringify(payload))}`;
+  const key = await importPrivateKeyFlexible(serviceAccount.private_key);
+  const signature = await crypto.subtle.sign(
+    { name: "RSASSA-PKCS1-v1_5" },
+    key,
+    new TextEncoder().encode(unsigned)
+  );
+  const assertion = `${unsigned}.${base64url(signature)}`;
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion
+    })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error_description || data.error || `Google OAuth token exchange failed (${res.status})`);
+  }
+  return { accessToken: data.access_token, projectId: serviceAccount.project_id };
+}
+
+// Converts Firestore REST API's typed-value JSON shape ({fields: {name:
+// {stringValue: "..."}}}) into a plain JS object/array - the REST API
+// never returns plain JSON, everything is wrapped like this.
+function firestoreValueToJs(v) {
+  if (!v) return null;
+  if ("nullValue" in v) return null;
+  if ("stringValue" in v) return v.stringValue;
+  if ("integerValue" in v) return parseInt(v.integerValue, 10);
+  if ("doubleValue" in v) return v.doubleValue;
+  if ("booleanValue" in v) return v.booleanValue;
+  if ("timestampValue" in v) return v.timestampValue;
+  if ("arrayValue" in v) return (v.arrayValue.values || []).map(firestoreValueToJs);
+  if ("mapValue" in v) return firestoreFieldsToJs((v.mapValue && v.mapValue.fields) || {});
+  return null;
+}
+function firestoreFieldsToJs(fields) {
+  const out = {};
+  for (const key of Object.keys(fields || {})) out[key] = firestoreValueToJs(fields[key]);
+  return out;
+}
+
+// Fetches one document by its path relative to /documents/ (e.g.
+// "agency/clientsDbShardMeta"). Returns null on a 404 (doc doesn't exist)
+// rather than throwing, since several callers below treat "not there yet"
+// as a normal, expected case.
+async function firestoreGetDoc(accessToken, projectId, relativePath) {
+  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${relativePath}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (res.status === 404) return null;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = (data.error && data.error.message) || `Firestore read failed (${res.status}) for ${relativePath}`;
+    throw new Error(msg);
+  }
+  return firestoreDocToJs(data);
+}
+function firestoreDocToJs(doc) {
+  if (!doc || !doc.fields) return null;
+  return firestoreFieldsToJs(doc.fields);
+}
+
+// Mirrors app.js's rebuildClientsDbFromShards: clientsDb is bin-packed
+// across agency/clientsDb-shard-0, -1, ... (however many
+// agency/clientsDbShardMeta's count says exist) to stay under Firestore's
+// per-document size limit. Falls back to the pre-sharding single
+// agency/clientsDb document if the meta doc doesn't exist yet (shouldn't
+// happen given the migration already ran client-side, but this endpoint
+// has no way to trigger that migration itself, so staying defensive here
+// costs nothing).
+async function fetchAllClientsFromFirestore(accessToken, projectId) {
+  const meta = await firestoreGetDoc(accessToken, projectId, "agency/clientsDbShardMeta");
+  if (!meta) {
+    const legacy = await firestoreGetDoc(accessToken, projectId, "agency/clientsDb");
+    return legacy || {};
+  }
+  const shardCount = typeof meta.count === "number" ? meta.count : 0;
+  const merged = {};
+  for (let i = 0; i < shardCount; i++) {
+    const shard = await firestoreGetDoc(accessToken, projectId, `agency/clientsDb-shard-${i}`);
+    if (shard) Object.assign(merged, shard);
+  }
+  return merged;
+}
+
+async function fetchRevisionRecords(accessToken, projectId) {
+  const doc = await firestoreGetDoc(accessToken, projectId, "agency/revisionFeedbackLog");
+  return doc && Array.isArray(doc.list) ? doc.list : [];
+}
+
+function healthDigestTodayStr() {
+  const dt = new Date();
+  dt.setUTCHours(0, 0, 0, 0);
+  return dt.toISOString().slice(0, 10);
+}
+// Accepts either a "YYYY-MM-DD" date or a full ISO timestamp (only the
+// first 10 characters are used either way) and returns days between two
+// such values, calendar-date-only (no time-of-day component) - same
+// rounding behavior as the dashboard's own daysBetween.
+function healthDigestDaysBetween(fromStr, toStr) {
+  const from = new Date((fromStr || "").slice(0, 10) + "T00:00:00Z");
+  const to = new Date((toStr || "").slice(0, 10) + "T00:00:00Z");
+  return Math.round((to - from) / 86400000);
+}
+
+// Exact port of budget-pacing-tracker's getPacingClass() / the
+// dashboard's own local copy of it - see agency-health-dashboard/js/app.js
+// for the client-side original. Kept byte-for-byte equivalent in intent
+// so this digest's "Overspending" count never disagrees with the live
+// dashboard.
+function healthDigestBudgetPaceClass(p) {
+  if (!p || !p.totalBudget || p.totalBudget <= 0) return null;
+  const start = new Date(p.startDate);
+  const end = new Date(p.endDate);
+  const now = new Date();
+  if (now > end) return "pace-danger";
+  if (now < start) return "pace-good";
+  const totalDays = (end - start) / (1000 * 60 * 60 * 24);
+  const daysPassed = (now - start) / (1000 * 60 * 60 * 24);
+  const expectedPacingRatio = totalDays > 0 ? daysPassed / totalDays : 1;
+  const actualPacingRatio = p.spentToDate / p.totalBudget;
+  if (actualPacingRatio > expectedPacingRatio * 1.15) return "pace-danger";
+  if (actualPacingRatio < expectedPacingRatio * 0.85) return "pace-warn";
+  return "pace-good";
+}
+
+// Faithful port of agency-health-dashboard/js/app.js's buildRows() - see
+// that file for the fuller reasoning behind each threshold/signal. Any
+// change to what counts as "needs attention" there should be mirrored
+// here (and vice versa) so the two never quietly disagree.
+function buildHealthDigestRows(clients, revisionRecords) {
+  const today = healthDigestTodayStr();
+  return Object.keys(clients || {})
+    .filter(name => name !== HEALTH_DIGEST_SANDBOX_NAME)
+    .map(name => {
+      const client = clients[name] || {};
+      const checkins = Array.isArray(client.weeklyCheckins) ? client.weeklyCheckins : [];
+      const latestCheckin = checkins.length ? checkins[0] : null;
+      const healthRating = latestCheckin ? latestCheckin.healthRating : null;
+      const lastCheckinDate = latestCheckin ? latestCheckin.date : null;
+      const daysSinceCheckin = lastCheckinDate ? healthDigestDaysBetween(lastCheckinDate, today) : null;
+
+      const renewalRec = client.renewal;
+      const renewalIsOpen = renewalRec && (renewalRec.status === "On Track" || renewalRec.status === "At Risk");
+      const renewalDate = renewalIsOpen ? renewalRec.renewalDate : null;
+      const renewalDays = renewalDate ? healthDigestDaysBetween(today, renewalDate) : null;
+      const renewalDueSoon = renewalDays !== null && renewalDays <= 30;
+
+      const openRevisions = (revisionRecords || []).filter(r =>
+        (r.clientName || "").toLowerCase() === name.toLowerCase() && !r.dateResolved
+      ).length;
+      const heavyRevisions = openRevisions >= 3;
+
+      const budgetPace = healthDigestBudgetPaceClass(client.budgetPacing);
+      const overspending = budgetPace === "pace-danger";
+      const upsellOpportunity = overspending && healthRating !== "Red";
+
+      const pendingApprovals = Array.isArray(client.pendingApprovals) ? client.pendingApprovals : [];
+      const approvalAges = pendingApprovals
+        .filter(a => a && a.createdAt)
+        .map(a => healthDigestDaysBetween(a.createdAt, today));
+      const oldestPendingApprovalDays = approvalAges.length ? Math.max(...approvalAges) : null;
+      const staleApproval = oldestPendingApprovalDays !== null && oldestPendingApprovalDays >= HEALTH_DIGEST_STALE_APPROVAL_DAYS;
+
+      const meetingNotes = Array.isArray(client.meetingNotes) ? client.meetingNotes : [];
+      const lastMeetingDate = meetingNotes.length
+        ? meetingNotes.map(m => m.date).filter(Boolean).sort().slice(-1)[0]
+        : null;
+      const daysSinceMeeting = lastMeetingDate ? healthDigestDaysBetween(lastMeetingDate, today) : null;
+      const staleContact = daysSinceMeeting !== null && daysSinceMeeting >= HEALTH_DIGEST_STALE_CONTACT_DAYS;
+      const openActionItems = meetingNotes.reduce((sum, m) =>
+        sum + (Array.isArray(m.actionItems) ? m.actionItems.filter(ai => !ai.completed).length : 0), 0);
+      const heavyOpenActionItems = openActionItems >= HEALTH_DIGEST_HEAVY_OPEN_ACTION_ITEMS;
+
+      const needsAttention = healthRating === "Red" || renewalDueSoon || heavyRevisions
+        || overspending || staleApproval || heavyOpenActionItems || staleContact;
+
+      return {
+        name, healthRating, lastCheckinDate, daysSinceCheckin,
+        renewalDate, renewalDays, renewalDueSoon, openRevisions, heavyRevisions,
+        overspending, upsellOpportunity,
+        oldestPendingApprovalDays, staleApproval,
+        lastMeetingDate, daysSinceMeeting, staleContact,
+        openActionItems, heavyOpenActionItems, needsAttention
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function healthDigestReasons(row) {
+  const reasons = [];
+  if (row.healthRating === "Red") reasons.push("Health check-in is Red");
+  if (row.renewalDueSoon) reasons.push(`Renewal due in ${row.renewalDays}d (${row.renewalDate})`);
+  if (row.heavyRevisions) reasons.push(`${row.openRevisions} open revisions`);
+  if (row.overspending) reasons.push("Overspending budget pace");
+  if (row.staleApproval) reasons.push(`Approval awaiting response ${row.oldestPendingApprovalDays}d`);
+  if (row.heavyOpenActionItems) reasons.push(`${row.openActionItems} open meeting action items`);
+  if (row.staleContact) reasons.push(`No contact logged in ${row.daysSinceMeeting}d`);
+  return reasons;
+}
+
+function escapeHtmlForDigest(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function buildHealthDigestEmail(rows) {
+  const attention = rows.filter(r => r.needsAttention);
+  const upsell = rows.filter(r => r.upsellOpportunity);
+  const totalClients = rows.length;
+
+  const subject = attention.length
+    ? `Weekly Agency Health Digest — ${attention.length} client${attention.length === 1 ? "" : "s"} need attention`
+    : "Weekly Agency Health Digest — all clients on track";
+
+  const summaryLine = totalClients === 0
+    ? "No clients in the Hub yet."
+    : `${attention.length} of ${totalClients} client${totalClients === 1 ? "" : "s"} need attention this week.`;
+
+  const listItemsHtml = attention.length
+    ? attention.map(r => `<li style="margin-bottom:10px;"><strong>${escapeHtmlForDigest(r.name)}</strong> — ${healthDigestReasons(r).map(escapeHtmlForDigest).join("; ")}</li>`).join("")
+    : "<li>Nothing flagged this week — every client is on track.</li>";
+
+  const upsellHtml = upsell.length
+    ? `<p><strong>💡 Upsell opportunities (overspending, health not Red):</strong> ${upsell.map(r => escapeHtmlForDigest(r.name)).join(", ")}</p>`
+    : "";
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; color:#1e293b; max-width:600px;">
+      <h2 style="margin-bottom:4px;">Weekly Agency Health Digest</h2>
+      <p style="color:#64748b; margin-top:0;">${escapeHtmlForDigest(summaryLine)}</p>
+      <ul style="padding-left:20px;">${listItemsHtml}</ul>
+      ${upsellHtml}
+      <p style="font-size:12px; color:#94a3b8; margin-top:24px;">Generated automatically from the same data as Agency Health Dashboard in the Hub. Open the Hub → Agency Health Dashboard for the full live view and to filter/search.</p>
+    </div>
+  `;
+
+  const textLines = ["WEEKLY AGENCY HEALTH DIGEST", summaryLine, ""];
+  if (attention.length) {
+    attention.forEach(r => textLines.push(`- ${r.name}: ${healthDigestReasons(r).join("; ")}`));
+  } else {
+    textLines.push("Nothing flagged this week - every client is on track.");
+  }
+  if (upsell.length) {
+    textLines.push("");
+    textLines.push("Upsell opportunities (overspending, health not Red): " + upsell.map(r => r.name).join(", "));
+  }
+  textLines.push("", "Open the Hub -> Agency Health Dashboard for the full live view.");
+
+  return { subject, html, text: textLines.join("\n") };
+}
+
+async function sendHealthDigestEmail(env, recipients, subject, html, text) {
+  const apiKey = env.RESEND_API_KEY;
+  if (!apiKey) throw new Error("Server missing RESEND_API_KEY secret");
+  const body = {
+    from: `Revital Productions <hello@${SEND_EMAIL_DOMAIN}>`,
+    to: recipients,
+    subject,
+    text
+  };
+  if (html) body.html = html;
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || `Resend API error (${res.status})`);
+  return data;
+}
+
+async function runWeeklyHealthDigest(env) {
+  const recipients = (env.HEALTH_DIGEST_RECIPIENTS || "admin@revitalproductions.com")
+    .split(",").map(s => s.trim()).filter(Boolean);
+
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const [clients, revisionRecords] = await Promise.all([
+      fetchAllClientsFromFirestore(accessToken, projectId),
+      fetchRevisionRecords(accessToken, projectId)
+    ]);
+    const rows = buildHealthDigestRows(clients, revisionRecords);
+    const { subject, html, text } = buildHealthDigestEmail(rows);
+    await sendHealthDigestEmail(env, recipients, subject, html, text);
+  } catch (e) {
+    console.error("Weekly health digest failed:", e);
+    // Best-effort failure alert, so a broken digest doesn't just go quiet
+    // forever with nobody noticing - if this second send also fails
+    // (e.g. RESEND_API_KEY itself is the problem), give up silently;
+    // it's already in the Worker's own logs via the console.error above.
+    try {
+      await sendHealthDigestEmail(
+        env, recipients,
+        "Weekly Agency Health Digest failed to generate",
+        undefined,
+        `The weekly Agency Health Digest failed to run: ${e.message}\n\nCheck the Worker's logs (wrangler tail, or Cloudflare dashboard -> Workers & Pages -> this Worker -> Logs) for the full error.`
+      );
+    } catch (e2) {
+      console.error("Also failed to send the digest-failure alert:", e2);
+    }
+  }
+}
+
+// ── Shared RS256 JWT-signing helpers (used by the Firebase custom token
+// minter, the Docusign JWT Grant, and the Weekly Agency Health Digest
+// above) ──
 function base64url(bytes) {
   let binary = "";
   const arr = new Uint8Array(bytes);
