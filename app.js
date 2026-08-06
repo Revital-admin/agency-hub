@@ -3366,6 +3366,58 @@ function initParentEventListeners() {
     });
   }
 
+  // ── Try the desktop app first, fall back to the web ──
+  // There's no reliable way for a webpage to ask a browser "is app X
+  // installed?" directly - openAppOrWeb uses the standard workaround
+  // instead: attempt navigation to a matching custom URL scheme
+  // (clickup://...) in a hidden iframe, and watch whether the window
+  // loses focus shortly after (a strong signal the OS actually handed
+  // off to an installed app taking over the screen). If it doesn't lose
+  // focus within the timeout, nothing caught the custom scheme, so fall
+  // back to opening the normal web URL in a new tab - exactly what
+  // happened before this existed.
+  //
+  // clickupAppUrlFor is a best-effort guess, not a guarantee: ClickUp's
+  // clickup:// scheme is unofficial and doesn't cover every link shape
+  // (per ClickUp's own feature-request tracker, it works for regular
+  // task-ID links but not custom IDs, and share links like
+  // sharing.clickup.com aren't confirmed supported at all). Worst case,
+  // the app doesn't catch it and this just falls through to the web
+  // link exactly as before - it never gets stuck.
+  function openAppOrWeb(webUrl, appUrl) {
+    if (!webUrl) return;
+    if (!appUrl) { window.open(webUrl, '_blank', 'noopener'); return; }
+
+    let handedOff = false;
+    const onBlur = () => { handedOff = true; };
+    window.addEventListener('blur', onBlur, { once: true });
+
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+    try {
+      iframe.contentWindow.location.href = appUrl;
+    } catch (err) {
+      // Some browsers throw synchronously for an unregistered custom
+      // scheme instead of just failing silently - either way, fall
+      // through to the web link below.
+    }
+
+    setTimeout(() => {
+      window.removeEventListener('blur', onBlur);
+      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+      if (!handedOff) {
+        window.open(webUrl, '_blank', 'noopener');
+      }
+    }, 800);
+  }
+
+  function clickupAppUrlFor(webUrl) {
+    if (!webUrl) return null;
+    if (!/^https?:\/\/([a-z0-9-]+\.)?clickup\.com\//i.test(webUrl)) return null;
+    return webUrl.replace(/^https?:\/\//i, 'clickup://');
+  }
+
   const dashClickupUrl = document.getElementById("dashClickupUrl");
   if (dashClickupUrl) {
     dashClickupUrl.addEventListener("input", (e) => {
@@ -3381,6 +3433,22 @@ function initParentEventListeners() {
           btn.style.display = "none";
         }
       }
+    });
+  }
+
+  // Open button tries the ClickUp desktop app first (if installed), and
+  // falls back to opening the web link in a new tab if not - see
+  // openAppOrWeb() for how. href stays set to the plain web URL so the
+  // button still behaves like a normal link (right-click > copy link,
+  // middle-click to open in a new tab, etc.) for anyone not using a plain
+  // left-click.
+  const dashClickupBtn = document.getElementById("dashClickupBtn");
+  if (dashClickupBtn) {
+    dashClickupBtn.addEventListener("click", (e) => {
+      const webUrl = dashClickupBtn.getAttribute("href");
+      if (!webUrl || webUrl === "#") return;
+      e.preventDefault();
+      openAppOrWeb(webUrl, clickupAppUrlFor(webUrl));
     });
   }
 
