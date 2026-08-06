@@ -94,6 +94,12 @@ let roleTiers = {}; // { roleName: { sections: [...], note: "" } }
 let teamAccessUsers = {}; // { email: { role: name|null, sections: [...] (if role is null) } }
 let teamActivity = {}; // { email: { lastSeen: isoString } }
 let editingEmail = null; // set while the person form is editing an existing entry
+// Which role (by name) is currently expanded for editing in the Access
+// Roles list below - null means all 5 are collapsed to a single summary
+// row each. Only one at a time, on purpose: showing all 5 fully expanded
+// simultaneously (11 section checkboxes apiece) was the whole reason this
+// list got too long to scan at a glance.
+let expandedRoleName = null;
 // Optimistic-concurrency guard (see saveTeamAccessDoc below), kept fresh by
 // listenToTeamAccess's live onSnapshot rather than a one-time load.
 let docVersion = 0;
@@ -225,6 +231,18 @@ function showFormStatus(message, type) {
 }
 
 // ── Roles management ──
+// Collapsed-by-default accordion: each role is a single compact row
+// (name + section-count summary) until clicked, which expands it in
+// place to the full name/note/checkbox editor. Only one role expanded
+// at a time (expandedRoleName) - showing all 5 fully expanded together
+// (11 checkboxes apiece) was what made this list too long to scan.
+function roleSummaryText(role) {
+  const count = (role.sections || []).length;
+  if (count === 0) return "No sections (fully restricted)";
+  if (count === SECTION_DEFS.length) return "All sections";
+  return `${count} section${count === 1 ? "" : "s"}`;
+}
+
 function renderRolesList() {
   const container = el("rolesList");
   const names = Object.keys(roleTiers).sort();
@@ -233,6 +251,19 @@ function renderRolesList() {
   } else {
     container.innerHTML = names.map(name => {
       const role = roleTiers[name] || { sections: [], note: "" };
+      const isExpanded = expandedRoleName === name;
+
+      const headerHtml = `
+        <button type="button" class="role-row-toggle" data-role="${escapeHtml(name)}" aria-expanded="${isExpanded}">
+          <span class="role-row-name">${escapeHtml(name)}</span>
+          <span class="role-row-summary">${escapeHtml(roleSummaryText(role))}${role.note ? " &middot; " + escapeHtml(role.note) : ""}</span>
+          <svg class="role-row-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </button>`;
+
+      if (!isExpanded) {
+        return `<div class="step-card role-row" data-role-block="${escapeHtml(name)}">${headerHtml}</div>`;
+      }
+
       const checkboxes = SECTION_DEFS.map(s => `
         <label class="checkbox-item">
           <div class="custom-checkbox">
@@ -242,29 +273,43 @@ function renderRolesList() {
           <span>${s.label}</span>
         </label>
       `).join("");
+
       return `
-        <div class="step-card" style="margin-bottom:14px; background: var(--color-surface-2, var(--color-surface));" data-role-block="${escapeHtml(name)}">
-          <div class="form-group">
-            <label>Role name</label>
-            <input type="text" class="role-name-input" data-original="${escapeHtml(name)}" value="${escapeHtml(name)}">
+        <div class="step-card role-row role-row-expanded" data-role-block="${escapeHtml(name)}">
+          ${headerHtml}
+          <div class="role-row-body">
+            <div class="form-group">
+              <label>Role name</label>
+              <input type="text" class="role-name-input" data-original="${escapeHtml(name)}" value="${escapeHtml(name)}">
+            </div>
+            <div class="form-group">
+              <label>Typical job titles (optional, for reference only)</label>
+              <input type="text" class="role-note-input" data-role="${escapeHtml(name)}" value="${escapeHtml(role.note || "")}">
+            </div>
+            <div class="form-group">
+              <label>Sections this role grants</label>
+              <div class="section-checkbox-grid">${checkboxes}</div>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="btn-primary save-role-btn" data-role="${escapeHtml(name)}" style="padding:8px 16px; font-size:0.85rem;">Save Role</button>
+              <button type="button" class="btn btn-secondary delete-role-btn" data-role="${escapeHtml(name)}" style="padding:8px 16px; font-size:0.85rem;">Delete Role</button>
+            </div>
+            <p class="role-tier-hint role-save-status" data-role="${escapeHtml(name)}"></p>
           </div>
-          <div class="form-group">
-            <label>Typical job titles (optional, for reference only)</label>
-            <input type="text" class="role-note-input" data-role="${escapeHtml(name)}" value="${escapeHtml(role.note || "")}">
-          </div>
-          <div class="form-group">
-            <label>Sections this role grants</label>
-            <div class="section-checkbox-grid">${checkboxes}</div>
-          </div>
-          <div style="display:flex; gap:8px;">
-            <button type="button" class="btn-primary save-role-btn" data-role="${escapeHtml(name)}" style="padding:8px 16px; font-size:0.85rem;">Save Role</button>
-            <button type="button" class="btn btn-secondary delete-role-btn" data-role="${escapeHtml(name)}" style="padding:8px 16px; font-size:0.85rem;">Delete Role</button>
-          </div>
-          <p class="role-tier-hint role-save-status" data-role="${escapeHtml(name)}"></p>
         </div>`;
     }).join("");
   }
 
+  // Header button toggles expand/collapse. Save/Delete buttons live inside
+  // .role-row-body, a sibling of the header rather than a descendant of
+  // it, so clicking them doesn't also trigger the toggle.
+  container.querySelectorAll(".role-row-toggle").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const name = btn.getAttribute("data-role");
+      expandedRoleName = (expandedRoleName === name) ? null : name;
+      renderRolesList();
+    });
+  });
   container.querySelectorAll(".save-role-btn").forEach(btn => {
     btn.addEventListener("click", () => saveRole(btn.getAttribute("data-role")));
   });
@@ -316,8 +361,12 @@ function saveRole(originalName) {
 
   const prevRoleTiers = roleTiers;
   const prevUsers = teamAccessUsers;
+  const prevExpandedRoleName = expandedRoleName;
   roleTiers = nextRoleTiers;
   teamAccessUsers = nextUsers;
+  // Keep the row expanded through a rename instead of it silently
+  // collapsing (the accordion keys off the current name, which just changed).
+  if (expandedRoleName === originalName) expandedRoleName = newName;
 
   saveTeamAccessDoc().then(() => {
     roleSaveStatus(newName, "Saved.", false);
@@ -327,6 +376,7 @@ function saveRole(originalName) {
   }).catch(err => {
     roleTiers = prevRoleTiers;
     teamAccessUsers = prevUsers;
+    expandedRoleName = prevExpandedRoleName;
     roleSaveStatus(originalName, err.message || "Save failed - try again.", true);
     renderRolesList();
   });
@@ -341,9 +391,11 @@ function deleteRole(name) {
   if (!confirm(`Delete the "${name}" role? This can't be undone.`)) return;
 
   const prevRoleTiers = roleTiers;
+  const prevExpandedRoleName = expandedRoleName;
   const nextRoleTiers = { ...roleTiers };
   delete nextRoleTiers[name];
   roleTiers = nextRoleTiers;
+  if (expandedRoleName === name) expandedRoleName = null;
 
   saveTeamAccessDoc().then(() => {
     renderRolesList();
@@ -351,6 +403,7 @@ function deleteRole(name) {
     if (window.parent.showBanner) window.parent.showBanner("success", `Deleted role "${name}".`);
   }).catch(err => {
     roleTiers = prevRoleTiers;
+    expandedRoleName = prevExpandedRoleName;
     renderRolesList();
     alert(err.message || "Delete failed - try again.");
   });
@@ -364,12 +417,19 @@ function addRole() {
     return;
   }
   const prevRoleTiers = roleTiers;
+  const prevExpandedRoleName = expandedRoleName;
   roleTiers = { ...roleTiers, [name]: { sections: [], note: "" } };
+  // Open the new role expanded right away - it starts with zero sections,
+  // so there's no reason to make someone click twice to get to the
+  // checkboxes they almost certainly want to fill in immediately.
+  expandedRoleName = name;
   saveTeamAccessDoc().then(() => {
     renderRolesList();
     populateRoleSelect();
   }).catch(err => {
     roleTiers = prevRoleTiers;
+    expandedRoleName = prevExpandedRoleName;
+    renderRolesList();
     alert(err.message || "Couldn't add role - try again.");
   });
 }
