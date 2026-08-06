@@ -526,6 +526,32 @@ async function handleContractDelete(request, env) {
   const key = getContractKeyFromPath(request);
   if (!key) return jsonResponse({ error: "Invalid key" }, 400);
 
+  // Copy-on-delete backup (see CONTRACTS_BACKUP_BUCKET in wrangler.toml) -
+  // R2 has no native object versioning, so this is what stands in for it.
+  // Runs for both a direct Delete click and the delete-old-file step of a
+  // Replace (deleteR2Object in shared-contract-pdf-tools.js hits this same
+  // endpoint either way). If the backup bucket isn't configured yet (not
+  // created, or binding missing), this is a no-op and delete proceeds
+  // exactly as it did before this existed - it never blocks a delete just
+  // because backups aren't set up. If the bucket IS configured but the
+  // backup write itself fails, the delete is cancelled rather than risking
+  // an unrecoverable loss - better to ask the admin to retry than to
+  // silently delete something with no copy anywhere.
+  if (env.CONTRACTS_BACKUP_BUCKET) {
+    const existing = await env.CONTRACTS_BUCKET.get(key);
+    if (existing) {
+      const backupKey = `deleted/${Date.now()}-${key.replace(/\//g, "_")}`;
+      try {
+        await env.CONTRACTS_BACKUP_BUCKET.put(backupKey, existing.body, {
+          httpMetadata: existing.httpMetadata
+        });
+      } catch (e) {
+        console.error("Backup copy before contract delete failed:", e);
+        return jsonResponse({ error: "Couldn't back up the file before deleting, so the delete was cancelled - try again in a moment." }, 500);
+      }
+    }
+  }
+
   await env.CONTRACTS_BUCKET.delete(key);
   return jsonResponse({ success: true }, 200, { "Cache-Control": "no-store" });
 }

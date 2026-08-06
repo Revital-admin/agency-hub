@@ -22,3 +22,20 @@ binding = "ASSETS"
 [[r2_buckets]]
 binding = "CONTRACTS_BUCKET"
 bucket_name = "revital-contracts"
+
+# Backup target for CONTRACTS_BUCKET, since R2 has no built-in object
+# versioning (see the Data Backup & Disaster Recovery SOP in SOP Wiki).
+# handleContractDelete in _worker.js copies a file into this bucket right
+# before permanently deleting it from CONTRACTS_BUCKET, so an accidental
+# delete (a direct Delete click, or the delete-old-file step of a Replace)
+# is always recoverable - nothing in the primary bucket is ever removed
+# without a copy landing here first.
+#
+# This binding is optional at runtime - if it's missing or the bucket
+# doesn't exist yet, deletes still work exactly as before (no backup, no
+# error). Same one-time manual step as CONTRACTS_BUCKET before it takes
+# effect: `wrangler r2 bucket create revital-contracts-backup` (or via the
+# Cloudflare dashboard -> R2 -> Create bucket, same name).
+[[r2_buckets]]
+binding = "CONTRACTS_BACKUP_BUCKET"
+bucket_name = "revital-contracts-backup"
