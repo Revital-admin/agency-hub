@@ -68,9 +68,27 @@ document.addEventListener('DOMContentLoaded', async () => {
   currentDateEl.textContent = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   // ── Admin Identity Check ──
+  // The ?dev=admin shortcut below exists so the Admin Controls panel
+  // (profit margin, Edit Default Prices) can be tested without a real
+  // Cloudflare Access session while developing locally. It must never
+  // work on a deployed hostname - anyone with the internal Hub link
+  // could otherwise unlock margin/cost data just by adding a query
+  // param, with no server-side identity check at all. Gate it to
+  // localhost/127.0.0.1/file: only; every real deployment (including
+  // staging) falls through to the real /cdn-cgi/access/get-identity
+  // check below.
+  function isLocalDevHost(win) {
+    try {
+      const host = win.location.hostname;
+      return win.location.protocol === 'file:' || host === 'localhost' || host === '127.0.0.1' || host === '';
+    } catch (e) {
+      return false;
+    }
+  }
   async function checkAdminIdentity() {
     const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('dev') === 'admin' || (window.parent && window.parent.location.search.includes('dev=admin'))) {
+    const devFlagRequested = urlParams.get('dev') === 'admin' || (window.parent && window.parent.location.search.includes('dev=admin'));
+    if (devFlagRequested && (isLocalDevHost(window) || (window.parent && isLocalDevHost(window.parent)))) {
       if(adminControlsPanel) adminControlsPanel.style.display = 'block';
       return;
     }
