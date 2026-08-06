@@ -663,7 +663,7 @@ async function saveContractorDocToLibrary(defKey, file) {
       else { list.push({ id: uid(), ...entryPatch }); }
       return list;
     });
-    if (oldKey && oldKey !== key) deleteR2Object(oldKey);
+    if (oldKey && oldKey !== key) deleteR2Object(oldKey, def.label);
     setStatus(
       detection
         ? `${def.label} uploaded - signature/date lines auto-detected. Click Review to confirm before it's DocuSign-ready.`
@@ -739,7 +739,7 @@ async function replaceCustomContractorDoc(id, file) {
       }
       return list;
     });
-    if (oldKey && oldKey !== key) deleteR2Object(oldKey);
+    if (oldKey && oldKey !== key) deleteR2Object(oldKey, entry.label);
   } catch (e) {
     console.error('Could not replace contractor document:', e);
     if (window.parent.showBanner) window.parent.showBanner('error', "Couldn't replace: " + e.message);
@@ -755,7 +755,7 @@ async function deleteContractorEntry(id) {
     : `Remove "${entry.label}" from Contractor Documents? This can't be undone.`)) return;
   try {
     await writeContractorEntry((list) => list.filter(t => t.id !== id));
-    deleteR2Object(entry.r2Key);
+    deleteR2Object(entry.r2Key, entry.label);
     renderContractorDocManager();
   } catch (e) {
     console.error('Could not remove contractor document:', e);

@@ -38,6 +38,16 @@ export default {
       return jsonResponse({ error: "Method not allowed" }, 405);
     }
 
+    // Restore UI for the copy-on-delete backup (see CONTRACTS_BACKUP_BUCKET
+    // in wrangler.toml and handleContractDelete below) - lets the Contract
+    // Template Library show what's been deleted and bring a file back.
+    if (url.pathname === "/api/contracts-backup" && request.method === "GET") {
+      return handleContractsBackupList(request, env);
+    }
+    if (url.pathname === "/api/contracts-backup/restore" && request.method === "POST") {
+      return handleContractsBackupRestore(request, env);
+    }
+
     if (url.pathname === "/api/docusign/send-envelope") {
       return handleDocusignSendEnvelope(request, env);
     }
@@ -525,6 +535,12 @@ async function handleContractDelete(request, env) {
   }
   const key = getContractKeyFromPath(request);
   if (!key) return jsonResponse({ error: "Invalid key" }, 400);
+  // Optional, best-effort human-readable label (the caller's Firestore
+  // entry for this file - see deleteR2Object's label param in
+  // shared-contract-pdf-tools.js), so the Recently Deleted list can show
+  // "Master Service Agreement" instead of a raw R2 key. Never required -
+  // an empty label just falls back to showing the key in the restore UI.
+  const label = new URL(request.url).searchParams.get("label") || "";
 
   // Copy-on-delete backup (see CONTRACTS_BACKUP_BUCKET in wrangler.toml) -
   // R2 has no native object versioning, so this is what stands in for it.
@@ -540,10 +556,15 @@ async function handleContractDelete(request, env) {
   if (env.CONTRACTS_BACKUP_BUCKET) {
     const existing = await env.CONTRACTS_BUCKET.get(key);
     if (existing) {
-      const backupKey = `deleted/${Date.now()}-${key.replace(/\//g, "_")}`;
+      // Random key rather than one derived from the original - the
+      // original key/label are preserved properly via customMetadata
+      // instead (read back by handleContractsBackupList/Restore below),
+      // so nothing needs to be reconstructed by parsing the backup key.
+      const backupKey = `deleted/${Date.now()}-${crypto.randomUUID()}.pdf`;
       try {
         await env.CONTRACTS_BACKUP_BUCKET.put(backupKey, existing.body, {
-          httpMetadata: existing.httpMetadata
+          httpMetadata: existing.httpMetadata,
+          customMetadata: { originalKey: key, originalLabel: label }
         });
       } catch (e) {
         console.error("Backup copy before contract delete failed:", e);
@@ -554,6 +575,79 @@ async function handleContractDelete(request, env) {
 
   await env.CONTRACTS_BUCKET.delete(key);
   return jsonResponse({ success: true }, 200, { "Cache-Control": "no-store" });
+}
+
+// ── /api/contracts-backup (list) + /api/contracts-backup/restore ──
+// Restore side of the copy-on-delete backup above. Lists what's sitting
+// in CONTRACTS_BACKUP_BUCKET (everything under the deleted/ prefix) and
+// lets a file be copied back into the live CONTRACTS_BUCKET on demand -
+// see the Recently Deleted panel in the Contract & Invoice Tracker's
+// Contract Template Library.
+async function handleContractsBackupList(request, env) {
+  if (!isContractRequestAuthorized(request)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  if (!env.CONTRACTS_BACKUP_BUCKET) {
+    // Not configured yet (bucket not created) - empty list rather than an
+    // error, since "nothing's been backed up" is the correct state before
+    // the one-time bucket-creation step happens.
+    return jsonResponse({ items: [] }, 200, { "Cache-Control": "no-store" });
+  }
+
+  const listed = await env.CONTRACTS_BACKUP_BUCKET.list({
+    prefix: "deleted/",
+    include: ["customMetadata"],
+    limit: 200
+  });
+
+  const items = listed.objects.map(obj => ({
+    key: obj.key,
+    size: obj.size,
+    deletedAt: obj.uploaded ? obj.uploaded.toISOString() : null,
+    originalLabel: (obj.customMetadata && obj.customMetadata.originalLabel) || "",
+    originalKey: (obj.customMetadata && obj.customMetadata.originalKey) || ""
+  })).sort((a, b) => (b.deletedAt || "").localeCompare(a.deletedAt || ""));
+
+  return jsonResponse({ items }, 200, { "Cache-Control": "no-store" });
+}
+
+async function handleContractsBackupRestore(request, env) {
+  if (!isContractRequestAuthorized(request)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  if (!env.CONTRACTS_BACKUP_BUCKET || !env.CONTRACTS_BUCKET) {
+    return jsonResponse({ error: "R2 backup/primary bucket not configured" }, 500);
+  }
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+  const backupKey = payload && payload.key;
+  if (!backupKey || typeof backupKey !== "string" || backupKey.includes("..") || !backupKey.startsWith("deleted/")) {
+    return jsonResponse({ error: "Invalid key" }, 400);
+  }
+
+  const obj = await env.CONTRACTS_BACKUP_BUCKET.get(backupKey);
+  if (!obj) {
+    return jsonResponse({ error: "Backup file not found - it may already have been restored, or the backup itself was removed" }, 404);
+  }
+
+  // Always restores to a brand-new key rather than the original one - by
+  // the time a file is deleted, the Firestore entry that pointed at its
+  // original key is already gone (removed client-side before the delete
+  // request even fires), so nothing depends on reusing that exact key.
+  // A fresh key also sidesteps any (extremely unlikely, since keys are
+  // random UUIDs) collision with something uploaded since the delete.
+  const restoredKey = `uploaded/${Date.now()}-${crypto.randomUUID()}.pdf`;
+  await env.CONTRACTS_BUCKET.put(restoredKey, obj.body, {
+    httpMetadata: obj.httpMetadata
+  });
+
+  const originalLabel = (obj.customMetadata && obj.customMetadata.originalLabel) || "";
+  return jsonResponse({ success: true, key: restoredKey, label: originalLabel }, 200, { "Cache-Control": "no-store" });
 }
 
 // ── /api/docusign/send-envelope ──

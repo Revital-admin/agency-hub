@@ -133,6 +133,11 @@
      below, just without requiring a client row first (see
      openSendContractPanelStandalone, js/app.js). -->
 <button id="openOneOffSendBtn" class="btn-secondary" type="button">Send One-Off Document</button>
+<!-- Recovery UI for the copy-on-delete backup (see CONTRACTS_BACKUP_BUCKET
+     in wrangler.toml + handleContractsBackupList/Restore in _worker.js).
+     R2 has no native undo, so this is the only way to get a deleted
+     contract template back short of the Cloudflare dashboard. -->
+<button id="openDeletedFilesBtn" class="btn-secondary" type="button">Recently Deleted</button>
 </div>
 </div>
 
@@ -153,6 +158,16 @@ Choose File
 <button id="uploadContractBtn" class="btn-primary" type="button">+ Add Contract</button>
 </div>
 <div id="contractLibraryStatus" style="font-size: 0.8rem; margin-top: 8px;"></div>
+</div>
+
+<div class="step-card" id="deletedFilesCard" style="display:none; position: relative;">
+<button type="button" id="deletedFilesCloseBtn" aria-label="Close" style="position: absolute; top: 20px; right: 20px; background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 4px;">&times;</button>
+<div class="contract-library-header">
+<h2>Recently Deleted</h2>
+<p style="font-size: 0.8rem; color: var(--color-text-muted); margin-top: 4px;">Every contract or contractor document deleted (directly, or as part of a Replace) gets copied here first before it's actually removed. Restoring adds it back to the Contract Template Library as a fresh entry.</p>
+</div>
+<div id="deletedFilesList" class="contract-library-list"></div>
+<div id="deletedFilesStatus" style="font-size: 0.8rem; margin-top: 8px;"></div>
 </div>
 
 <!-- Anchor review panel - shown after a new/replaced upload gets its

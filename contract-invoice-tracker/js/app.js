@@ -588,6 +588,132 @@ if (contractLibraryCloseBtn) {
   });
 }
 
+/* ── Recently Deleted (restore from the copy-on-delete R2 backup) ──
+   Reads/writes /api/contracts-backup(/restore) in _worker.js. Restoring
+   adds a brand-new entry to contractLibrary pointing at a freshly copied
+   R2 object (see handleContractsBackupRestore) - it doesn't try to
+   resurrect the exact original Firestore entry, since that metadata
+   (docCategory, DocuSign anchor state, etc.) is already gone by the time
+   a delete happens. If the restored label matches a known contractor doc
+   name, isContractorDoc's label/filename fallback picks it back up into
+   Team Roster's Contractor Documents automatically - same as any
+   originally-migrated entry. */
+
+const openDeletedFilesBtn = el('openDeletedFilesBtn');
+const deletedFilesCloseBtn = el('deletedFilesCloseBtn');
+const deletedFilesCard = el('deletedFilesCard');
+const deletedFilesList = el('deletedFilesList');
+const deletedFilesStatus = el('deletedFilesStatus');
+
+function formatDeletedDate(iso) {
+  if (!iso) return '--';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '--';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+async function loadDeletedFiles() {
+  if (deletedFilesStatus) deletedFilesStatus.textContent = '';
+  if (deletedFilesList) deletedFilesList.innerHTML = '<p style="font-size:13px;color:var(--color-text-muted);">Loading...</p>';
+  try {
+    const res = await fetch('/api/contracts-backup');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Couldn't load (${res.status})`);
+    renderDeletedFiles(data.items || []);
+  } catch (e) {
+    console.error('Could not load deleted files:', e);
+    if (deletedFilesList) deletedFilesList.innerHTML = '';
+    if (deletedFilesStatus) {
+      deletedFilesStatus.textContent = "Couldn't load: " + e.message + " - the backup bucket may not be created yet (see the Data Backup & Disaster Recovery SOP).";
+      deletedFilesStatus.style.color = 'var(--color-error, #f68d5f)';
+    }
+  }
+}
+
+function renderDeletedFiles(items) {
+  if (!deletedFilesList) return;
+  if (!items.length) {
+    deletedFilesList.innerHTML = `<p style="font-size:13px;color:var(--color-text-muted);">Nothing's been deleted yet.</p>`;
+    return;
+  }
+  // Same restricted-user gating as the main library's Replace/Delete
+  // buttons - viewing what's been deleted is fine for everyone, but
+  // restoring is an "add back" action, so it follows the same
+  // unrestricted-users-only rule.
+  deletedFilesList.innerHTML = items.map(item => `
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 0; border-bottom:1px solid var(--border-color);" data-key="${escapeHtmlLocal(item.key)}">
+      <div style="min-width:220px; flex:1;">
+        <div style="font-size:0.85rem; font-weight:600;">${escapeHtmlLocal(item.originalLabel || item.key)}</div>
+        <div style="font-size:0.75rem; color:var(--text-muted);">Deleted ${formatDeletedDate(item.deletedAt)}</div>
+      </div>
+      ${isRestrictedUser ? '' : `<button type="button" class="restore-deleted-file-btn btn btn-secondary" data-key="${escapeHtmlLocal(item.key)}" data-label="${escapeHtmlLocal(item.originalLabel || '')}" style="padding:6px 12px; font-size:0.8rem;">Restore</button>`}
+    </div>
+  `).join('');
+}
+
+if (openDeletedFilesBtn) {
+  openDeletedFilesBtn.addEventListener('click', () => {
+    if (deletedFilesCard) {
+      deletedFilesCard.style.display = 'block';
+      deletedFilesCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    loadDeletedFiles();
+  });
+}
+if (deletedFilesCloseBtn) {
+  deletedFilesCloseBtn.addEventListener('click', () => {
+    if (deletedFilesCard) deletedFilesCard.style.display = 'none';
+  });
+}
+
+document.addEventListener('click', async (e) => {
+  if (!e.target.matches('.restore-deleted-file-btn')) return;
+  if (isRestrictedUser) return; // defense in depth - this button is hidden for restricted users
+  const btn = e.target;
+  const backupKey = btn.getAttribute('data-key');
+  const label = btn.getAttribute('data-label') || 'Restored document';
+  btn.disabled = true;
+  btn.textContent = 'Restoring...';
+  try {
+    const res = await fetch('/api/contracts-backup/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: backupKey })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) throw new Error(data.error || `Restore failed (${res.status})`);
+
+    contractLibrary.push({
+      id: uid(),
+      label: data.label || label,
+      r2Key: data.key,
+      filename: (data.label || label) + '.pdf',
+      uploadedAt: todayStr(),
+      docusignAnchorTags: false,
+      needsAnchorReview: false,
+      anchorDetection: null
+    });
+    const ok = await persistContractLibrary();
+    if (!ok) throw new Error('Restored the file, but could not save it into the library - try again.');
+
+    renderContractLibrary();
+    populateContractTemplateSelect();
+    btn.textContent = 'Restored ✓';
+    if (deletedFilesStatus) {
+      deletedFilesStatus.textContent = `"${data.label || label}" restored - it's back in the Contract Template Library above.`;
+      deletedFilesStatus.style.color = 'var(--color-success, #10b981)';
+    }
+  } catch (e) {
+    console.error('Restore failed:', e);
+    btn.disabled = false;
+    btn.textContent = 'Restore';
+    if (deletedFilesStatus) {
+      deletedFilesStatus.textContent = "Couldn't restore: " + e.message;
+      deletedFilesStatus.style.color = 'var(--color-error, #f68d5f)';
+    }
+  }
+});
+
 const newContractLabel = el('newContractLabel');
 const newContractFile = el('newContractFile');
 const newContractFileName = el('newContractFileName');
@@ -702,7 +828,7 @@ document.addEventListener('change', async (e) => {
     entry.anchorDetection = detection || null;
     const ok = await persistContractLibrary();
     if (!ok) throw new Error('Could not save — try again');
-    deleteR2Object(oldKey);
+    deleteR2Object(oldKey, entry.label);
     renderContractLibrary();
     populateContractTemplateSelect();
     setContractLibraryStatus(
@@ -731,7 +857,7 @@ document.addEventListener('click', async (e) => {
   contractLibrary = contractLibrary.filter(t => t.id !== id);
   const ok = await persistContractLibrary();
   if (!ok) { contractLibrary = previous; return; }
-  deleteR2Object(entry.r2Key);
+  deleteR2Object(entry.r2Key, entry.label);
   renderContractLibrary();
   populateContractTemplateSelect();
 });

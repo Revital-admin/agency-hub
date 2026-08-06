@@ -39,12 +39,19 @@ async function uploadBytesToR2(bytes, filename) {
   return data.key;
 }
 
-function deleteR2Object(key) {
+function deleteR2Object(key, label) {
   // Best-effort cleanup - if this fails, an orphaned object is left in
   // R2, which costs a few cents of storage but breaks nothing, so it's
   // not worth blocking or surfacing an error over.
   if (!key) return;
-  fetch('/api/contracts/' + encodeURIComponent(key), { method: 'DELETE' }).catch(e => {
+  // label (optional) is the caller's human-readable name for this file
+  // (e.g. "Master Service Agreement") - passed through as a query param
+  // so handleContractDelete in _worker.js can attach it to the backup
+  // copy it makes before actually deleting, for the Recently Deleted
+  // restore panel. Purely cosmetic - deletion/backup still work fine
+  // without it, just showing the raw key instead of a name.
+  const url = '/api/contracts/' + encodeURIComponent(key) + (label ? '?label=' + encodeURIComponent(label) : '');
+  fetch(url, { method: 'DELETE' }).catch(e => {
     console.warn('Could not delete old contract file from storage (non-fatal):', e);
   });
 }
