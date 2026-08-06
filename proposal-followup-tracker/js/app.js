@@ -206,6 +206,7 @@ function renderTable() {
 
     tr.innerHTML = `
       <td class="client-cell">${p.prospectName}</td>
+      <td><input type="email" class="email-input" data-id="${p.id}" value="${(p.prospectEmail || '').replace(/"/g, '&quot;')}" placeholder="prospect@..."></td>
       <td class="date-cell">${p.proposalSentDate || '--'}</td>
       <td class="date-cell">${expiryDate}</td>
       <td><select class="stage-select" data-id="${p.id}">${stageOptionsHtml(p.followUpStage)}</select></td>
@@ -214,6 +215,7 @@ function renderTable() {
       <td><input type="text" class="notes-input" data-id="${p.id}" value="${(p.notes || '').replace(/"/g, '&quot;')}" placeholder="Notes..."></td>
       <td>
         <div class="row-actions">
+          <button class="send-followup-btn" data-id="${p.id}" ${p.status !== 'open' ? 'disabled' : ''}>Send Follow-Up</button>
           <button class="log-followup-btn" data-id="${p.id}" ${p.status !== 'open' ? 'disabled' : ''}>Log Follow-Up</button>
           <button class="win-btn" data-id="${p.id}" ${p.status !== 'open' ? 'disabled' : ''}>Mark as Won</button>
           <button class="lose-btn" data-id="${p.id}" ${p.status !== 'open' ? 'disabled' : ''}>Mark as Lost</button>
@@ -250,6 +252,18 @@ function wireRowListeners() {
     });
   });
 
+  document.querySelectorAll('.email-input').forEach(inp => {
+    inp.addEventListener('input', async () => {
+      const p = findProposal(inp.getAttribute('data-id'));
+      if (!p) return;
+      p.prospectEmail = inp.value.trim();
+      await persist();
+    });
+  });
+
+  document.querySelectorAll('.send-followup-btn').forEach(btn => {
+    btn.addEventListener('click', () => openSendFollowupPanel(btn.getAttribute('data-id')));
+  });
   document.querySelectorAll('.log-followup-btn').forEach(btn => {
     btn.addEventListener('click', () => logFollowUp(btn.getAttribute('data-id')));
   });
@@ -261,6 +275,193 @@ function wireRowListeners() {
   });
   document.querySelectorAll('.delete-btn').forEach(btn => {
     btn.addEventListener('click', () => deleteProposal(btn.getAttribute('data-id')));
+  });
+}
+
+/* ── Send Follow-Up (real auto-send via Resend, plain text) ──
+   Most prospects tracked here aren't a Client Workspace yet (see header
+   comment), so there's no Account Manager on file to send as - unlike
+   Renewal Tracker/QBR Generator/etc, which always send as the client's
+   assigned Account Manager. This resolves "from" two ways: if the
+   prospect name matches an existing client (the occasional
+   upsell/expansion case), send as that client's real Account Manager;
+   otherwise fall back to the currently logged-in team member's own
+   @revitalproductions.com address, since any teammate working proposals
+   is a legitimate sender for their own outreach. Copy/mailto always
+   work regardless of which (or neither) resolves. */
+
+function findClientRecordByName(name) {
+  if (!isEmbedded || typeof window.parent.getAllClients !== 'function') return null;
+  let clients = {};
+  try { clients = window.parent.getAllClients() || {}; } catch (e) { return null; }
+  const target = (name || '').trim().toLowerCase();
+  const key = Object.keys(clients).find(k => k.trim().toLowerCase() === target);
+  return key ? clients[key] : null;
+}
+
+function resolveFollowupSender() {
+  if (!isEmbedded) return null;
+  const currentEmail = (window.parent.currentAdminEmail || '').trim();
+  if (!currentEmail) return null;
+  const name = window.parent.friendlyNameFromEmail ? window.parent.friendlyNameFromEmail(currentEmail) : currentEmail.split('@')[0];
+  return { name, email: currentEmail };
+}
+
+const STAGE_FOLLOWUP_COPY = {
+  'Sent': (firstName, sender) => `Hi ${firstName},\n\nJust wanted to make sure the proposal I sent over landed okay and see if you had any questions so far.\n\nHappy to hop on a quick call if that's easier.\n\nThanks,\n${sender}`,
+  'Day 3 Sent': (firstName, sender) => `Hi ${firstName},\n\nFollowing up on the proposal I sent over - wanted to check in and see where things stand on your end, and if there's anything I can clarify.\n\nThanks,\n${sender}`,
+  'Day 7 Sent': (firstName, sender) => `Hi ${firstName},\n\nCircling back one more time on the proposal - totally understand if priorities have shifted, but wanted to see if it's still something you're considering, and if there's anything holding it up I can help with.\n\nThanks,\n${sender}`,
+  'Day 12 Sent': (firstName, sender) => `Hi ${firstName},\n\nThis is my last check-in on the proposal before it expires - let me know if you'd like to move forward or if you have any last questions.\n\nThanks,\n${sender}`
+};
+
+const sendFollowupPanel = el('sendFollowupPanel');
+const sendFollowupTo = el('sendFollowupTo');
+const sendFollowupSubject = el('sendFollowupSubject');
+const sendFollowupBody = el('sendFollowupBody');
+const sendFollowupOpenBtn = el('sendFollowupOpenBtn');
+const sendFollowupCopyBtn = el('sendFollowupCopyBtn');
+const sendFollowupSendBtn = el('sendFollowupSendBtn');
+const sendFollowupStatus = el('sendFollowupStatus');
+const sendFollowupCloseBtn = el('sendFollowupCloseBtn');
+
+let currentFollowupContext = null; // { id, from }
+
+function refreshSendFollowupMailto() {
+  if (!sendFollowupOpenBtn || !sendFollowupTo) return;
+  sendFollowupOpenBtn.href = `mailto:${encodeURIComponent(sendFollowupTo.value)}?subject=${encodeURIComponent(sendFollowupSubject.value)}&body=${encodeURIComponent(sendFollowupBody.value)}`;
+}
+
+if (sendFollowupCloseBtn) {
+  sendFollowupCloseBtn.addEventListener('click', () => {
+    if (sendFollowupPanel) sendFollowupPanel.style.display = 'none';
+  });
+}
+
+[sendFollowupTo, sendFollowupSubject, sendFollowupBody].forEach(elx => {
+  if (elx) elx.addEventListener('input', refreshSendFollowupMailto);
+});
+
+if (sendFollowupCopyBtn) {
+  sendFollowupCopyBtn.addEventListener('click', async () => {
+    const text = `To: ${sendFollowupTo.value}\nSubject: ${sendFollowupSubject.value}\n\n${sendFollowupBody.value}`;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        sendFollowupBody.select();
+        document.execCommand('copy');
+      }
+      const original = sendFollowupCopyBtn.textContent;
+      sendFollowupCopyBtn.textContent = 'Copied!';
+      setTimeout(() => { sendFollowupCopyBtn.textContent = original; }, 2000);
+    } catch (err) {
+      console.error('Failed to copy follow-up email', err);
+      alert('Failed to copy. Please manually select and copy the text.');
+    }
+  });
+}
+
+function openSendFollowupPanel(id) {
+  const p = findProposal(id);
+  if (!p || p.status !== 'open') return;
+
+  if (!p.prospectEmail) {
+    alert(`Add a contact email for ${p.prospectName} first (the Contact Email column) before sending a follow-up.`);
+    return;
+  }
+
+  const firstName = p.prospectName.split(' ')[0];
+  const matchedClient = findClientRecordByName(p.prospectName);
+  const clientConfig = matchedClient && matchedClient.portalConfig;
+
+  let from = null;
+  let senderDisplayName = 'the Revital Productions team';
+  if (clientConfig && clientConfig.accountManagerEmail && clientConfig.accountManagerName) {
+    from = `${clientConfig.accountManagerName} <${clientConfig.accountManagerEmail}>`;
+    senderDisplayName = clientConfig.accountManagerName.split(' ')[0];
+  } else {
+    const sender = resolveFollowupSender();
+    if (sender) {
+      from = `${sender.name} <${sender.email}>`;
+      senderDisplayName = sender.name.split(' ')[0];
+    }
+  }
+
+  const copyFn = STAGE_FOLLOWUP_COPY[p.followUpStage] || STAGE_FOLLOWUP_COPY['Sent'];
+  const subject = `Following up on our proposal`;
+  const body = copyFn(firstName, senderDisplayName);
+
+  sendFollowupTo.value = p.prospectEmail;
+  sendFollowupSubject.value = subject;
+  sendFollowupBody.value = body;
+  refreshSendFollowupMailto();
+
+  currentFollowupContext = { id: p.id, from };
+
+  if (sendFollowupSendBtn) {
+    sendFollowupSendBtn.style.display = from ? 'inline-block' : 'none';
+    sendFollowupSendBtn.disabled = false;
+    sendFollowupSendBtn.textContent = 'Send';
+  }
+  if (sendFollowupStatus) {
+    sendFollowupStatus.textContent = from ? '' : "Couldn't determine a sender address - use Copy or \"Open in Email App\" instead.";
+    sendFollowupStatus.style.color = 'var(--text-muted)';
+  }
+
+  if (sendFollowupPanel) {
+    sendFollowupPanel.style.display = 'block';
+    sendFollowupPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+if (sendFollowupSendBtn) {
+  sendFollowupSendBtn.addEventListener('click', async () => {
+    if (!currentFollowupContext || !currentFollowupContext.from) return;
+
+    sendFollowupSendBtn.disabled = true;
+    sendFollowupSendBtn.textContent = 'Sending...';
+    if (sendFollowupStatus) sendFollowupStatus.textContent = '';
+
+    try {
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: sendFollowupTo.value,
+          subject: sendFollowupSubject.value,
+          body: sendFollowupBody.value,
+          from: currentFollowupContext.from
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `Send failed (${res.status})`);
+      }
+
+      sendFollowupSendBtn.textContent = 'Sent ✓';
+      if (sendFollowupStatus) {
+        sendFollowupStatus.textContent = 'Sent successfully.';
+        sendFollowupStatus.style.color = 'var(--color-success, #10b981)';
+      }
+
+      // Sending IS the follow-up contact, so advance the stage/dates the
+      // same way "Log Follow-Up" does rather than leaving the row stale
+      // until someone remembers to click that separately.
+      const p = findProposal(currentFollowupContext.id);
+      if (p) await logFollowUp(p.id);
+
+      if (isEmbedded && window.parent.showBanner) {
+        window.parent.showBanner('success', `Follow-up emailed to ${p ? p.prospectName : 'prospect'}.`);
+      }
+    } catch (e) {
+      console.error('Send follow-up email failed:', e);
+      sendFollowupSendBtn.disabled = false;
+      sendFollowupSendBtn.textContent = 'Send';
+      if (sendFollowupStatus) {
+        sendFollowupStatus.textContent = "Couldn't send automatically (" + e.message + ") - use Copy or \"Open in Email App\" instead.";
+        sendFollowupStatus.style.color = 'var(--color-error, #f68d5f)';
+      }
+    }
   });
 }
 
@@ -326,6 +527,7 @@ async function addTrackedProposal() {
   proposals.push({
     id: uid(),
     prospectName,
+    prospectEmail: '',
     status: 'open',
     proposalSentDate: sentDate,
     followUpStage: 'Sent',

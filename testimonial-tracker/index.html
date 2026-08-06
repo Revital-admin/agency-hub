@@ -60,11 +60,39 @@
         </div>
         <div class="form-actions">
           <button class="btn-primary" id="saveTrackerBtn">Save</button>
+          <button class="btn-secondary" id="openSendAskBtn" type="button">Send Ask Email</button>
           <span id="saveStatus" class="save-status"></span>
         </div>
       </div>
+
+      <!-- Send Ask Email panel - same To/Subject/Body/Copy/Open/Send
+           layout used across the Hub's other real-send flows (Renewal
+           Tracker, Proposal Follow-Up Tracker). Plain text, no PDF - this
+           is just the testimonial ask itself. -->
+      <div id="sendAskPanel" class="step-card" style="display:none; position:relative;">
+        <button type="button" id="sendAskCloseBtn" aria-label="Close" style="position: absolute; top: 14px; right: 14px; background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 4px;">&times;</button>
+        <h3 style="margin-top:0;">Send Ask Email</h3>
+        <div class="form-group">
+          <label for="sendAskTo">To</label>
+          <input type="text" id="sendAskTo">
+        </div>
+        <div class="form-group">
+          <label for="sendAskSubject">Subject</label>
+          <input type="text" id="sendAskSubject">
+        </div>
+        <div class="form-group">
+          <label for="sendAskBody">Body</label>
+          <textarea id="sendAskBody" rows="8"></textarea>
+        </div>
+        <div class="form-actions">
+          <a href="#" id="sendAskOpenBtn" class="btn-secondary" style="text-decoration:none;" target="_blank" rel="noopener">Open in Email App</a>
+          <button class="btn-secondary" id="sendAskCopyBtn" type="button">Copy Text</button>
+          <button class="btn-primary" id="sendAskSendBtn" type="button" style="display:none;">Send</button>
+        </div>
+        <div id="sendAskStatus" style="font-size: 0.8rem; margin-top: 8px;"></div>
+      </div>
     </div>
   </div>
-  <script src="js/app.js?v=1"></script>
+  <script src="js/app.js?v=2"></script>
 </body>
 </html>

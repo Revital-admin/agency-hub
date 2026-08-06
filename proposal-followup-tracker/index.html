@@ -49,6 +49,7 @@
           <thead>
             <tr>
               <th>Prospect</th>
+              <th>Contact Email</th>
               <th>Sent</th>
               <th>Expires</th>
               <th>Stage</th>
@@ -64,8 +65,36 @@
         <p id="emptyState" class="empty-state" style="display: none;">No proposals being tracked yet. Add one above.</p>
       </div>
     </div>
+
+    <!-- Send Follow-Up panel - shared across every row's "Send Follow-Up"
+         button (see wireRowListeners' send-followup-btn handler in
+         js/app.js). Same To/Subject/Body/Copy/Open/Send layout used by
+         Renewal Tracker's Email to Client panel, minus the PDF attachment -
+         this is a plain follow-up email, not a document delivery. -->
+    <div id="sendFollowupPanel" style="display:none; max-width: 640px; margin: 0 auto 24px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md, 10px); padding: 20px; position: relative;">
+      <button type="button" id="sendFollowupCloseBtn" aria-label="Close" style="position: absolute; top: 14px; right: 14px; background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 4px;">&times;</button>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; padding-right: 24px;">Follow-up email ready to send:</p>
+      <div class="form-group">
+        <label for="sendFollowupTo">To</label>
+        <input type="text" id="sendFollowupTo">
+      </div>
+      <div class="form-group">
+        <label for="sendFollowupSubject">Subject</label>
+        <input type="text" id="sendFollowupSubject">
+      </div>
+      <div class="form-group">
+        <label for="sendFollowupBody">Body</label>
+        <textarea id="sendFollowupBody" rows="8"></textarea>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap: wrap; align-items: center;">
+        <a href="#" id="sendFollowupOpenBtn" class="download-pdf-btn" style="padding: 10px 20px; text-decoration:none;" target="_blank" rel="noopener">Open in Email App</a>
+        <button class="btn-secondary" id="sendFollowupCopyBtn" type="button" style="padding: 10px 20px;">Copy Text</button>
+        <button class="download-pdf-btn" id="sendFollowupSendBtn" type="button" style="padding: 10px 20px; display:none;">Send</button>
+      </div>
+      <div id="sendFollowupStatus" style="font-size: 0.8rem; margin-top: 8px;"></div>
+    </div>
   </main>
 
-  <script src="js/app.js?v=4"></script>
+  <script src="js/app.js?v=5"></script>
 </body>
 </html>

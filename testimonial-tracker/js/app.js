@@ -102,6 +102,163 @@ function showSaveStatus(message, type) {
   }
 }
 
+/* ── Send Ask Email (real auto-send via Resend, plain text) ──
+   Distinct from the bell's testimonial_prompt nudge (fired automatically
+   when a client's health flips Green, via buildTestimonialAskDraftEmail
+   in the parent Hub's app.js) - this is the same email content, but
+   available on-demand from the tracker itself for whenever the team
+   decides to ask, not just the automatic Green-flip moment. Reuses the
+   parent's buildTestimonialAskDraftEmail so the two stay in sync rather
+   than maintaining two copies of the same copy. */
+
+const sendAskPanel = el('sendAskPanel');
+const sendAskTo = el('sendAskTo');
+const sendAskSubject = el('sendAskSubject');
+const sendAskBody = el('sendAskBody');
+const sendAskOpenBtn = el('sendAskOpenBtn');
+const sendAskCopyBtn = el('sendAskCopyBtn');
+const sendAskSendBtn = el('sendAskSendBtn');
+const sendAskStatus = el('sendAskStatus');
+const sendAskCloseBtn = el('sendAskCloseBtn');
+const openSendAskBtn = el('openSendAskBtn');
+
+let currentAskDraft = null; // { to, subject, body, from? }
+
+function refreshSendAskMailto() {
+  if (!sendAskOpenBtn || !sendAskTo) return;
+  sendAskOpenBtn.href = `mailto:${encodeURIComponent(sendAskTo.value)}?subject=${encodeURIComponent(sendAskSubject.value)}&body=${encodeURIComponent(sendAskBody.value)}`;
+}
+
+if (sendAskCloseBtn) {
+  sendAskCloseBtn.addEventListener('click', () => {
+    if (sendAskPanel) sendAskPanel.style.display = 'none';
+  });
+}
+
+[sendAskTo, sendAskSubject, sendAskBody].forEach(elx => {
+  if (elx) elx.addEventListener('input', refreshSendAskMailto);
+});
+
+if (sendAskCopyBtn) {
+  sendAskCopyBtn.addEventListener('click', async () => {
+    const text = `To: ${sendAskTo.value}\nSubject: ${sendAskSubject.value}\n\n${sendAskBody.value}`;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        sendAskBody.select();
+        document.execCommand('copy');
+      }
+      const original = sendAskCopyBtn.textContent;
+      sendAskCopyBtn.textContent = 'Copied!';
+      setTimeout(() => { sendAskCopyBtn.textContent = original; }, 2000);
+    } catch (err) {
+      console.error('Failed to copy testimonial ask email', err);
+      alert('Failed to copy. Please manually select and copy the text.');
+    }
+  });
+}
+
+if (openSendAskBtn) {
+  openSendAskBtn.addEventListener('click', () => {
+    if (!isEmbedded || !parentClient) return;
+    if (!window.parent.buildTestimonialAskDraftEmail) {
+      alert("Couldn't build the ask email - try reloading the Hub.");
+      return;
+    }
+    const draft = window.parent.buildTestimonialAskDraftEmail(parentClient, parentClient.name);
+    if (!draft) {
+      alert(`${parentClient.name} has no Contact Email set in Client Portal Manager yet - add one before sending a testimonial ask.`);
+      return;
+    }
+    currentAskDraft = draft;
+
+    sendAskTo.value = draft.to;
+    sendAskSubject.value = draft.subject;
+    sendAskBody.value = draft.body;
+    refreshSendAskMailto();
+
+    if (sendAskSendBtn) {
+      sendAskSendBtn.style.display = draft.sendEnabled ? 'inline-block' : 'none';
+      sendAskSendBtn.disabled = false;
+      sendAskSendBtn.textContent = 'Send';
+    }
+    if (sendAskStatus) {
+      sendAskStatus.textContent = draft.sendEnabled ? '' : `Add ${parentClient.name}'s Account Manager Name + Email in Client Portal Manager to enable sending.`;
+      sendAskStatus.style.color = 'var(--text-muted)';
+    }
+
+    if (sendAskPanel) {
+      sendAskPanel.style.display = 'block';
+      sendAskPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  });
+}
+
+if (sendAskSendBtn) {
+  sendAskSendBtn.addEventListener('click', async () => {
+    if (!currentAskDraft || !currentAskDraft.sendEnabled || !currentAskDraft.from) return;
+
+    sendAskSendBtn.disabled = true;
+    sendAskSendBtn.textContent = 'Sending...';
+    if (sendAskStatus) sendAskStatus.textContent = '';
+
+    try {
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: sendAskTo.value,
+          subject: sendAskSubject.value,
+          body: sendAskBody.value,
+          from: currentAskDraft.from
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `Send failed (${res.status})`);
+      }
+
+      sendAskSendBtn.textContent = 'Sent ✓';
+      if (sendAskStatus) {
+        sendAskStatus.textContent = 'Sent successfully.';
+        sendAskStatus.style.color = 'var(--color-success, #10b981)';
+      }
+
+      // Sending the ask IS the ask, so log it the same way manually
+      // filling in Status/Date Asked and clicking Save would.
+      const state = getRequestState();
+      state.status = 'Asked';
+      state.askedDate = todayStr();
+      state.templateUsed = 'Testimonial Ask (sent via Send Ask Email)';
+      el('requestStatus').value = state.status;
+      el('askedDate').value = state.askedDate;
+      el('templateUsed').value = state.templateUsed;
+
+      if (window.parent && typeof window.parent.saveDatabase === 'function') {
+        window.parent.saveDatabase();
+      }
+      if (window.parent.showBanner) {
+        window.parent.showBanner('success', `Testimonial ask emailed to ${parentClient.name}.`);
+      }
+    } catch (e) {
+      console.error('Send testimonial ask failed:', e);
+      sendAskSendBtn.disabled = false;
+      sendAskSendBtn.textContent = 'Send';
+      if (sendAskStatus) {
+        sendAskStatus.textContent = "Couldn't send automatically (" + e.message + ") - use Copy or \"Open in Email App\" instead.";
+        sendAskStatus.style.color = 'var(--color-error, #f68d5f)';
+      }
+    }
+  });
+}
+
+function todayStr() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString().slice(0, 10);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   if (!isEmbedded || !parentClient) {
     el('noClientState').style.display = '';
