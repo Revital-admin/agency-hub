@@ -72,6 +72,16 @@ function initState() {
   }
 }
 
+// Used only by the Download PDF builder below - output copy/notes are
+// plain text (typed by whoever's using the tool), so this has to be
+// escaped before going into the exported document's innerHTML the same
+// way any other untrusted-ish string would be.
+function escapeHtmlCopy(str) {
+  const div = document.createElement("div");
+  div.textContent = str == null ? "" : String(str);
+  return div.innerHTML;
+}
+
 function saveState() {
   if (isEmbedded && parentClient) {
     parentClient.copywriting.activeFramework = state.activeFramework;
@@ -105,7 +115,8 @@ const elements = {
   charCount: document.getElementById("charCount"),
   wordCount: document.getElementById("wordCount"),
   copyBtn: document.getElementById("copyBtn"),
-  downloadTxtBtn: document.getElementById("downloadTxtBtn")
+  downloadTxtBtn: document.getElementById("downloadTxtBtn"),
+  downloadPdfBtn: document.getElementById("downloadPdfBtn")
 };
 
 /* ── Renderers ──────────────────────────────────────────────── */
@@ -283,6 +294,59 @@ function bindEvents() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       showFeedback(elements.downloadTxtBtn, "Saved!");
+    });
+  }
+
+  // Download PDF - a real leave-behind/shareable document, unlike Save
+  // TXT above (plain text is fine internally, but not something you'd
+  // hand a lead or drop into a polished deck). Output is plain text
+  // already (not markdown, unlike most of the Hub's other copy-building
+  // tools), so this just wraps outputCopy's value in a styled white page
+  // with white-space:pre-wrap rather than parsing it as markdown. Same
+  // html2pdf pattern as the rest of the Hub's Download PDF buttons.
+  if (elements.downloadPdfBtn) {
+    elements.downloadPdfBtn.addEventListener("click", async () => {
+      const btn = elements.downloadPdfBtn;
+      btn.disabled = true;
+      const origHtml = btn.innerHTML;
+      btn.innerHTML = "<span>Generating...</span>";
+
+      const frameworkTitle = (elements.activeFrameworkTitle && elements.activeFrameworkTitle.textContent) || state.activeFramework.toUpperCase();
+      const productLabel = state.inputs.product || "Copywriting Draft";
+      const clientName = (isEmbedded && parentClient && parentClient.name) ? parentClient.name : "";
+      const copyText = elements.outputCopy.value || "(No copy generated yet.)";
+      const notesText = (elements.workspaceNotes.value || "").trim();
+
+      const container = document.createElement("div");
+      container.style.cssText = 'font-family: "Inter", sans-serif, Arial; color:#1e293b; font-size:14px; line-height:1.6; width:100%; padding:40px; box-sizing:border-box; background:white;';
+      container.innerHTML = `
+        <img src="assets/logo.png" onerror="this.src='../logo.png'" alt="Revital Hub" style="height:50px; width:144px; object-fit:contain; margin-bottom:30px;">
+        <h1 style="font-size:26px; font-weight:700; color:#0f172a; border-bottom:4px solid #f59e0b; padding-bottom:16px; margin-bottom:6px;">${escapeHtmlCopy(productLabel)}</h1>
+        <p style="color:#64748b; font-size:13px; margin-bottom:24px;"><strong>Framework:</strong> ${escapeHtmlCopy(frameworkTitle)}${clientName ? ` &nbsp;&middot;&nbsp; <strong>Client:</strong> ${escapeHtmlCopy(clientName)}` : ""} &nbsp;&middot;&nbsp; <strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+        <div style="white-space:pre-wrap; color:#334155;">${escapeHtmlCopy(copyText)}</div>
+        ${notesText ? `<h2 style="font-size:16px; color:#0f172a; border-bottom:2px solid #e2e8f0; padding-bottom:6px; margin:26px 0 10px;">Scratchpad Notes</h2><div style="white-space:pre-wrap; color:#334155;">${escapeHtmlCopy(notesText)}</div>` : ""}
+      `;
+
+      try {
+        const opt = {
+          margin: 0,
+          filename: `Copywriting_${productLabel.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`,
+          image: { type: 'jpeg', quality: 0.92 },
+          html2canvas: { scale: 2, letterRendering: true, useCORS: true },
+          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+        };
+        if (typeof html2pdf !== 'undefined') {
+          await html2pdf().set(opt).from(container).save();
+        } else {
+          alert("PDF library failed to load.");
+        }
+      } catch (e) {
+        console.error("PDF error:", e);
+        alert("Something went wrong generating the PDF.");
+      }
+
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
     });
   }
 

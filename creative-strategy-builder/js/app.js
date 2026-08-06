@@ -283,6 +283,65 @@ function wireCopyBtn() {
   });
 }
 
+// Download PDF - a real leave-behind document, unlike Copy Full Strategy
+// above (only useful once pasted somewhere else). No live-rendered
+// preview panel to reuse here (unlike creative-brief-generator/
+// ad-campaign-brief), so this runs buildStrategyMarkdown() through
+// marked.parse() itself (already loaded for consistency, even though
+// this tool doesn't otherwise use it for an on-screen preview), then
+// restyles the result dark-on-white for the exported document. Same
+// html2pdf pattern as every other Download PDF button in the Hub.
+function wireDownloadPdfBtn() {
+  const btn = el('downloadPdfBtn');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    const origHtml = btn.innerHTML;
+    btn.innerHTML = '<span>Generating...</span>';
+
+    const clientName = (isEmbedded && parentClient && parentClient.name) ? parentClient.name : 'Client';
+    // Strip the markdown's own leading "# Creative Strategy: ..." title
+    // line - the container below builds its own styled h1 for that, so
+    // parsing it as-is would print the same title twice.
+    const mdBody = buildStrategyMarkdown().replace(/^#\s+Creative Strategy:.*\n+/, '');
+    const bodyHtml = (typeof marked !== 'undefined') ? marked.parse(mdBody) : `<pre>${mdBody}</pre>`;
+
+    const container = document.createElement('div');
+    container.style.cssText = 'font-family: "Inter", sans-serif, Arial; color:#1e293b; font-size:14px; line-height:1.6; width:100%; padding:40px; box-sizing:border-box; background:white;';
+    container.innerHTML = `
+      <img src="assets/logo.png" onerror="this.src='../logo.png'" alt="Revital Hub" style="height:50px; width:144px; object-fit:contain; margin-bottom:30px;">
+      <h1 style="font-size:26px; font-weight:700; color:#0f172a; border-bottom:4px solid #f59e0b; padding-bottom:16px; margin-bottom:20px;">Creative Strategy: ${clientName}</h1>
+      <p style="color:#64748b; font-size:13px; margin-bottom:24px;"><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+      <div>${bodyHtml}</div>
+    `;
+    container.querySelectorAll('h2').forEach(h => h.style.cssText = 'font-size:16px; color:#0f172a; border-bottom:2px solid #e2e8f0; padding-bottom:6px; margin:20px 0 10px;');
+    container.querySelectorAll('p, li, strong').forEach(elx => { elx.style.color = '#334155'; });
+    container.querySelectorAll('hr').forEach(elx => elx.style.cssText = 'border:none; border-top:1px solid #e2e8f0; margin:24px 0;');
+    container.querySelectorAll('em').forEach(elx => { elx.style.color = '#94a3b8'; });
+
+    try {
+      const opt = {
+        margin: 0,
+        filename: `Creative_Strategy_${clientName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`,
+        image: { type: 'jpeg', quality: 0.92 },
+        html2canvas: { scale: 2, letterRendering: true, useCORS: true },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+      };
+      if (typeof html2pdf !== 'undefined') {
+        await html2pdf().set(opt).from(container).save();
+      } else {
+        alert("PDF library failed to load.");
+      }
+    } catch (e) {
+      console.error("PDF error:", e);
+      alert("Something went wrong generating the PDF.");
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   loadState();
   if (isEmbedded && parentClient) {

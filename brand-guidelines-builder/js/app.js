@@ -235,12 +235,13 @@ function renderState() {
   renderImageryRefs();
 }
 
-function saveGuideline() {
-  const clientName = el('clientSelect').value;
-  if (!clientName) return;
-  const clients = getClients();
-
-  clients[clientName].brandGuideline = {
+// Pulled out of saveGuideline so the Download PDF button (below) can read
+// exactly what's currently on screen - including edits not yet saved -
+// instead of either duplicating this whole field list a second time or
+// exporting the last-saved snapshot and silently dropping anything the
+// user just typed but hasn't clicked Save Brand Guidelines for yet.
+function collectGuidelineFromForm() {
+  return {
     mission: el('bgMission').value.trim(),
     story: el('bgStory').value.trim(),
     values: el('bgValues').value.trim(),
@@ -277,12 +278,153 @@ function saveGuideline() {
     imageryStyle: el('bgImageryStyle').value.trim(),
     imageryRefs: imageryRefs
   };
+}
 
+function saveGuideline() {
+  const clientName = el('clientSelect').value;
+  if (!clientName) return;
+  const clients = getClients();
+  clients[clientName].brandGuideline = collectGuidelineFromForm();
   persist();
 
   if (isEmbedded && window.parent.showBanner) {
     window.parent.showBanner('success', `Brand Guidelines saved for ${clientName}.`);
   }
+}
+
+// ── Download PDF ──
+// Brand Guidelines Builder had zero export before this - you could build
+// out a full guideline here but had no way to actually hand it to anyone
+// (a lead, or use it for Revital's own materials) outside the Hub. Same
+// html2pdf pattern as the rest of the Hub's Download PDF buttons, built
+// from scratch (not reusing an on-screen preview, since this tool doesn't
+// have one) covering every section: overview, logo, colors, typography,
+// voice/tone, messaging, imagery.
+function colorSwatchHtml(hex, label, usage) {
+  const safeHex = /^#[0-9A-F]{3,8}$/i.test(hex || '') ? hex : '#ffffff';
+  return `
+    <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:14px;">
+      <div style="width:44px; height:44px; border-radius:8px; border:1px solid #e2e8f0; background:${safeHex}; flex-shrink:0;"></div>
+      <div>
+        <div style="font-weight:600; color:#0f172a;">${escapeHtml(label)} <span style="font-weight:400; color:#64748b; font-family:monospace; font-size:12px;">${escapeHtml(hex || '--')}</span></div>
+        ${usage ? `<div style="color:#475569; font-size:12.5px; margin-top:2px;">${escapeHtml(usage)}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+function imageGridHtml(list, emptyLabel) {
+  if (!list || !list.length) return `<p style="color:#94a3b8; font-size:13px;">${emptyLabel}</p>`;
+  return `<div style="display:flex; flex-wrap:wrap; gap:12px;">${list.map(l => {
+    const isImage = l.isImage || (l.url || '').startsWith('data:image');
+    const thumb = isImage
+      ? `<img src="${l.url}" style="width:120px; height:90px; object-fit:contain; border:1px solid #e2e8f0; border-radius:6px; background:#f8fafc;">`
+      : `<div style="width:120px; height:90px; border:1px solid #e2e8f0; border-radius:6px; background:#f8fafc; display:flex; align-items:center; justify-content:center; font-size:10px; color:#94a3b8; text-align:center; padding:4px; overflow:hidden;">${escapeHtml(l.url || '')}</div>`;
+    return `<div style="width:120px;">${thumb}<div style="font-size:11px; color:#475569; margin-top:4px; text-align:center;">${escapeHtml(l.label || '')}</div></div>`;
+  }).join('')}</div>`;
+}
+
+function pdfSectionHtml(title, bodyHtml) {
+  return `
+    <div style="margin-bottom:26px; page-break-inside:avoid;">
+      <h2 style="font-size:16px; color:#0f172a; border-bottom:2px solid #e2e8f0; padding-bottom:6px; margin-bottom:12px;">${title}</h2>
+      ${bodyHtml}
+    </div>`;
+}
+
+function pdfTextBlockHtml(label, value) {
+  return value ? `<div style="margin-bottom:10px;"><strong style="color:#0f172a;">${label}:</strong> <span style="color:#334155; white-space:pre-wrap;">${escapeHtml(value)}</span></div>` : '';
+}
+
+function buildGuidelinePdfHtml(clientName, g) {
+  return `
+    <img src="assets/logo.png" onerror="this.src='../logo.png'" alt="Revital Hub" style="height:50px; width:144px; object-fit:contain; margin-bottom:30px;">
+    <h1 style="font-size:26px; font-weight:700; color:#0f172a; border-bottom:4px solid #f59e0b; padding-bottom:16px; margin-bottom:6px;">Brand Guidelines: ${escapeHtml(clientName)}</h1>
+    <p style="color:#64748b; font-size:13px; margin-bottom:28px;"><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+
+    ${pdfSectionHtml('Brand Overview', `
+      ${pdfTextBlockHtml('Mission', g.mission)}
+      ${pdfTextBlockHtml('Story', g.story)}
+      ${pdfTextBlockHtml('Core Values', g.values)}
+      ${pdfTextBlockHtml('Target Audience', g.audience)}
+    `)}
+
+    ${pdfSectionHtml('Logo', `
+      ${g.primaryLogoUrl ? `<img src="${g.primaryLogoUrl}" style="max-width:200px; max-height:120px; object-fit:contain; border:1px solid #e2e8f0; border-radius:6px; padding:10px; margin-bottom:14px; background:#f8fafc;">` : `<p style="color:#94a3b8; font-size:13px;">No primary logo uploaded.</p>`}
+      <div style="font-weight:600; color:#0f172a; margin:14px 0 8px;">Logo Variations</div>
+      ${imageGridHtml(g.logoVariations, 'None added yet.')}
+      ${pdfTextBlockHtml('Clear Space', g.clearSpace)}
+      ${pdfTextBlockHtml("Don'ts", g.logoDonts)}
+    `)}
+
+    ${pdfSectionHtml('Color Palette', `
+      ${colorSwatchHtml(g.primaryColor, 'Primary', g.primaryColorUsage)}
+      ${colorSwatchHtml(g.secondaryColor, 'Secondary', g.secondaryColorUsage)}
+      ${colorSwatchHtml(g.accentColor, 'Accent', g.accentColorUsage)}
+      ${colorSwatchHtml(g.neutralColor, 'Neutral', g.neutralColorUsage)}
+    `)}
+
+    ${pdfSectionHtml('Typography', `
+      ${pdfTextBlockHtml('Primary Font', g.fontPrimary)}
+      ${pdfTextBlockHtml('Secondary Font', g.fontSecondary)}
+      ${pdfTextBlockHtml('Type Scale', g.typeScale)}
+      ${pdfTextBlockHtml('Font License', g.fontLicenseUrl)}
+    `)}
+
+    ${pdfSectionHtml('Voice & Tone', `
+      ${pdfTextBlockHtml('Personality', g.personality)}
+      ${pdfTextBlockHtml('Tone', g.toneDescription)}
+      ${pdfTextBlockHtml("Writing Do's", g.writingDos)}
+      ${pdfTextBlockHtml("Writing Don'ts", g.writingDonts)}
+    `)}
+
+    ${pdfSectionHtml('Messaging', `
+      ${pdfTextBlockHtml('Tagline', g.tagline)}
+      ${pdfTextBlockHtml('Elevator Pitch', g.elevatorPitch)}
+      ${pdfTextBlockHtml('Messaging Pillars', g.messagingPillars)}
+    `)}
+
+    ${pdfSectionHtml('Imagery', `
+      ${pdfTextBlockHtml('Imagery Style', g.imageryStyle)}
+      <div style="font-weight:600; color:#0f172a; margin:14px 0 8px;">Reference Images</div>
+      ${imageGridHtml(g.imageryRefs, 'None added yet.')}
+    `)}
+  `;
+}
+
+async function downloadGuidelinePdf() {
+  const clientName = el('clientSelect').value;
+  if (!clientName) return;
+  const btn = el('downloadGuidelinePdfBtn');
+  const origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span>Generating...</span>';
+
+  const g = collectGuidelineFromForm();
+
+  const container = document.createElement('div');
+  container.style.cssText = 'font-family: "Inter", sans-serif, Arial; color:#1e293b; font-size:14px; line-height:1.6; width:100%; padding:40px; box-sizing:border-box; background:white;';
+  container.innerHTML = buildGuidelinePdfHtml(clientName, g);
+
+  try {
+    const opt = {
+      margin: 0,
+      filename: `Brand_Guidelines_${clientName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`,
+      image: { type: 'jpeg', quality: 0.92 },
+      html2canvas: { scale: 2, letterRendering: true, useCORS: true },
+      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    if (typeof html2pdf !== 'undefined') {
+      await html2pdf().set(opt).from(container).save();
+    } else {
+      alert("PDF library failed to load.");
+    }
+  } catch (e) {
+    console.error("PDF error:", e);
+    alert("Something went wrong generating the PDF.");
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = origHtml;
 }
 
 function autoSelectActiveClient() {
@@ -303,6 +445,8 @@ document.addEventListener('DOMContentLoaded', () => {
   renderState();
   el('clientSelect').addEventListener('change', renderState);
   el('saveGuidelineBtn').addEventListener('click', saveGuideline);
+  const downloadPdfBtn = el('downloadGuidelinePdfBtn');
+  if (downloadPdfBtn) downloadPdfBtn.addEventListener('click', downloadGuidelinePdf);
   el('addLogoVarBtn').addEventListener('click', () => addLinkToList('logoVarLabel', 'logoVarUrl', logoVariations, renderLogoVariations));
   el('addImgRefBtn').addEventListener('click', () => addLinkToList('imgRefLabel', 'imgRefUrl', imageryRefs, renderImageryRefs));
 
