@@ -36,8 +36,22 @@ body {
   justify-content: space-between;
   align-items: flex-start;
   gap: 20px;
-  margin-bottom: 20px;
   flex-wrap: wrap;
+  /* Sticky so the Unsaved changes badge + Save All Changes button stay
+     visible while scrolling through the ~85-row price table down to
+     Package Presets - price edits require an explicit save, but preset
+     edits below autosave instantly, so it's easy to lose track of
+     unsaved price changes once you've scrolled past this header. The
+     negative margin + matching padding cancels out the body's 24px
+     padding so this bar sits flush against the iframe edge when stuck,
+     instead of leaving a gap. */
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--color-bg);
+  margin: -24px -24px 20px;
+  padding: 20px 24px 16px;
+  box-shadow: 0 4px 10px -6px rgba(0, 0, 0, 0.15);
 }
 
 .pricing-admin-header p {

@@ -36,8 +36,24 @@ function showBanner(type, message) {
   banner.textContent = message;
   banner.style.display = 'block';
   if (type === 'success') {
-    setTimeout(() => { banner.style.display = 'none'; }, 4000);
+    // Preset saves carrying the unsaved-price-changes reminder (see
+    // unsavedPriceReminderSuffix) get longer on screen than a routine
+    // confirmation - that reminder is the whole point of showing it.
+    const dismissAfter = message.includes('unsaved price changes') ? 7000 : 4000;
+    setTimeout(() => { banner.style.display = 'none'; }, dismissAfter);
   }
+}
+
+// Presets autosave instantly while price/cost/type edits above require an
+// explicit "Save All Changes" click - it's easy to edit a few prices, get
+// pulled into adding/editing a preset, and walk away thinking everything
+// saved. Tack this onto preset save/delete confirmations whenever there's
+// still a real unsaved price edit sitting in workingOverrides, so the
+// price-side badge in the (sticky) header isn't the only warning.
+function unsavedPriceReminderSuffix() {
+  return hasUnsavedChanges()
+    ? ' Reminder: you still have unsaved price changes above — click Save All Changes when ready.'
+    : '';
 }
 
 async function loadOverrides() {
@@ -528,7 +544,7 @@ function deletePreset(id) {
     if (!ok) return;
     if (editingPresetId === id) resetPresetForm();
     renderPresetsList();
-    showBanner('success', `Deleted "${preset.name}".`);
+    showBanner('success', `Deleted "${preset.name}".` + unsavedPriceReminderSuffix());
   });
 }
 
@@ -569,7 +585,7 @@ function savePresetFromForm() {
     if (!ok) return;
     resetPresetForm();
     renderPresetsList();
-    showBanner('success', `Saved "${preset.name}".`);
+    showBanner('success', `Saved "${preset.name}".` + unsavedPriceReminderSuffix());
   });
 }
 

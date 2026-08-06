@@ -744,8 +744,19 @@ function buildApprovalEmail(client, entry) {
     ? `${config.accountManagerName} <${config.accountManagerEmail}>`
     : null;
   if (sendBtn) sendBtn.style.display = currentApprovalEmailFrom ? "inline-block" : "none";
-  if (statusEl) { statusEl.textContent = ""; statusEl.className = ""; }
   if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = "Send"; }
+  // Same "why is Send missing" pattern used in Contract & Invoice Tracker
+  // and QBR Generator - without this, the Send button just silently isn't
+  // there and Open in Email App / Copy Text are the only visible options,
+  // with no clue that filling in the Account Manager section above (this
+  // same tool) would enable it.
+  if (statusEl) {
+    statusEl.textContent = currentApprovalEmailFrom
+      ? ""
+      : "Add this client's Account Manager Name + Email above to enable sending.";
+    statusEl.className = "";
+    statusEl.style.color = "var(--text-muted)";
+  }
 
   panel.style.display = "block";
 }
