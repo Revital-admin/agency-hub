@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const welcomeState = document.getElementById('welcomeState');
   const viewerState = document.getElementById('viewerState');
+  const wikiContentEl = document.querySelector('.wiki-content');
 
   const docCategory = document.getElementById('docCategory');
   const docTitle = document.getElementById('docTitle');
@@ -751,6 +752,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // views share content, but which one you were on for a different SOP
     // shouldn't carry over.
     setChecklistMode(false);
+
+    // Same idea for scroll position: opening a new SOP should always start
+    // at the top, not wherever the previous document happened to be
+    // scrolled to. wiki-content is the scrollable pane; it has
+    // scroll-behavior: smooth in CSS, so an instant jump keeps this from
+    // animating down through the old content before landing back at 0.
+    if (wikiContentEl) wikiContentEl.scrollTo({ top: 0, behavior: 'instant' });
   }
 
   // ── Rich-text paste sanitization ──
