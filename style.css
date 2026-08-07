@@ -1242,6 +1242,68 @@ textarea {
   min-height: 100px;
 }
 
+/* ── Custom number-field spinner buttons ──
+   Native <input type="number"> up/down arrows aren't available once a
+   money field switches to type="text" for comma formatting (see
+   shared-number-format.js). attachSpinnerButtons() wraps the field in
+   .number-spinner-wrap and appends .number-spinner-btns - styled here
+   to match the theme instead of the browser's unstyled default. */
+.number-spinner-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.number-spinner-wrap input {
+  padding-right: 34px !important;
+}
+
+.number-spinner-btns {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  width: 28px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border-color);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  overflow: hidden;
+}
+
+.number-spinner-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  line-height: 0;
+  transition: all var(--transition-fast);
+}
+
+.number-spinner-btn:first-child {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.number-spinner-btn:hover {
+  background: var(--bg-card-hover);
+  color: var(--primary);
+}
+
+.number-spinner-btn:active {
+  background: var(--primary);
+  color: var(--bg-main);
+}
+
+.number-spinner-btn svg {
+  width: 8px;
+  height: 8px;
+  pointer-events: none;
+}
+
 /* ── Custom Cards / Panels ── */
 .glass-panel {
   background: var(--bg-card);

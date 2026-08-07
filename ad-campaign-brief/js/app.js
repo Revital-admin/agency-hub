@@ -126,6 +126,7 @@ ${specialNotes}
   inputs.forEach(input => input.addEventListener('input', generateMarkdown));
   platformChecks.forEach(cb => cb.addEventListener('change', generateMarkdown));
   if (typeof attachCommaFormatting === 'function') attachCommaFormatting(document.getElementById('totalBudget'));
+  if (typeof attachSpinnerButtons === 'function') attachSpinnerButtons(document.getElementById('totalBudget'), { step: 100 });
 
   generateMarkdown();
 

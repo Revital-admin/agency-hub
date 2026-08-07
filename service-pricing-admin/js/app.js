@@ -285,6 +285,7 @@ function wireRowEvents() {
 
   document.querySelectorAll('.pricing-price-input').forEach(input => {
     if (typeof attachCommaFormatting === 'function') attachCommaFormatting(input);
+    if (typeof attachSpinnerButtons === 'function') attachSpinnerButtons(input, { step: 50 });
     input.addEventListener('change', () => {
       const name = decodeURIComponent(input.getAttribute('data-name'));
       const svc = byName[name];
@@ -316,6 +317,7 @@ function wireRowEvents() {
 
   document.querySelectorAll('.pricing-cost-input').forEach(input => {
     if (typeof attachCommaFormatting === 'function') attachCommaFormatting(input);
+    if (typeof attachSpinnerButtons === 'function') attachSpinnerButtons(input, { step: 10 });
     input.addEventListener('change', () => {
       const name = decodeURIComponent(input.getAttribute('data-name'));
       const svc = byName[name];
@@ -621,6 +623,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   resetPresetForm();
 
   if (typeof attachCommaFormatting === 'function') attachCommaFormatting(el('presetPriceInput'));
+  if (typeof attachSpinnerButtons === 'function') attachSpinnerButtons(el('presetPriceInput'), { step: 1 });
 
   el('presetTypeInput').addEventListener('change', togglePresetTypeFields);
   el('presetServiceSearch').addEventListener('input', renderServiceChecklist);

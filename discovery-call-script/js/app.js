@@ -217,6 +217,7 @@ function initListeners() {
     el(id).addEventListener('input', onFormChange);
   });
   if (typeof attachCommaFormatting === 'function') attachCommaFormatting(el('estimatedRetainer'));
+  if (typeof attachSpinnerButtons === 'function') attachSpinnerButtons(el('estimatedRetainer'), { step: 100 });
   ['budgetConfirmed', 'budgetAmount', 'decisionMakerSummary', 'timelineSummary', 'redFlagsSummary', 'recommendedPackage', 'estimatedRetainer', 'nextAction', 'nextActionDate', 'postCallNotes'].forEach(id => {
     el(id).addEventListener('input', onFormChange);
     el(id).addEventListener('change', onFormChange);

@@ -291,4 +291,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   el('filterInput').addEventListener('input', renderTable);
   el('showCancelledToggle').addEventListener('change', renderTable);
   if (typeof attachCommaFormatting === 'function') attachCommaFormatting(el('monthlyCost'));
+  if (typeof attachSpinnerButtons === 'function') attachSpinnerButtons(el('monthlyCost'), { step: 1 });
 });

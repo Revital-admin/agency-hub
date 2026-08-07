@@ -249,6 +249,7 @@ function wireRowListeners() {
 
   document.querySelectorAll('.reward-amount-input').forEach(inp => {
     if (typeof attachCommaFormatting === 'function') attachCommaFormatting(inp);
+    if (typeof attachSpinnerButtons === 'function') attachSpinnerButtons(inp, { step: 1 });
     inp.addEventListener('change', async () => {
       const r = findReferral(inp.getAttribute('data-id'));
       if (!r) return;

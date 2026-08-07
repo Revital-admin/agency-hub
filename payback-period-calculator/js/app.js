@@ -109,6 +109,11 @@ document.addEventListener('DOMContentLoaded', () => {
     attachCommaFormatting(monthlyFeeIn);
     attachCommaFormatting(monthlyValueIn);
   }
+  if (typeof attachSpinnerButtons === 'function') {
+    attachSpinnerButtons(setupCostIn, { step: 100 });
+    attachSpinnerButtons(monthlyFeeIn, { step: 100 });
+    attachSpinnerButtons(monthlyValueIn, { step: 100 });
+  }
 
   calculate();
 

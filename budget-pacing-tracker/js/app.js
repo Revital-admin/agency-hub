@@ -138,6 +138,7 @@ function wireListeners() {
 
   document.querySelectorAll('.spent-input').forEach(inp => {
     if (typeof attachCommaFormatting === 'function') attachCommaFormatting(inp);
+    if (typeof attachSpinnerButtons === 'function') attachSpinnerButtons(inp, { step: 1 });
     inp.addEventListener('change', (e) => {
       const c = e.target.getAttribute('data-client');
       clients[c].budgetPacing.spentToDate = parseFormattedNumber(e.target.value);
@@ -148,6 +149,7 @@ function wireListeners() {
 
   document.querySelectorAll('.total-input').forEach(inp => {
     if (typeof attachCommaFormatting === 'function') attachCommaFormatting(inp);
+    if (typeof attachSpinnerButtons === 'function') attachSpinnerButtons(inp, { step: 1 });
     inp.addEventListener('change', (e) => {
       const c = e.target.getAttribute('data-client');
       clients[c].budgetPacing.totalBudget = parseFormattedNumber(e.target.value);

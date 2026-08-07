@@ -348,6 +348,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (customPrice) attachCommaFormatting(customPrice);
     if (propAov) attachCommaFormatting(propAov);
   }
+  if (typeof attachSpinnerButtons === 'function') {
+    attachSpinnerButtons(baseFee, { step: 500 });
+    if (customPrice) attachSpinnerButtons(customPrice, { step: 1 });
+    if (propAov) attachSpinnerButtons(propAov, { step: 1 });
+  }
   baseFee.addEventListener('input', calculate);
   if (spendTier) spendTier.addEventListener('change', calculate);
   if (blogCount) blogCount.addEventListener('input', calculate);

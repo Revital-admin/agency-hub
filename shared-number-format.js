@@ -106,3 +106,83 @@ function attachCommaFormatting(inputEl, opts) {
   inputEl.addEventListener('input', reformat);
   if (inputEl.value) reformat(); // format whatever's already there (e.g. a server-rendered default)
 }
+
+// Adds custom up/down increment buttons to a comma-formatted field.
+// Native <input type="number"> spinner arrows aren't available once a
+// field is switched to type="text" for comma formatting (see the file
+// header above) - this rebuilds the same up/down convenience with
+// buttons styled to match the Hub's theme (.number-spinner-wrap /
+// .number-spinner-btn in style.css) instead of the browser's unstyled
+// default.
+//
+// Wraps inputEl in a positioning div and appends the two buttons -
+// call once per field, same as attachCommaFormatting (and typically
+// paired with it). Safe to call on a field that's about to be thrown
+// away and re-created by a full innerHTML re-render (e.g. a table row
+// rebuilt on every edit) since nothing here persists outside the DOM
+// node itself - just call it again on the fresh element next render.
+//
+// opts.step (default 1): amount added/subtracted per click. Pass the
+// field's old native `step` attribute value here to preserve whatever
+// increment made sense before the field switched off type="number".
+// opts.min (default 0), opts.max (default none).
+function attachSpinnerButtons(inputEl, opts) {
+  if (!inputEl || !inputEl.parentNode) return;
+  opts = opts || {};
+  const step = typeof opts.step === 'number' && !isNaN(opts.step) ? opts.step : 1;
+  const min = typeof opts.min === 'number' && !isNaN(opts.min) ? opts.min : 0;
+  const max = typeof opts.max === 'number' && !isNaN(opts.max) ? opts.max : Infinity;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'number-spinner-wrap';
+
+  // Carry over any inline flex/width sizing so the wrapper - not the
+  // now-nested input - participates correctly in whatever flex row
+  // layout the input used to sit in directly (e.g. a "Price ($)" field
+  // with an inline flex:1 next to another field in the same row).
+  ['flex', 'flexGrow', 'flexShrink', 'flexBasis', 'width'].forEach(function (prop) {
+    if (inputEl.style[prop]) {
+      wrap.style[prop] = inputEl.style[prop];
+      inputEl.style[prop] = '';
+    }
+  });
+
+  inputEl.parentNode.insertBefore(wrap, inputEl);
+  wrap.appendChild(inputEl);
+
+  const btns = document.createElement('div');
+  btns.className = 'number-spinner-btns';
+
+  function step_(dir) {
+    const current = parseFormattedNumber(inputEl.value);
+    let next = current + (dir === 'up' ? step : -step);
+    if (next < min) next = min;
+    if (next > max) next = max;
+    setFormattedValue(inputEl, next);
+    // Both events, since some fields recalc on 'input' (most calculators)
+    // and others only on 'change' (e.g. Service Pricing Admin's table
+    // rows) - dispatching both means either listener style picks this up.
+    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function makeBtn(dir) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'number-spinner-btn';
+    btn.setAttribute('aria-label', dir === 'up' ? 'Increase' : 'Decrease');
+    btn.tabIndex = -1; // keyboard flow stays on the input itself, not these
+    btn.innerHTML = dir === 'up'
+      ? '<svg viewBox="0 0 10 6" fill="currentColor"><polygon points="5,0 10,6 0,6"></polygon></svg>'
+      : '<svg viewBox="0 0 10 6" fill="currentColor"><polygon points="0,0 10,0 5,6"></polygon></svg>';
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      step_(dir);
+    });
+    return btn;
+  }
+
+  btns.appendChild(makeBtn('up'));
+  btns.appendChild(makeBtn('down'));
+  wrap.appendChild(btns);
+}

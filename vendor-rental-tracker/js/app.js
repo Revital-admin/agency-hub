@@ -232,6 +232,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   el('saveEntryBtn').addEventListener('click', saveEntry);
   el('filterInput').addEventListener('input', renderTable);
   if (typeof attachCommaFormatting === 'function') attachCommaFormatting(el('cost'));
+  if (typeof attachSpinnerButtons === 'function') attachSpinnerButtons(el('cost'), { step: 1 });
 
   let pollAttempts = 0;
   const pollTimer = setInterval(() => {

@@ -305,4 +305,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     attachCommaFormatting(el('coverageAmount'));
     attachCommaFormatting(el('annualPremium'));
   }
+  if (typeof attachSpinnerButtons === 'function') {
+    attachSpinnerButtons(el('coverageAmount'), { step: 1 });
+    attachSpinnerButtons(el('annualPremium'), { step: 1 });
+  }
 });

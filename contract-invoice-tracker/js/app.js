@@ -410,6 +410,7 @@ function wireRowListeners() {
 
   document.querySelectorAll('.amount-input').forEach(inp => {
     if (typeof attachCommaFormatting === 'function') attachCommaFormatting(inp);
+    if (typeof attachSpinnerButtons === 'function') attachSpinnerButtons(inp, { step: 1 });
     inp.addEventListener('change', async () => {
       const r = findRecord(inp.getAttribute('data-id'));
       if (!r) return;

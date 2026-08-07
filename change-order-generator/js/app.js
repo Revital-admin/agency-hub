@@ -463,6 +463,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   el('showResolvedToggle').addEventListener('change', renderTable);
   el('filterClientInput').addEventListener('input', renderTable);
   if (typeof attachCommaFormatting === 'function') attachCommaFormatting(el('additionalCost'));
+  if (typeof attachSpinnerButtons === 'function') attachSpinnerButtons(el('additionalCost'), { step: 50 });
 
   // Same iframe-race fix used across the other cross-client tools: the
   // client datalist can be empty if this loads before the parent Hub's
