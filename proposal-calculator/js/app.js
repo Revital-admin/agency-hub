@@ -352,6 +352,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     attachSpinnerButtons(baseFee, { step: 500 });
     if (customPrice) attachSpinnerButtons(customPrice, { step: 1 });
     if (propAov) attachSpinnerButtons(propAov, { step: 1 });
+    // Not a money field (no attachCommaFormatting above - commas don't
+    // make sense under 100%) but was switched from type="number" to
+    // type="text" too so it can carry the same styled buttons as its
+    // row-mate "Current AOV" instead of the browser's native arrows.
+    if (propConvRate) attachSpinnerButtons(propConvRate, { step: 0.1, max: 100 });
   }
   baseFee.addEventListener('input', calculate);
   if (spendTier) spendTier.addEventListener('change', calculate);
