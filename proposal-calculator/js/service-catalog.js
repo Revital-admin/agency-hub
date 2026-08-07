@@ -618,5 +618,34 @@ const SERVICE_CATALOG = [
         "defaultCost": 60
       }
     ]
+  },
+  {
+    "category": "⭐ Reputation & Reviews",
+    "services": [
+      {
+        "name": "NFC Google Review Card (Single, Branded)",
+        "defaultPrice": 75,
+        "defaultFeeType": "setup",
+        "defaultCost": 20
+      },
+      {
+        "name": "NFC Review Starter Kit (5 Cards + Countertop Stand)",
+        "defaultPrice": 249,
+        "defaultFeeType": "setup",
+        "defaultCost": 85
+      },
+      {
+        "name": "Multi-Location NFC Review Deployment (10 units/location)",
+        "defaultPrice": 450,
+        "defaultFeeType": "setup",
+        "defaultCost": 150
+      },
+      {
+        "name": "NFC Review Program Management (monitoring, reprogramming, replacements)",
+        "defaultPrice": 50,
+        "defaultFeeType": "monthly",
+        "defaultCost": 15
+      }
+    ]
   }
 ];

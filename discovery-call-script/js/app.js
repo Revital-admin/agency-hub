@@ -69,6 +69,13 @@ const BLOCKS = [
       { id: 'budget_2', q: "Besides yourself, is anyone else involved in making this decision?", why: "Identifies if you're talking to the actual decision maker.", probe: "If vague: \"Would a proposal need to go through anyone else before it's approved?\"", redflag: "If a decision maker isn't on the call, the deal will move slower and needs a plan to reach them." },
       { id: 'budget_3', q: "If we put together the right plan, what's your timeline to get started?", why: "Confirms urgency and helps set proposal expiry expectations.", probe: "If vague: \"Is this something you want solved this month, or are you still exploring?\"", redflag: "If \"just exploring\" with no timeline, deprioritize follow-up cadence." }
     ]
+  },
+  {
+    id: 'closing',
+    title: '7. Closing — Freebie Offer (Optional)',
+    type: 'script',
+    script: "Before we wrap up — one thing I want to leave you with regardless of what we decide: a free NFC review card. It's a small card you tap your phone to and it opens straight to your Google review page, no typing, no searching. I'll program one to your business right now and send/hand it over — no strings attached.",
+    stageDirection: "Use this with a qualified lead who's warm but hesitant — a low-cost, no-strings taste of the paid service (see the NFC Google Review Cards playbook in the SOP Wiki) that keeps the door open even if they don't sign today. Skip it for clear Not a Fit calls. If they respond well, this is a natural bridge into recommending the NFC Review Starter Kit as part of the actual proposal."
   }
 ];
 
