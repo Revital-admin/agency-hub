@@ -150,7 +150,11 @@ body {
    Reserving two lines' worth of height on both labels keeps their
    inputs flush regardless of which one wraps. */
 .dual-field-label {
-  min-height: 2.6em;
+  min-height: 46px; /* exact height "Current Conv Rate (%)" occupies once
+                        it wraps to 2 lines at this column's width - 2.6em
+                        (~37px) undershot that, so the shorter one-line
+                        label still came up short and the boxes stayed
+                        misaligned. */
 }
 
 .num-input, .select-input {
