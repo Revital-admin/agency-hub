@@ -419,3 +419,83 @@ body {
   gap: 16px;
   margin-top: 16px;
 }
+
+/* ── Custom number-field spinner buttons ──
+   Same missing-stylesheet issue as Proposal Calculator: this page never
+   links the shared root ../style.css (only the Proposal Calculator's
+   css/style.css, whose tokens it reuses per the file header above), so
+   the shared .number-spinner-* rules for attachSpinnerButtons()
+   (shared-number-format.js) never reached this page either - buttons
+   rendered unstyled, in normal flow instead of overlaid on the field.
+   Base rules match Proposal Calculator's; the .pricing-row-table
+   override below shrinks the button cluster to fit the compact 110px
+   table-cell price/cost inputs instead of the full-size default. */
+.number-spinner-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.number-spinner-wrap input {
+  padding-right: 34px !important;
+}
+
+.number-spinner-btns {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  width: 28px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border-color);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  overflow: hidden;
+}
+
+.number-spinner-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.number-spinner-btn:first-child {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.number-spinner-btn:hover {
+  background: var(--bg-card-hover);
+  color: var(--primary);
+}
+
+.number-spinner-btn:active {
+  background: var(--primary);
+  color: var(--bg-main);
+}
+
+.number-spinner-btn svg {
+  width: 8px;
+  height: 8px;
+  pointer-events: none;
+}
+
+/* Compact variant for the price/cost table cells - the base 34px
+   padding-right/28px button cluster is sized for full-width form
+   fields and would eat too much of these 110px-wide cells. */
+.pricing-row-table .number-spinner-wrap input {
+  padding-right: 20px !important;
+}
+
+.pricing-row-table .number-spinner-btns {
+  width: 16px;
+}
+
+.pricing-row-table .number-spinner-btn svg {
+  width: 6px;
+  height: 6px;
+}

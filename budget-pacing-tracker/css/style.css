@@ -191,3 +191,68 @@
   gap: 16px;
   color: var(--color-text-secondary);
 }
+
+/* ── Custom number-field spinner buttons ──
+   This page links ../vars.css + ../shared-components.css + ../forms.css
+   + its own css/style.css, but never the shared root ../style.css - so
+   the .number-spinner-* rules defined there for attachSpinnerButtons()
+   (shared-number-format.js) never reached this page, and the spent/total
+   inputs' buttons rendered unstyled/out of flow instead of overlaid on
+   the field. Re-declared here against this page's own token names
+   (--color-border/--color-surface-2 from vars.css, --primary from the
+   :root block above) instead of the root file's (--border-color/
+   --bg-card-hover/--bg-main), which aren't defined anywhere in this
+   page's cascade. */
+.number-spinner-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.number-spinner-wrap input {
+  padding-right: 34px !important;
+}
+
+.number-spinner-btns {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  width: 28px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--color-border);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  overflow: hidden;
+}
+
+.number-spinner-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.number-spinner-btn:first-child {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.number-spinner-btn:hover {
+  background: var(--color-surface-2);
+  color: var(--primary);
+}
+
+.number-spinner-btn:active {
+  background: var(--primary);
+  color: var(--color-surface);
+}
+
+.number-spinner-btn svg {
+  width: 8px;
+  height: 8px;
+  pointer-events: none;
+}

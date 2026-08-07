@@ -51,6 +51,8 @@
 
   --shadow-glow: 0 0 20px rgba(246, 141, 95, 0.15);
   --shadow-glow-money: 0 0 20px rgba(16, 185, 129, 0.15);
+
+  --bg-main: #15130f; /* only used as the spinner-button active-state text color below */
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -555,4 +557,68 @@ body {
   .price-value {
     font-size: 2.2rem;
   }
+}
+
+/* ── Custom number-field spinner buttons ──
+   This tool never links the shared root ../style.css (see the note in
+   the :root block above), so the .number-spinner-* rules defined there
+   for attachSpinnerButtons() (shared-number-format.js) never reached
+   this page - the buttons rendered completely unstyled, pushed into
+   normal document flow below the field instead of overlaid on its
+   right edge, which is what threw off row alignment (e.g. "Current AOV"
+   vs. the "Current Conv Rate" box next to it). Same rules as the shared
+   file, just re-pointed at this file's own local tokens (--radius-sm
+   to match .num-input's own corner radius, not --radius-md). */
+.number-spinner-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.number-spinner-wrap input {
+  padding-right: 34px !important;
+}
+
+.number-spinner-btns {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  width: 28px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border-color);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  overflow: hidden;
+}
+
+.number-spinner-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.number-spinner-btn:first-child {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.number-spinner-btn:hover {
+  background: var(--bg-card-hover);
+  color: var(--primary);
+}
+
+.number-spinner-btn:active {
+  background: var(--primary);
+  color: var(--bg-main);
+}
+
+.number-spinner-btn svg {
+  width: 8px;
+  height: 8px;
+  pointer-events: none;
 }
