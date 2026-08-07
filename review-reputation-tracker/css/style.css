@@ -1,0 +1,332 @@
+/* ── Hub-native hero header (matches Budget Pacing Tracker / other
+   Account Ops modules) ── */
+:root {
+  --primary: #f68d5f;
+  --secondary: #d85a30;
+  --text-bright: #f5f1e8;
+  --text-muted: #8a887f;
+  --font-heading: 'Fraunces', Georgia, serif;
+}
+
+.site-header {
+  margin-bottom: 0;
+}
+
+.header-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(246, 141, 95, 0.08);
+  border: 1px solid rgba(246, 141, 95, 0.2);
+  border-radius: 100px;
+  padding: 4px 12px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--primary);
+  margin-bottom: 12px;
+}
+
+.header-eyebrow .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--primary);
+  box-shadow: 0 0 6px var(--primary);
+}
+
+.site-title {
+  font-family: var(--font-heading);
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--text-bright);
+  letter-spacing: -0.5px;
+  margin-bottom: 8px;
+}
+
+.site-title em {
+  font-style: normal;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.site-subtitle {
+  font-size: 1rem;
+  color: var(--text-muted);
+  max-width: 800px;
+  margin: 0;
+}
+
+.module-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.module-body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+}
+
+.module-container {
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+/* ── Summary stat bar - same convention as Subscription Tracker / other
+   cross-client Account Ops modules (not shared anywhere, copy-pasted by
+   convention across tools that use this vars.css/forms.css stack). ── */
+.summary-bar {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.summary-stat {
+  flex: 1;
+  min-width: 160px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.summary-num { font-family: var(--font-display); font-size: 32px; color: var(--color-accent); line-height: 1; }
+.summary-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--color-text-secondary); }
+
+.top-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.tracker-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+
+.tracker-list > .reputation-card:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 760px) {
+  .tracker-list {
+    grid-template-columns: 1fr;
+  }
+  .tracker-list > .reputation-card:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+}
+
+.reputation-card {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.reputation-card.needs-attention {
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.card-title {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+}
+
+.card-type {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Big current-rating readout + trend badge */
+.rating-display {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rating-number {
+  font-family: var(--font-display);
+  font-size: 40px;
+  line-height: 1;
+  color: var(--text-bright);
+}
+
+.rating-star {
+  color: #facc15;
+  font-size: 22px;
+}
+
+.rating-count {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.rating-trend {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+.rating-trend.trend-up { background: rgba(74, 222, 128, 0.12); color: #4ade80; }
+.rating-trend.trend-down { background: rgba(248, 113, 113, 0.12); color: #f87171; }
+.rating-trend.trend-flat { background: rgba(138, 136, 127, 0.15); color: var(--color-text-secondary); }
+
+.last-checked {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+.last-checked.overdue { color: #f87171; font-weight: 600; }
+
+.checkin-form {
+  border-top: 1px solid var(--color-border);
+  padding-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.checkin-form .form-group { margin: 0; }
+.checkin-form .form-group.full { grid-column: 1 / -1; }
+.checkin-form label { font-size: 10px; }
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+}
+.card-actions .btn-primary,
+.card-actions .btn-secondary {
+  flex: 1;
+  justify-content: center;
+}
+
+/* Collapsible history list, newest first */
+.history-toggle {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.history-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px;
+  background: rgba(0,0,0,0.15);
+  border-radius: 6px;
+}
+.history-row .history-date { color: var(--color-text-secondary); }
+.history-row .history-note { color: var(--color-text-secondary); font-style: italic; }
+
+.empty-state {
+  text-align: center;
+  padding: 64px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: var(--color-text-secondary);
+}
+
+/* ── Custom number-field spinner buttons ──
+   Same missing-stylesheet situation as Budget Pacing Tracker: this page
+   links vars.css/shared-components.css/forms.css + its own css/style.css,
+   never the shared root ../style.css, so attachSpinnerButtons()'s
+   .number-spinner-* rules from there wouldn't reach this page. Declared
+   here against this page's own token names from the start instead of
+   discovering the gap after the fact. */
+.number-spinner-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.number-spinner-wrap input {
+  padding-right: 34px !important;
+}
+
+.number-spinner-btns {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  width: 28px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--color-border);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  overflow: hidden;
+}
+
+.number-spinner-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.number-spinner-btn:first-child {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.number-spinner-btn:hover {
+  background: var(--color-surface-2);
+  color: var(--primary);
+}
+
+.number-spinner-btn:active {
+  background: var(--primary);
+  color: var(--color-surface);
+}
+
+.number-spinner-btn svg {
+  width: 8px;
+  height: 8px;
+  pointer-events: none;
+}

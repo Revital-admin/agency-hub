@@ -502,6 +502,7 @@ let iframeNeedsReload = {
   "tab-teamroster": true,
   "tab-hourslog": true,
   "tab-testimonialtracker": true,
+  "tab-reviewtracker": true,
   "tab-intakequalifier": true,
   "tab-discoverycall": true,
   "tab-packagerecommend": true,
@@ -1169,6 +1170,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-testimonialtracker":
       renderTestimonialTracker();
+      break;
+    case "tab-reviewtracker":
+      renderReviewTracker();
       break;
     case "tab-strategy":
       renderContentStrategy();
@@ -2956,6 +2960,11 @@ function renderReportArchive() {
 // ── Testimonial & Review Requests Controller ──
 function renderTestimonialTracker() {
   setIframeAbsoluteSrc('#tab-testimonialtracker iframe', "testimonial-tracker/index.html");
+}
+
+// ── Review & Reputation Tracker Controller ──
+function renderReviewTracker() {
+  setIframeAbsoluteSrc('#tab-reviewtracker iframe', "review-reputation-tracker/index.html");
 }
 
 // ── Content Strategy Guide Controller ──
