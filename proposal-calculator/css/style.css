@@ -140,6 +140,19 @@ body {
   font-weight: 500;
 }
 
+/* "Current AOV ($)" and "Current Conv Rate (%)" sit side by side in a
+   fixed-width flex row. "Current Conv Rate (%)" is long enough to wrap
+   to a second line at that column width while "Current AOV ($)" stays
+   on one line, so without this the two labels take different amounts
+   of vertical space and their input boxes (including AOV's spinner
+   buttons) end up starting at different heights - not lined up with
+   each other even though the boxes themselves are the same size.
+   Reserving two lines' worth of height on both labels keeps their
+   inputs flush regardless of which one wraps. */
+.dual-field-label {
+  min-height: 2.6em;
+}
+
 .num-input, .select-input {
   width: 100%;
   background: rgba(0, 0, 0, 0.2);
