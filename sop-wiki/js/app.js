@@ -747,6 +747,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     docBody.innerHTML = sopContentAsHtml(sop);
 
+    // Links inside SOP content (pasted from ClickUp/Google Docs, or added
+    // via the editor's link button) render with no target attribute -
+    // clicking one navigates this tool's own iframe away to the external
+    // site instead of opening a new tab, stranding the reader with no way
+    // back to the Wiki. Force every link open in a new tab instead;
+    // noopener/noreferrer since the destination is picked by whoever wrote
+    // the SOP, not vetted here.
+    docBody.querySelectorAll('a[href]').forEach(link => {
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+    });
+
     updateChecklistToggleVisibility(sop);
     // Always land back on the prose view when switching documents - the two
     // views share content, but which one you were on for a different SOP
