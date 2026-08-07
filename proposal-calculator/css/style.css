@@ -141,20 +141,16 @@ body {
 }
 
 /* "Current AOV ($)" and "Current Conv Rate (%)" sit side by side in a
-   fixed-width flex row. "Current Conv Rate (%)" is long enough to wrap
-   to a second line at that column width while "Current AOV ($)" stays
-   on one line, so without this the two labels take different amounts
-   of vertical space and their input boxes (including AOV's spinner
-   buttons) end up starting at different heights - not lined up with
-   each other even though the boxes themselves are the same size.
-   Reserving two lines' worth of height on both labels keeps their
-   inputs flush regardless of which one wraps. */
+   fixed-width flex row. The full "Current Conv Rate (%)" text was long
+   enough to wrap to a second line at that column width while
+   "Current AOV ($)" stayed on one line, so the two labels took
+   different amounts of vertical space and their input boxes (AOV's
+   with spinner buttons) ended up starting at different heights.
+   Shortened the label to "Conv Rate (%)" (index.html) so it fits on
+   one line at this column's actual width; nowrap here is just a
+   guard against that ever silently regressing back into a wrap. */
 .dual-field-label {
-  min-height: 46px; /* exact height "Current Conv Rate (%)" occupies once
-                        it wraps to 2 lines at this column's width - 2.6em
-                        (~37px) undershot that, so the shorter one-line
-                        label still came up short and the boxes stayed
-                        misaligned. */
+  white-space: nowrap;
 }
 
 .num-input, .select-input {
