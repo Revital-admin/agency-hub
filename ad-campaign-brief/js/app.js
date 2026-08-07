@@ -47,7 +47,18 @@ document.addEventListener('DOMContentLoaded', () => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
   };
 
-  function generateMarkdown() {
+  // persist (default true): whether to also write the rebuilt state back
+  // to the parent Hub's clientsDb via window.parent.saveDatabase() at the
+  // end of this function. Every user-driven call site below (input/change
+  // listeners, attachSpinnerButtons) wants that. The one-time init call
+  // right after this function's definition does not - see the identical
+  // fix + full explanation in proposal-calculator/js/app.js's calculate().
+  // Short version: this iframe gets a full reload every time ANY client
+  // data changes anywhere in the Hub, and an unconditional save on that
+  // reload's init call re-triggers another reload (here or in any other
+  // open tab) even though nothing actually changed, looping fast enough
+  // to exhaust Firestore's write stream with two tabs open.
+  function generateMarkdown(persist = true) {
     const campaignName = document.getElementById('campaignName').value || '[Campaign Name]';
     const clientName = document.getElementById('clientName').value || '[Client Name]';
     const objective = document.getElementById('objective').value;
@@ -119,7 +130,7 @@ ${specialNotes}
         trackingNotes: document.getElementById('trackingNotes').value,
         specialNotes: document.getElementById('specialNotes').value
       };
-      window.parent.saveDatabase();
+      if (persist) window.parent.saveDatabase();
     }
   }
 
@@ -128,7 +139,7 @@ ${specialNotes}
   if (typeof attachCommaFormatting === 'function') attachCommaFormatting(document.getElementById('totalBudget'));
   if (typeof attachSpinnerButtons === 'function') attachSpinnerButtons(document.getElementById('totalBudget'), { step: 100 });
 
-  generateMarkdown();
+  generateMarkdown(false); // init render only - see comment on the function above
 
   copyBtn.addEventListener('click', () => {
     navigator.clipboard.writeText(currentMarkdown).then(() => {

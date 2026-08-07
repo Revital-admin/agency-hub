@@ -32,7 +32,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const copyBtn = document.getElementById('copyBtn');
   let currentMarkdown = '';
 
-  function generateMarkdown() {
+  // persist (default true): whether to also write the rebuilt state back
+  // to the parent Hub's clientsDb via window.parent.saveDatabase() at the
+  // end of this function. Every user-driven call site (the input-change
+  // listeners below) wants that; the one-time init call right after this
+  // function's definition does not - see the identical fix + full
+  // explanation in proposal-calculator/js/app.js's calculate(). Short
+  // version: this iframe gets a full reload every time ANY client data
+  // changes anywhere in the Hub, and an unconditional save on that
+  // reload's init call re-triggers another reload (here or in any other
+  // open tab) even though nothing actually changed, looping fast enough
+  // to exhaust Firestore's write stream with two tabs open.
+  function generateMarkdown(persist = true) {
     const campaignName = document.getElementById('campaignName').value || '[Campaign Name]';
     const clientName = document.getElementById('clientName').value || '[Client Name]';
     const objective = document.getElementById('objective').value;
@@ -83,7 +94,7 @@ ${references}
         deliverables: document.getElementById('deliverables').value,
         references: document.getElementById('references').value
       };
-      window.parent.saveDatabase();
+      if (persist) window.parent.saveDatabase();
     }
   }
 
@@ -92,8 +103,10 @@ ${references}
     input.addEventListener('input', generateMarkdown);
   });
 
-  // Initial generation
-  generateMarkdown();
+  // Initial generation - persist:false, this is just rendering from
+  // whatever was just loaded above, not a real edit (see comment on the
+  // function above)
+  generateMarkdown(false);
 
   // Copy functionality
   copyBtn.addEventListener('click', () => {

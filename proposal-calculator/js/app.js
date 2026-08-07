@@ -438,11 +438,30 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   pdfBtn.addEventListener('click', generatePDFProposal);
 
-  // Init
-  calculate();
+  // Init - persist:false, see calculate()'s own param comment below: this
+  // first call is just rendering the totals from whatever loadState()
+  // just hydrated, not a real edit, so it must not immediately write
+  // back to the parent's clientsDb.
+  calculate(false);
 
   // ── Core Calculation ──
-  function calculate() {
+  // persist (default true): whether to also write the recomputed state
+  // back to the parent Hub's clientsDb via saveState() at the end of this
+  // function. Every *user-driven* call site (checkbox/input change
+  // handlers below) wants that - a real edit should sync. The one-time
+  // init call above does not: this iframe gets a full reload every time
+  // ANY client data changes anywhere in the Hub (see refreshIframeTab in
+  // the root app.js), and until this flag existed, that reload's init
+  // call to calculate() unconditionally re-saved via window.parent.
+  // saveDatabase() even though nothing had actually changed - which
+  // produced a fresh Firestore write, which triggered another reload
+  // (here or in any other open tab), which saved again, forever. With
+  // two tabs open cross-triggering each other's reloads this looped fast
+  // enough to hit Firestore's "Write stream exhausted maximum allowed
+  // queued writes" error - the "sync bugging out" symptom. A single tab
+  // has the same loop, just slower/quieter, so this was silently
+  // burning writes even outside that report.
+  function calculate(persist = true) {
     let monthly = parseFormattedNumber(baseFee.value);
     let setup = 0;
     let hardCosts = 0; // Cost of goods sold (freelancers, software)
@@ -602,7 +621,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       sowListEl.appendChild(li);
     });
 
-    saveState();
+    if (persist) saveState();
   }
 
   function generateTextOutput() {
