@@ -1798,6 +1798,34 @@ function wrapPointToPercent(wrap, clientX, clientY) {
   return { x, y };
 }
 
+// Live feedback while dragging out a circle - without this, a touch drag
+// in particular gives zero visual indication of the selected area until
+// release, which is a rougher guess-and-check experience on a phone than
+// with a mouse cursor you can already see moving.
+function renderCircleDragPreview(start, current) {
+  const svg = document.getElementById("moodboardAnnotationLayer");
+  if (!svg) return;
+  let preview = svg.querySelector(".moodboard-annotation-circle-preview");
+  if (!preview) {
+    preview = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+    preview.setAttribute("class", "moodboard-annotation-circle-preview");
+    preview.setAttribute("vector-effect", "non-scaling-stroke");
+    svg.appendChild(preview);
+  }
+  const radiusX = Math.max(0.5, Math.abs(current.x - start.x) / 2);
+  const radiusY = Math.max(0.5, Math.abs(current.y - start.y) / 2);
+  preview.setAttribute("cx", (start.x + current.x) / 2);
+  preview.setAttribute("cy", (start.y + current.y) / 2);
+  preview.setAttribute("rx", radiusX);
+  preview.setAttribute("ry", radiusY);
+}
+
+function clearCircleDragPreview() {
+  const svg = document.getElementById("moodboardAnnotationLayer");
+  const preview = svg && svg.querySelector(".moodboard-annotation-circle-preview");
+  if (preview) preview.remove();
+}
+
 function showAnnotationPopup(clientX, clientY) {
   const popup = document.getElementById("moodboardAnnotationPopup");
   const input = document.getElementById("moodboardAnnotationCommentInput");
@@ -1893,6 +1921,11 @@ document.addEventListener("DOMContentLoaded", () => {
   pinBtn?.addEventListener("click", () => setAnnotateTool(annotateTool === "pin" ? null : "pin"));
   circleBtn?.addEventListener("click", () => setAnnotateTool(annotateTool === "circle" ? null : "circle"));
 
+  // Pointer Events (not separate mouse/touch listeners) so mouse, touch,
+  // and pen all go through one code path - mousedown/mousemove/mouseup
+  // alone never fire from a touch drag, which was silently breaking the
+  // circle tool on phones/tablets entirely (tapping to drop a pin still
+  // worked via the synthesized "click", since that's a tap not a drag).
   const wrap = document.getElementById("moodboardImageWrap");
   if (wrap) {
     wrap.addEventListener("click", (e) => {
@@ -1901,13 +1934,21 @@ document.addEventListener("DOMContentLoaded", () => {
       pendingAnnotationDraft = { type: "pin", x, y };
       showAnnotationPopup(e.clientX, e.clientY);
     });
-    wrap.addEventListener("mousedown", (e) => {
+    wrap.addEventListener("pointerdown", (e) => {
       if (annotateTool !== "circle") return;
+      e.preventDefault();
+      wrap.setPointerCapture(e.pointerId);
       circleDragStart = wrapPointToPercent(wrap, e.clientX, e.clientY);
     });
-    wrap.addEventListener("mouseup", (e) => {
+    wrap.addEventListener("pointermove", (e) => {
+      if (annotateTool !== "circle" || !circleDragStart) return;
+      const current = wrapPointToPercent(wrap, e.clientX, e.clientY);
+      renderCircleDragPreview(circleDragStart, current);
+    });
+    wrap.addEventListener("pointerup", (e) => {
       if (annotateTool !== "circle" || !circleDragStart) return;
       const end = wrapPointToPercent(wrap, e.clientX, e.clientY);
+      clearCircleDragPreview();
       const radiusX = Math.max(2, Math.abs(end.x - circleDragStart.x) / 2);
       const radiusY = Math.max(2, Math.abs(end.y - circleDragStart.y) / 2);
       const x = (circleDragStart.x + end.x) / 2;
@@ -1915,6 +1956,10 @@ document.addEventListener("DOMContentLoaded", () => {
       circleDragStart = null;
       pendingAnnotationDraft = { type: "circle", x, y, radiusX, radiusY };
       showAnnotationPopup(e.clientX, e.clientY);
+    });
+    wrap.addEventListener("pointercancel", () => {
+      circleDragStart = null;
+      clearCircleDragPreview();
     });
   }
 

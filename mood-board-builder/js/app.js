@@ -835,6 +835,30 @@ function adminWrapPointToPercent(wrap, clientX, clientY) {
   return { x, y };
 }
 
+function renderAdminCircleDragPreview(start, current) {
+  const svg = el('mbAdminAnnotationLayer');
+  if (!svg) return;
+  let preview = svg.querySelector('.moodboard-annotation-circle-preview');
+  if (!preview) {
+    preview = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+    preview.setAttribute('class', 'moodboard-annotation-circle-preview');
+    preview.setAttribute('vector-effect', 'non-scaling-stroke');
+    svg.appendChild(preview);
+  }
+  const radiusX = Math.max(0.5, Math.abs(current.x - start.x) / 2);
+  const radiusY = Math.max(0.5, Math.abs(current.y - start.y) / 2);
+  preview.setAttribute('cx', (start.x + current.x) / 2);
+  preview.setAttribute('cy', (start.y + current.y) / 2);
+  preview.setAttribute('rx', radiusX);
+  preview.setAttribute('ry', radiusY);
+}
+
+function clearAdminCircleDragPreview() {
+  const svg = el('mbAdminAnnotationLayer');
+  const preview = svg && svg.querySelector('.moodboard-annotation-circle-preview');
+  if (preview) preview.remove();
+}
+
 function showAdminAnnotationPopup(clientX, clientY) {
   const popup = el('mbAdminAnnotationPopup');
   const input = el('mbAdminAnnotationCommentInput');
@@ -952,13 +976,21 @@ document.addEventListener('DOMContentLoaded', () => {
       adminPendingAnnotationDraft = { type: 'pin', x, y };
       showAdminAnnotationPopup(e.clientX, e.clientY);
     });
-    wrap.addEventListener('mousedown', (e) => {
+    wrap.addEventListener('pointerdown', (e) => {
       if (adminAnnotateTool !== 'circle') return;
+      e.preventDefault();
+      wrap.setPointerCapture(e.pointerId);
       adminCircleDragStart = adminWrapPointToPercent(wrap, e.clientX, e.clientY);
     });
-    wrap.addEventListener('mouseup', (e) => {
+    wrap.addEventListener('pointermove', (e) => {
+      if (adminAnnotateTool !== 'circle' || !adminCircleDragStart) return;
+      const current = adminWrapPointToPercent(wrap, e.clientX, e.clientY);
+      renderAdminCircleDragPreview(adminCircleDragStart, current);
+    });
+    wrap.addEventListener('pointerup', (e) => {
       if (adminAnnotateTool !== 'circle' || !adminCircleDragStart) return;
       const end = adminWrapPointToPercent(wrap, e.clientX, e.clientY);
+      clearAdminCircleDragPreview();
       const radiusX = Math.max(2, Math.abs(end.x - adminCircleDragStart.x) / 2);
       const radiusY = Math.max(2, Math.abs(end.y - adminCircleDragStart.y) / 2);
       const x = (adminCircleDragStart.x + end.x) / 2;
@@ -966,6 +998,10 @@ document.addEventListener('DOMContentLoaded', () => {
       adminCircleDragStart = null;
       adminPendingAnnotationDraft = { type: 'circle', x, y, radiusX, radiusY };
       showAdminAnnotationPopup(e.clientX, e.clientY);
+    });
+    wrap.addEventListener('pointercancel', () => {
+      adminCircleDragStart = null;
+      clearAdminCircleDragPreview();
     });
   }
 
