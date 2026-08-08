@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Book a Discovery Call — Revital Productions</title>
+<meta name="robots" content="noindex" />
+<!--
+  Standalone public page - deliberately NOT part of the internal Hub's
+  SPA/nav/iframe system (see root index.html/app.js). This is meant to be
+  reached directly at book.revitalproductions.com, a subdomain outside
+  the Cloudflare Access application that protects the rest of the Hub, so
+  it has to work for anonymous prospects with no login at all. Talks to
+  /api/booking/roster, /api/booking/availability, /api/booking/book in
+  _worker.js. Self-contained (styles/script inline) rather than pulling
+  in the Hub's shared CSS stack, since those files assume they're loaded
+  inside the Access-protected app shell.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;0,9..144,700;1,9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary: #f68d5f;
+    --secondary: #d85a30;
+    --bg-main: #15130f;
+    --bg-card: #1e1b15;
+    --border-color: rgba(245, 241, 232, 0.12);
+    --text-bright: #f5f1e8;
+    --text-muted: #8a887f;
+    --font-heading: 'Fraunces', Georgia, serif;
+    --font-body: 'Inter', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg-main);
+    color: var(--text-bright);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 48px 20px;
+  }
+  .page {
+    width: 100%;
+    max-width: 640px;
+  }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(246, 141, 95, 0.08);
+    border: 1px solid rgba(246, 141, 95, 0.2);
+    border-radius: 100px;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--primary);
+    margin-bottom: 16px;
+  }
+  .eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 6px var(--primary); }
+  h1 {
+    font-family: var(--font-heading);
+    font-size: 2rem;
+    line-height: 1.2;
+    margin: 0 0 8px 0;
+  }
+  .subtitle { color: var(--text-muted); margin: 0 0 32px 0; font-size: 1rem; }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .card h2 { font-family: var(--font-heading); font-size: 1.1rem; margin: 0 0 16px 0; font-weight: 600; }
+  .person-list, .day-list { display: flex; flex-wrap: wrap; gap: 10px; }
+  .pill-btn {
+    background: rgba(245, 241, 232, 0.04);
+    border: 1px solid var(--border-color);
+    color: var(--text-bright);
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    text-align: left;
+  }
+  .pill-btn:hover { border-color: var(--primary); }
+  .pill-btn.selected { border-color: var(--primary); background: rgba(246, 141, 95, 0.12); }
+  .pill-btn .pill-sub { display: block; font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+  .slot-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-top: 16px; }
+  .slot-btn {
+    background: rgba(245, 241, 232, 0.04);
+    border: 1px solid var(--border-color);
+    color: var(--text-bright);
+    border-radius: 8px;
+    padding: 10px 8px;
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    cursor: pointer;
+    text-align: center;
+  }
+  .slot-btn:hover { border-color: var(--primary); background: rgba(246, 141, 95, 0.12); }
+  .form-group { margin-bottom: 14px; }
+  .form-group label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px; }
+  .form-group input, .form-group textarea {
+    width: 100%;
+    background: var(--bg-main);
+    border: 1px solid var(--border-color);
+    color: var(--text-bright);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+  }
+  .form-group textarea { min-height: 70px; resize: vertical; }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: #1a1408;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 22px;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  .btn-primary:disabled { opacity: 0.6; cursor: default; }
+  .btn-text {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+    margin-bottom: 16px;
+  }
+  .selected-slot-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(246, 141, 95, 0.08);
+    border: 1px solid rgba(246, 141, 95, 0.25);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-size: 0.9rem;
+  }
+  .msg { font-size: 0.9rem; margin-top: 12px; }
+  .msg.error { color: #f87171; }
+  .msg.muted { color: var(--text-muted); }
+  .hidden { display: none !important; }
+  .confirm-card { text-align: center; padding: 40px 24px; }
+  .confirm-card .check {
+    width: 52px; height: 52px; border-radius: 50%;
+    background: rgba(74, 222, 128, 0.12); color: #4ade80;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 16px auto; font-size: 26px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="eyebrow"><span class="dot"></span>REVITAL PRODUCTIONS</div>
+  <h1>Book a Discovery Call</h1>
+  <p class="subtitle">Pick a time that works for you — we'll send a calendar invite with the video link right away.</p>
+
+  <div id="personStep" class="card hidden">
+    <h2>Who would you like to talk to?</h2>
+    <div id="personList" class="person-list"></div>
+  </div>
+
+  <div id="timeStep" class="card hidden">
+    <h2>Pick a day and time</h2>
+    <div id="dayList" class="day-list"></div>
+    <div id="slotList" class="slot-list"></div>
+    <p id="timeMsg" class="msg muted"></p>
+  </div>
+
+  <div id="formStep" class="card hidden">
+    <button class="btn-text" id="changeSlotBtn">&larr; Choose a different time</button>
+    <div id="selectedSlotBanner" class="selected-slot-banner"></div>
+    <div class="form-group">
+      <label for="fName">Name</label>
+      <input type="text" id="fName" placeholder="Jane Smith" />
+    </div>
+    <div class="form-group">
+      <label for="fEmail">Email</label>
+      <input type="email" id="fEmail" placeholder="jane@company.com" />
+    </div>
+    <div class="form-group">
+      <label for="fCompany">Company (optional)</label>
+      <input type="text" id="fCompany" placeholder="Company name" />
+    </div>
+    <div class="form-group">
+      <label for="fNotes">Anything we should know before the call? (optional)</label>
+      <textarea id="fNotes" placeholder="e.g. what you're hoping to get out of the call"></textarea>
+    </div>
+    <button class="btn-primary" id="confirmBtn">Confirm Booking</button>
+    <p id="formMsg" class="msg error hidden"></p>
+  </div>
+
+  <div id="confirmStep" class="card confirm-card hidden">
+    <div class="check">&#10003;</div>
+    <h2>You're booked!</h2>
+    <p class="subtitle" id="confirmText"></p>
+  </div>
+
+  <div id="loadMsg" class="msg muted">Loading...</div>
+</div>
+
+<script>
+(function () {
+  const el = (id) => document.getElementById(id);
+  let roster = [];
+  let selectedPerson = null;
+  let availability = null; // { timezone, slotMinutes, slotsByDay }
+  let selectedDay = null;
+  let selectedSlotISO = null;
+
+  function fmtDayLabel(dateKey) {
+    // dateKey is "YYYY-MM-DD" in the business timezone; render weekday/date
+    // labels using the visitor's own local calendar day derived from noon
+    // UTC on that date, which avoids an off-by-one on either side of the
+    // date line while still reading naturally.
+    const d = new Date(dateKey + "T12:00:00Z");
+    return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  }
+  function fmtTime(iso) {
+    return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  }
+
+  async function init() {
+    try {
+      const res = await fetch("/api/booking/roster");
+      const data = await res.json();
+      roster = data.roster || [];
+    } catch (e) {
+      el("loadMsg").textContent = "Could not load booking options. Please refresh, or reach out directly.";
+      return;
+    }
+
+    if (roster.length === 0) {
+      el("loadMsg").textContent = "Booking isn't available right now — please reach out directly.";
+      return;
+    }
+
+    el("loadMsg").classList.add("hidden");
+
+    if (roster.length === 1) {
+      selectPerson(roster[0]);
+    } else {
+      el("personStep").classList.remove("hidden");
+      const list = el("personList");
+      roster.forEach((p) => {
+        const btn = document.createElement("button");
+        btn.className = "pill-btn";
+        btn.innerHTML = `${escapeHtml(p.name)}<span class="pill-sub">${escapeHtml(p.title || "")}</span>`;
+        btn.addEventListener("click", () => selectPerson(p, btn));
+        list.appendChild(btn);
+      });
+    }
+  }
+
+  function escapeHtml(str) {
+    const d = document.createElement("div");
+    d.textContent = str || "";
+    return d.innerHTML;
+  }
+
+  async function selectPerson(person, btnEl) {
+    selectedPerson = person;
+    document.querySelectorAll("#personList .pill-btn").forEach((b) => b.classList.remove("selected"));
+    if (btnEl) btnEl.classList.add("selected");
+
+    el("timeStep").classList.remove("hidden");
+    el("timeMsg").textContent = "Loading availability...";
+    el("dayList").innerHTML = "";
+    el("slotList").innerHTML = "";
+
+    try {
+      const res = await fetch("/api/booking/availability?personId=" + encodeURIComponent(person.id));
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load availability");
+      availability = data;
+    } catch (e) {
+      el("timeMsg").textContent = "Couldn't load availability: " + e.message;
+      return;
+    }
+
+    const days = Object.keys(availability.slotsByDay).sort();
+    if (days.length === 0) {
+      el("timeMsg").textContent = "No open times in the next couple weeks — please reach out directly.";
+      return;
+    }
+    el("timeMsg").textContent = "";
+
+    const dayList = el("dayList");
+    days.forEach((dateKey, i) => {
+      const btn = document.createElement("button");
+      btn.className = "pill-btn";
+      btn.textContent = fmtDayLabel(dateKey);
+      btn.addEventListener("click", () => selectDay(dateKey, btn));
+      dayList.appendChild(btn);
+      if (i === 0) selectDay(dateKey, btn);
+    });
+  }
+
+  function selectDay(dateKey, btnEl) {
+    selectedDay = dateKey;
+    document.querySelectorAll("#dayList .pill-btn").forEach((b) => b.classList.remove("selected"));
+    btnEl.classList.add("selected");
+
+    const slotList = el("slotList");
+    slotList.innerHTML = "";
+    (availability.slotsByDay[dateKey] || []).forEach((iso) => {
+      const btn = document.createElement("button");
+      btn.className = "slot-btn";
+      btn.textContent = fmtTime(iso);
+      btn.addEventListener("click", () => selectSlot(iso));
+      slotList.appendChild(btn);
+    });
+  }
+
+  function selectSlot(iso) {
+    selectedSlotISO = iso;
+    el("timeStep").classList.add("hidden");
+    el("formStep").classList.remove("hidden");
+    const d = new Date(iso);
+    el("selectedSlotBanner").innerHTML =
+      `<span>${escapeHtml(fmtDayLabel(selectedDay))} at ${escapeHtml(fmtTime(iso))} with ${escapeHtml(selectedPerson.name)}</span>`;
+  }
+
+  el("changeSlotBtn").addEventListener("click", () => {
+    el("formStep").classList.add("hidden");
+    el("timeStep").classList.remove("hidden");
+  });
+
+  el("confirmBtn").addEventListener("click", async () => {
+    const name = el("fName").value.trim();
+    const email = el("fEmail").value.trim();
+    const company = el("fCompany").value.trim();
+    const notes = el("fNotes").value.trim();
+    const msgEl = el("formMsg");
+    msgEl.classList.add("hidden");
+
+    if (!name || !email) {
+      msgEl.textContent = "Please enter your name and email.";
+      msgEl.classList.remove("hidden");
+      return;
+    }
+
+    const btn = el("confirmBtn");
+    btn.disabled = true;
+    btn.textContent = "Booking...";
+
+    try {
+      const res = await fetch("/api/booking/book", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ personId: selectedPerson.id, startISO: selectedSlotISO, name, email, company, notes })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Booking failed");
+
+      el("formStep").classList.add("hidden");
+      el("confirmStep").classList.remove("hidden");
+      el("confirmText").textContent =
+        `You're confirmed with ${selectedPerson.name} on ${fmtDayLabel(selectedDay)} at ${fmtTime(selectedSlotISO)}. A calendar invite is on its way to ${email}.`;
+    } catch (e) {
+      // 409 = someone else took the slot in the meantime - send them back
+      // to pick a fresh one instead of leaving them stuck on a dead slot.
+      msgEl.textContent = e.message;
+      msgEl.classList.remove("hidden");
+      btn.disabled = false;
+      btn.textContent = "Confirm Booking";
+      if (String(e.message).toLowerCase().includes("booked by someone else")) {
+        setTimeout(() => {
+          el("formStep").classList.add("hidden");
+          el("timeStep").classList.remove("hidden");
+          selectPerson(selectedPerson);
+        }, 1500);
+      }
+    }
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

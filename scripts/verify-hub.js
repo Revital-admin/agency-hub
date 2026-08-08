@@ -69,6 +69,7 @@ const ROOT = path.resolve(__dirname, '..');
 // (with a reason) rather than letting them silently fail the check.
 const KNOWN_NON_TAB_TOOLS = {
   'portal': 'The client-facing public portal itself (served directly to clients, not an admin nav tab).',
+  'booking': 'Public prospect booking page, reached at book.<domain> (outside Cloudflare Access), not an admin nav tab.',
 };
 
 let failures = 0;

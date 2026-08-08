@@ -65,6 +65,24 @@ export default {
       return handleMarketingNews(request, env, ctx);
     }
 
+    // ── Prospect Booking (book.revitalproductions.com, see /booking/) ──
+    // Deliberately no Cf-Access-Authenticated-User-Email check on these
+    // three - unlike every other /api/* route above, this one has to work
+    // for anonymous prospects who aren't @revitalproductions.com at all.
+    // That's safe because the booking subdomain isn't covered by the
+    // Cloudflare Access application protecting the rest of this Worker
+    // (Access apps are matched by hostname), so these routes are only
+    // ever reachable via book.revitalproductions.com in the first place.
+    if (url.pathname === "/api/booking/roster") {
+      return handleBookingRoster(request, env);
+    }
+    if (url.pathname === "/api/booking/availability") {
+      return handleBookingAvailability(request, env);
+    }
+    if (url.pathname === "/api/booking/book" && request.method === "POST") {
+      return handleBookingCreate(request, env);
+    }
+
     // Everything else: serve the static site as before.
     return env.ASSETS.fetch(request);
   }
@@ -1002,6 +1020,266 @@ async function getGoogleAccessToken(env, scope) {
     throw new Error(data.error_description || data.error || `Google OAuth token exchange failed (${res.status})`);
   }
   return { accessToken: data.access_token, projectId: serviceAccount.project_id };
+}
+
+// ── Prospect Booking (book.revitalproductions.com) ──
+//
+// Bookable team members. id is used internally by the API/page, name and
+// title are shown to the prospect, email is the real Google Workspace
+// mailbox the hub-calendar-booking service account impersonates (via
+// domain-wide delegation - see getGoogleAccessTokenForUser below) to
+// check availability and create the event. There's no admin UI for this
+// list yet - add a person here and redeploy when the roster changes.
+const BOOKING_ROSTER = [
+  { id: "ronald", name: "Ronald", title: "Founder", email: "admin@revitalproductions.com" }
+];
+
+const BOOKING_TIMEZONE = "America/New_York"; // business hours below are in this zone; change if the team isn't Eastern
+const BOOKING_DAY_START_HOUR = 9;  // 9am local, 24h clock
+const BOOKING_DAY_END_HOUR = 17;   // 5pm local
+const BOOKING_SLOT_MINUTES = 30;
+const BOOKING_LOOKAHEAD_DAYS = 14;   // how many calendar days out to search for open slots
+const BOOKING_MIN_NOTICE_HOURS = 12; // don't offer a slot starting sooner than this from "now"
+
+// Same RS256-JWT-signing approach as getGoogleAccessToken above, but
+// against the separate hub-calendar-booking service account
+// (GOOGLE_SERVICE_ACCOUNT_KEY secret) with domain-wide delegation: the
+// `sub` claim tells Google which Workspace mailbox to impersonate, so the
+// resulting access token can read/write that specific person's calendar
+// even though the service account itself has no calendar of its own.
+async function getGoogleAccessTokenForUser(env, scope, impersonateEmail) {
+  const keyJson = env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  if (!keyJson) throw new Error("Server missing GOOGLE_SERVICE_ACCOUNT_KEY secret");
+  let serviceAccount;
+  try {
+    serviceAccount = JSON.parse(keyJson);
+  } catch (e) {
+    throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY is not valid JSON");
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: "RS256", typ: "JWT" };
+  const payload = {
+    iss: serviceAccount.client_email,
+    sub: impersonateEmail,
+    scope,
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600
+  };
+  const unsigned = `${base64urlStr(JSON.stringify(header))}.${base64urlStr(JSON.stringify(payload))}`;
+  const key = await importPrivateKeyFlexible(serviceAccount.private_key);
+  const signature = await crypto.subtle.sign(
+    { name: "RSASSA-PKCS1-v1_5" },
+    key,
+    new TextEncoder().encode(unsigned)
+  );
+  const assertion = `${unsigned}.${base64url(signature)}`;
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion
+    })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error_description || data.error || `Google OAuth token exchange failed (${res.status})`);
+  }
+  return data.access_token;
+}
+
+// ── Timezone helpers for the availability calculation ──
+// The Workers runtime has no environment-local timezone (Date is always
+// UTC), so "9am Eastern" has to be computed explicitly via
+// Intl.DateTimeFormat's timeZone option rather than a system offset.
+function getZonedParts(date, timeZone) {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hourCycle: "h23", weekday: "short"
+  });
+  const parts = {};
+  for (const p of fmt.formatToParts(date)) parts[p.type] = p.value;
+  return parts;
+}
+function getDayOfWeekInTimeZone(date, timeZone) {
+  const weekdayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return weekdayMap[getZonedParts(date, timeZone).weekday];
+}
+function getDateKeyInTimeZone(date, timeZone) {
+  const p = getZonedParts(date, timeZone);
+  return `${p.year}-${p.month}-${p.day}`;
+}
+// Converts a "YYYY-MM-DD" date (interpreted in timeZone) plus an
+// hour/minute in that same zone into the correct UTC instant, DST-aware.
+// Works by taking a naive UTC guess, checking what that guess actually
+// renders as in the target zone, and correcting for the difference.
+function zonedTimeToUtc(dateKey, hour, minute, timeZone) {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const naiveUtcGuess = new Date(Date.UTC(y, m - 1, d, hour, minute, 0));
+  const p = getZonedParts(naiveUtcGuess, timeZone);
+  const renderedAsUtc = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute), Number(p.second));
+  const diff = naiveUtcGuess.getTime() - renderedAsUtc;
+  return new Date(naiveUtcGuess.getTime() + diff);
+}
+
+// ── GET /api/booking/roster ──
+// Public. Only exposes id/name/title, never the underlying mailbox
+// address, since this is reachable by anyone on the internet.
+async function handleBookingRoster(request, env) {
+  return jsonResponse({ roster: BOOKING_ROSTER.map(({ id, name, title }) => ({ id, name, title })) });
+}
+
+// ── GET /api/booking/availability?personId=... ──
+// Public. Queries that person's real Google Calendar via freeBusy.query
+// (impersonated through domain-wide delegation) and returns open
+// BOOKING_SLOT_MINUTES-long slots across the next BOOKING_LOOKAHEAD_DAYS
+// days, business hours only, weekends excluded.
+async function handleBookingAvailability(request, env) {
+  const url = new URL(request.url);
+  const personId = url.searchParams.get("personId");
+  const person = BOOKING_ROSTER.find(p => p.id === personId);
+  if (!person) return jsonResponse({ error: "Unknown person" }, 400);
+
+  let accessToken;
+  try {
+    accessToken = await getGoogleAccessTokenForUser(env, "https://www.googleapis.com/auth/calendar", person.email);
+  } catch (e) {
+    return jsonResponse({ error: `Calendar auth failed: ${e.message}` }, 500);
+  }
+
+  const now = new Date();
+  const rangeStart = now;
+  const rangeEnd = new Date(now.getTime() + BOOKING_LOOKAHEAD_DAYS * 86400000);
+
+  let busy;
+  try {
+    const fbRes = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        timeMin: rangeStart.toISOString(),
+        timeMax: rangeEnd.toISOString(),
+        timeZone: BOOKING_TIMEZONE,
+        items: [{ id: person.email }]
+      })
+    });
+    const fbData = await fbRes.json();
+    if (!fbRes.ok) throw new Error((fbData.error && fbData.error.message) || `freeBusy query failed (${fbRes.status})`);
+    busy = (fbData.calendars && fbData.calendars[person.email] && fbData.calendars[person.email].busy) || [];
+  } catch (e) {
+    return jsonResponse({ error: `Calendar availability check failed: ${e.message}` }, 500);
+  }
+
+  const busyRanges = busy.map(b => ({ start: new Date(b.start), end: new Date(b.end) }));
+  const earliestBookable = new Date(now.getTime() + BOOKING_MIN_NOTICE_HOURS * 3600000);
+
+  const slotsByDay = {};
+  for (let d = 0; d < BOOKING_LOOKAHEAD_DAYS; d++) {
+    const day = new Date(rangeStart.getTime() + d * 86400000);
+    const dow = getDayOfWeekInTimeZone(day, BOOKING_TIMEZONE);
+    if (dow === 0 || dow === 6) continue; // skip Sat/Sun
+
+    const dateKey = getDateKeyInTimeZone(day, BOOKING_TIMEZONE);
+    const dayStartUtc = zonedTimeToUtc(dateKey, BOOKING_DAY_START_HOUR, 0, BOOKING_TIMEZONE);
+    const dayEndUtc = zonedTimeToUtc(dateKey, BOOKING_DAY_END_HOUR, 0, BOOKING_TIMEZONE);
+
+    const slots = [];
+    for (let t = dayStartUtc.getTime(); t + BOOKING_SLOT_MINUTES * 60000 <= dayEndUtc.getTime(); t += BOOKING_SLOT_MINUTES * 60000) {
+      const slotStart = new Date(t);
+      const slotEnd = new Date(t + BOOKING_SLOT_MINUTES * 60000);
+      if (slotStart < earliestBookable) continue;
+      if (busyRanges.some(b => slotStart < b.end && slotEnd > b.start)) continue;
+      slots.push(slotStart.toISOString());
+    }
+    if (slots.length) slotsByDay[dateKey] = slots;
+  }
+
+  return jsonResponse({ timezone: BOOKING_TIMEZONE, slotMinutes: BOOKING_SLOT_MINUTES, slotsByDay });
+}
+
+// ── POST /api/booking/book ──
+// Public. Creates the actual calendar event once a prospect picks a
+// slot. The Calendar invite (sendUpdates=all, prospect added as an
+// attendee) is what notifies both sides by email - no separate
+// confirmation-email step needed.
+async function handleBookingCreate(request, env) {
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+
+  const { personId, startISO, name, email, company, notes } = payload || {};
+  const person = BOOKING_ROSTER.find(p => p.id === personId);
+  if (!person) return jsonResponse({ error: "Unknown person" }, 400);
+  if (!startISO || isNaN(new Date(startISO).getTime())) {
+    return jsonResponse({ error: "Invalid or missing time slot" }, 400);
+  }
+  if (!name || !email) {
+    return jsonResponse({ error: "Name and email are required" }, 400);
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return jsonResponse({ error: "Invalid email address" }, 400);
+  }
+
+  const start = new Date(startISO);
+  const end = new Date(start.getTime() + BOOKING_SLOT_MINUTES * 60000);
+
+  let accessToken;
+  try {
+    accessToken = await getGoogleAccessTokenForUser(env, "https://www.googleapis.com/auth/calendar", person.email);
+  } catch (e) {
+    return jsonResponse({ error: `Calendar auth failed: ${e.message}` }, 500);
+  }
+
+  // Re-check the specific slot is still free right before booking, to
+  // close the race window between the prospect loading availability and
+  // clicking Confirm.
+  try {
+    const fbRes = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ timeMin: start.toISOString(), timeMax: end.toISOString(), items: [{ id: person.email }] })
+    });
+    const fbData = await fbRes.json();
+    const busy = (fbData.calendars && fbData.calendars[person.email] && fbData.calendars[person.email].busy) || [];
+    if (busy.length > 0) {
+      return jsonResponse({ error: "That time was just booked by someone else - please pick another slot." }, 409);
+    }
+  } catch (e) {
+    // If the re-check itself fails, fall through and let events.insert be
+    // the source of truth rather than blocking a legitimate booking over
+    // a transient error here.
+  }
+
+  const eventBody = {
+    summary: `Discovery Call: ${name}${company ? " (" + company + ")" : ""}`,
+    description: notes
+      ? `Booked via the Revital Productions booking page.\n\nNotes from ${name}:\n${notes}`
+      : "Booked via the Revital Productions booking page.",
+    start: { dateTime: start.toISOString(), timeZone: BOOKING_TIMEZONE },
+    end: { dateTime: end.toISOString(), timeZone: BOOKING_TIMEZONE },
+    attendees: [{ email: person.email }, { email, displayName: name }],
+    reminders: { useDefault: true }
+  };
+
+  try {
+    const evRes = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(person.email)}/events?sendUpdates=all`,
+      { method: "POST", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(eventBody) }
+    );
+    const evData = await evRes.json();
+    if (!evRes.ok) throw new Error((evData.error && evData.error.message) || `Event creation failed (${evRes.status})`);
+    return jsonResponse({ ok: true, eventId: evData.id, htmlLink: evData.htmlLink });
+  } catch (e) {
+    return jsonResponse({ error: `Could not create the calendar event: ${e.message}` }, 500);
+  }
 }
 
 // Converts Firestore REST API's typed-value JSON shape ({fields: {name:
