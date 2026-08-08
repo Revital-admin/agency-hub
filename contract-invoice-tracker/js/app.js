@@ -330,6 +330,7 @@ function billingCellHtml(r) {
     return `
       <div class="billing-setup-form">
         <input type="text" inputmode="decimal" class="billing-amount-input" data-id="${r.id}" placeholder="Monthly $" value="${(r.recurringPendingAmount || '').toString().replace(/"/g, '&quot;')}">
+        <label class="billing-mode-toggle"><input type="checkbox" class="billing-live-toggle" data-id="${r.id}"> Live</label>
         <button class="billing-setup-btn" data-id="${r.id}">Send Billing Link</button>
         <div class="billing-error hidden" data-id="${r.id}"></div>
       </div>
@@ -338,7 +339,8 @@ function billingCellHtml(r) {
 
   const label = BILLING_STATUS_LABELS[rb.status] || rb.status;
   const amountText = rb.monthlyAmount ? formatCurrency(Number(rb.monthlyAmount)) + '/mo' : '';
-  const badge = `<span class="billing-badge status-${rb.status}">${label}${amountText ? ' &middot; ' + amountText : ''}</span>`;
+  const modeText = rb.mode === 'live' ? '' : ' (Test)';
+  const badge = `<span class="billing-badge status-${rb.status}">${label}${amountText ? ' &middot; ' + amountText : ''}${modeText}</span>`;
 
   if (rb.status === 'pending_checkout' && rb.checkoutUrl) {
     return `
@@ -523,6 +525,8 @@ async function sendBillingLink(id) {
 
   const row = document.querySelector(`.billing-setup-btn[data-id="${id}"]`);
   const errorEl = document.querySelector(`.billing-error[data-id="${id}"]`);
+  const liveToggle = document.querySelector(`.billing-live-toggle[data-id="${id}"]`);
+  const mode = liveToggle && liveToggle.checked ? 'live' : 'test';
   const amountRaw = (r.recurringPendingAmount || '').toString().replace(/,/g, '').trim();
   const amount = parseFloat(amountRaw);
 
@@ -533,13 +537,18 @@ async function sendBillingLink(id) {
     return;
   }
 
+  if (mode === 'live') {
+    const confirmed = confirm(`This creates a LIVE billing link for ${r.clientName} at ${formatCurrency(amount)}/mo - once they check out, their card is actually charged every month. Continue?`);
+    if (!confirmed) return;
+  }
+
   if (row) { row.disabled = true; row.textContent = 'Sending...'; }
 
   try {
     const res = await fetch('/api/billing/create-subscription-checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recordId: r.id, clientName: r.clientName, monthlyAmount: amount })
+      body: JSON.stringify({ recordId: r.id, clientName: r.clientName, monthlyAmount: amount, mode })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Request failed');
@@ -549,7 +558,8 @@ async function sendBillingLink(id) {
       monthlyAmount: amount,
       checkoutUrl: data.checkoutUrl,
       stripeCustomerId: null,
-      stripeSubscriptionId: null
+      stripeSubscriptionId: null,
+      mode
     };
     delete r.recurringPendingAmount;
     await persist();

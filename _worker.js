@@ -1490,14 +1490,27 @@ async function handlePipelineSyncClickUp(request, env) {
 // in sync with what Stripe actually did (paid/failed/canceled) without
 // anyone checking back manually.
 //
-// Requires two new secrets:
-//   wrangler secret put STRIPE_SECRET_KEY       (sk_test_... to start)
-//   wrangler secret put STRIPE_WEBHOOK_SECRET   (whsec_..., from the
-//     webhook endpoint's signing secret in the Stripe Dashboard)
+// Test and live mode run side by side rather than one replacing the
+// other: STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET are the test-mode pair
+// (sk_test_.../whsec_... from the test-mode webhook), and
+// STRIPE_SECRET_KEY_LIVE/STRIPE_WEBHOOK_SECRET_LIVE are the live-mode
+// pair (sk_live_.../whsec_... from a SECOND webhook endpoint created in
+// live mode, pointed at the same URL). The Tracker's "Send Billing
+// Link" UI has a Live checkbox (defaults off) that decides which pair a
+// given checkout session is created with; the webhook side can't know
+// in advance which mode an incoming event is, so it tries both signing
+// secrets and uses whichever one actually verifies (see
+// verifyStripeWebhookSignature below).
+//   wrangler secret put STRIPE_SECRET_KEY            (sk_test_...)
+//   wrangler secret put STRIPE_WEBHOOK_SECRET        (whsec_..., test-mode endpoint)
+//   wrangler secret put STRIPE_SECRET_KEY_LIVE       (sk_live_...)
+//   wrangler secret put STRIPE_WEBHOOK_SECRET_LIVE   (whsec_..., live-mode endpoint)
 
-async function stripeApiRequest(env, path, formParams) {
-  const secretKey = env.STRIPE_SECRET_KEY;
-  if (!secretKey) throw new Error("Server missing STRIPE_SECRET_KEY secret");
+async function stripeApiRequest(env, path, formParams, billingMode) {
+  const secretKey = billingMode === "live" ? env.STRIPE_SECRET_KEY_LIVE : env.STRIPE_SECRET_KEY;
+  if (!secretKey) {
+    throw new Error(`Server missing ${billingMode === "live" ? "STRIPE_SECRET_KEY_LIVE" : "STRIPE_SECRET_KEY"} secret`);
+  }
   const res = await fetch(`https://api.stripe.com/v1/${path}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${secretKey}`, "Content-Type": "application/x-www-form-urlencoded" },
@@ -1527,7 +1540,8 @@ async function handleCreateSubscriptionCheckout(request, env) {
   } catch (e) {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
-  const { recordId, clientName, monthlyAmount, clientEmail } = payload || {};
+  const { recordId, clientName, monthlyAmount, clientEmail, mode } = payload || {};
+  const billingMode = mode === "live" ? "live" : "test";
   if (!recordId || !clientName || !monthlyAmount) {
     return jsonResponse({ error: "recordId, clientName, and monthlyAmount are required" }, 400);
   }
@@ -1547,11 +1561,12 @@ async function handleCreateSubscriptionCheckout(request, env) {
   params.append("cancel_url", "https://revitalproductions.com/?billing=canceled");
   params.append("metadata[hubRecordId]", recordId);
   params.append("metadata[hubClientName]", clientName);
+  params.append("metadata[hubMode]", billingMode);
   if (clientEmail) params.append("customer_email", clientEmail);
 
   try {
-    const session = await stripeApiRequest(env, "checkout/sessions", params);
-    return jsonResponse({ ok: true, checkoutUrl: session.url, sessionId: session.id });
+    const session = await stripeApiRequest(env, "checkout/sessions", params, billingMode);
+    return jsonResponse({ ok: true, checkoutUrl: session.url, sessionId: session.id, mode: billingMode });
   } catch (e) {
     return jsonResponse({ error: `Stripe request failed: ${e.message}` }, 500);
   }
@@ -1562,9 +1577,8 @@ async function handleCreateSubscriptionCheckout(request, env) {
 // using their Node SDK, which doesn't run in the Workers runtime - same
 // reasoning as every other from-scratch crypto in this file. Rejects
 // anything older than 5 minutes as a basic replay guard.
-async function verifyStripeWebhookSignature(env, rawBody, sigHeader) {
-  const secret = env.STRIPE_WEBHOOK_SECRET;
-  if (!secret) throw new Error("Server missing STRIPE_WEBHOOK_SECRET secret");
+async function verifyStripeWebhookSignatureWithSecret(secret, rawBody, sigHeader) {
+  if (!secret) throw new Error("No signing secret configured");
   if (!sigHeader) throw new Error("Missing Stripe-Signature header");
 
   const parts = {};
@@ -1592,6 +1606,31 @@ async function verifyStripeWebhookSignature(env, rawBody, sigHeader) {
   return JSON.parse(rawBody);
 }
 
+// Test-mode and live-mode webhook endpoints both point at this same
+// URL (Stripe requires separate endpoints - and separate signing
+// secrets - per mode), so an incoming request doesn't say up front
+// which one it is. Try the test secret first, then live, and use
+// whichever one actually verifies. Returns which mode matched so the
+// caller can tag the record accordingly.
+async function verifyStripeWebhookSignature(env, rawBody, sigHeader) {
+  const candidates = [
+    { mode: "test", secret: env.STRIPE_WEBHOOK_SECRET },
+    { mode: "live", secret: env.STRIPE_WEBHOOK_SECRET_LIVE }
+  ].filter(c => c.secret);
+  if (!candidates.length) throw new Error("Server missing STRIPE_WEBHOOK_SECRET/STRIPE_WEBHOOK_SECRET_LIVE secret");
+
+  let lastErr;
+  for (const { mode, secret } of candidates) {
+    try {
+      const event = await verifyStripeWebhookSignatureWithSecret(secret, rawBody, sigHeader);
+      return { event, mode };
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("Signature verification failed");
+}
+
 // Applies one Stripe event to the matching Contract & Invoice Tracker
 // record's recurringBilling sub-object. Reads the whole agency/
 // contractInvoices doc, mutates just the one matching record, writes
@@ -1601,7 +1640,7 @@ async function verifyStripeWebhookSignature(env, rawBody, sigHeader) {
 // editing the Tracker at the exact same instant a webhook lands, judged
 // acceptable given how infrequent both events are - flagging here
 // rather than pretending it's impossible).
-async function applyStripeEventToContractInvoices(env, event) {
+async function applyStripeEventToContractInvoices(env, event, billingMode) {
   const relevantTypes = ["checkout.session.completed", "invoice.paid", "invoice.payment_failed", "customer.subscription.deleted"];
   if (!relevantTypes.includes(event.type)) return;
 
@@ -1621,6 +1660,7 @@ async function applyStripeEventToContractInvoices(env, event) {
       record.recurringBilling.stripeCustomerId = obj.customer || null;
       record.recurringBilling.stripeSubscriptionId = obj.subscription || null;
       record.recurringBilling.status = "active";
+      record.recurringBilling.mode = billingMode;
     }
   } else {
     // invoice.* events reference the subscription id via obj.subscription;
@@ -1655,20 +1695,24 @@ async function handleStripeWebhook(request, env) {
   const sigHeader = request.headers.get("Stripe-Signature");
   const rawBody = await request.text();
 
-  let event;
+  let event, billingMode;
   try {
-    event = await verifyStripeWebhookSignature(env, rawBody, sigHeader);
+    const verified = await verifyStripeWebhookSignature(env, rawBody, sigHeader);
+    event = verified.event;
+    billingMode = verified.mode;
   } catch (e) {
     return jsonResponse({ error: `Webhook signature verification failed: ${e.message}` }, 400);
   }
 
   try {
-    await applyStripeEventToContractInvoices(env, event);
+    await applyStripeEventToContractInvoices(env, event, billingMode);
   } catch (e) {
     // Still acknowledge with 200 below - a bug in our own processing
     // shouldn't make Stripe retry-storm this event. Logged here for
-    // manual follow-up.
-    console.error("Stripe webhook processing failed:", e);
+    // manual follow-up. Error objects don't serialize cleanly through
+    // console.error in Workers Logs (message/stack aren't own-enumerable
+    // properties), so pull them out explicitly.
+    console.error("Stripe webhook processing failed. type=" + event.type + " message=" + (e && e.message) + " name=" + (e && e.name) + " stack=" + (e && e.stack));
   }
 
   return jsonResponse({ received: true });
