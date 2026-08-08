@@ -1276,10 +1276,54 @@ async function handleBookingCreate(request, env) {
     );
     const evData = await evRes.json();
     if (!evRes.ok) throw new Error((evData.error && evData.error.message) || `Event creation failed (${evRes.status})`);
+
+    // Direct "you got a new booking" alert - the calendar invite alone
+    // isn't a reliable notification (Google doesn't always email an
+    // organizer about their own event), so send an explicit one via the
+    // same Resend setup the Weekly Agency Health Digest already uses.
+    // Best-effort: a failure here shouldn't undo or fail the booking
+    // itself, since the calendar event (the source of truth) already
+    // exists at this point.
+    try {
+      const recipients = Array.from(new Set([person.email, "admin@revitalproductions.com"]));
+      const humanTime = new Intl.DateTimeFormat("en-US", {
+        timeZone: BOOKING_TIMEZONE, weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short"
+      }).format(start);
+      const subject = `New booking: ${name}${company ? " (" + company + ")" : ""} - ${humanTime}`;
+      const html = `
+        <div style="font-family: sans-serif; max-width: 560px;">
+          <h2 style="margin:0 0 12px;">New Discovery Call Booked</h2>
+          <p><strong>${escapeHtmlServer(name)}</strong> booked a call with <strong>${escapeHtmlServer(person.name)}</strong> for <strong>${humanTime}</strong>.</p>
+          <table style="font-size:14px; margin:16px 0;">
+            <tr><td style="color:#64748b; padding-right:12px;">Email</td><td>${escapeHtmlServer(email)}</td></tr>
+            ${company ? `<tr><td style="color:#64748b; padding-right:12px;">Company</td><td>${escapeHtmlServer(company)}</td></tr>` : ""}
+            ${notes ? `<tr><td style="color:#64748b; padding-right:12px; vertical-align:top;">Notes</td><td>${escapeHtmlServer(notes)}</td></tr>` : ""}
+          </table>
+          ${evData.htmlLink ? `<p><a href="${evData.htmlLink}">View on Google Calendar</a></p>` : ""}
+          <p style="font-size:12px; color:#94a3b8; margin-top:24px;">Booked via book.revitalproductions.com.</p>
+        </div>
+      `;
+      const text = `New booking: ${name}${company ? " (" + company + ")" : ""}\nWith: ${person.name}\nWhen: ${humanTime}\nEmail: ${email}\n${notes ? "Notes: " + notes + "\n" : ""}${evData.htmlLink ? "\n" + evData.htmlLink : ""}`;
+      await sendHealthDigestEmail(env, recipients, subject, html, text);
+    } catch (notifyErr) {
+      console.error("Booking notification email failed (booking itself still succeeded):", notifyErr);
+    }
+
     return jsonResponse({ ok: true, eventId: evData.id, htmlLink: evData.htmlLink });
   } catch (e) {
     return jsonResponse({ error: `Could not create the calendar event: ${e.message}` }, 500);
   }
+}
+
+// Minimal HTML-escaping for values interpolated into the booking
+// notification email above - this runs server-side (no DOM available),
+// unlike the client-side escapeHtml() in booking/index.html.
+function escapeHtmlServer(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 // Converts Firestore REST API's typed-value JSON shape ({fields: {name:
