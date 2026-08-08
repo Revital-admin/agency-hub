@@ -1503,6 +1503,8 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
   transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
@@ -1519,7 +1521,6 @@ body {
 .annotate-hint {
   font-size: 12.5px;
   color: var(--color-text-secondary);
-  width: 100%;
 }
 
 .moodboard-image-wrap {
@@ -1695,6 +1696,7 @@ body {
      everything else off-screen with nowhere to scroll on small phones. */
   .moodboard-image-wrap, .moodboard-image-wrap img { max-height: 42vh; }
   .moodboard-annotate-toolbar { flex-wrap: wrap; row-gap: 6px; }
+  .annotate-hint { width: 100%; }
 }
 .moodboard-embed-wrapper {
   margin-top: 8px;
