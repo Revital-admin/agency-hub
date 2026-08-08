@@ -183,8 +183,8 @@
 <div class="page">
   <img class="brand-logo" src="https://framerusercontent.com/images/o3h6eIm6ccc2IJyWsP0aAbTp5M.png" alt="Revital Productions" />
   <div class="eyebrow"><span class="dot"></span>REVITAL PRODUCTIONS</div>
-  <h1>Book a 15-Minute Discovery Call</h1>
-  <p class="subtitle">Book a quick discovery or send us a note — we reply within one business day. We'll send a calendar invite with the video link right away.</p>
+  <h1 id="pageTitle">Book a 15-Minute Discovery Call</h1>
+  <p class="subtitle" id="pageSubtitle">Book a quick discovery or send us a note — we reply within one business day. We'll send a calendar invite with the video link right away.</p>
 
   <div id="personStep" class="card hidden">
     <h2>Who would you like to talk to?</h2>
@@ -201,22 +201,33 @@
   <div id="formStep" class="card hidden">
     <button class="btn-text" id="changeSlotBtn">&larr; Choose a different time</button>
     <div id="selectedSlotBanner" class="selected-slot-banner"></div>
-    <div class="form-group">
-      <label for="fName">Name</label>
-      <input type="text" id="fName" placeholder="Jane Smith" />
+
+    <!-- Shown instead of the fields below when name/email arrived via the
+         URL (see PREFILL_FIELDS in the script) - i.e. someone already
+         filled out the contact form on revitalproductions.com and got
+         redirected here just to pick a time, so there's no reason to make
+         them type their info twice. -->
+    <div id="prefillSummary" class="hidden" style="margin-bottom:16px; font-size:0.9rem; color: var(--text-muted);"></div>
+
+    <div id="contactFields">
+      <div class="form-group">
+        <label for="fName">Name</label>
+        <input type="text" id="fName" placeholder="Jane Smith" />
+      </div>
+      <div class="form-group">
+        <label for="fEmail">Email</label>
+        <input type="email" id="fEmail" placeholder="jane@company.com" />
+      </div>
+      <div class="form-group">
+        <label for="fCompany">Company name</label>
+        <input type="text" id="fCompany" placeholder="Company name" />
+      </div>
+      <div class="form-group">
+        <label for="fNotes">Description</label>
+        <textarea id="fNotes" placeholder="Tell us a bit about your project or what you're hoping to get out of the call"></textarea>
+      </div>
     </div>
-    <div class="form-group">
-      <label for="fEmail">Email</label>
-      <input type="email" id="fEmail" placeholder="jane@company.com" />
-    </div>
-    <div class="form-group">
-      <label for="fCompany">Company name</label>
-      <input type="text" id="fCompany" placeholder="Company name" />
-    </div>
-    <div class="form-group">
-      <label for="fNotes">Description</label>
-      <textarea id="fNotes" placeholder="Tell us a bit about your project or what you're hoping to get out of the call"></textarea>
-    </div>
+
     <button class="btn-primary" id="confirmBtn">BOOK 15 MIN CALL</button>
     <p id="formMsg" class="msg error hidden"></p>
   </div>
@@ -238,6 +249,36 @@
   let availability = null; // { timezone, slotMinutes, slotsByDay }
   let selectedDay = null;
   let selectedSlotISO = null;
+
+  // ── Prefill from the website's contact form ──
+  // When someone submits the Name/Email/Company name/Description form on
+  // revitalproductions.com, that form's success action redirects here
+  // with the same values as URL query params (see the Framer setup notes
+  // - the site itself is untouched, only what happens after submit
+  // changes). If they arrive that way, skip asking for the same info
+  // again: populate the (hidden) fields now and show a plain summary
+  // instead of the input form once they pick a time.
+  const qp = new URLSearchParams(window.location.search);
+  const prefill = {
+    name: (qp.get("name") || "").trim(),
+    email: (qp.get("email") || "").trim(),
+    company: (qp.get("company") || "").trim(),
+    notes: (qp.get("notes") || qp.get("description") || "").trim()
+  };
+  const isPrefilled = !!(prefill.name && prefill.email);
+  if (isPrefilled) {
+    el("fName").value = prefill.name;
+    el("fEmail").value = prefill.email;
+    el("fCompany").value = prefill.company;
+    el("fNotes").value = prefill.notes;
+    el("contactFields").classList.add("hidden");
+    el("prefillSummary").classList.remove("hidden");
+    el("prefillSummary").innerHTML =
+      `Booking as <strong>${escapeHtml(prefill.name)}</strong> (${escapeHtml(prefill.email)})` +
+      (prefill.company ? ` &middot; ${escapeHtml(prefill.company)}` : "");
+    el("pageTitle").textContent = "Pick a Time for Your Call";
+    el("pageSubtitle").textContent = `Thanks, ${prefill.name.split(" ")[0]} — just pick a time that works for you and we'll send the calendar invite.`;
+  }
 
   function fmtDayLabel(dateKey) {
     // dateKey is "YYYY-MM-DD" in the business timezone; render weekday/date
