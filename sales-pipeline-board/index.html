@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sales Pipeline Board</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../vars.css">
+  <link rel="stylesheet" href="../shared-components.css">
+  <link rel="stylesheet" href="../forms.css?v=2">
+  <link rel="stylesheet" href="css/style.css?v=1">
+</head>
+<body class="module-body">
+  <div class="module-container">
+    <div class="module-header">
+      <div class="module-header-left">
+        <div class="site-header">
+          <div class="header-eyebrow"><span class="dot"></span><span>Sales Pipeline</span></div>
+          <h1 class="site-title">Pipeline <em>Board</em></h1>
+          <p class="site-subtitle">Every active lead from first contact through closed won or lost - synced live to ClickUp.</p>
+        </div>
+      </div>
+      <div class="module-header-right">
+        <button class="btn-primary" id="addLeadBtn">+ Add Lead</button>
+      </div>
+    </div>
+
+    <div class="pipeline-board" id="pipelineBoard">
+      <!-- Columns rendered via JS -->
+    </div>
+
+    <div class="empty-state" id="emptyState" style="display:none;">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+      <h3>No Leads Yet</h3>
+      <p>Add your first lead to start tracking it through the pipeline.</p>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="leadModal">
+    <div class="modal-box">
+      <h2 id="modalTitle">Add Lead</h2>
+      <div class="form-group">
+        <label for="leadName">Name / Company</label>
+        <input type="text" id="leadName" class="form-control" placeholder="Acme Co." />
+      </div>
+      <div class="form-group">
+        <label for="leadEmail">Contact Email</label>
+        <input type="email" id="leadEmail" class="form-control" placeholder="jane@acme.com" />
+      </div>
+      <div class="form-group">
+        <label for="leadSource">Source</label>
+        <input type="text" id="leadSource" class="form-control" placeholder="Referral, cold outreach, website..." />
+      </div>
+      <div class="form-group">
+        <label for="leadStage">Stage</label>
+        <select id="leadStage" class="form-control"><!-- populated via JS --></select>
+      </div>
+      <div class="form-group">
+        <label for="leadNotes">Notes</label>
+        <textarea id="leadNotes" class="form-control" placeholder="Anything worth remembering"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="deleteLeadBtn" style="display:none;">Delete</button>
+        <div class="modal-actions-spacer"></div>
+        <button class="btn-secondary" id="cancelLeadBtn">Cancel</button>
+        <button class="btn-primary" id="saveLeadBtn">Save</button>
+      </div>
+      <p id="modalMsg" class="msg error hidden"></p>
+    </div>
+  </div>
+
+  <script src="js/app.js?v=1"></script>
+</body>
+</html>

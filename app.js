@@ -507,6 +507,7 @@ let iframeNeedsReload = {
   "tab-discoverycall": true,
   "tab-packagerecommend": true,
   "tab-followuptracker": true,
+  "tab-pipelineboard": true,
   "tab-coldoutreach": true,
   "tab-contractinvoice": true,
   "tab-referraltracker": true,
@@ -1059,6 +1060,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-followuptracker":
       renderFollowUpTracker();
+      break;
+    case "tab-pipelineboard":
+      renderPipelineBoard();
       break;
     case "tab-coldoutreach":
       renderColdOutreachSequencer();
@@ -2755,6 +2759,11 @@ function renderPackageRecommendationEngine() {
 // ── Proposal Follow-Up Sequence Tracker Controller ──
 function renderColdOutreachSequencer() {
   setIframeAbsoluteSrc('#tab-coldoutreach iframe', "cold-outreach-sequencer/index.html");
+}
+
+// ── Sales Pipeline Board Controller ──
+function renderPipelineBoard() {
+  setIframeAbsoluteSrc('#tab-pipelineboard iframe', "sales-pipeline-board/index.html");
 }
 
 function renderFollowUpTracker() {

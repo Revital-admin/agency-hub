@@ -83,6 +83,10 @@ export default {
       return handleBookingCreate(request, env);
     }
 
+    if (url.pathname === "/api/pipeline/sync-clickup" && request.method === "POST") {
+      return handlePipelineSyncClickUp(request, env);
+    }
+
     // Everything else: serve the static site as before.
     return env.ASSETS.fetch(request);
   }
@@ -1380,6 +1384,73 @@ function escapeHtmlServer(str) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+// ── Sales Pipeline Board -> ClickUp sync ──
+//
+// Sales Pipeline Board (sales-pipeline-board/) is the Hub's own source
+// of truth for leads; this mirrors every create/stage-change one-way
+// into ClickUp's "Growth > Pipeline Management > Sales Pipeline" list
+// (id below) so the board that was already well-designed there but
+// sitting empty actually reflects live pipeline state, without asking
+// anyone to keep two boards in sync by hand. One-way only (ClickUp
+// edits don't flow back) - the Hub board is authoritative.
+//
+// Requires a secret named CLICKUP_API_TOKEN, set via:
+//   wrangler secret put CLICKUP_API_TOKEN
+// (ClickUp -> Settings -> Apps -> generate a personal API token, starts
+// with "pk_" - passed as-is in the Authorization header, no "Bearer"
+// prefix, unlike most other APIs this Hub talks to.)
+const CLICKUP_SALES_PIPELINE_LIST_ID = "901327581862";
+
+async function handlePipelineSyncClickUp(request, env) {
+  const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+
+  const apiToken = env.CLICKUP_API_TOKEN;
+  if (!apiToken) return jsonResponse({ error: "Server missing CLICKUP_API_TOKEN secret" }, 500);
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+  const { taskId, name, stage, contactEmail, source, notes } = payload || {};
+  if (!name || !stage) return jsonResponse({ error: "name and stage are required" }, 400);
+
+  const descriptionParts = [];
+  if (contactEmail) descriptionParts.push(`**Contact:** ${contactEmail}`);
+  if (source) descriptionParts.push(`**Source:** ${source}`);
+  if (notes) descriptionParts.push(`**Notes:**\n${notes}`);
+  descriptionParts.push(`_Synced from the Hub's Sales Pipeline Board - edits here won't flow back._`);
+  const markdown_description = descriptionParts.join("\n\n");
+
+  try {
+    if (taskId) {
+      const res = await fetch(`https://api.clickup.com/api/v2/task/${encodeURIComponent(taskId)}`, {
+        method: "PUT",
+        headers: { Authorization: apiToken, "Content-Type": "application/json" },
+        body: JSON.stringify({ name, status: stage, markdown_description })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.err || `ClickUp update failed (${res.status})`);
+      return jsonResponse({ ok: true, taskId: data.id || taskId });
+    } else {
+      const res = await fetch(`https://api.clickup.com/api/v2/list/${CLICKUP_SALES_PIPELINE_LIST_ID}/task`, {
+        method: "POST",
+        headers: { Authorization: apiToken, "Content-Type": "application/json" },
+        body: JSON.stringify({ name, status: stage, markdown_description })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.err || `ClickUp create failed (${res.status})`);
+      return jsonResponse({ ok: true, taskId: data.id });
+    }
+  } catch (e) {
+    return jsonResponse({ error: `ClickUp sync failed: ${e.message}` }, 500);
+  }
 }
 
 // Converts Firestore REST API's typed-value JSON shape ({fields: {name:
