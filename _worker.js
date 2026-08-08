@@ -1689,6 +1689,38 @@ async function applyStripeEventToContractInvoices(env, event, billingMode) {
   }
 
   await firestoreSetDoc(accessToken, projectId, "agency/contractInvoices", { list, version: version + 1 });
+
+  // Failed-payment alert - without this, a declined card only shows up as
+  // a status change in the Tracker (same "Payment Failed" badge
+  // billingCellHtml already renders), which nobody sees unless they
+  // happen to check that page. Same best-effort pattern as the booking
+  // notification: a failed alert send shouldn't undo the status update
+  // above, since Firestore is already the source of truth by this point.
+  if (event.type === "invoice.payment_failed") {
+    try {
+      const amount = typeof obj.amount_due === "number" ? (obj.amount_due / 100).toFixed(2) : null;
+      const currency = (obj.currency || "usd").toUpperCase();
+      const attemptCount = obj.attempt_count || null;
+      const modeTag = billingMode === "live" ? "" : "[TEST] ";
+      const subject = `${modeTag}Payment failed: ${record.clientName}${amount ? ` ($${amount})` : ""}`;
+      const html = `
+        <div style="font-family: sans-serif; max-width: 560px;">
+          <h2 style="margin:0 0 12px; color:#dc2626;">Recurring Payment Failed</h2>
+          <p><strong>${escapeHtmlServer(record.clientName)}</strong>'s card was declined${attemptCount ? ` (attempt ${attemptCount})` : ""}.</p>
+          <table style="font-size:14px; margin:16px 0;">
+            ${amount ? `<tr><td style="color:#64748b; padding-right:12px;">Amount</td><td>$${amount} ${currency}</td></tr>` : ""}
+            <tr><td style="color:#64748b; padding-right:12px;">Mode</td><td>${billingMode === "live" ? "Live" : "Test"}</td></tr>
+          </table>
+          ${obj.hosted_invoice_url ? `<p><a href="${obj.hosted_invoice_url}">View invoice in Stripe</a></p>` : ""}
+          <p style="font-size:12px; color:#94a3b8; margin-top:24px;">Status is now "Payment Failed" in Contract & Invoice Tracker's Recurring Billing column. Stripe will automatically retry the charge per its default retry schedule.</p>
+        </div>
+      `;
+      const text = `Payment failed: ${record.clientName}${amount ? ` ($${amount} ${currency})` : ""}\nMode: ${billingMode === "live" ? "Live" : "Test"}${attemptCount ? `\nAttempt: ${attemptCount}` : ""}${obj.hosted_invoice_url ? `\n${obj.hosted_invoice_url}` : ""}\n\nStatus is now "Payment Failed" in Contract & Invoice Tracker.`;
+      await sendHealthDigestEmail(env, ["admin@revitalproductions.com"], subject, html, text);
+    } catch (notifyErr) {
+      console.error("Failed-payment alert email failed (billing status update itself still succeeded):", notifyErr);
+    }
+  }
 }
 
 async function handleStripeWebhook(request, env) {
