@@ -1557,8 +1557,8 @@ async function handleCreateSubscriptionCheckout(request, env) {
   params.append("line_items[0][price_data][recurring][interval]", "month");
   params.append("line_items[0][price_data][unit_amount]", String(amountCents));
   params.append("line_items[0][quantity]", "1");
-  params.append("success_url", "https://revitalproductions.com/?billing=success");
-  params.append("cancel_url", "https://revitalproductions.com/?billing=canceled");
+  params.append("success_url", "https://book.revitalproductions.com/billing-success/");
+  params.append("cancel_url", "https://book.revitalproductions.com/billing-canceled/");
   params.append("metadata[hubRecordId]", recordId);
   params.append("metadata[hubClientName]", clientName);
   params.append("metadata[hubMode]", billingMode);

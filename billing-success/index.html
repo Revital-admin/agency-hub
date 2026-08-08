@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Payment Confirmed — Revital Productions</title>
+<meta name="robots" content="noindex" />
+<!--
+  Standalone public page, same pattern as /booking/index.html - not part
+  of the internal Hub's SPA, reached directly at
+  book.revitalproductions.com/billing-success/. This is the success_url
+  a Stripe Checkout Session (subscription mode, see
+  handleCreateSubscriptionCheckout in _worker.js) redirects a client to
+  after they enter their card. Purely cosmetic - the actual status
+  update (Contract & Invoice Tracker badge flipping to Active) happens
+  separately and asynchronously via the Stripe webhook, so this page
+  doesn't need to talk to the Worker at all.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  @font-face {
+    font-family: "Azo Sans Uber Regular";
+    src: url("https://framerusercontent.com/assets/61LYSu5ltMaZcADwTMqTvGekik.woff2") format("woff2");
+    font-display: swap;
+    font-style: normal;
+    font-weight: 400;
+  }
+  :root {
+    --primary: #f5805f;
+    --secondary: #d85a30;
+    --bg-main: #262626;
+    --bg-card: #303030;
+    --border-color: rgba(241, 234, 219, 0.12);
+    --text-bright: #f1eadb;
+    --text-muted: rgba(241, 234, 219, 0.55);
+    --font-heading: "Azo Sans Uber Regular", "Inter", sans-serif;
+    --font-body: 'Inter', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg-main);
+    color: var(--text-bright);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 48px 20px;
+  }
+  .page { width: 100%; max-width: 520px; text-align: center; }
+  .brand-logo { height: 28px; margin: 0 auto 28px auto; display: block; }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 40px 28px;
+  }
+  .check {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: rgba(74, 222, 128, 0.12); color: #4ade80;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 20px auto; font-size: 28px;
+  }
+  h1 {
+    font-family: var(--font-heading);
+    font-weight: 400;
+    font-size: 1.9rem;
+    line-height: 1.2;
+    margin: 0 0 12px 0;
+  }
+  p { color: var(--text-muted); margin: 0 0 8px 0; font-size: 0.98rem; line-height: 1.5; }
+  .footer-note { margin-top: 28px; font-size: 0.82rem; color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="page">
+  <img class="brand-logo" src="https://framerusercontent.com/images/o3h6eIm6ccc2IJyWsP0aAbTp5M.png" alt="Revital Productions" />
+  <div class="card">
+    <div class="check">&#10003;</div>
+    <h1>You're all set</h1>
+    <p>Your card is on file and your monthly billing is now active.</p>
+    <p>We'll send a receipt by email for every charge, and you're welcome to reach out any time with questions about your account.</p>
+  </div>
+  <div class="footer-note">Revital Productions</div>
+</div>
+</body>
+</html>
