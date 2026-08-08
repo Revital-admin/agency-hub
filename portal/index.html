@@ -689,15 +689,33 @@ window.addEventListener('error', function(e) {
     <button type="button" id="moodboardLightboxClose" class="moodboard-lightbox-close" aria-label="Close">✕</button>
     <button type="button" id="moodboardLightboxPrev" class="moodboard-lightbox-nav moodboard-lightbox-prev" aria-label="Previous image">‹</button>
     <div class="moodboard-lightbox-body">
-      <img id="moodboardLightboxImg" src="" alt="">
+      <div class="moodboard-annotate-toolbar">
+        <button type="button" class="annotate-tool-btn" id="moodboardPinToolBtn" data-tool="pin" title="Drop a pin and leave a note on a specific spot">📍 Pin a spot</button>
+        <button type="button" class="annotate-tool-btn" id="moodboardCircleToolBtn" data-tool="circle" title="Drag to circle an area and leave a note">⭕ Circle an area</button>
+        <span id="moodboardAnnotateHint" class="annotate-hint"></span>
+      </div>
+      <div class="moodboard-image-wrap" id="moodboardImageWrap">
+        <img id="moodboardLightboxImg" src="" alt="">
+        <svg id="moodboardAnnotationLayer" class="moodboard-annotation-layer" preserveAspectRatio="none"></svg>
+      </div>
       <div class="moodboard-lightbox-meta">
         <span id="moodboardLightboxCaption"></span>
         <span id="moodboardLightboxCounter" class="moodboard-lightbox-counter"></span>
       </div>
+      <div id="moodboardAnnotationList" class="moodboard-annotation-list"></div>
     </div>
     <button type="button" id="moodboardLightboxNext" class="moodboard-lightbox-nav moodboard-lightbox-next" aria-label="Next image">›</button>
   </div>
 
-  <script src="js/app.js?v=78"></script>
+  <div id="moodboardAnnotationPopup" class="moodboard-annotation-popup" style="display:none;">
+    <div class="moodboard-annotation-popup-title">What do you think?</div>
+    <textarea id="moodboardAnnotationCommentInput" class="moodboard-annotation-popup-input" rows="3" placeholder="Leave a quick note about this spot..."></textarea>
+    <div class="moodboard-annotation-popup-actions">
+      <button type="button" id="moodboardAnnotationCancelBtn" class="moodboard-annotation-popup-cancel">Cancel</button>
+      <button type="button" id="moodboardAnnotationSaveBtn" class="moodboard-annotation-popup-save">Save Note</button>
+    </div>
+  </div>
+
+  <script src="js/app.js?v=79"></script>
 </body>
 </html>

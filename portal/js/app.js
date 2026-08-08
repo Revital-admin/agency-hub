@@ -1633,17 +1633,20 @@ function saveMoodBoardStyleFeedback(boardId, wrap) {
 // board's grid was opened from.
 let lightboxImages = [];
 let lightboxIndex = 0;
+let lightboxBoardId = null;
 
 function openMoodBoardLightbox(boardId, idx) {
   const board = (clientData.moodBoards || []).find(b => b.id === boardId);
   if (!board) return;
   lightboxImages = (board.embedLinks || []).filter(isMoodBoardImage);
   lightboxIndex = idx;
+  lightboxBoardId = boardId;
   if (!lightboxImages.length) return;
 
   const overlay = document.getElementById("moodboardLightbox");
   if (!overlay) return;
   overlay.style.display = "flex";
+  setAnnotateTool(null);
   renderLightboxImage();
 }
 
@@ -1657,18 +1660,213 @@ function renderLightboxImage() {
   img.alt = current.label || "";
   if (caption) caption.textContent = current.label || "";
   if (counter) counter.textContent = lightboxImages.length > 1 ? `${lightboxIndex + 1} / ${lightboxImages.length}` : "";
+  renderAnnotations();
 }
 
 function closeMoodBoardLightbox() {
   const overlay = document.getElementById("moodboardLightbox");
   if (overlay) overlay.style.display = "none";
   lightboxImages = [];
+  lightboxBoardId = null;
+  setAnnotateTool(null);
+  hideAnnotationPopup();
 }
 
 function moodBoardLightboxStep(delta) {
   if (!lightboxImages.length) return;
   lightboxIndex = (lightboxIndex + delta + lightboxImages.length) % lightboxImages.length;
   renderLightboxImage();
+}
+
+// ── Mood board image annotations (pin a spot / circle an area) ──
+// Lets whoever's looking (client here, admin in the Mood Board Builder's
+// own equivalent viewer) leave feedback tied to an exact location on an
+// image instead of only a whole-board numeric rating. Stored OUTSIDE the
+// admin-owned moodBoards array, keyed by board id then image id - same
+// "keyed outside the array" pattern moodBoardViews/moodBoardStyleFeedback
+// already use above, since a client-side save here only ever needs to
+// touch one image's annotation list, not rewrite the whole moodBoards
+// array the admin tool owns. Coordinates are stored as 0-100 percentages
+// of the image's own rendered box (see .moodboard-image-wrap's CSS
+// comment for why that's safe to do here), so they still land correctly
+// regardless of viewport size.
+let annotateTool = null; // null | "pin" | "circle"
+let circleDragStart = null; // {xPct, yPct} while actively dragging a circle
+let pendingAnnotationDraft = null; // {type, x, y, radiusX, radiusY} awaiting a comment in the popup
+
+function currentAnnotationImage() {
+  return lightboxImages[lightboxIndex] || null;
+}
+
+function getImageAnnotations(imageId) {
+  const boardMap = (clientData.moodBoardAnnotations && clientData.moodBoardAnnotations[lightboxBoardId]) || {};
+  return Array.isArray(boardMap[imageId]) ? boardMap[imageId] : [];
+}
+
+function setAnnotateTool(tool) {
+  annotateTool = tool;
+  const wrap = document.getElementById("moodboardImageWrap");
+  const pinBtn = document.getElementById("moodboardPinToolBtn");
+  const circleBtn = document.getElementById("moodboardCircleToolBtn");
+  const hint = document.getElementById("moodboardAnnotateHint");
+  if (wrap) wrap.classList.toggle("tool-active", !!tool);
+  if (pinBtn) pinBtn.classList.toggle("active", tool === "pin");
+  if (circleBtn) circleBtn.classList.toggle("active", tool === "circle");
+  if (hint) {
+    hint.textContent = tool === "pin" ? "Click anywhere on the image to drop a pin."
+      : tool === "circle" ? "Click and drag to circle an area."
+      : "";
+  }
+  circleDragStart = null;
+}
+
+function renderAnnotations() {
+  const current = currentAnnotationImage();
+  const svg = document.getElementById("moodboardAnnotationLayer");
+  if (!svg || !current) return;
+
+  const annotations = getImageAnnotations(current.id);
+  svg.innerHTML = "";
+  svg.setAttribute("viewBox", "0 0 100 100");
+
+  annotations.forEach((a, idx) => {
+    const num = idx + 1;
+    const isAdmin = a.author === "admin";
+    if (a.type === "circle") {
+      const ellipse = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+      ellipse.setAttribute("cx", a.x);
+      ellipse.setAttribute("cy", a.y);
+      ellipse.setAttribute("rx", a.radiusX);
+      ellipse.setAttribute("ry", a.radiusY);
+      ellipse.setAttribute("class", "moodboard-annotation-circle" + (isAdmin ? " admin-note" : ""));
+      ellipse.setAttribute("vector-effect", "non-scaling-stroke");
+      ellipse.addEventListener("click", () => scrollToAnnotationItem(a.id));
+      svg.appendChild(ellipse);
+    } else {
+      const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      g.setAttribute("class", "moodboard-annotation-pin" + (isAdmin ? " admin-note" : ""));
+      g.addEventListener("click", () => scrollToAnnotationItem(a.id));
+      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      circle.setAttribute("cx", a.x);
+      circle.setAttribute("cy", a.y);
+      circle.setAttribute("r", "3.2");
+      circle.setAttribute("vector-effect", "non-scaling-stroke");
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("x", a.x);
+      text.setAttribute("y", a.y);
+      text.textContent = String(num);
+      g.appendChild(circle);
+      g.appendChild(text);
+      svg.appendChild(g);
+    }
+  });
+
+  renderAnnotationList(annotations);
+}
+
+function renderAnnotationList(annotations) {
+  const list = document.getElementById("moodboardAnnotationList");
+  if (!list) return;
+  if (!annotations.length) {
+    list.innerHTML = "";
+    return;
+  }
+  list.innerHTML = annotations.map((a, idx) => `
+    <div class="moodboard-annotation-item${a.author === "admin" ? " admin-note" : ""}" id="annotation-item-${escapeHtml(a.id)}">
+      <span class="moodboard-annotation-item-num">${idx + 1}</span>
+      <div class="moodboard-annotation-item-body">
+        <span class="moodboard-annotation-item-author">${a.author === "admin" ? "Revital Productions" : "You"}</span>
+        <span class="moodboard-annotation-item-text">${escapeHtml(a.comment)}</span>
+      </div>
+      ${a.author === "client" ? `<button type="button" class="moodboard-annotation-item-delete" data-id="${escapeHtml(a.id)}" aria-label="Delete note" title="Delete">✕</button>` : ""}
+    </div>
+  `).join("");
+  list.querySelectorAll(".moodboard-annotation-item-delete").forEach(btn => {
+    btn.addEventListener("click", () => deleteAnnotation(btn.getAttribute("data-id")));
+  });
+}
+
+function scrollToAnnotationItem(id) {
+  const el = document.getElementById(`annotation-item-${id}`);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function wrapPointToPercent(wrap, clientX, clientY) {
+  const rect = wrap.getBoundingClientRect();
+  const x = Math.min(100, Math.max(0, ((clientX - rect.left) / rect.width) * 100));
+  const y = Math.min(100, Math.max(0, ((clientY - rect.top) / rect.height) * 100));
+  return { x, y };
+}
+
+function showAnnotationPopup(clientX, clientY) {
+  const popup = document.getElementById("moodboardAnnotationPopup");
+  const input = document.getElementById("moodboardAnnotationCommentInput");
+  if (!popup || !input) return;
+  input.value = "";
+  const popupWidth = 260;
+  const left = Math.min(window.innerWidth - popupWidth - 16, Math.max(16, clientX - popupWidth / 2));
+  const top = Math.min(window.innerHeight - 140, clientY + 12);
+  popup.style.left = `${left}px`;
+  popup.style.top = `${top}px`;
+  popup.style.display = "block";
+  input.focus();
+}
+
+function hideAnnotationPopup() {
+  const popup = document.getElementById("moodboardAnnotationPopup");
+  if (popup) popup.style.display = "none";
+  pendingAnnotationDraft = null;
+}
+
+function saveAnnotationDraft() {
+  const input = document.getElementById("moodboardAnnotationCommentInput");
+  const comment = input ? input.value.trim() : "";
+  if (!comment || !pendingAnnotationDraft) { hideAnnotationPopup(); return; }
+
+  const current = currentAnnotationImage();
+  if (!current) { hideAnnotationPopup(); return; }
+
+  if (!clientData.moodBoardAnnotations) clientData.moodBoardAnnotations = {};
+  if (!clientData.moodBoardAnnotations[lightboxBoardId]) clientData.moodBoardAnnotations[lightboxBoardId] = {};
+  if (!Array.isArray(clientData.moodBoardAnnotations[lightboxBoardId][current.id])) {
+    clientData.moodBoardAnnotations[lightboxBoardId][current.id] = [];
+  }
+
+  const annotation = Object.assign({}, pendingAnnotationDraft, {
+    id: "an-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+    comment,
+    author: "client",
+    createdAt: new Date().toISOString()
+  });
+  clientData.moodBoardAnnotations[lightboxBoardId][current.id].push(annotation);
+
+  hideAnnotationPopup();
+  setAnnotateTool(null);
+  renderAnnotations();
+  persistMoodBoardAnnotations();
+}
+
+function deleteAnnotation(id) {
+  const current = currentAnnotationImage();
+  if (!current || !lightboxBoardId) return;
+  const list = getImageAnnotations(current.id);
+  const annotation = list.find(a => a.id === id);
+  if (!annotation || annotation.author !== "client") return;
+  if (!confirm("Delete this note?")) return;
+
+  clientData.moodBoardAnnotations[lightboxBoardId][current.id] = list.filter(a => a.id !== id);
+  renderAnnotations();
+  persistMoodBoardAnnotations();
+}
+
+// Scoped merge write, same pattern as saveMoodBoardStyleFeedback above -
+// only ever touches the moodBoardAnnotations field, never the admin-owned
+// moodBoards array itself.
+function persistMoodBoardAnnotations() {
+  const docRef = db.collection("clients").doc(clientToken);
+  docRef.set({ moodBoardAnnotations: clientData.moodBoardAnnotations }, { merge: true }).catch(err => {
+    console.error("Error saving mood board annotation:", err);
+  });
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -1682,10 +1880,46 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   document.addEventListener("keydown", (e) => {
     if (overlay.style.display !== "flex") return;
-    if (e.key === "Escape") closeMoodBoardLightbox();
-    if (e.key === "ArrowLeft") moodBoardLightboxStep(-1);
-    if (e.key === "ArrowRight") moodBoardLightboxStep(1);
+    if (e.key === "Escape") {
+      if (document.getElementById("moodboardAnnotationPopup")?.style.display === "block") hideAnnotationPopup();
+      else closeMoodBoardLightbox();
+    }
+    if (e.key === "ArrowLeft" && !annotateTool) moodBoardLightboxStep(-1);
+    if (e.key === "ArrowRight" && !annotateTool) moodBoardLightboxStep(1);
   });
+
+  const pinBtn = document.getElementById("moodboardPinToolBtn");
+  const circleBtn = document.getElementById("moodboardCircleToolBtn");
+  pinBtn?.addEventListener("click", () => setAnnotateTool(annotateTool === "pin" ? null : "pin"));
+  circleBtn?.addEventListener("click", () => setAnnotateTool(annotateTool === "circle" ? null : "circle"));
+
+  const wrap = document.getElementById("moodboardImageWrap");
+  if (wrap) {
+    wrap.addEventListener("click", (e) => {
+      if (annotateTool !== "pin") return;
+      const { x, y } = wrapPointToPercent(wrap, e.clientX, e.clientY);
+      pendingAnnotationDraft = { type: "pin", x, y };
+      showAnnotationPopup(e.clientX, e.clientY);
+    });
+    wrap.addEventListener("mousedown", (e) => {
+      if (annotateTool !== "circle") return;
+      circleDragStart = wrapPointToPercent(wrap, e.clientX, e.clientY);
+    });
+    wrap.addEventListener("mouseup", (e) => {
+      if (annotateTool !== "circle" || !circleDragStart) return;
+      const end = wrapPointToPercent(wrap, e.clientX, e.clientY);
+      const radiusX = Math.max(2, Math.abs(end.x - circleDragStart.x) / 2);
+      const radiusY = Math.max(2, Math.abs(end.y - circleDragStart.y) / 2);
+      const x = (circleDragStart.x + end.x) / 2;
+      const y = (circleDragStart.y + end.y) / 2;
+      circleDragStart = null;
+      pendingAnnotationDraft = { type: "circle", x, y, radiusX, radiusY };
+      showAnnotationPopup(e.clientX, e.clientY);
+    });
+  }
+
+  document.getElementById("moodboardAnnotationCancelBtn")?.addEventListener("click", hideAnnotationPopup);
+  document.getElementById("moodboardAnnotationSaveBtn")?.addEventListener("click", saveAnnotationDraft);
 });
 
 // ── Testimonial submission ──

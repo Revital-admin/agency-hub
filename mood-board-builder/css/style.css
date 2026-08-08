@@ -403,3 +403,209 @@
   .form-row { flex-direction: column; gap: 8px; }
   .scale-mini-row { grid-template-columns: 56px 1fr 56px; gap: 6px; }
 }
+
+/* ── View & Annotate modal (mirrors the Client Portal's mood board
+   lightbox/annotation CSS almost exactly - same class names, same
+   percent-based coordinate approach, just re-pointed at this tool's own
+   --color-* variables instead of the Portal's). ── */
+.moodboard-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+.moodboard-lightbox-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+.moodboard-lightbox-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+.moodboard-lightbox-counter { color: var(--color-text-secondary); opacity: 0.7; }
+.moodboard-lightbox-close {
+  position: absolute;
+  top: 20px; right: 24px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  font-size: 15px;
+  cursor: pointer;
+}
+.moodboard-lightbox-close:hover { background: rgba(255,255,255,0.15); }
+.moodboard-lightbox-nav {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  font-size: 22px;
+  cursor: pointer;
+  flex-shrink: 0;
+  z-index: 1;
+}
+.moodboard-lightbox-nav:hover { background: rgba(255,255,255,0.15); }
+
+.moodboard-annotate-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.annotate-tool-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  border-radius: 100px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.annotate-tool-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.annotate-tool-btn.active { background: var(--color-accent); border-color: var(--color-accent); color: #1a1408; font-weight: 600; }
+.annotate-hint { font-size: 12px; color: var(--color-text-secondary); }
+
+.moodboard-image-wrap {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  max-width: 90vw;
+  max-height: 62vh;
+}
+.moodboard-image-wrap img {
+  max-width: 90vw;
+  max-height: 62vh;
+  object-fit: contain;
+  border-radius: 8px;
+  display: block;
+}
+.moodboard-image-wrap.tool-active img { cursor: crosshair; }
+.moodboard-annotation-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.moodboard-annotation-pin { cursor: pointer; pointer-events: all; }
+.moodboard-annotation-pin circle { fill: var(--color-accent); stroke: #1a1408; stroke-width: 1.5; }
+.moodboard-annotation-pin text {
+  fill: #1a1408;
+  font-size: 10px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+.moodboard-annotation-circle {
+  fill: rgba(246, 141, 95, 0.12);
+  stroke: var(--color-accent);
+  stroke-width: 2;
+  cursor: pointer;
+  pointer-events: all;
+}
+.moodboard-annotation-circle.admin-note { stroke: #7dd3fc; fill: rgba(125, 211, 252, 0.1); }
+.moodboard-annotation-pin.admin-note circle { fill: #7dd3fc; }
+
+.moodboard-annotation-list {
+  width: 100%;
+  max-width: 90vw;
+  max-height: 140px;
+  overflow-y: auto;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.moodboard-annotation-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+}
+.moodboard-annotation-item-num {
+  flex-shrink: 0;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: #1a1408;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.moodboard-annotation-item.admin-note .moodboard-annotation-item-num { background: #7dd3fc; }
+.moodboard-annotation-item-body { flex: 1; min-width: 0; }
+.moodboard-annotation-item-author { font-weight: 600; color: var(--color-text-primary); margin-right: 6px; }
+.moodboard-annotation-item-text { color: var(--color-text-secondary); word-break: break-word; }
+.moodboard-annotation-item-delete {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 2px;
+}
+.moodboard-annotation-item-delete:hover { color: #f87171; }
+
+.moodboard-annotation-popup {
+  position: fixed;
+  z-index: 1100;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 12px;
+  width: 260px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.moodboard-annotation-popup-title { font-size: 12.5px; font-weight: 600; color: var(--color-text-primary); margin-bottom: 6px; }
+.moodboard-annotation-popup-input {
+  width: 100%;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 12.5px;
+  padding: 8px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.moodboard-annotation-popup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.moodboard-annotation-popup-cancel, .moodboard-annotation-popup-save {
+  border-radius: 100px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.moodboard-annotation-popup-cancel { background: none; border: 1px solid var(--color-border); color: var(--color-text-secondary); }
+.moodboard-annotation-popup-save { background: var(--color-accent); border: none; color: #1a1408; font-weight: 600; }
+
+@media (max-width: 640px) {
+  .moodboard-lightbox { padding: 16px; }
+  .moodboard-lightbox-nav { width: 36px; height: 36px; font-size: 18px; }
+}

@@ -113,6 +113,46 @@
 
     </div>
   </div>
+
+  <!-- View & Annotate modal - opened by clicking a thumbnail on a SAVED
+       board's card (renderBoardCardThumbs in js/app.js), not the
+       in-progress form's image grid above, since annotations are only
+       meaningful against images the client has actually been able to see
+       and react to. Same annotation data model/markup pattern as the
+       Client Portal's own mood board lightbox (portal/index.html) - see
+       the CSS comment in css/style.css for why percent-based coordinates
+       work here without accounting for image letterboxing. -->
+  <div id="mbAdminLightbox" class="moodboard-lightbox" style="display:none;">
+    <button type="button" id="mbAdminLightboxClose" class="moodboard-lightbox-close" aria-label="Close">✕</button>
+    <button type="button" id="mbAdminLightboxPrev" class="moodboard-lightbox-nav moodboard-lightbox-prev" aria-label="Previous image">‹</button>
+    <div class="moodboard-lightbox-body">
+      <div class="moodboard-annotate-toolbar">
+        <button type="button" class="annotate-tool-btn" id="mbAdminPinToolBtn" data-tool="pin" title="Drop a pin and leave an internal note on a specific spot">📍 Pin a spot</button>
+        <button type="button" class="annotate-tool-btn" id="mbAdminCircleToolBtn" data-tool="circle" title="Drag to circle an area and leave an internal note">⭕ Circle an area</button>
+        <span id="mbAdminAnnotateHint" class="annotate-hint"></span>
+      </div>
+      <div class="moodboard-image-wrap" id="mbAdminImageWrap">
+        <img id="mbAdminLightboxImg" src="" alt="">
+        <svg id="mbAdminAnnotationLayer" class="moodboard-annotation-layer" preserveAspectRatio="none"></svg>
+      </div>
+      <div class="moodboard-lightbox-meta">
+        <span id="mbAdminLightboxCaption"></span>
+        <span id="mbAdminLightboxCounter" class="moodboard-lightbox-counter"></span>
+      </div>
+      <div id="mbAdminAnnotationList" class="moodboard-annotation-list"></div>
+    </div>
+    <button type="button" id="mbAdminLightboxNext" class="moodboard-lightbox-nav moodboard-lightbox-next" aria-label="Next image">›</button>
+  </div>
+
+  <div id="mbAdminAnnotationPopup" class="moodboard-annotation-popup" style="display:none;">
+    <div class="moodboard-annotation-popup-title">Internal note</div>
+    <textarea id="mbAdminAnnotationCommentInput" class="moodboard-annotation-popup-input" rows="3" placeholder="Note to yourself/the team about this spot..."></textarea>
+    <div class="moodboard-annotation-popup-actions">
+      <button type="button" id="mbAdminAnnotationCancelBtn" class="moodboard-annotation-popup-cancel">Cancel</button>
+      <button type="button" id="mbAdminAnnotationSaveBtn" class="moodboard-annotation-popup-save">Save Note</button>
+    </div>
+  </div>
+
   <script src="js/app.js"></script>
 </body>
 </html>

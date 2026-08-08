@@ -79,13 +79,20 @@ service cloud.firestore {
       // writes when the client opens the Mood Boards tab, so Ronald gets
       // notified the first time a client actually looks at a given shared
       // board (see recordMoodBoardViews in portal/js/app.js and
-      // foldInMoodBoardViews/ensureClientPortalListeners in app.js). Same
-      // trust boundary as the notification read-flags above: nothing stops
-      // a malicious client from writing garbage keys into their own doc,
-      // but the worst case is a bogus "viewed" notification about their
-      // own account, not a real security issue.
+      // foldInMoodBoardViews/ensureClientPortalListeners in app.js).
+      // moodBoardStyleFeedback (the "how does this feel to you?" style-axis
+      // sliders, saveMoodBoardStyleFeedback in portal/js/app.js) and
+      // moodBoardAnnotations (pin-a-spot/circle-an-area image feedback,
+      // persistMoodBoardAnnotations in the same file) were both missing
+      // from this whitelist until now - meaning those saves would have been
+      // silently rejected by these rules the whole time despite the
+      // client-side code being fully built. Same trust boundary as the
+      // notification read-flags above: nothing stops a malicious client
+      // from writing garbage keys into their own doc, but the worst case is
+      // bogus feedback/annotations on their own account, not a real
+      // security issue.
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
-                        .hasOnly(['clientChecklist', 'pendingApprovals', 'approvalHistory', 'testimonialSubmission', 'notifications', 'lastVisitedAt', 'moodBoardViews']);
+                        .hasOnly(['clientChecklist', 'pendingApprovals', 'approvalHistory', 'testimonialSubmission', 'notifications', 'lastVisitedAt', 'moodBoardViews', 'moodBoardStyleFeedback', 'moodBoardAnnotations']);
     }
 
     // Deny everything else by default.

@@ -611,7 +611,7 @@ function renderBoardCardThumbs(board) {
   }
   const shown = images.slice(0, BOARD_CARD_THUMB_LIMIT);
   const overflow = images.length - shown.length;
-  const thumbs = shown.map(l => `<img class="board-card-thumb" src="${l.url}" alt="${escapeHtml(l.label)}" title="${escapeHtml(l.label)}">`).join('');
+  const thumbs = shown.map((l, idx) => `<img class="board-card-thumb" src="${l.url}" alt="${escapeHtml(l.label)}" title="View &amp; annotate: ${escapeHtml(l.label)}" style="cursor:pointer;" data-board-id="${board.id}" data-idx="${idx}">`).join('');
   const overflowBadge = overflow > 0 ? `<span class="board-card-thumb-overflow">+${overflow}</span>` : '';
   const linkNote = nonImageCount ? `<span style="font-size:11px; color:var(--color-text-secondary); margin-left:6px;">+ ${nonImageCount} link${nonImageCount === 1 ? '' : 's'}</span>` : '';
   return `<div style="display:flex; align-items:center; gap:6px; margin-top:10px; flex-wrap:wrap;">${thumbs}${overflowBadge}${linkNote}</div>`;
@@ -649,6 +649,9 @@ function renderBoardsList() {
   document.querySelectorAll('.edit-board-btn').forEach(btn => btn.addEventListener('click', () => startEditBoard(btn.getAttribute('data-id'))));
   document.querySelectorAll('.remove-board-btn').forEach(btn => btn.addEventListener('click', () => removeBoard(btn.getAttribute('data-id'))));
   document.querySelectorAll('.share-board-btn').forEach(btn => btn.addEventListener('click', () => toggleShare(btn.getAttribute('data-id'))));
+  document.querySelectorAll('.board-card-thumb[data-board-id]').forEach(img => {
+    img.addEventListener('click', () => openAdminMoodBoardLightbox(img.getAttribute('data-board-id'), parseInt(img.getAttribute('data-idx'), 10)));
+  });
 }
 
 function renderState() {
@@ -663,6 +666,236 @@ function renderState() {
   resetForm();
   renderTasteProfile();
   renderBoardsList();
+}
+
+// ── View & Annotate (admin side) ──
+// Opens a SAVED board's image full-size with the same pin/circle
+// annotation tools the Client Portal has (portal/js/app.js -
+// persistMoodBoardAnnotations et al) - reads and renders both the
+// client's own annotations (author: "client") and any the agency has
+// left here (author: "admin"), and lets this side add more of its own.
+// Deliberately reads from client.moodBoards (the SAVED board), not
+// draftEmbedLinks, since annotating only makes sense against images the
+// client has actually been able to see and react to - the in-progress
+// form above this is a different, unsaved thing.
+let adminLightboxImages = [];
+let adminLightboxIndex = 0;
+let adminLightboxBoardId = null;
+let adminAnnotateTool = null; // null | "pin" | "circle"
+let adminCircleDragStart = null;
+let adminPendingAnnotationDraft = null;
+
+function openAdminMoodBoardLightbox(boardId, idx) {
+  const client = currentClient();
+  if (!client) return;
+  const board = (client.moodBoards || []).find(b => b.id === boardId);
+  if (!board) return;
+  adminLightboxImages = (board.embedLinks || []).filter(isImageEntry);
+  adminLightboxIndex = idx;
+  adminLightboxBoardId = boardId;
+  if (!adminLightboxImages.length) return;
+
+  const overlay = el('mbAdminLightbox');
+  if (!overlay) return;
+  overlay.style.display = 'flex';
+  setAdminAnnotateTool(null);
+  renderAdminLightboxImage();
+}
+
+function renderAdminLightboxImage() {
+  const img = el('mbAdminLightboxImg');
+  const caption = el('mbAdminLightboxCaption');
+  const counter = el('mbAdminLightboxCounter');
+  const current = adminLightboxImages[adminLightboxIndex];
+  if (!img || !current) return;
+  img.src = current.url;
+  img.alt = current.label || '';
+  if (caption) caption.textContent = current.label || '';
+  if (counter) counter.textContent = adminLightboxImages.length > 1 ? `${adminLightboxIndex + 1} / ${adminLightboxImages.length}` : '';
+  renderAdminAnnotations();
+}
+
+function closeAdminMoodBoardLightbox() {
+  const overlay = el('mbAdminLightbox');
+  if (overlay) overlay.style.display = 'none';
+  adminLightboxImages = [];
+  adminLightboxBoardId = null;
+  setAdminAnnotateTool(null);
+  hideAdminAnnotationPopup();
+}
+
+function adminLightboxStep(delta) {
+  if (!adminLightboxImages.length) return;
+  adminLightboxIndex = (adminLightboxIndex + delta + adminLightboxImages.length) % adminLightboxImages.length;
+  renderAdminLightboxImage();
+}
+
+function currentAdminAnnotationImage() {
+  return adminLightboxImages[adminLightboxIndex] || null;
+}
+
+function getAdminImageAnnotations(imageId) {
+  const client = currentClient();
+  const boardMap = (client && client.moodBoardAnnotations && client.moodBoardAnnotations[adminLightboxBoardId]) || {};
+  return Array.isArray(boardMap[imageId]) ? boardMap[imageId] : [];
+}
+
+function setAdminAnnotateTool(tool) {
+  adminAnnotateTool = tool;
+  const wrap = el('mbAdminImageWrap');
+  const pinBtn = el('mbAdminPinToolBtn');
+  const circleBtn = el('mbAdminCircleToolBtn');
+  const hint = el('mbAdminAnnotateHint');
+  if (wrap) wrap.classList.toggle('tool-active', !!tool);
+  if (pinBtn) pinBtn.classList.toggle('active', tool === 'pin');
+  if (circleBtn) circleBtn.classList.toggle('active', tool === 'circle');
+  if (hint) {
+    hint.textContent = tool === 'pin' ? 'Click anywhere on the image to drop a pin.'
+      : tool === 'circle' ? 'Click and drag to circle an area.'
+      : '';
+  }
+  adminCircleDragStart = null;
+}
+
+function renderAdminAnnotations() {
+  const current = currentAdminAnnotationImage();
+  const svg = el('mbAdminAnnotationLayer');
+  if (!svg || !current) return;
+
+  const annotations = getAdminImageAnnotations(current.id);
+  svg.innerHTML = '';
+  svg.setAttribute('viewBox', '0 0 100 100');
+
+  annotations.forEach((a, idx) => {
+    const num = idx + 1;
+    const isAdmin = a.author === 'admin';
+    if (a.type === 'circle') {
+      const ellipse = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+      ellipse.setAttribute('cx', a.x);
+      ellipse.setAttribute('cy', a.y);
+      ellipse.setAttribute('rx', a.radiusX);
+      ellipse.setAttribute('ry', a.radiusY);
+      ellipse.setAttribute('class', 'moodboard-annotation-circle' + (isAdmin ? ' admin-note' : ''));
+      ellipse.setAttribute('vector-effect', 'non-scaling-stroke');
+      ellipse.addEventListener('click', () => scrollToAdminAnnotationItem(a.id));
+      svg.appendChild(ellipse);
+    } else {
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g.setAttribute('class', 'moodboard-annotation-pin' + (isAdmin ? ' admin-note' : ''));
+      g.addEventListener('click', () => scrollToAdminAnnotationItem(a.id));
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', a.x);
+      circle.setAttribute('cy', a.y);
+      circle.setAttribute('r', '3.2');
+      circle.setAttribute('vector-effect', 'non-scaling-stroke');
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text.setAttribute('x', a.x);
+      text.setAttribute('y', a.y);
+      text.textContent = String(num);
+      g.appendChild(circle);
+      g.appendChild(text);
+      svg.appendChild(g);
+    }
+  });
+
+  renderAdminAnnotationList(annotations);
+}
+
+function renderAdminAnnotationList(annotations) {
+  const list = el('mbAdminAnnotationList');
+  if (!list) return;
+  if (!annotations.length) {
+    list.innerHTML = '<p style="color:var(--color-text-secondary); font-size:12.5px; margin:0;">No notes on this image yet. Use the tools above to leave one.</p>';
+    return;
+  }
+  list.innerHTML = annotations.map((a, idx) => `
+    <div class="moodboard-annotation-item${a.author === 'admin' ? ' admin-note' : ''}" id="admin-annotation-item-${escapeHtml(a.id)}">
+      <span class="moodboard-annotation-item-num">${idx + 1}</span>
+      <div class="moodboard-annotation-item-body">
+        <span class="moodboard-annotation-item-author">${a.author === 'admin' ? 'You / Team' : 'Client'}</span>
+        <span class="moodboard-annotation-item-text">${escapeHtml(a.comment)}</span>
+      </div>
+      ${a.author === 'admin' ? `<button type="button" class="moodboard-annotation-item-delete" data-id="${escapeHtml(a.id)}" aria-label="Delete note" title="Delete">✕</button>` : ''}
+    </div>
+  `).join('');
+  list.querySelectorAll('.moodboard-annotation-item-delete').forEach(btn => {
+    btn.addEventListener('click', () => deleteAdminAnnotation(btn.getAttribute('data-id')));
+  });
+}
+
+function scrollToAdminAnnotationItem(id) {
+  const item = document.getElementById(`admin-annotation-item-${id}`);
+  if (item) item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function adminWrapPointToPercent(wrap, clientX, clientY) {
+  const rect = wrap.getBoundingClientRect();
+  const x = Math.min(100, Math.max(0, ((clientX - rect.left) / rect.width) * 100));
+  const y = Math.min(100, Math.max(0, ((clientY - rect.top) / rect.height) * 100));
+  return { x, y };
+}
+
+function showAdminAnnotationPopup(clientX, clientY) {
+  const popup = el('mbAdminAnnotationPopup');
+  const input = el('mbAdminAnnotationCommentInput');
+  if (!popup || !input) return;
+  input.value = '';
+  const popupWidth = 260;
+  const left = Math.min(window.innerWidth - popupWidth - 16, Math.max(16, clientX - popupWidth / 2));
+  const top = Math.min(window.innerHeight - 140, clientY + 12);
+  popup.style.left = `${left}px`;
+  popup.style.top = `${top}px`;
+  popup.style.display = 'block';
+  input.focus();
+}
+
+function hideAdminAnnotationPopup() {
+  const popup = el('mbAdminAnnotationPopup');
+  if (popup) popup.style.display = 'none';
+  adminPendingAnnotationDraft = null;
+}
+
+function saveAdminAnnotationDraft() {
+  const input = el('mbAdminAnnotationCommentInput');
+  const comment = input ? input.value.trim() : '';
+  if (!comment || !adminPendingAnnotationDraft) { hideAdminAnnotationPopup(); return; }
+
+  const client = currentClient();
+  const current = currentAdminAnnotationImage();
+  if (!client || !current) { hideAdminAnnotationPopup(); return; }
+
+  if (!client.moodBoardAnnotations) client.moodBoardAnnotations = {};
+  if (!client.moodBoardAnnotations[adminLightboxBoardId]) client.moodBoardAnnotations[adminLightboxBoardId] = {};
+  if (!Array.isArray(client.moodBoardAnnotations[adminLightboxBoardId][current.id])) {
+    client.moodBoardAnnotations[adminLightboxBoardId][current.id] = [];
+  }
+
+  const annotation = Object.assign({}, adminPendingAnnotationDraft, {
+    id: 'an-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+    comment,
+    author: 'admin',
+    createdAt: new Date().toISOString()
+  });
+  client.moodBoardAnnotations[adminLightboxBoardId][current.id].push(annotation);
+
+  hideAdminAnnotationPopup();
+  setAdminAnnotateTool(null);
+  renderAdminAnnotations();
+  persist();
+}
+
+function deleteAdminAnnotation(id) {
+  const client = currentClient();
+  const current = currentAdminAnnotationImage();
+  if (!client || !current || !adminLightboxBoardId) return;
+  const list = getAdminImageAnnotations(current.id);
+  const annotation = list.find(a => a.id === id);
+  if (!annotation || annotation.author !== 'admin') return;
+  if (!confirm('Delete this note?')) return;
+
+  client.moodBoardAnnotations[adminLightboxBoardId][current.id] = list.filter(a => a.id !== id);
+  renderAdminAnnotations();
+  persist();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -685,4 +918,57 @@ document.addEventListener('DOMContentLoaded', () => {
       if (hasClients) populateClientSelect();
     }
   }, 250);
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  const overlay = el('mbAdminLightbox');
+  if (!overlay) return;
+  el('mbAdminLightboxClose')?.addEventListener('click', closeAdminMoodBoardLightbox);
+  el('mbAdminLightboxPrev')?.addEventListener('click', () => adminLightboxStep(-1));
+  el('mbAdminLightboxNext')?.addEventListener('click', () => adminLightboxStep(1));
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeAdminMoodBoardLightbox();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (overlay.style.display !== 'flex') return;
+    if (e.key === 'Escape') {
+      if (el('mbAdminAnnotationPopup')?.style.display === 'block') hideAdminAnnotationPopup();
+      else closeAdminMoodBoardLightbox();
+    }
+    if (e.key === 'ArrowLeft' && !adminAnnotateTool) adminLightboxStep(-1);
+    if (e.key === 'ArrowRight' && !adminAnnotateTool) adminLightboxStep(1);
+  });
+
+  const pinBtn = el('mbAdminPinToolBtn');
+  const circleBtn = el('mbAdminCircleToolBtn');
+  pinBtn?.addEventListener('click', () => setAdminAnnotateTool(adminAnnotateTool === 'pin' ? null : 'pin'));
+  circleBtn?.addEventListener('click', () => setAdminAnnotateTool(adminAnnotateTool === 'circle' ? null : 'circle'));
+
+  const wrap = el('mbAdminImageWrap');
+  if (wrap) {
+    wrap.addEventListener('click', (e) => {
+      if (adminAnnotateTool !== 'pin') return;
+      const { x, y } = adminWrapPointToPercent(wrap, e.clientX, e.clientY);
+      adminPendingAnnotationDraft = { type: 'pin', x, y };
+      showAdminAnnotationPopup(e.clientX, e.clientY);
+    });
+    wrap.addEventListener('mousedown', (e) => {
+      if (adminAnnotateTool !== 'circle') return;
+      adminCircleDragStart = adminWrapPointToPercent(wrap, e.clientX, e.clientY);
+    });
+    wrap.addEventListener('mouseup', (e) => {
+      if (adminAnnotateTool !== 'circle' || !adminCircleDragStart) return;
+      const end = adminWrapPointToPercent(wrap, e.clientX, e.clientY);
+      const radiusX = Math.max(2, Math.abs(end.x - adminCircleDragStart.x) / 2);
+      const radiusY = Math.max(2, Math.abs(end.y - adminCircleDragStart.y) / 2);
+      const x = (adminCircleDragStart.x + end.x) / 2;
+      const y = (adminCircleDragStart.y + end.y) / 2;
+      adminCircleDragStart = null;
+      adminPendingAnnotationDraft = { type: 'circle', x, y, radiusX, radiusY };
+      showAdminAnnotationPopup(e.clientX, e.clientY);
+    });
+  }
+
+  el('mbAdminAnnotationCancelBtn')?.addEventListener('click', hideAdminAnnotationPopup);
+  el('mbAdminAnnotationSaveBtn')?.addEventListener('click', saveAdminAnnotationDraft);
 });
