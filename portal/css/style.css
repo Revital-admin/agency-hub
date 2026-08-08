@@ -1426,6 +1426,14 @@ body {
   gap: 12px;
   max-width: 90vw;
   max-height: 90vh;
+  /* The annotation toolbar + note list added below the image can push
+     total content taller than the viewport on mobile - without this,
+     there was no way to scroll down to reach them (or even the Save/
+     Cancel buttons on the note popup), the modal just clipped and
+     trapped the page underneath it too since body itself has
+     overflow:hidden (see the comment on body{} above). */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .moodboard-lightbox-body img {
   max-width: 90vw;
@@ -1624,10 +1632,15 @@ body {
 .moodboard-annotation-popup-cancel { background: none; border: 1px solid var(--color-border); color: var(--color-text-secondary); }
 .moodboard-annotation-popup-save { background: #f5805f; border: none; color: #1a1408; font-weight: 600; }
 @media (max-width: 640px) {
-  .moodboard-lightbox { padding: 16px; }
+  .moodboard-lightbox { padding: 16px; align-items: flex-start; }
   .moodboard-lightbox-nav { width: 36px; height: 36px; font-size: 18px; }
   .moodboard-scale-row { grid-template-columns: 56px 1fr 56px; gap: 6px; }
   .moodboard-scale-overall-row { grid-template-columns: 56px 1fr 40px; gap: 6px; }
+  /* Leaves real room for the toolbar/meta/annotation list below the image
+     instead of the image alone claiming 62vh - that's what was pushing
+     everything else off-screen with nowhere to scroll on small phones. */
+  .moodboard-image-wrap, .moodboard-image-wrap img { max-height: 42vh; }
+  .moodboard-annotate-toolbar { flex-wrap: wrap; row-gap: 6px; }
 }
 .moodboard-embed-wrapper {
   margin-top: 8px;

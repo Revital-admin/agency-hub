@@ -425,6 +425,8 @@
   gap: 12px;
   max-width: 90vw;
   max-height: 90vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .moodboard-lightbox-meta {
   display: flex;
@@ -606,6 +608,8 @@
 .moodboard-annotation-popup-save { background: var(--color-accent); border: none; color: #1a1408; font-weight: 600; }
 
 @media (max-width: 640px) {
-  .moodboard-lightbox { padding: 16px; }
+  .moodboard-lightbox { padding: 16px; align-items: flex-start; }
   .moodboard-lightbox-nav { width: 36px; height: 36px; font-size: 18px; }
+  .moodboard-image-wrap, .moodboard-image-wrap img { max-height: 42vh; }
+  .moodboard-annotate-toolbar { flex-wrap: wrap; row-gap: 6px; }
 }
