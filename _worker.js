@@ -1716,7 +1716,11 @@ async function applyStripeEventToContractInvoices(env, event, billingMode) {
         </div>
       `;
       const text = `Payment failed: ${record.clientName}${amount ? ` ($${amount} ${currency})` : ""}\nMode: ${billingMode === "live" ? "Live" : "Test"}${attemptCount ? `\nAttempt: ${attemptCount}` : ""}${obj.hosted_invoice_url ? `\n${obj.hosted_invoice_url}` : ""}\n\nStatus is now "Payment Failed" in Contract & Invoice Tracker.`;
-      await sendHealthDigestEmail(env, ["admin@revitalproductions.com"], subject, html, text);
+      // Sent to the invoice@ alias (forwards to admin@'s inbox) rather than
+      // admin@ directly, so billing failure alerts land under a
+      // filterable/labelable "to" address instead of mixing into the
+      // general admin inbox undifferentiated.
+      await sendHealthDigestEmail(env, ["invoice@revitalproductions.com"], subject, html, text);
     } catch (notifyErr) {
       console.error("Failed-payment alert email failed (billing status update itself still succeeded):", notifyErr);
     }
