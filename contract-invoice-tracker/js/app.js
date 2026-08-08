@@ -544,11 +544,19 @@ async function sendBillingLink(id) {
 
   if (row) { row.disabled = true; row.textContent = 'Sending...'; }
 
+  // Pre-fill the client's email on the Checkout Session so they don't have
+  // to type it in fresh - same Client Workspace lookup (by clientName,
+  // matched via findClientRecordByName) that openSendContractPanel above
+  // already uses for the contract-sending flow. Falls back to Stripe just
+  // asking for it on the checkout page if there's no Contact Email on file.
+  const client = findClientRecordByName(r.clientName);
+  const clientEmail = (client && client.portalConfig && client.portalConfig.clientContactEmail) || '';
+
   try {
     const res = await fetch('/api/billing/create-subscription-checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recordId: r.id, clientName: r.clientName, monthlyAmount: amount, mode })
+      body: JSON.stringify({ recordId: r.id, clientName: r.clientName, monthlyAmount: amount, mode, clientEmail })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Request failed');
