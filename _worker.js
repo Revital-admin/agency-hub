@@ -1134,15 +1134,64 @@ async function handleBookingRoster(request, env) {
   return jsonResponse({ roster: BOOKING_ROSTER.map(({ id, name, title }) => ({ id, name, title })) });
 }
 
-// ── GET /api/booking/availability?personId=... ──
+// ── Account manager lookup for client bookings ──
+// Clients book with their OWN assigned account manager, not a pick-from-
+// a-list roster, and that roster shouldn't need a manual code edit every
+// time someone becomes (or stops being) an AM. Instead of a hardcoded
+// list, this treats "currently assigned as at least one client's account
+// manager in Client Portal Manager" (client.portalConfig.accountManagerName
+// / accountManagerEmail, already set via that tool's own UI) as the
+// source of truth - whoever that points to is automatically bookable,
+// no _worker.js edit required when the roster changes. Public callers
+// can only resolve an email that's actually assigned to a real client
+// this way (not an arbitrary address), which is what keeps this safe to
+// expose without auth.
+async function findAccountManagerByEmail(env, rawEmail) {
+  const email = (rawEmail || "").trim().toLowerCase();
+  if (!email) return null;
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const clients = await fetchAllClientsFromFirestore(accessToken, projectId);
+    for (const name of Object.keys(clients)) {
+      const cfg = clients[name] && clients[name].portalConfig;
+      const amEmail = cfg && cfg.accountManagerEmail ? String(cfg.accountManagerEmail).trim().toLowerCase() : "";
+      if (amEmail && amEmail === email) {
+        return { email, name: (cfg.accountManagerName || "").trim() || email };
+      }
+    }
+  } catch (e) {
+    console.error("findAccountManagerByEmail lookup failed:", e);
+  }
+  return null;
+}
+
+// Resolves "who is this booking for" from either the static prospect
+// roster (?personId=) or a live-verified account manager (?amEmail=),
+// used by both the availability and create handlers below so the two
+// entry points (public prospect booking vs. client-portal AM booking)
+// stay in sync.
+async function resolveBookingTarget(env, { personId, amEmail }) {
+  if (personId) {
+    const person = BOOKING_ROSTER.find(p => p.id === personId);
+    return person ? { email: person.email, name: person.name } : null;
+  }
+  if (amEmail) {
+    return await findAccountManagerByEmail(env, amEmail);
+  }
+  return null;
+}
+
+// ── GET /api/booking/availability?personId=...  or  ?amEmail=... ──
 // Public. Queries that person's real Google Calendar via freeBusy.query
 // (impersonated through domain-wide delegation) and returns open
 // BOOKING_SLOT_MINUTES-long slots across the next BOOKING_LOOKAHEAD_DAYS
 // days, business hours only, weekends excluded.
 async function handleBookingAvailability(request, env) {
   const url = new URL(request.url);
-  const personId = url.searchParams.get("personId");
-  const person = BOOKING_ROSTER.find(p => p.id === personId);
+  const person = await resolveBookingTarget(env, {
+    personId: url.searchParams.get("personId"),
+    amEmail: url.searchParams.get("amEmail")
+  });
   if (!person) return jsonResponse({ error: "Unknown person" }, 400);
 
   let accessToken;
@@ -1199,7 +1248,7 @@ async function handleBookingAvailability(request, env) {
     if (slots.length) slotsByDay[dateKey] = slots;
   }
 
-  return jsonResponse({ timezone: BOOKING_TIMEZONE, slotMinutes: BOOKING_SLOT_MINUTES, slotsByDay });
+  return jsonResponse({ personName: person.name, timezone: BOOKING_TIMEZONE, slotMinutes: BOOKING_SLOT_MINUTES, slotsByDay });
 }
 
 // ── POST /api/booking/book ──
@@ -1215,8 +1264,8 @@ async function handleBookingCreate(request, env) {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
 
-  const { personId, startISO, name, email, company, notes } = payload || {};
-  const person = BOOKING_ROSTER.find(p => p.id === personId);
+  const { personId, amEmail, startISO, name, email, company, notes } = payload || {};
+  const person = await resolveBookingTarget(env, { personId, amEmail });
   if (!person) return jsonResponse({ error: "Unknown person" }, 400);
   if (!startISO || isNaN(new Date(startISO).getTime())) {
     return jsonResponse({ error: "Invalid or missing time slot" }, 400);
@@ -1258,11 +1307,18 @@ async function handleBookingCreate(request, env) {
     // a transient error here.
   }
 
+  // Client-portal bookings (amEmail) are an existing client meeting with
+  // their own account manager, not a first-touch sales call - label and
+  // source note differ accordingly, everything else about the booking
+  // (calendar write, notification email) is identical either way.
+  const isClientBooking = !!amEmail;
   const eventBody = {
-    summary: `Discovery Call: ${name}${company ? " (" + company + ")" : ""}`,
+    summary: isClientBooking
+      ? `Client Meeting: ${name}${company ? " (" + company + ")" : ""}`
+      : `Discovery Call: ${name}${company ? " (" + company + ")" : ""}`,
     description: notes
-      ? `Booked via the Revital Productions booking page.\n\nNotes from ${name}:\n${notes}`
-      : "Booked via the Revital Productions booking page.",
+      ? `Booked via ${isClientBooking ? "the client portal" : "the Revital Productions booking page"}.\n\nNotes from ${name}:\n${notes}`
+      : `Booked via ${isClientBooking ? "the client portal" : "the Revital Productions booking page"}.`,
     start: { dateTime: start.toISOString(), timeZone: BOOKING_TIMEZONE },
     end: { dateTime: end.toISOString(), timeZone: BOOKING_TIMEZONE },
     attendees: [{ email: person.email }, { email, displayName: name }],
@@ -1289,10 +1345,10 @@ async function handleBookingCreate(request, env) {
       const humanTime = new Intl.DateTimeFormat("en-US", {
         timeZone: BOOKING_TIMEZONE, weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short"
       }).format(start);
-      const subject = `New booking: ${name}${company ? " (" + company + ")" : ""} - ${humanTime}`;
+      const subject = `New ${isClientBooking ? "client meeting" : "booking"}: ${name}${company ? " (" + company + ")" : ""} - ${humanTime}`;
       const html = `
         <div style="font-family: sans-serif; max-width: 560px;">
-          <h2 style="margin:0 0 12px;">New Discovery Call Booked</h2>
+          <h2 style="margin:0 0 12px;">New ${isClientBooking ? "Client Meeting" : "Discovery Call"} Booked</h2>
           <p><strong>${escapeHtmlServer(name)}</strong> booked a call with <strong>${escapeHtmlServer(person.name)}</strong> for <strong>${humanTime}</strong>.</p>
           <table style="font-size:14px; margin:16px 0;">
             <tr><td style="color:#64748b; padding-right:12px;">Email</td><td>${escapeHtmlServer(email)}</td></tr>
@@ -1300,7 +1356,7 @@ async function handleBookingCreate(request, env) {
             ${notes ? `<tr><td style="color:#64748b; padding-right:12px; vertical-align:top;">Notes</td><td>${escapeHtmlServer(notes)}</td></tr>` : ""}
           </table>
           ${evData.htmlLink ? `<p><a href="${evData.htmlLink}">View on Google Calendar</a></p>` : ""}
-          <p style="font-size:12px; color:#94a3b8; margin-top:24px;">Booked via book.revitalproductions.com.</p>
+          <p style="font-size:12px; color:#94a3b8; margin-top:24px;">Booked via ${isClientBooking ? "the client portal" : "book.revitalproductions.com"}.</p>
         </div>
       `;
       const text = `New booking: ${name}${company ? " (" + company + ")" : ""}\nWith: ${person.name}\nWhen: ${humanTime}\nEmail: ${email}\n${notes ? "Notes: " + notes + "\n" : ""}${evData.htmlLink ? "\n" + evData.htmlLink : ""}`;

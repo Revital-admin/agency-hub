@@ -211,9 +211,19 @@ function renderPortal() {
   } else {
     amPhone.style.display = "none";
   }
+  // "Book a Call" - auto-built from the assigned account manager's email
+  // via book.revitalproductions.com (domain-wide-delegation Calendar
+  // booking, see _worker.js's /api/booking/* routes), so this works for
+  // whoever is currently assigned as this client's AM with no manual
+  // link setup per client. calendlyLink remains a manual override if one
+  // is ever set (this field predates the custom booking system and was
+  // never actually populated, but left as an escape hatch).
   if (config.calendlyLink) {
     btnBookCall.style.display = "inline-flex";
     btnBookCall.href = config.calendlyLink;
+  } else if (config.accountManagerEmail) {
+    btnBookCall.style.display = "inline-flex";
+    btnBookCall.href = "https://book.revitalproductions.com/booking/?amEmail=" + encodeURIComponent(config.accountManagerEmail);
   }
 
   // Iframes setup

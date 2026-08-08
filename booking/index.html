@@ -280,6 +280,16 @@
     el("pageSubtitle").textContent = `Thanks, ${prefill.name.split(" ")[0]} — just pick a time that works for you and we'll send the calendar invite.`;
   }
 
+  // ── Client Portal -> "book your account manager" flow ──
+  // The client portal links here with ?amEmail=<their assigned AM's
+  // email> instead of a personId - that email is verified server-side
+  // (has to actually be assigned as a real client's account manager in
+  // Client Portal Manager, see findAccountManagerByEmail in _worker.js)
+  // rather than trusted blindly. When present, this skips the roster
+  // entirely and the "who would you like to talk to" step never shows -
+  // there's only ever one right answer for a given client.
+  const clientAmEmail = (qp.get("amEmail") || "").trim();
+
   function fmtDayLabel(dateKey) {
     // dateKey is "YYYY-MM-DD" in the business timezone; render weekday/date
     // labels using the visitor's own local calendar day derived from noon
@@ -293,6 +303,16 @@
   }
 
   async function init() {
+    if (clientAmEmail) {
+      // Client-portal flow: nothing to pick, no roster call needed - go
+      // straight to that person's availability. Their display name comes
+      // back in the availability response itself (personName) since we
+      // don't have a roster entry for them client-side.
+      el("loadMsg").classList.add("hidden");
+      selectPerson({ id: null, amEmail: clientAmEmail, name: null });
+      return;
+    }
+
     try {
       const res = await fetch("/api/booking/roster");
       const data = await res.json();
@@ -341,10 +361,23 @@
     el("slotList").innerHTML = "";
 
     try {
-      const res = await fetch("/api/booking/availability?personId=" + encodeURIComponent(person.id));
+      const qs = person.amEmail
+        ? "amEmail=" + encodeURIComponent(person.amEmail)
+        : "personId=" + encodeURIComponent(person.id);
+      const res = await fetch("/api/booking/availability?" + qs);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load availability");
       availability = data;
+      // amEmail bookings don't know the person's display name up front
+      // (no roster entry client-side) - the server resolves and returns
+      // it, so fill it in now for the "with {name}" labels below.
+      if (data.personName) {
+        person.name = data.personName;
+        if (clientAmEmail) {
+          el("pageTitle").textContent = "Book a Time with " + data.personName;
+          el("pageSubtitle").textContent = "Pick a time that works for you and we'll send a calendar invite right away.";
+        }
+      }
     } catch (e) {
       el("timeMsg").textContent = "Couldn't load availability: " + e.message;
       return;
@@ -417,10 +450,13 @@
     btn.textContent = "Booking...";
 
     try {
+      const targetField = selectedPerson.amEmail
+        ? { amEmail: selectedPerson.amEmail }
+        : { personId: selectedPerson.id };
       const res = await fetch("/api/booking/book", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ personId: selectedPerson.id, startISO: selectedSlotISO, name, email, company, notes })
+        body: JSON.stringify({ ...targetField, startISO: selectedSlotISO, name, email, company, notes })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Booking failed");
