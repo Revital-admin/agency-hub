@@ -87,6 +87,29 @@ export default {
       return handlePipelineSyncClickUp(request, env);
     }
 
+    if (url.pathname === "/api/billing/create-subscription-checkout" && request.method === "POST") {
+      return handleCreateSubscriptionCheckout(request, env);
+    }
+
+    // No Cf-Access-Authenticated-User-Email check here (deliberately,
+    // like /api/booking/* above) - Stripe calls this directly from its
+    // own servers, not through a browser that's been through Cloudflare
+    // Access. Trust here comes entirely from the Stripe-Signature
+    // verification inside the handler (STRIPE_WEBHOOK_SECRET), not from
+    // Access. IMPORTANT: this route must be registered in Stripe as
+    // https://book.revitalproductions.com/api/stripe/webhook, NOT the
+    // hub.revitalproductions.com one - Cloudflare Access protects the
+    // whole hub.* hostname (including every /api/* path on it), so a
+    // request from Stripe's servers would get stopped at the Access
+    // layer before ever reaching this handler. book.* is bound to this
+    // same Worker but sits outside that Access application (see
+    // booking/index.html's header comment for the original reasoning),
+    // so the path resolves the same way there without an Access wall
+    // in front of it.
+    if (url.pathname === "/api/stripe/webhook" && request.method === "POST") {
+      return handleStripeWebhook(request, env);
+    }
+
     // Everything else: serve the static site as before.
     return env.ASSETS.fetch(request);
   }
@@ -1453,6 +1476,204 @@ async function handlePipelineSyncClickUp(request, env) {
   }
 }
 
+// ── Recurring Billing (Stripe Subscriptions) ──
+//
+// Contract & Invoice Tracker's only prior billing mechanism was a
+// manually-pasted Stripe Payment Link (one-time charges) plus a manual
+// "Invoice Paid" toggle - nothing actually pulled a card automatically
+// each month. This adds real Stripe Billing: an admin enters a monthly
+// amount in the Tracker, which creates a Stripe Checkout Session
+// (subscription mode) server-side and returns a link to send the
+// client: they enter their card once on Stripe's own hosted page (this
+// Worker never touches card data), and Stripe charges it automatically
+// every month after that. A webhook keeps each record's billing status
+// in sync with what Stripe actually did (paid/failed/canceled) without
+// anyone checking back manually.
+//
+// Requires two new secrets:
+//   wrangler secret put STRIPE_SECRET_KEY       (sk_test_... to start)
+//   wrangler secret put STRIPE_WEBHOOK_SECRET   (whsec_..., from the
+//     webhook endpoint's signing secret in the Stripe Dashboard)
+
+async function stripeApiRequest(env, path, formParams) {
+  const secretKey = env.STRIPE_SECRET_KEY;
+  if (!secretKey) throw new Error("Server missing STRIPE_SECRET_KEY secret");
+  const res = await fetch(`https://api.stripe.com/v1/${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${secretKey}`, "Content-Type": "application/x-www-form-urlencoded" },
+    body: formParams.toString()
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data.error && data.error.message) || `Stripe API error (${res.status})`);
+  return data;
+}
+
+// ── POST /api/billing/create-subscription-checkout ──
+// Admin-gated (called from inside the Hub, same as the other write
+// routes). Creates a Stripe Checkout Session in subscription mode with
+// an inline dynamic price (price_data) rather than requiring a
+// pre-created Stripe Price object per possible dollar amount - agency
+// retainers are bespoke per client, so a fixed catalog of Prices
+// doesn't fit. Returns the hosted checkout URL to send the client.
+async function handleCreateSubscriptionCheckout(request, env) {
+  const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+  const { recordId, clientName, monthlyAmount, clientEmail } = payload || {};
+  if (!recordId || !clientName || !monthlyAmount) {
+    return jsonResponse({ error: "recordId, clientName, and monthlyAmount are required" }, 400);
+  }
+  const amountCents = Math.round(Number(monthlyAmount) * 100);
+  if (!Number.isFinite(amountCents) || amountCents <= 0) {
+    return jsonResponse({ error: "monthlyAmount must be a positive number" }, 400);
+  }
+
+  const params = new URLSearchParams();
+  params.append("mode", "subscription");
+  params.append("line_items[0][price_data][currency]", "usd");
+  params.append("line_items[0][price_data][product_data][name]", `${clientName} - Monthly Retainer`);
+  params.append("line_items[0][price_data][recurring][interval]", "month");
+  params.append("line_items[0][price_data][unit_amount]", String(amountCents));
+  params.append("line_items[0][quantity]", "1");
+  params.append("success_url", "https://revitalproductions.com/?billing=success");
+  params.append("cancel_url", "https://revitalproductions.com/?billing=canceled");
+  params.append("metadata[hubRecordId]", recordId);
+  params.append("metadata[hubClientName]", clientName);
+  if (clientEmail) params.append("customer_email", clientEmail);
+
+  try {
+    const session = await stripeApiRequest(env, "checkout/sessions", params);
+    return jsonResponse({ ok: true, checkoutUrl: session.url, sessionId: session.id });
+  } catch (e) {
+    return jsonResponse({ error: `Stripe request failed: ${e.message}` }, 500);
+  }
+}
+
+// Verifies Stripe's webhook signature by hand (HMAC-SHA256 over
+// "{timestamp}.{rawBody}", per Stripe's documented scheme) rather than
+// using their Node SDK, which doesn't run in the Workers runtime - same
+// reasoning as every other from-scratch crypto in this file. Rejects
+// anything older than 5 minutes as a basic replay guard.
+async function verifyStripeWebhookSignature(env, rawBody, sigHeader) {
+  const secret = env.STRIPE_WEBHOOK_SECRET;
+  if (!secret) throw new Error("Server missing STRIPE_WEBHOOK_SECRET secret");
+  if (!sigHeader) throw new Error("Missing Stripe-Signature header");
+
+  const parts = {};
+  sigHeader.split(",").forEach(p => {
+    const [k, v] = p.split("=");
+    if (k && v) parts[k] = v;
+  });
+  const timestamp = parts.t;
+  const signature = parts.v1;
+  if (!timestamp || !signature) throw new Error("Malformed Stripe-Signature header");
+
+  const signedPayload = `${timestamp}.${rawBody}`;
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sigBuffer = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(signedPayload));
+  const expectedHex = Array.from(new Uint8Array(sigBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+  if (expectedHex !== signature) throw new Error("Signature mismatch");
+
+  const ageSeconds = Math.abs(Date.now() / 1000 - Number(timestamp));
+  if (ageSeconds > 300) throw new Error("Webhook timestamp too old (possible replay)");
+
+  return JSON.parse(rawBody);
+}
+
+// Applies one Stripe event to the matching Contract & Invoice Tracker
+// record's recurringBilling sub-object. Reads the whole agency/
+// contractInvoices doc, mutates just the one matching record, writes
+// the whole list back - same overwrite shape the Tracker's own
+// saveVersionedAgencyDoc uses, but without that same optimistic-
+// concurrency retry (a genuine small race window against a human
+// editing the Tracker at the exact same instant a webhook lands, judged
+// acceptable given how infrequent both events are - flagging here
+// rather than pretending it's impossible).
+async function applyStripeEventToContractInvoices(env, event) {
+  const relevantTypes = ["checkout.session.completed", "invoice.paid", "invoice.payment_failed", "customer.subscription.deleted"];
+  if (!relevantTypes.includes(event.type)) return;
+
+  const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+  const doc = await firestoreGetDoc(accessToken, projectId, "agency/contractInvoices");
+  const list = (doc && doc.list) || [];
+  const version = (doc && doc.version) || 0;
+
+  const obj = event.data.object;
+  let record = null;
+
+  if (event.type === "checkout.session.completed") {
+    const recordId = obj.metadata && obj.metadata.hubRecordId;
+    record = list.find(r => r.id === recordId);
+    if (record) {
+      record.recurringBilling = record.recurringBilling || {};
+      record.recurringBilling.stripeCustomerId = obj.customer || null;
+      record.recurringBilling.stripeSubscriptionId = obj.subscription || null;
+      record.recurringBilling.status = "active";
+    }
+  } else {
+    // invoice.* events reference the subscription id via obj.subscription;
+    // customer.subscription.deleted's object IS the subscription, so its
+    // own id is what we matched at checkout time.
+    const subId = obj.subscription || obj.id;
+    record = list.find(r => r.recurringBilling && r.recurringBilling.stripeSubscriptionId === subId);
+    if (record) {
+      record.recurringBilling = record.recurringBilling || {};
+      if (event.type === "invoice.paid") {
+        record.recurringBilling.status = "active";
+        record.recurringBilling.lastPaymentDate = new Date().toISOString().slice(0, 10);
+        record.recurringBilling.lastPaymentStatus = "paid";
+      } else if (event.type === "invoice.payment_failed") {
+        record.recurringBilling.status = "past_due";
+        record.recurringBilling.lastPaymentStatus = "failed";
+      } else if (event.type === "customer.subscription.deleted") {
+        record.recurringBilling.status = "canceled";
+      }
+    }
+  }
+
+  if (!record) {
+    console.warn(`Stripe webhook ${event.type}: no matching contract/invoice record found (subscription/record id not on file yet)`);
+    return;
+  }
+
+  await firestoreSetDoc(accessToken, projectId, "agency/contractInvoices", { list, version: version + 1 });
+}
+
+async function handleStripeWebhook(request, env) {
+  const sigHeader = request.headers.get("Stripe-Signature");
+  const rawBody = await request.text();
+
+  let event;
+  try {
+    event = await verifyStripeWebhookSignature(env, rawBody, sigHeader);
+  } catch (e) {
+    return jsonResponse({ error: `Webhook signature verification failed: ${e.message}` }, 400);
+  }
+
+  try {
+    await applyStripeEventToContractInvoices(env, event);
+  } catch (e) {
+    // Still acknowledge with 200 below - a bug in our own processing
+    // shouldn't make Stripe retry-storm this event. Logged here for
+    // manual follow-up.
+    console.error("Stripe webhook processing failed:", e);
+  }
+
+  return jsonResponse({ received: true });
+}
+
 // Converts Firestore REST API's typed-value JSON shape ({fields: {name:
 // {stringValue: "..."}}}) into a plain JS object/array - the REST API
 // never returns plain JSON, everything is wrapped like this.
@@ -1492,6 +1713,48 @@ async function firestoreGetDoc(accessToken, projectId, relativePath) {
 function firestoreDocToJs(doc) {
   if (!doc || !doc.fields) return null;
   return firestoreFieldsToJs(doc.fields);
+}
+
+// ── Firestore REST write path (jsToFirestoreValue etc.) ──
+// Everything above this point in the file only ever READS Firestore
+// (health digest, account-manager lookup) - the Stripe webhook handler
+// is the first thing that needs the Worker to write back, so this is
+// the inverse of firestoreValueToJs/firestoreFieldsToJs above: plain JS
+// -> Firestore's typed-value wire format.
+function jsToFirestoreValue(v) {
+  if (v === null || v === undefined) return { nullValue: null };
+  if (typeof v === "string") return { stringValue: v };
+  if (typeof v === "boolean") return { booleanValue: v };
+  if (typeof v === "number") {
+    return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+  }
+  if (Array.isArray(v)) return { arrayValue: { values: v.map(jsToFirestoreValue) } };
+  if (typeof v === "object") return { mapValue: { fields: jsToFirestoreFields(v) } };
+  return { stringValue: String(v) };
+}
+function jsToFirestoreFields(obj) {
+  const out = {};
+  for (const key of Object.keys(obj || {})) out[key] = jsToFirestoreValue(obj[key]);
+  return out;
+}
+
+// PATCH without an updateMask replaces the whole document - same
+// full-overwrite semantics the client-side saveVersionedAgencyDoc uses,
+// kept consistent deliberately so a doc looks the same shape regardless
+// of whether a human or this Worker wrote it last.
+async function firestoreSetDoc(accessToken, projectId, relativePath, dataObj) {
+  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${relativePath}`;
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ fields: jsToFirestoreFields(dataObj) })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = (data.error && data.error.message) || `Firestore write failed (${res.status}) for ${relativePath}`;
+    throw new Error(msg);
+  }
+  return data;
 }
 
 // Mirrors app.js's rebuildClientsDbFromShards: clientsDb is bin-packed

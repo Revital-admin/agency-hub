@@ -307,6 +307,52 @@ function findRecord(id) {
   return records.find(r => r.id === id);
 }
 
+// ── Recurring Billing cell ──
+// Real Stripe Billing (see /api/billing/create-subscription-checkout
+// and /api/stripe/webhook in _worker.js), separate from the existing
+// one-time invoiceAmount/invoiceStatus fields above - a client can be on
+// a monthly subscription independent of whatever one-off invoice is
+// also being tracked. Not set up yet -> small inline amount input +
+// button. Once a checkout link exists but hasn't been paid -> "Link
+// Sent" badge + copyable link. Once Stripe confirms a payment via
+// webhook -> Active/Past Due/Canceled badge, no more admin action
+// needed unless it lapses.
+const BILLING_STATUS_LABELS = {
+  active: 'Active',
+  past_due: 'Payment Failed',
+  canceled: 'Canceled',
+  pending_checkout: 'Link Sent'
+};
+
+function billingCellHtml(r) {
+  const rb = r.recurringBilling;
+  if (!rb || !rb.status || rb.status === 'not_started') {
+    return `
+      <div class="billing-setup-form">
+        <input type="text" inputmode="decimal" class="billing-amount-input" data-id="${r.id}" placeholder="Monthly $" value="${(r.recurringPendingAmount || '').toString().replace(/"/g, '&quot;')}">
+        <button class="billing-setup-btn" data-id="${r.id}">Send Billing Link</button>
+        <div class="billing-error hidden" data-id="${r.id}"></div>
+      </div>
+    `;
+  }
+
+  const label = BILLING_STATUS_LABELS[rb.status] || rb.status;
+  const amountText = rb.monthlyAmount ? formatCurrency(Number(rb.monthlyAmount)) + '/mo' : '';
+  const badge = `<span class="billing-badge status-${rb.status}">${label}${amountText ? ' &middot; ' + amountText : ''}</span>`;
+
+  if (rb.status === 'pending_checkout' && rb.checkoutUrl) {
+    return `
+      <div>
+        ${badge}
+        <div class="billing-link-row">
+          <button class="billing-copy-link-btn" data-url="${rb.checkoutUrl}">Copy billing link</button>
+        </div>
+      </div>
+    `;
+  }
+  return badge;
+}
+
 function renderTable() {
   const changed = reconcileOverdueInvoices();
   if (changed) persist();
@@ -338,6 +384,7 @@ function renderTable() {
       <td><input type="text" inputmode="decimal" class="amount-input" data-id="${r.id}" value="${(r.invoiceAmount || '').replace(/"/g, '&quot;')}" placeholder="0.00"></td>
       <td><input type="date" class="due-date-input" data-id="${r.id}" value="${r.invoiceDueDate || ''}"></td>
       <td class="date-cell">${r.invoicePaidDate || '--'}</td>
+      <td class="billing-cell">${billingCellHtml(r)}</td>
       <td><input type="text" class="notes-input" data-id="${r.id}" value="${(r.notes || '').replace(/"/g, '&quot;')}" placeholder="Notes..."></td>
       <td>
         <div class="row-actions">
@@ -437,6 +484,83 @@ function wireRowListeners() {
   document.querySelectorAll('.send-contract-btn').forEach(btn => {
     btn.addEventListener('click', () => openSendContractPanel(btn.getAttribute('data-id')));
   });
+
+  document.querySelectorAll('.billing-amount-input').forEach(inp => {
+    if (typeof attachCommaFormatting === 'function') attachCommaFormatting(inp);
+    inp.addEventListener('input', () => {
+      const r = findRecord(inp.getAttribute('data-id'));
+      if (r) r.recurringPendingAmount = inp.value; // not persisted on its own - just remembered for the button click below, cleared once billing actually starts
+    });
+  });
+
+  document.querySelectorAll('.billing-setup-btn').forEach(btn => {
+    btn.addEventListener('click', () => sendBillingLink(btn.getAttribute('data-id')));
+  });
+
+  document.querySelectorAll('.billing-copy-link-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const url = btn.getAttribute('data-url');
+      try {
+        await navigator.clipboard.writeText(url);
+        const original = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = original; }, 1500);
+      } catch (e) {
+        if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', "Couldn't copy - here's the link: " + url);
+      }
+    });
+  });
+}
+
+// Creates a Stripe Checkout Session (subscription mode) for this record
+// via the Worker and stores the resulting link/status - see
+// /api/billing/create-subscription-checkout in _worker.js. The actual
+// "did they pay" status update comes later, asynchronously, from Stripe's
+// webhook - this only gets as far as "a link exists to send them."
+async function sendBillingLink(id) {
+  const r = findRecord(id);
+  if (!r) return;
+
+  const row = document.querySelector(`.billing-setup-btn[data-id="${id}"]`);
+  const errorEl = document.querySelector(`.billing-error[data-id="${id}"]`);
+  const amountRaw = (r.recurringPendingAmount || '').toString().replace(/,/g, '').trim();
+  const amount = parseFloat(amountRaw);
+
+  if (errorEl) { errorEl.textContent = ''; errorEl.classList.add('hidden'); }
+
+  if (!amount || amount <= 0) {
+    if (errorEl) { errorEl.textContent = 'Enter a monthly amount first.'; errorEl.classList.remove('hidden'); }
+    return;
+  }
+
+  if (row) { row.disabled = true; row.textContent = 'Sending...'; }
+
+  try {
+    const res = await fetch('/api/billing/create-subscription-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recordId: r.id, clientName: r.clientName, monthlyAmount: amount })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+
+    r.recurringBilling = {
+      status: 'pending_checkout',
+      monthlyAmount: amount,
+      checkoutUrl: data.checkoutUrl,
+      stripeCustomerId: null,
+      stripeSubscriptionId: null
+    };
+    delete r.recurringPendingAmount;
+    await persist();
+    renderTable();
+    if (isEmbedded && window.parent.showBanner) {
+      window.parent.showBanner('success', `Billing link created for ${r.clientName} - copy it from the Recurring Billing column to send.`);
+    }
+  } catch (e) {
+    if (row) { row.disabled = false; row.textContent = 'Send Billing Link'; }
+    if (errorEl) { errorEl.textContent = e.message; errorEl.classList.remove('hidden'); }
+  }
 }
 
 async function resetCycle(id) {
