@@ -760,11 +760,13 @@ function setAdminAnnotateTool(tool) {
 function renderAdminAnnotations() {
   const current = currentAdminAnnotationImage();
   const svg = el('mbAdminAnnotationLayer');
-  if (!svg || !current) return;
+  const pinsLayer = el('mbAdminAnnotationPinsLayer');
+  if (!svg || !pinsLayer || !current) return;
 
   const annotations = getAdminImageAnnotations(current.id);
   svg.innerHTML = '';
   svg.setAttribute('viewBox', '0 0 100 100');
+  pinsLayer.innerHTML = '';
 
   annotations.forEach((a, idx) => {
     const num = idx + 1;
@@ -780,21 +782,14 @@ function renderAdminAnnotations() {
       ellipse.addEventListener('click', () => scrollToAdminAnnotationItem(a.id));
       svg.appendChild(ellipse);
     } else {
-      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      g.setAttribute('class', 'moodboard-annotation-pin' + (isAdmin ? ' admin-note' : ''));
-      g.addEventListener('click', () => scrollToAdminAnnotationItem(a.id));
-      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      circle.setAttribute('cx', a.x);
-      circle.setAttribute('cy', a.y);
-      circle.setAttribute('r', '3.2');
-      circle.setAttribute('vector-effect', 'non-scaling-stroke');
-      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      text.setAttribute('x', a.x);
-      text.setAttribute('y', a.y);
-      text.textContent = String(num);
-      g.appendChild(circle);
-      g.appendChild(text);
-      svg.appendChild(g);
+      const marker = document.createElement('div');
+      marker.className = 'moodboard-pin-marker' + (isAdmin ? ' admin-note' : '');
+      marker.style.left = a.x + '%';
+      marker.style.top = a.y + '%';
+      marker.textContent = String(num);
+      marker.title = a.comment;
+      marker.addEventListener('click', () => scrollToAdminAnnotationItem(a.id));
+      pinsLayer.appendChild(marker);
     }
   });
 

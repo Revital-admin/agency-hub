@@ -1556,28 +1556,51 @@ body {
   height: 100%;
   pointer-events: none;
 }
-.moodboard-annotation-pin {
-  cursor: pointer;
-  pointer-events: all;
-}
-.moodboard-annotation-pin circle { fill: #f5805f; stroke: #1a1408; stroke-width: 1.5; }
-.moodboard-annotation-pin text {
-  fill: #1a1408;
-  font-size: 10px;
-  font-weight: 700;
-  text-anchor: middle;
-  dominant-baseline: central;
-  pointer-events: none;
-}
 .moodboard-annotation-circle {
-  fill: rgba(245, 128, 95, 0.12);
+  fill: rgba(245, 128, 95, 0.14);
   stroke: #f5805f;
   stroke-width: 2;
   cursor: pointer;
   pointer-events: all;
+  transition: fill 0.15s;
 }
-.moodboard-annotation-circle.admin-note { stroke: #7dd3fc; fill: rgba(125, 211, 252, 0.1); }
-.moodboard-annotation-pin.admin-note circle { fill: #7dd3fc; }
+.moodboard-annotation-circle:hover { fill: rgba(245, 128, 95, 0.24); }
+.moodboard-annotation-circle.admin-note { stroke: #7dd3fc; fill: rgba(125, 211, 252, 0.12); }
+.moodboard-annotation-circle.admin-note:hover { fill: rgba(125, 211, 252, 0.22); }
+
+/* Pins are plain HTML, not SVG, deliberately - the SVG layer's viewBox
+   gets stretched non-uniformly (preserveAspectRatio="none") to match
+   whatever aspect ratio the image itself is, which is correct for circle
+   annotations (an area SHOULD stay proportional to the image) but was
+   turning pin badges into squashed ellipses with illegible numbers on
+   any non-square image. A real DOM element with a fixed pixel size and
+   percentage-based left/top stays a perfect circle regardless. */
+.moodboard-annotation-pins-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.moodboard-pin-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #f5805f;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1a1408;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.moodboard-pin-marker:hover { transform: translate(-50%, -50%) scale(1.2); box-shadow: 0 3px 8px rgba(0,0,0,0.55); }
+.moodboard-pin-marker.admin-note { background: #7dd3fc; }
 
 .moodboard-annotation-list {
   width: 100%;

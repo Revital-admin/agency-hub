@@ -1723,16 +1723,21 @@ function setAnnotateTool(tool) {
 function renderAnnotations() {
   const current = currentAnnotationImage();
   const svg = document.getElementById("moodboardAnnotationLayer");
-  if (!svg || !current) return;
+  const pinsLayer = document.getElementById("moodboardAnnotationPinsLayer");
+  if (!svg || !pinsLayer || !current) return;
 
   const annotations = getImageAnnotations(current.id);
   svg.innerHTML = "";
   svg.setAttribute("viewBox", "0 0 100 100");
+  pinsLayer.innerHTML = "";
 
   annotations.forEach((a, idx) => {
     const num = idx + 1;
     const isAdmin = a.author === "admin";
     if (a.type === "circle") {
+      // SVG, percentage viewBox stretched to the image's own aspect
+      // ratio - correct here, since a circled AREA should stay
+      // proportional to the image regardless of its shape.
       const ellipse = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
       ellipse.setAttribute("cx", a.x);
       ellipse.setAttribute("cy", a.y);
@@ -1743,21 +1748,17 @@ function renderAnnotations() {
       ellipse.addEventListener("click", () => scrollToAnnotationItem(a.id));
       svg.appendChild(ellipse);
     } else {
-      const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      g.setAttribute("class", "moodboard-annotation-pin" + (isAdmin ? " admin-note" : ""));
-      g.addEventListener("click", () => scrollToAnnotationItem(a.id));
-      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      circle.setAttribute("cx", a.x);
-      circle.setAttribute("cy", a.y);
-      circle.setAttribute("r", "3.2");
-      circle.setAttribute("vector-effect", "non-scaling-stroke");
-      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      text.setAttribute("x", a.x);
-      text.setAttribute("y", a.y);
-      text.textContent = String(num);
-      g.appendChild(circle);
-      g.appendChild(text);
-      svg.appendChild(g);
+      // Plain HTML, not SVG - see the CSS comment on .moodboard-pin-marker
+      // for why (stretched viewBox turns a fixed-radius SVG circle into
+      // an ellipse on any non-square image; a real DOM element doesn't).
+      const marker = document.createElement("div");
+      marker.className = "moodboard-pin-marker" + (isAdmin ? " admin-note" : "");
+      marker.style.left = a.x + "%";
+      marker.style.top = a.y + "%";
+      marker.textContent = String(num);
+      marker.title = a.comment;
+      marker.addEventListener("click", () => scrollToAnnotationItem(a.id));
+      pinsLayer.appendChild(marker);
     }
   });
 
