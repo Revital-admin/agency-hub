@@ -65,6 +65,16 @@ export default {
       return handleMarketingNews(request, env, ctx);
     }
 
+    // Real, per-section-filtered clientsDb access for restricted Team
+    // Access users - see the big comment above CLIENT_FIELD_SECTIONS
+    // below for why this exists and how it relates to firestore.rules'
+    // own (coarser, all-or-nothing) gate on clientsDb.
+    if (url.pathname === "/api/restricted-client-data") {
+      if (request.method === "GET") return handleRestrictedClientData(request, env);
+      if (request.method === "POST") return handleRestrictedClientDataWrite(request, env);
+      return jsonResponse({ error: "Method not allowed" }, 405);
+    }
+
     // ── Prospect Booking (book.revitalproductions.com, see /booking/) ──
     // Deliberately no Cf-Access-Authenticated-User-Email check on these
     // three - unlike every other /api/* route above, this one has to work
@@ -1858,6 +1868,243 @@ async function fetchAllClientsFromFirestore(accessToken, projectId) {
     if (shard) Object.assign(merged, shard);
   }
   return merged;
+}
+
+// ── Restricted Client Data (Team Access real section-level enforcement) ──
+//
+// firestore.rules' gate on clientsDb is all-or-nothing: a restricted user
+// either has SOME reason to be in account/client data (any non-Agency-
+// Globals section) and gets the WHOLE bundled document, or has none and
+// is blocked entirely - because clientsDb-shard-N packs nearly every
+// tool's per-client fields into one object per client, and Firestore
+// rules can only grant or deny a whole document, never individual fields
+// within one. These two endpoints are the actual per-section slice: once
+// app.js routes restricted users through them instead of talking to
+// Firestore directly (separate change, tested independently first - see
+// the Aug 2026 Team Access audit), a restricted teammate only ever sees
+// or touches the fields their granted sections cover.
+//
+// CLIENT_FIELD_SECTIONS is a third copy of the same section
+// classification as SECTION_DEFS (team-access-manager/js/app.js) and
+// nonGlobalsSections (firestore.rules) - keep all three in sync if a
+// tool's data moves sections or a new top-level client field is added.
+// Built by hand by matching every field in createClientBlankState and
+// every field syncPublicPortalDocs projects to the client-facing doc
+// (both in app.js) against which <li class="nav-section"
+// data-section="..."> its owning tool sits under in index.html. A field
+// left off this map is simply never shown to (or writable by) a
+// restricted user - fails closed, not open - until it's added here.
+const ALWAYS_VISIBLE_CLIENT_FIELDS = ["name", "createdDate", "targetUrl", "clickupUrl", "onboardingDate"];
+
+const CLIENT_FIELD_SECTIONS = {
+  onboardingChecklist: "core",
+  clientChecklist: "core",
+  brandVault: "core",
+  portalConfig: "core",
+  pendingApprovals: "core",
+  approvalHistory: "core",
+  notifications: "core",
+  lastVisitedAt: "core",
+  portalLastVisitedAt: "core",
+  lastEditedBy: "core",
+  lastEditedByEmail: "core",
+  lastEditedAt: "core",
+
+  paidAdsTracker: "ad-accounts-access",
+
+  reportArchive: "reporting-health",
+  report: "reporting-health",
+
+  brandKit: "content-creation",
+  moodBoards: "content-creation",
+  moodBoardViews: "content-creation",
+  moodBoardStyleFeedback: "content-creation",
+  moodBoardAnnotations: "content-creation",
+  brandRoadmap: "content-creation",
+  copywriting: "content-creation",
+  creativeBrief: "content-creation",
+  contentStrategy: "content-creation",
+
+  campaignLaunch: "account-ops",
+  meetingNotes: "account-ops",
+
+  uxuiAudit: "audits",
+  seoAudit: "audits",
+  paidAdsAudit: "audits",
+  emailAudit: "audits",
+  socialAudit: "audits",
+  contentAudit: "audits",
+  emailStrategy: "audits",
+
+  competitorAnalysis: "strategy-competition",
+  strategyBuilder: "strategy-competition",
+  webComp: "strategy-competition",
+  socialComp: "strategy-competition",
+
+  proposal: "sales-pipeline",
+  roi: "sales-pipeline",
+  signature: "sales-pipeline",
+  billingSummary: "sales-pipeline",
+
+  testimonialSubmission: "retention-social-proof",
+  referralSummary: "retention-social-proof"
+};
+
+// Mirrors effectiveSections() in team-access-manager/js/app.js and
+// firestore.rules' own copy of the same logic - see the comment on
+// agency/teamAccess there for the shape of the doc this reads.
+async function resolveRestrictionForEmail(accessToken, projectId, email) {
+  const teamAccess = await firestoreGetDoc(accessToken, projectId, "agency/teamAccess");
+  const normalizedEmail = (email || "").toLowerCase();
+  const users = (teamAccess && teamAccess.users) || {};
+  if (!Object.prototype.hasOwnProperty.call(users, normalizedEmail)) {
+    return { isRestricted: false, sections: null };
+  }
+  const entry = users[normalizedEmail] || {};
+  const roleTiers = (teamAccess && teamAccess.roleTiers) || {};
+  const sections = (entry.role && roleTiers[entry.role])
+    ? (roleTiers[entry.role].sections || [])
+    : (Array.isArray(entry.sections) ? entry.sections : []);
+  return { isRestricted: true, sections };
+}
+
+// Keeps only the fields a restricted user's granted sections cover (plus
+// the always-visible identity fields), for one client object.
+function filterClientBySections(client, sections) {
+  const sectionSet = new Set(sections || []);
+  const out = {};
+  ALWAYS_VISIBLE_CLIENT_FIELDS.forEach(key => {
+    if (client[key] !== undefined) out[key] = client[key];
+  });
+  Object.keys(client).forEach(key => {
+    if (out[key] !== undefined) return; // already included above
+    const section = CLIENT_FIELD_SECTIONS[key];
+    if (section && sectionSet.has(section)) out[key] = client[key];
+  });
+  return out;
+}
+
+// ── GET /api/restricted-client-data ──
+// Returns every client, filtered to the caller's granted sections. An
+// unrestricted admin gets the full, unfiltered roster back (harmless -
+// they already have direct Firestore access to all of it today), so this
+// endpoint behaves consistently no matter who calls it.
+async function handleRestrictedClientData(request, env) {
+  const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const { isRestricted, sections } = await resolveRestrictionForEmail(accessToken, projectId, accessEmail);
+    const allClients = await fetchAllClientsFromFirestore(accessToken, projectId);
+
+    if (!isRestricted) {
+      return jsonResponse({ restricted: false, sections: null, clients: allClients }, 200, { "Cache-Control": "no-store" });
+    }
+
+    const filtered = {};
+    Object.keys(allClients).forEach(name => {
+      filtered[name] = filterClientBySections(allClients[name], sections);
+    });
+    return jsonResponse({ restricted: true, sections, clients: filtered }, 200, { "Cache-Control": "no-store" });
+  } catch (e) {
+    console.error("restricted-client-data read failed:", e);
+    return jsonResponse({ error: "Request failed: " + e.message }, 500);
+  }
+}
+
+// ── POST /api/restricted-client-data ──
+// Body: { clientName: string, fields: { fieldName: value, ... } }
+// Validates every key in `fields` is one this caller's granted sections
+// are allowed to touch, then merges just those fields into that client's
+// real record server-side - the caller never needs (and for a restricted
+// user, never has) the rest of that client's document in memory to save
+// safely. Rejects the whole request if ANY field falls outside what's
+// allowed, rather than silently dropping just the bad ones - a partial
+// silent drop would look like a successful save while quietly losing
+// data.
+async function handleRestrictedClientDataWrite(request, env) {
+  const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+  const { clientName, fields } = payload || {};
+  if (!clientName || !fields || typeof fields !== "object" || Array.isArray(fields)) {
+    return jsonResponse({ error: "clientName and fields (object) are required" }, 400);
+  }
+
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const { isRestricted, sections } = await resolveRestrictionForEmail(accessToken, projectId, accessEmail);
+    const sectionSet = new Set(sections || []);
+
+    const requestedKeys = Object.keys(fields);
+
+    // Identity fields (name, createdDate, etc.) are never writable through
+    // this endpoint at all, restricted or not - renaming a client or
+    // changing its creation date isn't a per-section action, and a merge-
+    // into-shard endpoint like this one is the wrong tool for it.
+    const identityFieldsRequested = requestedKeys.filter(key => ALWAYS_VISIBLE_CLIENT_FIELDS.includes(key));
+    if (identityFieldsRequested.length) {
+      return jsonResponse({ error: "These fields can't be changed through this endpoint: " + identityFieldsRequested.join(", ") }, 403);
+    }
+
+    const disallowed = requestedKeys.filter(key => {
+      const section = CLIENT_FIELD_SECTIONS[key];
+      if (!section) return true; // unclassified field - fail closed
+      if (!isRestricted) return false; // unrestricted admin: any classified field is fine
+      return !sectionSet.has(section);
+    });
+    if (disallowed.length) {
+      return jsonResponse({ error: "Not permitted to write: " + disallowed.join(", ") }, 403);
+    }
+
+    // Locate which shard this client lives in, read that ONE shard fresh,
+    // merge in just the permitted fields for this one client, write the
+    // whole shard back - the same full-shard-overwrite semantics
+    // commitDatabaseToCloud already uses client-side (see app.js), just
+    // scoped to one shard instead of all of them, and without needing
+    // this caller to have had the rest of the shard's other clients in
+    // memory at all. NOTE: there's a small unguarded race window between
+    // this read and the write below if two saves land on the same shard
+    // at nearly the same instant (no version check like
+    // commitDatabaseToCloud's clientsDbDocVersion guard) - acceptable for
+    // this team's size and write frequency today, but worth adding if
+    // restricted-user write volume ever grows.
+    const meta = await firestoreGetDoc(accessToken, projectId, "agency/clientsDbShardMeta");
+    const shardCount = meta && typeof meta.count === "number" ? meta.count : 0;
+
+    let targetShardIndex = -1;
+    let targetShardData = null;
+    for (let i = 0; i < shardCount; i++) {
+      const shard = await firestoreGetDoc(accessToken, projectId, `agency/clientsDb-shard-${i}`);
+      if (shard && Object.prototype.hasOwnProperty.call(shard, clientName)) {
+        targetShardIndex = i;
+        targetShardData = shard;
+        break;
+      }
+    }
+    if (targetShardIndex === -1) {
+      return jsonResponse({ error: `Client "${clientName}" not found` }, 404);
+    }
+
+    targetShardData[clientName] = Object.assign({}, targetShardData[clientName], fields);
+    await firestoreSetDoc(accessToken, projectId, `agency/clientsDb-shard-${targetShardIndex}`, targetShardData);
+
+    return jsonResponse({ success: true }, 200, { "Cache-Control": "no-store" });
+  } catch (e) {
+    console.error("restricted-client-data write failed:", e);
+    return jsonResponse({ error: "Request failed: " + e.message }, 500);
+  }
 }
 
 async function fetchRevisionRecords(accessToken, projectId) {
