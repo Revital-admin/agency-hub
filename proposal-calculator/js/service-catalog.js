@@ -567,6 +567,41 @@ const SERVICE_CATALOG = [
     ]
   },
   {
+    "category": "🎥 Video & Production",
+    "services": [
+      {
+        "name": "Half-Day Shoot (up to ~5 hrs, single location)",
+        "defaultPrice": 750,
+        "defaultFeeType": "setup",
+        "defaultCost": 300
+      },
+      {
+        "name": "Full-Day Shoot (8-10 hrs, up to 2 setups/locations)",
+        "defaultPrice": 1400,
+        "defaultFeeType": "setup",
+        "defaultCost": 560
+      },
+      {
+        "name": "Brand Video Package (shoot + edit, 1 hero video + 3-5 cutdowns)",
+        "defaultPrice": 2800,
+        "defaultFeeType": "setup",
+        "defaultCost": 1120
+      },
+      {
+        "name": "Live Event AV Package (sound + technician, half-day event)",
+        "defaultPrice": 1200,
+        "defaultFeeType": "setup",
+        "defaultCost": 480
+      },
+      {
+        "name": "Video Editing (post-production only, client-provided footage)",
+        "defaultPrice": 450,
+        "defaultFeeType": "setup",
+        "defaultCost": 180
+      }
+    ]
+  },
+  {
     "category": "🎨 Branding & Design",
     "services": [
       {
