@@ -40,23 +40,6 @@ service cloud.firestore {
     // devtools (or just calling the Firebase SDK directly) bypassed it
     // completely.
     //
-    // Firestore rules are document-level, not field-level: they can grant
-    // or deny a whole document, but can't hand back "only these fields"
-    // of one. Team Access's 11 sections are a UI-level split within
-    // documents that mix many sections' data together (clientsDb-shard-N
-    // holds nearly every tool's per-client fields in one object per
-    // client), so true per-section slicing at this layer isn't possible
-    // without routing restricted users' reads through a server-side
-    // filter that classifies every field of every tool by section - a
-    // much larger project, deliberately not built here. What IS
-    // enforceable at this layer, and what this adds: a
-    // restricted teammate with NONE of the relevant sections is now
-    // actually blocked at the database level, not just steered around it
-    // in the UI. Someone with at least one relevant section still gets
-    // the whole document once past the gate (same as today) - the Team
-    // Access UI's finer section list is what governs what they actually
-    // see and use inside the Hub.
-    //
     // Mirrors effectiveSections() in team-access-manager/js/app.js as
     // closely as rules syntax allows - keep both in sync if that logic
     // changes.
@@ -80,6 +63,13 @@ service cloud.firestore {
         ? roleTiers[entry.role].get('sections', [])
         : entry.get('sections', []);
     }
+    // True if the requester isn't restricted at all, or is restricted but
+    // still has the given section. The one real per-section gate: usable
+    // wherever a document belongs cleanly to a single section (see
+    // docSectionMap below).
+    function hasSection(name) {
+      return !isRestricted() || name in effectiveSections();
+    }
     // Every section key except Agency Globals (see SECTION_DEFS in
     // team-access-manager/js/app.js) - kept in sync manually, same as
     // that file's own comment about the July 2026 sidebar reorg.
@@ -89,16 +79,56 @@ service cloud.firestore {
               'sales-pipeline', 'retention-social-proof'];
     }
     // True for anyone with at least one reason to be in account/client
-    // data at all - the all-or-nothing gate described above.
+    // data at all. This is the fallback for clientsDb and anything not
+    // explicitly classified below: clientsDb-shard-N bundles nearly every
+    // section's per-client fields (onboarding, mood boards, brand kit,
+    // meeting notes, approvals, audits, competitor grids, etc.) into one
+    // object per client, and Firestore rules are document-level, not
+    // field-level - they can grant or deny a whole document but can't
+    // hand back "only these fields" of one. Slicing that bundle by
+    // section would need a server-side filter that classifies every field
+    // of every tool - a much larger project, not built here. What this
+    // gate DOES do: a restricted teammate with NONE of these sections is
+    // now actually blocked from clientsDb at the database level, not just
+    // steered around it in the UI. Someone with at least one such section
+    // still gets the whole document once past the gate (same as today).
     function hasAccountDataAccess() {
       return !isRestricted() || effectiveSections().hasAny(nonGlobalsSections());
     }
-    // Agency Globals (SOP & Wiki Library, Email Template Library) is the
-    // one section that genuinely lives in its own documents rather than
-    // bundled with everything else, so it gets its own real gate instead
-    // of folding into the general one above.
-    function hasAgencyGlobalsAccess() {
-      return !isRestricted() || 'agency-globals' in effectiveSections();
+    // Every standalone agency/* document that lives on its own (not
+    // bundled into clientsDb) and maps cleanly to exactly one Team Access
+    // section, so it CAN get the real per-section gate via hasSection()
+    // above instead of the coarser hasAccountDataAccess() fallback. Kept
+    // in sync by hand against each tool's own doc name and which
+    // <li class="nav-section" data-section="..."> it sits under in
+    // index.html - see the Team Access audit (Aug 2026) for how this list
+    // was built. A tool added later that isn't added here still works,
+    // just falls back to the coarser account-data gate below rather than
+    // 403ing - same fail-safe reasoning as the original blanket rule this
+    // replaced.
+    function docSectionMap() {
+      return {
+        'accessLoginLog': 'ad-accounts-access',
+        'adAccountLog': 'ad-accounts-access',
+        'callSheets': 'production',
+        'rawFootageLog': 'production',
+        'releaseForms': 'production',
+        'runOfShow': 'production',
+        'venueTechSpecs': 'production',
+        'vendorRentalTracker': 'production',
+        'changeOrders': 'account-ops',
+        'hoursLog': 'account-ops',
+        'revisionFeedbackLog': 'account-ops',
+        'teamRoster': 'account-ops',
+        'timelineTemplates': 'account-ops',
+        'coldOutreachSequences': 'sales-pipeline',
+        'contractInvoices': 'sales-pipeline',
+        'packagePresets': 'sales-pipeline',
+        'proposalFollowUps': 'sales-pipeline',
+        'salesPipeline': 'sales-pipeline',
+        'portfolioShowcase': 'retention-social-proof',
+        'referrals': 'retention-social-proof'
+      };
     }
 
     // Covers every document under agency/ (clientsDb, activityLog, and any
@@ -111,7 +141,25 @@ service cloud.firestore {
         // a restricted teammate with any section at all could reach in
         // via devtools and grant themselves more access.
         (document == 'teamAccess' || document == 'teamActivity') ? !isRestricted() :
-        (document.matches('sops-shard-.*') || document == 'sopShardMeta' || document == 'sopChecklistRuns' || document == 'emailTemplates') ? hasAgencyGlobalsAccess() :
+        // Never section-restrictable in the Team Access UI - these four
+        // tools sit in the sidebar footer, outside all 11 <nav-section>
+        // groups, so Team Access can't restrict them for anyone no matter
+        // what sections they're missing. Always available to any admin,
+        // matching what the UI itself promises.
+        (document == 'adminActivityLog' || document == 'businessInsurance' || document == 'servicePricing' || document == 'subscriptionTracker') ? true :
+        // clientsDb and its shards/backups - see hasAccountDataAccess.
+        (document == 'clientsDb' || document.matches('clientsDb-shard-.*') || document.matches('clientsDbBackup-shard-.*') || document == 'clientsDbShardMeta' || document == 'clientsDbBackupShardMeta') ? hasAccountDataAccess() :
+        // Agency Globals' own documents (SOP & Wiki Library, Email
+        // Template Library) - genuinely separable, so a real gate.
+        (document.matches('sops-shard-.*') || document == 'sopShardMeta' || document == 'sopChecklistRuns' || document == 'emailTemplates') ? hasSection('agency-globals') :
+        // Shared by two tools in two different sections (Team Roster's
+        // Contractor Documents and Contract & Invoice Tracker's Contract
+        // Template Library both read/write this) - either grants access.
+        (document == 'contractTemplates') ? (hasSection('account-ops') || hasSection('sales-pipeline')) :
+        // Every other standalone tool document classified above.
+        (document in docSectionMap()) ? hasSection(docSectionMap()[document]) :
+        // Not yet classified - fail safe to the coarser account-data gate
+        // rather than silently 403ing a document nobody's gotten to yet.
         hasAccountDataAccess()
       );
     }
