@@ -464,6 +464,7 @@ let iframeNeedsReload = {
   "tab-brandguidelines": true,
   "tab-moodboard": true,
   "tab-contentcalendar": true,
+  "tab-brandroadmap": true,
 
   // These tool tabs previously had a hardcoded iframe src in index.html and
   // were never wired into the reload system at all, so switching client
@@ -1224,6 +1225,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-moodboard":
       renderMoodBoard();
+      break;
+    case "tab-brandroadmap":
+      renderBrandRoadmap();
       break;
     case "tab-contentcalendar":
       renderContentCalendar();
@@ -2958,6 +2962,9 @@ function renderMeetingNotes() {
 }
 function renderMoodBoard() {
   setIframeAbsoluteSrc('#tab-moodboard iframe', "mood-board-builder/index.html");
+}
+function renderBrandRoadmap() {
+  setIframeAbsoluteSrc('#tab-brandroadmap iframe', "brand-roadmap/index.html");
 }
 function renderContentCalendar() {
   setIframeAbsoluteSrc('#tab-contentcalendar iframe', "content-calendar/index.html");
@@ -5809,6 +5816,14 @@ async function syncPublicPortalDocs(dbSnapshot) {
       // field, so no fold-in-existing-progress step is needed.
       brandKit: client.brandKit || {},
       meetingNotes: client.meetingNotes || [],
+      // Brand Roadmap (see brand-roadmap/js/app.js) - admin-only to
+      // create/edit, same as moodBoards/brandKit above, so no fold-in-
+      // existing-progress step is needed here. The whole object (including
+      // visibleToClient) is carried forward as-is; the Portal is what
+      // decides whether to actually show it, same "send it all, client
+      // hides what isn't shared" pattern already used for moodBoards'
+      // per-board sharedWithClient flag.
+      brandRoadmap: client.brandRoadmap || null,
       // Carried forward as-is (see preservedLastVisitedAt above) - the
       // admin never writes this, only preserves whatever the portal itself
       // already recorded so a Hub save doesn't erase it.

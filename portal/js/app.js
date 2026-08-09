@@ -328,6 +328,9 @@ function renderPortal() {
   // Mood Boards shared by the team
   renderMoodBoards();
 
+  // Brand Roadmap, if the admin has turned it on for this client
+  renderBrandRoadmapView();
+
   // Testimonial request
   renderTestimonialView();
 }
@@ -1480,6 +1483,66 @@ function renderBrandKit() {
   } else {
     logoLink.innerHTML = '';
   }
+}
+
+const ROADMAP_PHASE_STATUS_LABELS = { upcoming: "Upcoming", current: "Current", complete: "Complete" };
+const ROADMAP_INITIATIVE_STATUS_LABELS = { planned: "Planned", "in-progress": "In Progress", done: "Done" };
+
+// Read-only view of the Brand Roadmap built in the Hub's Brand Roadmap
+// tool (see brand-roadmap/js/app.js) - admin-authored, nothing here is
+// ever written back by the client, so this is pure render. Hidden
+// entirely unless the admin has explicitly turned on visibleToClient,
+// same opt-in pattern as a Mood Board's own sharedWithClient flag.
+function renderBrandRoadmapView() {
+  const container = document.getElementById("brandRoadmapContainer");
+  const emptyState = document.getElementById("brandRoadmapEmptyState");
+  const lastReviewedEl = document.getElementById("brandRoadmapLastReviewed");
+  const nav = document.getElementById("navBrandRoadmap");
+  if (!container || !nav) return;
+
+  const roadmap = clientData.brandRoadmap;
+  const phases = roadmap && Array.isArray(roadmap.phases) ? roadmap.phases : [];
+
+  if (!roadmap || !roadmap.visibleToClient || phases.length === 0) {
+    nav.style.display = "none";
+    container.innerHTML = "";
+    if (lastReviewedEl) lastReviewedEl.textContent = "";
+    if (emptyState) emptyState.style.display = "none";
+    return;
+  }
+
+  nav.style.display = "flex";
+  if (emptyState) emptyState.style.display = "none";
+
+  if (lastReviewedEl) {
+    lastReviewedEl.textContent = roadmap.lastReviewedAt
+      ? `Last reviewed ${new Date(roadmap.lastReviewedAt).toLocaleDateString()}`
+      : "";
+  }
+
+  container.innerHTML = phases.map(phase => {
+    const initiatives = Array.isArray(phase.initiatives) ? phase.initiatives : [];
+    const initiativesHtml = initiatives.length
+      ? initiatives.map(init => `
+        <div class="roadmap-initiative-row">
+          <span class="roadmap-channel-chip">${escapeHtml(init.channel || "")}</span>
+          <span class="roadmap-initiative-name">${escapeHtml(init.name || "")}</span>
+          <span class="roadmap-status-badge status-${escapeHtml(init.status || "planned")}">${escapeHtml(ROADMAP_INITIATIVE_STATUS_LABELS[init.status] || init.status || "")}</span>
+        </div>
+      `).join("")
+      : `<p class="roadmap-initiatives-empty">Nothing planned here yet.</p>`;
+
+    return `
+      <div class="roadmap-phase-card status-${escapeHtml(phase.status || "upcoming")}">
+        <div class="roadmap-phase-header">
+          <span class="roadmap-phase-name">${escapeHtml(phase.name || "")}</span>
+          ${phase.timeframe ? `<span class="roadmap-phase-timeframe">${escapeHtml(phase.timeframe)}</span>` : ""}
+          <span class="roadmap-status-badge status-${escapeHtml(phase.status || "upcoming")}">${escapeHtml(ROADMAP_PHASE_STATUS_LABELS[phase.status] || phase.status || "")}</span>
+        </div>
+        <div class="roadmap-initiatives-list">${initiativesHtml}</div>
+      </div>
+    `;
+  }).join("");
 }
 
 function renderMoodBoards() {
