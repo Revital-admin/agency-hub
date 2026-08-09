@@ -4065,6 +4065,10 @@ function saveDatabase() {
     activeClientForEditStamp.lastEditedAt = new Date().toISOString();
     try { renderClientLastEditedNote(); } catch (e) {}
   }
+  // See pendingLocalClientEdits above rebuildClientsDbFromShards - protect
+  // the client actually being edited from getting clobbered by an
+  // unrelated shard update while this save is still in flight.
+  if (activeClientName) pendingLocalClientEdits.add(activeClientName);
   // Second line of defense (see rebuildClientsDbFromShards): never let
   // this overwrite the local cache with a clientsDb we know is still
   // mid-sync. In the normal case clientsDb is never in that state by
@@ -4142,6 +4146,25 @@ let clientsDbAllShardsLoaded = false;
 // just never closed here specifically.
 let clientsDbDocVersion = 0;
 
+// Set of client names with in-memory changes not yet confirmed as saved
+// to the cloud (see saveDatabase, ensureClientPortalListeners' fold-in
+// block, and rebuildClientsDbFromShards below). Needed because
+// rebuildClientsDbFromShards does a full clientsDb = merged reassignment
+// any time ANY shard document changes for ANY reason - including a
+// totally unrelated client's edit landing in the same shard doc, since
+// multiple clients are bin-packed per shard, or another admin's tab
+// saving something else entirely. Without this guard, a fold-in mutation
+// sitting in memory waiting on its own 500ms-debounced save could be
+// silently clobbered by that unrelated shard update if it arrives first
+// - discarding the fold before it's ever written to the cloud. This is
+// what made "already seen" client notifications (mood board notes/
+// ratings) keep reappearing even after being marked read: the fold that
+// was supposed to make the diff-based new-event detection stop firing
+// never actually reached the cloud, so it silently reverted on the next
+// shard snapshot merge and looked new again - with no error, no
+// version-conflict banner, nothing to tip anyone off.
+let pendingLocalClientEdits = new Set();
+
 function getClientsDbShardMetaDocRef() {
   if (!window.firebaseDb || !window.firebaseDoc) return null;
   return window.firebaseDoc(window.firebaseDb, "agency", "clientsDbShardMeta");
@@ -4204,6 +4227,14 @@ function rebuildClientsDbFromShards() {
       Object.assign(merged, clientsDbShardData[i]);
     }
   }
+
+  // Keep whichever clients have an unconfirmed local edit in flight (see
+  // pendingLocalClientEdits above) instead of letting this merge - which
+  // fires on ANY shard change, not just ones related to these clients -
+  // overwrite them with cloud data that doesn't have that edit yet.
+  pendingLocalClientEdits.forEach(name => {
+    if (clientsDb[name]) merged[name] = clientsDb[name];
+  });
 
   const cloudStr = JSON.stringify(merged);
   const localStr = JSON.stringify(clientsDb);
@@ -4292,6 +4323,13 @@ function commitDatabaseToCloud() {
 
   const cleanDb = JSON.parse(JSON.stringify(clientsDb));
   const shards = packClientsDbIntoShards(cleanDb);
+  // Snapshot which clients are pending as of THIS write (see
+  // pendingLocalClientEdits above rebuildClientsDbFromShards) - only these
+  // are guaranteed to be included in cleanDb above. Clearing the whole set
+  // once this write confirms would incorrectly mark any edit made during
+  // the round-trip below as safe, even though it wasn't part of this
+  // write (it'll ride along on the next debounced save instead).
+  const namesPendingAsOfThisWrite = new Set(pendingLocalClientEdits);
 
   // Safety-net backup write moved below (see comment there) - it used to
   // fire here, unconditionally, before the version-conflict check further
@@ -4400,6 +4438,7 @@ function commitDatabaseToCloud() {
     return Promise.all(writes).then(() => {
       resolved = true;
       clientsDbDocVersion = nextVersion;
+      namesPendingAsOfThisWrite.forEach(name => pendingLocalClientEdits.delete(name));
       if (indicator) {
         indicator.innerHTML = "Saved to Cloud ✅";
         setTimeout(() => { indicator.style.opacity = "0"; }, 2000);
@@ -6036,6 +6075,16 @@ function ensureClientPortalListeners() {
         // saveDatabase() does the same instant localStorage write this
         // used to do AND schedules the debounced real cloud commit, so
         // the fold actually sticks from here on.
+        //
+        // Second bug fix, found when the first one wasn't enough: `name`
+        // here is whichever client's portal just fired, which is very
+        // often NOT the admin's currently-active client - saveDatabase()
+        // only marks activeClientName as pending (see pendingLocalClientEdits),
+        // so without this, a fold for a non-active client had no
+        // protection against rebuildClientsDbFromShards clobbering it
+        // before the debounced save below reached the cloud. This is
+        // what let the notification-pile-up bug survive the first fix.
+        pendingLocalClientEdits.add(name);
         saveDatabase();
         try { renderOnboardingChecklist(); } catch (e) {}
         try { renderDashboard(); } catch (e) {}
