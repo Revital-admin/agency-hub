@@ -4412,24 +4412,49 @@ const RESTRICTED_WRITE_IDENTITY_FIELDS = ["name", "createdDate", "targetUrl", "c
 // field neither side actually meant to write).
 function commitRestrictedClientEdits() {
   const indicator = document.getElementById("autosaveIndicator");
-  const names = Array.from(pendingLocalClientEdits);
-  if (!names.length) return;
+  if (!pendingLocalClientEdits.size) return;
 
   if (indicator) {
     indicator.innerHTML = "Syncing... 🔄";
     indicator.style.opacity = "1";
   }
 
+  // Never build a save payload before the first real fetch has told us
+  // what the server actually has - see restrictedClientsDbFirstSyncPromise's
+  // own comment for the incident this specifically closes. If a save
+  // fires before boot's first sync has resolved, wait for it (not just
+  // skip and hope another edit triggers a retry later, the way the
+  // unrestricted path's analogous shard-count guard does - that's fine
+  // there because the debounce is short and edits are frequent, but a
+  // restricted teammate's very first interaction on a fresh load
+  // shouldn't risk silently going nowhere).
+  const ready = restrictedClientsDbFirstSyncPromise || Promise.resolve();
+  ready.then(() => commitRestrictedClientEditsNow()).catch(() => commitRestrictedClientEditsNow());
+}
+
+function commitRestrictedClientEditsNow() {
+  const indicator = document.getElementById("autosaveIndicator");
+  const names = Array.from(pendingLocalClientEdits);
+  if (!names.length) return;
+
   const allowedSet = new Set(restrictedAllowedSections || []);
 
   const writes = names.map(name => {
     const client = clientsDb[name];
     if (!client) return Promise.resolve({ ok: true });
+    const serverClient = restrictedLastServerClientState[name] || {};
     const fields = {};
     Object.keys(client).forEach(key => {
       if (RESTRICTED_WRITE_IDENTITY_FIELDS.indexOf(key) !== -1) return;
       const section = CLIENT_FIELD_SECTIONS_MIRROR[key];
-      if (section && allowedSet.has(section)) fields[key] = client[key];
+      if (!section || !allowedSet.has(section)) return;
+      // Only send fields that actually differ from the last
+      // server-confirmed state for this client - see
+      // restrictedLastServerClientState's own comment above for why this
+      // matters more than it might look like it should.
+      if (JSON.stringify(client[key]) !== JSON.stringify(serverClient[key])) {
+        fields[key] = client[key];
+      }
     });
     if (!Object.keys(fields).length) return Promise.resolve({ ok: true });
     return fetch('/api/restricted-client-data', {
@@ -6448,14 +6473,60 @@ function startUnrestrictedClientsDbSync() {
 
 let restrictedClientsDbPollTimer = null;
 
+// Set once the first /api/restricted-client-data fetch has completed (see
+// startRestrictedClientsDbSync) - commitRestrictedClientEdits awaits this
+// before sending anything. BUG this closes: without it, a save triggered
+// by a user interaction that happens before that first fetch resolves
+// would build its payload from clientsDb as it stood straight out of the
+// instant localStorage-cache boot (loadDatabase's step 1) - which, for a
+// restricted teammate, was never actually filtered to their sections at
+// all (it's whatever this browser last had cached, full data included, or
+// nothing). That's exactly what happened in production: a save landed
+// before the first fetch arrived, its payload's moodBoards field was
+// whatever the stale local cache had (empty), and the server dutifully
+// merged that empty value over a real, populated moodBoards array. See
+// reference-docs/Team_Access_Restricted_Sync_Verification.md.
+let restrictedClientsDbFirstSyncPromise = null;
+
+// The last snapshot actually confirmed by the server for each client,
+// keyed by name - kept separate from `clientsDb` itself (which may have
+// local, not-yet-saved edits layered on top - see the pendingLocalClientEdits
+// preservation below). commitRestrictedClientEdits diffs against this
+// rather than sending everything currently in clientsDb[name], so a field
+// neither the user nor this session actually touched can never be sent
+// back and overwrite whatever's really on the server for it - closes the
+// same class of bug as the first-sync guard above, but for every save
+// after the first one too (e.g. a field that's stale in this browser's
+// copy for some other reason still wouldn't get echoed back, because it'd
+// never differ from what the last successful fetch already confirmed for
+// it... except when it's actually been fetched and genuinely changed by
+// this user, which is exactly the case that should be sent).
+let restrictedLastServerClientState = {};
+
 // Applies one /api/restricted-client-data response (already filtered to
 // the caller's granted sections server-side) as the new clientsDb, same
 // end-of-pipeline steps rebuildClientsDbFromShards uses for the
-// unrestricted path (re-render, re-cache locally).
+// unrestricted path (re-render, re-cache locally, and - critically -
+// protect any client with an edit still in flight from being clobbered by
+// this incoming snapshot, the same guard rebuildClientsDbFromShards itself
+// needed for the identical reason on the unrestricted path; see
+// pendingLocalClientEdits' own comment above rebuildClientsDbFromShards).
 function applyRestrictedClientsDbSnapshot(data) {
   isRestrictedTeamMember = true;
   restrictedAllowedSections = data.sections || [];
-  clientsDb = data.clients || {};
+  const incoming = data.clients || {};
+
+  // Snapshot the server's own copy of each client BEFORE the local-edit
+  // preservation below folds in anything - this is the diff baseline
+  // commitRestrictedClientEdits uses, so it has to be what the server
+  // actually confirmed, not whatever ends up in clientsDb next.
+  restrictedLastServerClientState = JSON.parse(JSON.stringify(incoming));
+
+  pendingLocalClientEdits.forEach(name => {
+    if (clientsDb[name]) incoming[name] = clientsDb[name];
+  });
+  clientsDb = incoming;
+
   // No shard concept on this path - nothing for commitDatabaseToCloud's
   // partial-shard safety guard to wait on.
   lastKnownClientsDbShardCount = 0;
@@ -6493,7 +6564,7 @@ function fetchRestrictedClientsDbSnapshot() {
 // commitRestrictedClientEdits) so their own edits reflect right away
 // regardless of the poll interval.
 function startRestrictedClientsDbSync() {
-  fetchRestrictedClientsDbSnapshot();
+  restrictedClientsDbFirstSyncPromise = fetchRestrictedClientsDbSnapshot();
   if (restrictedClientsDbPollTimer) clearInterval(restrictedClientsDbPollTimer);
   restrictedClientsDbPollTimer = setInterval(fetchRestrictedClientsDbSnapshot, 60000);
 }
