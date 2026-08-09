@@ -4651,6 +4651,31 @@ async function loadAdminNotifications() {
     console.warn("Could not load admin notifications:", e);
     adminNotifications = [];
   }
+  // One-time cleanup for the pile-up bug fixed alongside this (see the
+  // saveDatabase() comment in ensureClientPortalListeners): the same
+  // client event could get re-notified on every reload for as long as
+  // that bug was live, leaving exact-duplicate entries (same type+
+  // message+clientName) sitting in this list. Collapse them here so
+  // anyone who already hit this doesn't have to manually clear a pile of
+  // repeats - keeps the newest occurrence of each (list is newest-first),
+  // carrying forward read:true if ANY duplicate of it had been read.
+  const seen = new Map();
+  const deduped = [];
+  let removedAny = false;
+  adminNotifications.forEach(n => {
+    const key = `${n.type || ""}|${n.message || ""}|${n.clientName || ""}`;
+    if (seen.has(key)) {
+      if (n.read) seen.get(key).read = true;
+      removedAny = true;
+      return;
+    }
+    seen.set(key, n);
+    deduped.push(n);
+  });
+  if (removedAny) {
+    adminNotifications = deduped;
+    persistAdminNotifications();
+  }
   renderAdminNotifications();
 }
 
@@ -4662,6 +4687,23 @@ function persistAdminNotifications() {
 }
 
 function pushAdminNotification(type, message, clientName, draftEmail) {
+  // Defense-in-depth against the pile-up bug fixed alongside this (see
+  // the saveDatabase() comment in ensureClientPortalListeners): don't add
+  // an exact duplicate (same type+message+clientName) of one that's
+  // already sitting in the list, read or not. The real fix is making sure
+  // the fold that feeds this actually persists to the cloud so the same
+  // event can't look "new" again on a later reload, but this guard means
+  // even some other future edge case can't spam the same notification
+  // over and over.
+  // Scoped to unread only: once a matching notification has actually been
+  // seen and marked read, a later genuinely-new event with the same
+  // generic wording (message text doesn't include a timestamp/note body)
+  // should still be allowed through rather than staying suppressed
+  // forever.
+  const dupeKey = `${type || ""}|${message || ""}|${clientName || ""}`;
+  const alreadyExists = adminNotifications.some(n => !n.read && `${n.type || ""}|${n.message || ""}|${n.clientName || ""}` === dupeKey);
+  if (alreadyExists) return;
+
   adminNotifications.unshift({
     id: 'an_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
     type: type || 'info',
@@ -5978,7 +6020,23 @@ function ensureClientPortalListeners() {
       }
 
       if (changedOnboarding || changedClientChecklist || changedApprovals || changedTestimonial || changedVisit || changedMoodBoardViews || changedMoodBoardStyleFeedback || changedMoodBoardAnnotations || changedPendingComments) {
-        localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
+        // Bug fix: this used to only call localStorage.setItem, never an
+        // actual cloud write - meaning every fold-in above (onboarding,
+        // approvals, testimonials, moodBoardViews/StyleFeedback/
+        // Annotations) only ever survived in THIS browser tab's local
+        // cache, never reached Firestore's real agency/clientsDb-shard-N
+        // docs. The instant those docs get re-fetched from the cloud on
+        // any fresh page load (loadDatabase()'s shard listener overwrites
+        // clientsDb wholesale once the real data arrives, same as it does
+        // right after the instant localStorage-cache boot), the fold was
+        // silently reverted - so the "already knew about this" state this
+        // whole diff-before/after pattern depends on kept resetting to
+        // before the fold, and every one of the notifications pushed
+        // above would fire again as if brand new on every single reload.
+        // saveDatabase() does the same instant localStorage write this
+        // used to do AND schedules the debounced real cloud commit, so
+        // the fold actually sticks from here on.
+        saveDatabase();
         try { renderOnboardingChecklist(); } catch (e) {}
         try { renderDashboard(); } catch (e) {}
         if (changedMoodBoardStyleFeedback) {
