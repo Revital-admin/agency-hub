@@ -42,7 +42,29 @@
 }
 
 .table-card { padding: 0; overflow: hidden; }
-.tracker-table-wrap { overflow-x: auto; }
+/* This table grew to 8 columns (health, renewal, revisions, portal
+   visited, a stack of signal badges, status) across a few additive
+   commits, and overflow-x:auto was already here to handle that - but
+   with nothing else set, most OSes (macOS especially, with "show
+   scrollbars: when scrolling" as the default System Settings behavior)
+   render that scrollbar completely invisible until a scroll gesture is
+   already in progress, so there was no visible cue this table had more
+   to see off to the right. scrollbar-gutter/-color keep a slim bar
+   always visible instead of only-on-hover/scroll, and
+   -webkit-overflow-scrolling adds momentum scrolling on touch trackpads. */
+.tracker-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-md) transparent;
+}
+.tracker-table-wrap::-webkit-scrollbar { height: 10px; }
+.tracker-table-wrap::-webkit-scrollbar-track { background: transparent; }
+.tracker-table-wrap::-webkit-scrollbar-thumb {
+  background: var(--color-border-md);
+  border-radius: 100px;
+}
+.tracker-table-wrap::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
 .tracker-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tracker-table th {
   text-align: left;
@@ -128,6 +150,12 @@
 .signal-none { color: var(--color-text-muted); font-size: 12px; }
 
 .empty-state { text-align: center; padding: 40px 20px; color: var(--color-text-muted); font-size: 14px; }
+
+.table-scroll-hint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  padding: 10px 14px 0;
+}
 
 @media (max-width: 768px) {
   html, body { overflow-x: hidden; }
