@@ -1433,6 +1433,7 @@ body {
      trapped the page underneath it too since body itself has
      overflow:hidden (see the comment on body{} above). */
   overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
 }
 .moodboard-lightbox-body img {

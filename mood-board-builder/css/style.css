@@ -426,6 +426,7 @@
   max-width: 90vw;
   max-height: 90vh;
   overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
 }
 .moodboard-lightbox-meta {
