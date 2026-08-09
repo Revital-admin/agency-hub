@@ -1,5 +1,18 @@
 .container-wide { max-width: 1320px; }
 .container { position: relative; z-index: 1; margin: 0 auto; padding: 3rem 1.5rem 4rem; }
+/* Real root cause of "scroll doesn't work": the shared ../style.css sets
+   body{display:flex} site-wide. That makes this page's <main> a flex
+   item, and flex items default to min-width:auto - meaning main's
+   width can't shrink below its content's min-content size. The tracker
+   table's th cells use white-space:nowrap, so the table has a wide
+   min-content width, which was forcing main WIDER than the iframe's
+   actual rendered viewport. The excess was then silently clipped by the
+   shared body{overflow-x:hidden} rule - not scrollable anywhere, because
+   .tracker-table-wrap below never itself overflowed (it was already
+   sized to fit its inflated container). This min-width:0 lets main
+   shrink to the real available width instead, so the table's own
+   overflow-x:auto wrap (below) becomes the one true scroll boundary. */
+main.container { min-width: 0; }
 
 .summary-bar {
   display: flex;
