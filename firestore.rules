@@ -30,11 +30,90 @@ service cloud.firestore {
         && request.auth.token.email.lower().matches('.*@revitalproductions[.]com$');
     }
 
+    // ── Team Access enforcement ──
+    // Real, database-level backing for the Team Access tool (see
+    // team-access-manager/js/app.js), not just the UI hiding sidebar
+    // buttons for restricted teammates. Before this, ANY
+    // @revitalproductions.com account could read/write every document
+    // under agency/ regardless of what Team Access showed them - the
+    // restriction only ever hid nav buttons client-side, so opening
+    // devtools (or just calling the Firebase SDK directly) bypassed it
+    // completely.
+    //
+    // Firestore rules are document-level, not field-level: they can grant
+    // or deny a whole document, but can't hand back "only these fields"
+    // of one. Team Access's 11 sections are a UI-level split within
+    // documents that mix many sections' data together (clientsDb-shard-N
+    // holds nearly every tool's per-client fields in one object per
+    // client), so true per-section slicing at this layer isn't possible
+    // without routing restricted users' reads through a server-side
+    // filter that classifies every field of every tool by section - a
+    // much larger project, deliberately not built here. What IS
+    // enforceable at this layer, and what this adds: a
+    // restricted teammate with NONE of the relevant sections is now
+    // actually blocked at the database level, not just steered around it
+    // in the UI. Someone with at least one relevant section still gets
+    // the whole document once past the gate (same as today) - the Team
+    // Access UI's finer section list is what governs what they actually
+    // see and use inside the Hub.
+    //
+    // Mirrors effectiveSections() in team-access-manager/js/app.js as
+    // closely as rules syntax allows - keep both in sync if that logic
+    // changes.
+    function normalizedEmail() {
+      return request.auth.token.email.lower();
+    }
+    function teamAccessData() {
+      return get(/databases/$(database)/documents/agency/teamAccess).data;
+    }
+    function isRestricted() {
+      return exists(/databases/$(database)/documents/agency/teamAccess)
+        && normalizedEmail() in teamAccessData().get('users', {});
+    }
+    function userEntry() {
+      return teamAccessData().users[normalizedEmail()];
+    }
+    function effectiveSections() {
+      let entry = userEntry();
+      let roleTiers = teamAccessData().get('roleTiers', {});
+      return (entry.get('role', null) != null && entry.role in roleTiers)
+        ? roleTiers[entry.role].get('sections', [])
+        : entry.get('sections', []);
+    }
+    // Every section key except Agency Globals (see SECTION_DEFS in
+    // team-access-manager/js/app.js) - kept in sync manually, same as
+    // that file's own comment about the July 2026 sidebar reorg.
+    function nonGlobalsSections() {
+      return ['core', 'ad-accounts-access', 'reporting-health', 'production',
+              'content-creation', 'account-ops', 'audits', 'strategy-competition',
+              'sales-pipeline', 'retention-social-proof'];
+    }
+    // True for anyone with at least one reason to be in account/client
+    // data at all - the all-or-nothing gate described above.
+    function hasAccountDataAccess() {
+      return !isRestricted() || effectiveSections().hasAny(nonGlobalsSections());
+    }
+    // Agency Globals (SOP & Wiki Library, Email Template Library) is the
+    // one section that genuinely lives in its own documents rather than
+    // bundled with everything else, so it gets its own real gate instead
+    // of folding into the general one above.
+    function hasAgencyGlobalsAccess() {
+      return !isRestricted() || 'agency-globals' in effectiveSections();
+    }
+
     // Covers every document under agency/ (clientsDb, activityLog, and any
     // future admin-only document), instead of allow-listing each one by
     // name and silently 403'ing new ones added later.
     match /agency/{document} {
-      allow read, write: if isAdmin();
+      allow read, write: if isAdmin() && (
+        // Team Access's own config: only fully-unrestricted admins can
+        // read or edit who's restricted and what roles grant - otherwise
+        // a restricted teammate with any section at all could reach in
+        // via devtools and grant themselves more access.
+        (document == 'teamAccess' || document == 'teamActivity') ? !isRestricted() :
+        (document.matches('sops-shard-.*') || document == 'sopShardMeta' || document == 'sopChecklistRuns' || document == 'emailTemplates') ? hasAgencyGlobalsAccess() :
+        hasAccountDataAccess()
+      );
     }
 
     match /hub/settings {
