@@ -820,6 +820,22 @@ function timeAgo(isoString) {
   return new Date(isoString).toLocaleDateString();
 }
 
+// Ids of notifications that were just marked read THIS session and are
+// still being shown, mid fade-out, before disappearing from the list (see
+// renderNotifications below). Deliberately not persisted anywhere and
+// never changes what's actually stored in clientData.notifications/
+// Firestore - a notification's `read` flag is still permanent (and still
+// folded one-directionally back into the admin's clientsDb by
+// foldInNotificationReadState in app.js), only whether it's currently
+// rendered in this list is affected. Removing already-read items from the
+// underlying array instead would've reintroduced the exact same class of
+// bug just fixed for mood board annotations: the admin's full projection
+// write in syncPublicPortalDocs rebuilds `notifications` from its own copy
+// of the array on every save, so a client-side deletion would just get
+// silently restored the next time anything else got saved in the Hub.
+const recentlyReadNotifIds = new Set();
+const NOTIF_FADE_MS = 1400;
+
 function renderNotifications() {
   if (!notifList || !notifBellBadge) return;
 
@@ -833,9 +849,15 @@ function renderNotifications() {
     notifBellBadge.style.display = "none";
   }
 
+  // Once a notification has been read (either from a previous visit, or
+  // clicked earlier this session and its fade-out timer already elapsed),
+  // it no longer needs to take up room in the list - only unread items,
+  // plus anything mid-fade from just being clicked, stay visible.
+  const visibleItems = items.filter(n => !n.read || recentlyReadNotifIds.has(n.id));
+
   notifList.innerHTML = "";
 
-  if (items.length === 0) {
+  if (visibleItems.length === 0) {
     const empty = document.createElement("div");
     empty.className = "notif-empty";
     empty.textContent = "Nothing yet - you'll see updates here as work moves forward.";
@@ -843,7 +865,7 @@ function renderNotifications() {
     return;
   }
 
-  items.forEach(item => {
+  visibleItems.forEach(item => {
     const row = document.createElement("div");
     row.className = "notif-item" + (item.read ? " read" : "");
 
@@ -866,8 +888,13 @@ function renderNotifications() {
     row.addEventListener("click", () => {
       if (!item.read) {
         item.read = true;
+        recentlyReadNotifIds.add(item.id);
         renderNotifications();
         updateFirebaseNotifications();
+        setTimeout(() => {
+          recentlyReadNotifIds.delete(item.id);
+          renderNotifications();
+        }, NOTIF_FADE_MS);
       }
     });
 
@@ -904,15 +931,22 @@ if (notifMarkAllReadBtn) {
     e.stopPropagation();
     const items = Array.isArray(clientData.notifications) ? clientData.notifications : [];
     let changed = false;
+    const justRead = [];
     items.forEach(n => {
       if (!n.read) {
         n.read = true;
+        justRead.push(n.id);
         changed = true;
       }
     });
     if (changed) {
+      justRead.forEach(id => recentlyReadNotifIds.add(id));
       renderNotifications();
       updateFirebaseNotifications();
+      setTimeout(() => {
+        justRead.forEach(id => recentlyReadNotifIds.delete(id));
+        renderNotifications();
+      }, NOTIF_FADE_MS);
     }
   });
 }

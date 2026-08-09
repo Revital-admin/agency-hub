@@ -4539,6 +4539,48 @@ function foldInMoodBoardStyleFeedback(target, publicData) {
   return changed;
 }
 
+// Pin/circle annotations on mood board images (see saveAnnotationDraft in
+// portal/js/app.js and the admin mirror in mood-board-builder/js/app.js).
+// Shaped as moodBoardAnnotations[boardId][imageId] -> array of annotation
+// objects, and unlike moodBoardStyleFeedback this array can be appended to
+// from BOTH sides (a client dropping their own pin, an admin leaving an
+// internal note on the same image) - so this can't just compare a single
+// updatedAt stamp and take-all-or-nothing like that fold does. Instead it
+// merges item-by-item, keyed by each annotation's own unique id, and only
+// ever adds an item in that target doesn't already have - it never removes
+// one, same "only ever grows" philosophy as foldInMoodBoardViews above.
+// This was the missing piece behind mood board notes appearing to save and
+// then vanishing: syncPublicPortalDocs below does a full non-merge .set()
+// of the public clients/{token} doc on every single admin save (of
+// anything, anywhere in the Hub) - without folding the client's own
+// annotations into the admin's in-memory copy first, that overwrite wiped
+// out any note a client had added since the admin's clientsDb last knew
+// about it.
+function foldInMoodBoardAnnotations(target, publicData) {
+  if (!target || !publicData || !publicData.moodBoardAnnotations) return false;
+  if (!target.moodBoardAnnotations) target.moodBoardAnnotations = {};
+  let changed = false;
+  Object.keys(publicData.moodBoardAnnotations).forEach(boardId => {
+    const incomingBoard = publicData.moodBoardAnnotations[boardId] || {};
+    if (!target.moodBoardAnnotations[boardId]) target.moodBoardAnnotations[boardId] = {};
+    Object.keys(incomingBoard).forEach(imageId => {
+      const incomingList = Array.isArray(incomingBoard[imageId]) ? incomingBoard[imageId] : [];
+      const existingList = Array.isArray(target.moodBoardAnnotations[boardId][imageId])
+        ? target.moodBoardAnnotations[boardId][imageId] : [];
+      const existingIds = new Set(existingList.map(a => a.id));
+      const merged = existingList.slice();
+      incomingList.forEach(a => {
+        if (!existingIds.has(a.id)) {
+          merged.push(a);
+          changed = true;
+        }
+      });
+      target.moodBoardAnnotations[boardId][imageId] = merged;
+    });
+  });
+  return changed;
+}
+
 // Appends one entry to a client's notification feed (the bell icon on
 // their portal). Admin-only to create - called from wherever the hub
 // pushes something the client needs to know about (a new approval request,
@@ -5256,22 +5298,35 @@ function adminNotifTimeAgo(isoString) {
 // stream doesn't leak what those two tools already keep hidden.
 const ADMIN_ONLY_NOTIF_TYPES = new Set(['insurance_renewal', 'subscription_renewal']);
 
+// Same "fade then disappear, but never actually delete" pattern as
+// recentlyReadNotifIds in portal/js/app.js - see that comment for why
+// adminNotifications itself still keeps every entry forever (item.read
+// just flips permanently as before) and only the rendered list hides ones
+// that have finished their brief read/fade window. No cross-tool sync risk
+// here the way there was on the portal side (adminNotifications is a
+// single agency-wide doc this session already owns outright), but keeping
+// the two bells' behavior identical is the point.
+const recentlyReadAdminNotifIds = new Set();
+const ADMIN_NOTIF_FADE_MS = 1400;
+
 function renderAdminNotifications() {
   const badge = document.getElementById("adminNotifBellBadge");
   const list = document.getElementById("adminNotifList");
   if (!badge || !list) return;
 
-  const visibleNotifications = isRestrictedTeamMember
+  const scoped = isRestrictedTeamMember
     ? adminNotifications.filter(n => !ADMIN_ONLY_NOTIF_TYPES.has(n.type))
     : adminNotifications;
 
-  const unreadCount = visibleNotifications.filter(n => !n.read).length;
+  const unreadCount = scoped.filter(n => !n.read).length;
   if (unreadCount > 0) {
     badge.textContent = unreadCount > 9 ? "9+" : String(unreadCount);
     badge.style.display = "flex";
   } else {
     badge.style.display = "none";
   }
+
+  const visibleNotifications = scoped.filter(n => !n.read || recentlyReadAdminNotifIds.has(n.id));
 
   list.innerHTML = "";
   if (visibleNotifications.length === 0) {
@@ -5328,8 +5383,13 @@ function renderAdminNotifications() {
     row.addEventListener("click", () => {
       if (!item.read) {
         item.read = true;
+        recentlyReadAdminNotifIds.add(item.id);
         renderAdminNotifications();
         persistAdminNotifications();
+        setTimeout(() => {
+          recentlyReadAdminNotifIds.delete(item.id);
+          renderAdminNotifications();
+        }, ADMIN_NOTIF_FADE_MS);
       }
     });
 
@@ -5472,12 +5532,18 @@ function initAdminNotifBell() {
     markAllBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       let changed = false;
+      const justRead = [];
       adminNotifications.forEach(n => {
-        if (!n.read) { n.read = true; changed = true; }
+        if (!n.read) { n.read = true; justRead.push(n.id); changed = true; }
       });
       if (changed) {
+        justRead.forEach(id => recentlyReadAdminNotifIds.add(id));
         renderAdminNotifications();
         persistAdminNotifications();
+        setTimeout(() => {
+          justRead.forEach(id => recentlyReadAdminNotifIds.delete(id));
+          renderAdminNotifications();
+        }, ADMIN_NOTIF_FADE_MS);
       }
     });
   }
@@ -5658,6 +5724,12 @@ async function syncPublicPortalDocs(dbSnapshot) {
         // usually already has it too - this is the safety net for the case
         // where a rating arrives in the gap between listener ticks.
         foldInMoodBoardStyleFeedback(client, existingData);
+        // Same reasoning as moodBoardStyleFeedback just above, but see
+        // foldInMoodBoardAnnotations' own comment for why this one needs a
+        // real item-by-item merge instead of a single updatedAt comparison
+        // - this is the fix for notes appearing to save and then vanishing
+        // the next time anything else gets saved in the Hub.
+        foldInMoodBoardAnnotations(client, existingData);
         foldInNotificationReadState(localNotifications, existingData.notifications);
         // lastVisitedAt is written directly by the portal on load (see
         // portal/js/app.js) and read back into clientsDb by
@@ -5718,6 +5790,14 @@ async function syncPublicPortalDocs(dbSnapshot) {
       // existing doc above first, so this save doesn't stomp a rating that
       // just came in.
       moodBoardStyleFeedback: client.moodBoardStyleFeedback || {},
+      // Pin/circle notes on mood board images (see foldInMoodBoardAnnotations
+      // above for the full story on why the fold-in step just above this
+      // was the fix that actually mattered here - this projection field was
+      // already missing too, a second contributor to the same vanishing-
+      // notes bug, since without it the field never reached the public doc
+      // in the first place on any save that happened to run before it was
+      // added here).
+      moodBoardAnnotations: client.moodBoardAnnotations || {},
       // Same missing-field bug as moodBoards above, caught in the same
       // audit pass: the Portal's Brand Kit widget reads clientData.brandKit
       // (see renderBrandKit in portal/js/app.js) and its Action Items
@@ -5848,6 +5928,30 @@ function ensureClientPortalListeners() {
           });
       }
 
+      // Same before/after-diff approach as the two moodboard blocks above,
+      // this time counting existing annotation ids per board/image before
+      // folding so only genuinely new pins/circles (from either side, but
+      // this listener only ever sees ones that arrived via the client's own
+      // portal - admin-added ones are already in currentClient locally the
+      // moment they're drawn) turn into an admin notification.
+      const priorAnnotationIds = new Set();
+      Object.values(currentClient.moodBoardAnnotations || {}).forEach(byImage => {
+        Object.values(byImage || {}).forEach(list => (list || []).forEach(a => priorAnnotationIds.add(a.id)));
+      });
+      const changedMoodBoardAnnotations = foldInMoodBoardAnnotations(currentClient, data);
+      if (changedMoodBoardAnnotations) {
+        Object.values(currentClient.moodBoardAnnotations || {}).forEach(byImage => {
+          Object.values(byImage || {}).forEach(list => (list || []).forEach(a => {
+            if (!priorAnnotationIds.has(a.id) && a.author === "client") {
+              const board = (currentClient.moodBoards || []).find(b =>
+                Object.values(currentClient.moodBoardAnnotations[b.id] || {}).some(l => (l || []).some(x => x.id === a.id))
+              );
+              pushAdminNotification("moodboard_annotation", `${name} left a note on "${board ? board.title : "a mood board"}".`, name);
+            }
+          }));
+        });
+      }
+
       // Portal last-visited tracking - the portal writes lastVisitedAt to
       // its own public doc on load (see portal/js/app.js); pull it into
       // clientsDb here the same way everything else client-driven arrives,
@@ -5858,7 +5962,7 @@ function ensureClientPortalListeners() {
         currentClient.portalLastVisitedAt = data.lastVisitedAt;
       }
 
-      if (changedOnboarding || changedClientChecklist || changedApprovals || changedTestimonial || changedVisit || changedMoodBoardViews || changedMoodBoardStyleFeedback || changedPendingComments) {
+      if (changedOnboarding || changedClientChecklist || changedApprovals || changedTestimonial || changedVisit || changedMoodBoardViews || changedMoodBoardStyleFeedback || changedMoodBoardAnnotations || changedPendingComments) {
         localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
         try { renderOnboardingChecklist(); } catch (e) {}
         try { renderDashboard(); } catch (e) {}
@@ -5881,7 +5985,7 @@ function ensureClientPortalListeners() {
         // reload it the same way tab-portal gets reloaded above, so a
         // rating that comes in while that tab happens to be open shows up
         // without needing a manual client-switch to force a re-render.
-        if (changedMoodBoardViews || changedMoodBoardStyleFeedback) {
+        if (changedMoodBoardViews || changedMoodBoardStyleFeedback || changedMoodBoardAnnotations) {
           try {
             if (typeof iframeNeedsReload !== "undefined" && iframeNeedsReload["tab-moodboard"] !== undefined) {
               iframeNeedsReload["tab-moodboard"] = true;
