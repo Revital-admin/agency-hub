@@ -4146,6 +4146,12 @@ let clientsDbAllShardsLoaded = false;
 // just never closed here specifically.
 let clientsDbDocVersion = 0;
 
+// Which sections a Team-Access-restricted teammate is granted, per the
+// last /api/restricted-client-data response (see startRestrictedClientsDbSync
+// and commitRestrictedClientEdits below). null for unrestricted admins -
+// they never take this path at all.
+let restrictedAllowedSections = null;
+
 // Set of client names with in-memory changes not yet confirmed as saved
 // to the cloud (see saveDatabase, ensureClientPortalListeners' fold-in
 // block, and rebuildClientsDbFromShards below). Needed because
@@ -4288,7 +4294,138 @@ function setClientsDbShardListenerCount(count) {
   for (let i = 0; i < count; i++) listenToClientsDbShard(i);
 }
 
+// Client-side mirror of _worker.js's CLIENT_FIELD_SECTIONS - see
+// commitRestrictedClientEdits below for why this exists. Keep in sync with
+// that copy (same "keep both in sync" pattern as effectiveSections()
+// already uses between app.js, team-access-manager/js/app.js, and
+// firestore.rules).
+const CLIENT_FIELD_SECTIONS_MIRROR = {
+  onboardingChecklist: "core", clientChecklist: "core", brandVault: "core",
+  portalConfig: "core", pendingApprovals: "core", approvalHistory: "core",
+  notifications: "core", lastVisitedAt: "core", portalLastVisitedAt: "core",
+  lastEditedBy: "core", lastEditedByEmail: "core", lastEditedAt: "core",
+
+  paidAdsTracker: "ad-accounts-access",
+
+  reportArchive: "reporting-health", report: "reporting-health",
+
+  brandKit: "content-creation", moodBoards: "content-creation",
+  moodBoardViews: "content-creation", moodBoardStyleFeedback: "content-creation",
+  moodBoardAnnotations: "content-creation", brandRoadmap: "content-creation",
+  copywriting: "content-creation", creativeBrief: "content-creation",
+  contentStrategy: "content-creation",
+
+  campaignLaunch: "account-ops", meetingNotes: "account-ops",
+
+  uxuiAudit: "audits", seoAudit: "audits", paidAdsAudit: "audits",
+  emailAudit: "audits", socialAudit: "audits", contentAudit: "audits",
+  emailStrategy: "audits",
+
+  competitorAnalysis: "strategy-competition", strategyBuilder: "strategy-competition",
+  webComp: "strategy-competition", socialComp: "strategy-competition",
+
+  proposal: "sales-pipeline", roi: "sales-pipeline", signature: "sales-pipeline",
+  billingSummary: "sales-pipeline",
+
+  testimonialSubmission: "retention-social-proof", referralSummary: "retention-social-proof"
+};
+// Never writable through /api/restricted-client-data regardless of
+// section - see handleRestrictedClientDataWrite in _worker.js.
+const RESTRICTED_WRITE_IDENTITY_FIELDS = ["name", "createdDate", "targetUrl", "clickupUrl", "onboardingDate"];
+
+// Save path for Team-Access-restricted teammates - takes over from
+// commitDatabaseToCloud below for that case. Instead of resharding and
+// rewriting the ENTIRE clientsDb the way commitDatabaseToCloud does (which
+// would need this caller to have every other client's full data in memory
+// too, and would round-trip fields outside their granted sections right
+// back to Firestore), this POSTs just the edited client(s)' currently-
+// in-memory fields to /api/restricted-client-data, which validates every
+// field against this caller's granted sections server-side and merges
+// them into the right shard - see handleRestrictedClientDataWrite in
+// _worker.js.
+//
+// Fields are filtered client-side against CLIENT_FIELD_SECTIONS_MIRROR
+// before sending, rather than trusting that everything currently sitting
+// in clientsDb[name] is already safe to send. It usually is - a
+// restricted teammate's in-memory copy only ever contains fields their
+// GET response included in the first place - but a couple of
+// section-blind helpers that run on every save regardless of who's
+// editing (saveDatabase's lastEditedBy/lastEditedByEmail/lastEditedAt
+// attribution stamp, backfillMissingClientChecklists seeding a missing
+// clientChecklist) can add a 'core' field into memory even for someone
+// without the 'core' section. Without this filter, that harmless side
+// effect would get bundled into the request and the server would reject
+// the WHOLE save - handleRestrictedClientDataWrite deliberately rejects
+// wholesale rather than silently dropping just the bad field, since a
+// partial silent drop would look like a successful save while quietly
+// losing data. The server re-validates independently regardless (this
+// filter is just to avoid a real edit failing to save over an unrelated
+// field neither side actually meant to write).
+function commitRestrictedClientEdits() {
+  const indicator = document.getElementById("autosaveIndicator");
+  const names = Array.from(pendingLocalClientEdits);
+  if (!names.length) return;
+
+  if (indicator) {
+    indicator.innerHTML = "Syncing... 🔄";
+    indicator.style.opacity = "1";
+  }
+
+  const allowedSet = new Set(restrictedAllowedSections || []);
+
+  const writes = names.map(name => {
+    const client = clientsDb[name];
+    if (!client) return Promise.resolve({ ok: true });
+    const fields = {};
+    Object.keys(client).forEach(key => {
+      if (RESTRICTED_WRITE_IDENTITY_FIELDS.indexOf(key) !== -1) return;
+      const section = CLIENT_FIELD_SECTIONS_MIRROR[key];
+      if (section && allowedSet.has(section)) fields[key] = client[key];
+    });
+    if (!Object.keys(fields).length) return Promise.resolve({ ok: true });
+    return fetch('/api/restricted-client-data', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientName: name, fields })
+    }).then(res => res.json().catch(() => ({})).then(data => ({ ok: res.ok, data, name })));
+  });
+
+  Promise.all(writes).then(results => {
+    names.forEach(name => pendingLocalClientEdits.delete(name));
+    const failed = results.filter(r => r && r.ok === false);
+
+    if (indicator) {
+      indicator.innerHTML = failed.length ? "Save Failed ❌" : "Saved to Cloud ✅";
+      setTimeout(() => { indicator.style.opacity = "0"; }, failed.length ? 4000 : 2000);
+    }
+
+    if (failed.length) {
+      console.error("commitRestrictedClientEdits: server rejected some fields:", failed);
+      const firstError = (failed[0].data && failed[0].data.error) || "not permitted.";
+      showBanner("error", "Couldn't save some changes: " + firstError);
+    } else {
+      // Refetch so this restricted view reflects the confirmed cloud
+      // state right away, rather than waiting up to a minute for the
+      // next poll (see startRestrictedClientsDbSync).
+      fetchRestrictedClientsDbSnapshot();
+    }
+  }).catch(err => {
+    console.error("commitRestrictedClientEdits failed:", err);
+    if (indicator) {
+      indicator.innerHTML = "Cloud Save Error ❌";
+      setTimeout(() => { indicator.style.opacity = "0"; }, 4000);
+    }
+    showBanner("error", "Couldn't save changes to the cloud: " + err.message);
+  });
+}
+
 function commitDatabaseToCloud() {
+  if (isRestrictedTeamMember) {
+    commitRestrictedClientEdits();
+    return;
+  }
+
   const indicator = document.getElementById("autosaveIndicator");
 
   if (!(window.firebaseSetDoc && window.firebaseDoc && window.firebaseDb)) {
@@ -6184,48 +6321,132 @@ function loadDatabase() {
   refreshAllViews();
   renderDashboard();
 
-    // 2. Setup Firebase real-time listener (sharded - see the
-  // "clientsDb Firestore storage (sharded)" comment block above
-  // commitDatabaseToCloud for why).
-  if (window.firebaseOnSnapshot && window.firebaseDoc && window.firebaseDb && window.firebaseGetDoc) {
-    const metaRef = getClientsDbShardMetaDocRef();
-    window.firebaseOnSnapshot(metaRef, async (metaSnap) => {
-      if (metaSnap.exists && typeof metaSnap.data().count === 'number') {
-        clientsDbDocVersion = typeof metaSnap.data().version === 'number' ? metaSnap.data().version : 0;
-        setClientsDbShardListenerCount(metaSnap.data().count);
-        return;
+    // 2. Determine clientsDb sync strategy. Unrestricted admins keep the
+  // existing real-time Firestore shard listeners (startUnrestrictedClientsDbSync,
+  // unchanged from before). Team-Access-restricted teammates instead go
+  // through the filtered REST endpoint (startRestrictedClientsDbSync - see
+  // /api/restricted-client-data in _worker.js), because clientsDb's own
+  // Firestore rules gate is all-or-nothing per document (see
+  // hasAccountDataAccess in firestore.rules) - it can't slice one shard
+  // down to just a restricted teammate's granted sections, only the
+  // server-side endpoint can. A fresh, one-time read of agency/teamAccess
+  // decides which path to take, rather than waiting on
+  // initTeamAccessGate's own separate listener to resolve first - that
+  // would race with starting the (unfiltered) Firestore shard listeners
+  // below, which is exactly the gap this whole change exists to close.
+  if (window.firebaseDoc && window.firebaseDb && window.firebaseGetDoc) {
+    const teamAccessRef = window.firebaseDoc(window.firebaseDb, "agency", "teamAccess");
+    window.firebaseGetDoc(teamAccessRef).then((snap) => {
+      const data = snap && snap.exists ? snap.data() : null;
+      const users = (data && data.users) || {};
+      const email = (window.currentAdminEmail || "").toLowerCase();
+      const restricted = Object.prototype.hasOwnProperty.call(users, email);
+      if (restricted) {
+        startRestrictedClientsDbSync();
+      } else {
+        startUnrestrictedClientsDbSync();
       }
-
-      // No shard metadata yet - either a brand-new install, or a Hub
-      // still on the old single-document format that needs a one-time
-      // migration into shards.
-      try {
-        const legacyRef = getLegacyClientsDbDocRef();
-        const legacySnap = legacyRef ? await window.firebaseGetDoc(legacyRef) : null;
-        if (legacySnap && legacySnap.exists) {
-          clientsDb = legacySnap.data();
-          localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
-          if (!clientsDb[activeClientName]) {
-            activeClientName = Object.keys(clientsDb)[0] || "";
-          }
-          buildClientDropdown();
-          refreshAllViews();
-          renderDashboard();
-        }
-        // Writes the migrated (or first-ever, brand-new-install) state
-        // into shards + shard metadata. The metadata write above will
-        // re-trigger this listener with metaSnap.exists === true next
-        // time, switching over to the normal per-shard listeners.
-        commitDatabaseToCloud();
-      } catch (err) {
-        console.error("clientsDb migration failed:", err);
-        showBanner("error", "Couldn't migrate the client database to the new format: " + err.message);
-      }
-    }, (err) => {
-      console.error("clientsDb shard meta listener error:", err);
-      showBanner("error", "Couldn't sync with the cloud database: " + err.message);
+    }).catch((err) => {
+      console.error("Couldn't resolve Team Access restriction status, defaulting to unrestricted sync:", err);
+      startUnrestrictedClientsDbSync();
     });
   }
+}
+
+// Real-time Firestore shard listeners - the original, unrestricted-only
+// clientsDb sync path (unchanged behavior from before Team Access section
+// enforcement existed). See loadDatabase() above for how this gets chosen.
+function startUnrestrictedClientsDbSync() {
+  if (!(window.firebaseOnSnapshot && window.firebaseDoc && window.firebaseDb && window.firebaseGetDoc)) return;
+  const metaRef = getClientsDbShardMetaDocRef();
+  window.firebaseOnSnapshot(metaRef, async (metaSnap) => {
+    if (metaSnap.exists && typeof metaSnap.data().count === 'number') {
+      clientsDbDocVersion = typeof metaSnap.data().version === 'number' ? metaSnap.data().version : 0;
+      setClientsDbShardListenerCount(metaSnap.data().count);
+      return;
+    }
+
+    // No shard metadata yet - either a brand-new install, or a Hub
+    // still on the old single-document format that needs a one-time
+    // migration into shards.
+    try {
+      const legacyRef = getLegacyClientsDbDocRef();
+      const legacySnap = legacyRef ? await window.firebaseGetDoc(legacyRef) : null;
+      if (legacySnap && legacySnap.exists) {
+        clientsDb = legacySnap.data();
+        localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
+        if (!clientsDb[activeClientName]) {
+          activeClientName = Object.keys(clientsDb)[0] || "";
+        }
+        buildClientDropdown();
+        refreshAllViews();
+        renderDashboard();
+      }
+      // Writes the migrated (or first-ever, brand-new-install) state
+      // into shards + shard metadata. The metadata write above will
+      // re-trigger this listener with metaSnap.exists === true next
+      // time, switching over to the normal per-shard listeners.
+      commitDatabaseToCloud();
+    } catch (err) {
+      console.error("clientsDb migration failed:", err);
+      showBanner("error", "Couldn't migrate the client database to the new format: " + err.message);
+    }
+  }, (err) => {
+    console.error("clientsDb shard meta listener error:", err);
+    showBanner("error", "Couldn't sync with the cloud database: " + err.message);
+  });
+}
+
+let restrictedClientsDbPollTimer = null;
+
+// Applies one /api/restricted-client-data response (already filtered to
+// the caller's granted sections server-side) as the new clientsDb, same
+// end-of-pipeline steps rebuildClientsDbFromShards uses for the
+// unrestricted path (re-render, re-cache locally).
+function applyRestrictedClientsDbSnapshot(data) {
+  isRestrictedTeamMember = true;
+  restrictedAllowedSections = data.sections || [];
+  clientsDb = data.clients || {};
+  // No shard concept on this path - nothing for commitDatabaseToCloud's
+  // partial-shard safety guard to wait on.
+  lastKnownClientsDbShardCount = 0;
+  clientsDbAllShardsLoaded = true;
+  localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
+  if (!clientsDb[activeClientName]) {
+    activeClientName = Object.keys(clientsDb)[0] || "";
+  }
+  buildClientDropdown();
+  refreshAllViews();
+  renderDashboard();
+}
+
+function fetchRestrictedClientsDbSnapshot() {
+  return fetch('/api/restricted-client-data', { credentials: 'include' })
+    .then(res => res.json())
+    .then(data => {
+      if (data && data.restricted) {
+        applyRestrictedClientsDbSnapshot(data);
+      } else {
+        console.warn("Expected a restricted /api/restricted-client-data response but got:", data);
+      }
+    })
+    .catch(err => {
+      console.error("Restricted clientsDb sync failed:", err);
+      showBanner("error", "Couldn't sync with the cloud database: " + err.message);
+    });
+}
+
+// Filtered REST sync path for Team-Access-restricted teammates (see
+// /api/restricted-client-data in _worker.js). Not a Firestore listener, so
+// there's no real-time push - polls on an interval instead, same tradeoff
+// already accepted elsewhere in the Hub for non-realtime data. A
+// restricted teammate's own saves also trigger an immediate refetch (see
+// commitRestrictedClientEdits) so their own edits reflect right away
+// regardless of the poll interval.
+function startRestrictedClientsDbSync() {
+  fetchRestrictedClientsDbSnapshot();
+  if (restrictedClientsDbPollTimer) clearInterval(restrictedClientsDbPollTimer);
+  restrictedClientsDbPollTimer = setInterval(fetchRestrictedClientsDbSnapshot, 60000);
 }
 
 // ── Global Command Palette (Cmd+K) ──
