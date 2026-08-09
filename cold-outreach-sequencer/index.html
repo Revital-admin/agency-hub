@@ -42,10 +42,41 @@
           <option value="Call">Call</option>
         </select>
         <button id="addLeadBtn" class="btn-primary">+ Start Sequence (Touch 1 sent)</button>
+        <button id="composeTouch1Btn" class="btn-secondary" type="button">Compose Touch 1 Email</button>
         <label class="show-closed-toggle">
           <input type="checkbox" id="showClosedToggle"> Show closed
         </label>
       </div>
+      <p style="font-size: 0.78rem; color: var(--text-muted, #8a8880); margin-top: 8px;">Type the lead/company name above first, then Compose to drop it into the template - fill in "To" manually since leads here don't have a stored email.</p>
+    </div>
+
+    <!-- Day 1 (Touch 1) message template - Copy/Open only, no real Send
+         button the way Referral Tracker's ask/thank-you panels have one,
+         since leads here are NOT clientsDb entries (see js/app.js header
+         comment) so there's no account manager/from-address to resolve
+         for the /api/send-email route. Touches 2-4 don't have a drafted
+         template yet - TOUCH_GOALS below still covers what each one
+         should accomplish. -->
+    <div id="sendOutreachPanel" style="display:none; max-width: 640px; margin: 0 auto 24px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md, 10px); padding: 20px; position: relative;">
+      <button type="button" id="sendOutreachCloseBtn" aria-label="Close" style="position: absolute; top: 14px; right: 14px; background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 4px;">&times;</button>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; padding-right: 24px;">Touch 1 (Day 1) template - personalize the bracketed fields before sending:</p>
+      <div class="form-group">
+        <label for="sendOutreachTo">To</label>
+        <input type="text" id="sendOutreachTo" placeholder="prospect@company.com">
+      </div>
+      <div class="form-group">
+        <label for="sendOutreachSubject">Subject</label>
+        <input type="text" id="sendOutreachSubject">
+      </div>
+      <div class="form-group">
+        <label for="sendOutreachBody">Body</label>
+        <textarea id="sendOutreachBody" rows="10"></textarea>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap: wrap; align-items: center;">
+        <a href="#" id="sendOutreachOpenBtn" class="download-pdf-btn" style="padding: 10px 20px; text-decoration:none;" target="_blank" rel="noopener">Open in Email App</a>
+        <button class="btn-secondary" id="sendOutreachCopyBtn" type="button" style="padding: 10px 20px;">Copy Text</button>
+      </div>
+      <div id="sendOutreachStatus" style="font-size: 0.8rem; margin-top: 8px;"></div>
     </div>
 
     <div class="step-card table-card">
@@ -71,6 +102,6 @@
     </div>
   </main>
 
-  <script src="js/app.js?v=1"></script>
+  <script src="js/app.js?v=2"></script>
 </body>
 </html>

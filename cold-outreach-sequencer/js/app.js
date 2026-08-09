@@ -344,9 +344,82 @@ async function addLead() {
   }
 }
 
+// Touch 1 (Day 1) message template - see the HTML comment above
+// #sendOutreachPanel for why this is Copy/Open only, no real Send button.
+// [Company Name] gets swapped for whatever's currently typed in the
+// lead-name field, if anything; every other bracket stays as-is for the
+// account manager to fill in by hand.
+function buildTouch1Email(leadName) {
+  const name = leadName || '[Company Name]';
+  const subject = `Quick idea for ${name}`;
+  const body = `Hi [First Name],\n\nI came across ${name} and [something specific — a recent launch, a post, a product, an event] caught my eye. We're Revital Productions — an AV production company based in Louisiana that specializes in marketing for brands on the rise, so we end up doing both the strategy/creative and the actual production (video, live events, brand campaigns) instead of handing that off to a third party.\n\nWe just wrapped work with [Evry Intention / Reginald White — swap in whichever case study fits the prospect] and the results were strong enough that I wanted to reach out directly rather than wait for a referral.\n\nWould you be open to a quick 15-minute call to see if there's a fit? No pressure either way — happy to just send over a short portfolio piece if that's easier.\n\n[Your Name]\nRevital Productions\n[phone] | [email]`;
+  return { subject, body };
+}
+
+const sendOutreachPanel = el('sendOutreachPanel');
+const sendOutreachTo = el('sendOutreachTo');
+const sendOutreachSubject = el('sendOutreachSubject');
+const sendOutreachBody = el('sendOutreachBody');
+const sendOutreachOpenBtn = el('sendOutreachOpenBtn');
+const sendOutreachCopyBtn = el('sendOutreachCopyBtn');
+const sendOutreachCloseBtn = el('sendOutreachCloseBtn');
+const sendOutreachStatus = el('sendOutreachStatus');
+
+function refreshOutreachMailto() {
+  if (!sendOutreachOpenBtn || !sendOutreachTo) return;
+  sendOutreachOpenBtn.href = `mailto:${encodeURIComponent(sendOutreachTo.value)}?subject=${encodeURIComponent(sendOutreachSubject.value)}&body=${encodeURIComponent(sendOutreachBody.value)}`;
+}
+
+function openTouch1Panel() {
+  const leadNameInput = el('newLeadName');
+  const { subject, body } = buildTouch1Email(leadNameInput ? leadNameInput.value.trim() : '');
+  if (sendOutreachTo) sendOutreachTo.value = '';
+  if (sendOutreachSubject) sendOutreachSubject.value = subject;
+  if (sendOutreachBody) sendOutreachBody.value = body;
+  refreshOutreachMailto();
+  if (sendOutreachStatus) sendOutreachStatus.textContent = '';
+  if (sendOutreachPanel) {
+    sendOutreachPanel.style.display = 'block';
+    sendOutreachPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+if (sendOutreachCloseBtn) {
+  sendOutreachCloseBtn.addEventListener('click', () => {
+    if (sendOutreachPanel) sendOutreachPanel.style.display = 'none';
+  });
+}
+
+[sendOutreachTo, sendOutreachSubject, sendOutreachBody].forEach(elx => {
+  if (elx) elx.addEventListener('input', refreshOutreachMailto);
+});
+
+if (sendOutreachCopyBtn) {
+  sendOutreachCopyBtn.addEventListener('click', async () => {
+    const toLine = sendOutreachTo.value ? `To: ${sendOutreachTo.value}\n` : '';
+    const text = `${toLine}Subject: ${sendOutreachSubject.value}\n\n${sendOutreachBody.value}`;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        sendOutreachBody.select();
+        document.execCommand('copy');
+      }
+      const original = sendOutreachCopyBtn.textContent;
+      sendOutreachCopyBtn.textContent = 'Copied!';
+      setTimeout(() => { sendOutreachCopyBtn.textContent = original; }, 2000);
+    } catch (err) {
+      console.error('Failed to copy outreach email', err);
+      alert('Failed to copy. Please manually select and copy the text.');
+    }
+  });
+}
+
 function initListeners() {
   el('addLeadBtn').addEventListener('click', addLead);
   el('showClosedToggle').addEventListener('change', renderTable);
+  const composeBtn = el('composeTouch1Btn');
+  if (composeBtn) composeBtn.addEventListener('click', openTouch1Panel);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

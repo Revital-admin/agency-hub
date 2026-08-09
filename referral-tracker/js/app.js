@@ -469,8 +469,8 @@ function openAskReferralPanel() {
   const contactFirstName = (config.clientContactName || clientName).split(' ')[0];
   const { from, firstName, isFallback } = resolveSenderFor(client);
 
-  const subject = `Know anyone who could use us?`;
-  const body = `Hi ${contactFirstName},\n\nThings have been going great, and it's always a huge compliment when a happy client sends someone our way. If you know anyone who could use help with what we do for you, we'd love an introduction - and we'll make sure it's worth your while.\n\nNo pressure at all, just wanted to plant the seed!\n\nThanks,\n${firstName}`;
+  const subject = `Quick favor?`;
+  const body = `Hi ${contactFirstName},\n\nWanted to say again how much we've enjoyed working together - it's exactly the kind of work we want to keep doing more of.\n\nWe're taking on a few new clients right now, and the best ones almost always come through people who've already seen our work firsthand. If anyone in your network - a friend, a business contact, someone you'd genuinely vouch for us to - could use help with what we do for you, we'd really appreciate the introduction. Happy to make it easy: a quick email intro is more than enough, we'll take it from there.\n\nNo pressure at all if nothing comes to mind right now - just wanted to ask while it's on my mind.\n\nThanks again for trusting us with this,\n${firstName}`;
 
   sendReferralTo.value = config.clientContactEmail;
   sendReferralSubject.value = subject;
