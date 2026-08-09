@@ -43,6 +43,100 @@ let hoursCapacitySnapshot = {};
 // expanded open - see toggleClientExpand/renderTable.
 let expandedRosterId = null;
 
+// ── Hub Access (pulls from agency/teamActivity) ──
+// Every teammate who signs into the Hub gets a lastSeen timestamp written
+// to agency/teamActivity by recordLastSeen (see app.js) - that happens
+// regardless of whether they're in this roster at all, so it's a real,
+// already-existing "who's actually using the Hub" signal this tool can
+// pull from rather than relying on someone remembering to check the
+// manual "Hub login confirmed" onboarding box. Keyed by lowercased email,
+// same normalization the rest of the Hub uses (Team Access, capacity
+// snapshots, etc.).
+let teamActivitySnapshot = {}; // { emailLower: isoLastSeen }
+
+async function refreshHubAccessData() {
+  if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb || !window.parent.firebaseGetDoc) {
+    teamActivitySnapshot = {};
+    return;
+  }
+  try {
+    const ref = window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "teamActivity");
+    const snap = await window.parent.firebaseGetDoc(ref);
+    const data = snap && snap.exists ? snap.data() : null;
+    const users = (data && data.users) || {};
+    teamActivitySnapshot = {};
+    Object.keys(users).forEach(email => {
+      const rec = users[email];
+      if (rec && rec.lastSeen) teamActivitySnapshot[email.toLowerCase()] = rec.lastSeen;
+    });
+  } catch (e) {
+    console.warn("Couldn't load Hub sign-in activity:", e);
+    teamActivitySnapshot = {};
+  }
+}
+
+// Same day-math as daysAgoLabel below, worded for "last signed in" rather
+// than "last updated" - reused by both the callout and the per-row badge.
+function lastSeenLabel(isoDateStr) {
+  if (!isoDateStr) return "";
+  const then = new Date(isoDateStr).getTime();
+  if (Number.isNaN(then)) return "";
+  const days = Math.floor((Date.now() - then) / 86400000);
+  if (days <= 0) return "seen today";
+  if (days === 1) return "seen 1 day ago";
+  return `seen ${days} days ago`;
+}
+
+// Renders the "signed in, not on the roster yet" callout - anyone in
+// teamActivitySnapshot whose email doesn't match any current roster
+// member's email field. Hidden for restricted users (same edit gate as
+// the rest of this tool - adding someone is an edit action) and hidden
+// entirely when there's nothing to show, rather than an empty card.
+function renderUnrosteredCallout() {
+  const card = el('unrosteredCallout');
+  const list = el('unrosteredList');
+  if (!card || !list) return;
+
+  if (isRestrictedUser) { card.style.display = 'none'; return; }
+
+  const rosteredEmails = new Set(members.map(m => (m.email || '').trim().toLowerCase()).filter(Boolean));
+  const unrostered = Object.keys(teamActivitySnapshot)
+    .filter(email => !rosteredEmails.has(email))
+    .sort((a, b) => (teamActivitySnapshot[b] || '').localeCompare(teamActivitySnapshot[a] || ''));
+
+  if (!unrostered.length) { card.style.display = 'none'; return; }
+
+  card.style.display = 'block';
+  list.innerHTML = unrostered.map(email => `
+    <div style="display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--border-color); flex-wrap:wrap;">
+      <span style="flex:1; min-width:200px; font-size:0.85rem;">${escapeHtml(email)}</span>
+      <span style="font-size:0.72rem; color:var(--text-muted);">${lastSeenLabel(teamActivitySnapshot[email]) || 'seen recently'}</span>
+      <button type="button" class="btn btn-secondary unrostered-add-btn" data-email="${escapeHtml(email)}" style="padding:5px 12px; font-size:0.78rem;">+ Add to Roster</button>
+    </div>`).join('');
+
+  list.querySelectorAll('.unrostered-add-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      resetForm();
+      el('formCard').style.display = 'block';
+      el('email').value = btn.getAttribute('data-email');
+      el('memberName').focus();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+}
+
+// Small "last active" caption shown under a roster row's name (see
+// renderTable) - deliberately not gating anything (a restricted section
+// header wouldn't make sense here), purely informational, same spirit as
+// the timeOff/onboarding/compliance badges it sits alongside.
+function hubAccessBadge(entry) {
+  const email = (entry.email || '').trim().toLowerCase();
+  if (!email) return '<span style="font-size:0.78rem; color:var(--text-muted);">No email on file</span>';
+  const lastSeen = teamActivitySnapshot[email];
+  if (!lastSeen) return '<span style="font-size:0.78rem; color:var(--text-muted);">Never signed in</span>';
+  return `<span style="font-size:0.78rem;">${lastSeenLabel(lastSeen) || 'Active today'}</span>`;
+}
+
 async function refreshCapacitySnapshot() {
   if (isEmbedded && window.parent.getAccountManagerCapacitySnapshot) {
     try {
@@ -1384,6 +1478,7 @@ function updateSummary() {
 
 function renderTable() {
   updateSummary();
+  renderUnrosteredCallout();
 
   const filter = (el('filterInput').value || '').trim().toLowerCase();
   const rows = members.filter(m => {
@@ -1449,6 +1544,7 @@ function renderTable() {
       <td class="client-cell">${escapeHtml(m.memberName)}${timeOffBadge}${onboardingBadge}${complianceBadge}</td>
       <td>${escapeHtml(m.role)}${isContractor ? ' <span class="section-tag" style="margin-left:4px;">Contractor</span>' : ''}</td>
       <td>${escapeHtml(m.employmentType)}</td>
+      <td>${hubAccessBadge(m)}</td>
       <td>${escapeHtml(formatDateNice(m.startDate)) || '—'}</td>
       <td>${loadCell}</td>
       <td>${capacityCell}</td>
@@ -1468,7 +1564,7 @@ function renderTable() {
       const names = load.clientNames.length
         ? load.clientNames.map(escapeHtml).join(', ')
         : emptyText;
-      rowHtml += `<tr class="roster-expand-row"><td colspan="9" style="padding:6px 14px 12px; font-size:0.8rem; color:var(--text-muted);"><strong>${expandLabel}:</strong> ${names}</td></tr>`;
+      rowHtml += `<tr class="roster-expand-row"><td colspan="10" style="padding:6px 14px 12px; font-size:0.8rem; color:var(--text-muted);"><strong>${expandLabel}:</strong> ${names}</td></tr>`;
     }
     return rowHtml;
   }).join('');
@@ -1508,7 +1604,7 @@ function applyEditPermission() {
 document.addEventListener('DOMContentLoaded', async () => {
   applyEditPermission();
   resetForm();
-  await Promise.all([loadMembers(), refreshCapacitySnapshot()]);
+  await Promise.all([loadMembers(), refreshCapacitySnapshot(), refreshHubAccessData()]);
   refreshViews();
 
   el('newMemberBtn').addEventListener('click', () => {

@@ -42,6 +42,21 @@
 <div class="summary-stat"><span class="summary-num" id="summaryAtCapacity">0</span><span class="summary-label">At Capacity</span></div>
 </div>
 
+<!-- Signed into the Hub but not on this roster yet - built from
+     agency/teamActivity, which every teammate's login already writes a
+     lastSeen timestamp into (see recordLastSeen in app.js), regardless of
+     whether they're in this roster at all. Cross-referencing that against
+     members' email fields surfaces anyone using the Hub who was never
+     added here - see refreshHubAccessData/renderUnrosteredCallout in
+     js/app.js. Hidden entirely when there's nothing to show. -->
+<div class="step-card" id="unrosteredCallout" style="display:none;">
+<div class="section-title" style="margin-bottom: 10px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent); font-size: 1.1rem;">Signed Into the Hub, Not on This Roster</h2>
+</div>
+<p style="font-size:0.8rem; color:var(--text-muted); margin-bottom: 10px;">These emails have signed into the Hub at least once but aren't listed below yet.</p>
+<div id="unrosteredList"></div>
+</div>
+
 <!-- Send Agreement panel - contractor-only. Sends the Independent
      Contractor Agreement and/or its NDA via the same Docusign
      integration the Contract & Invoice Tracker uses, without needing to
@@ -213,6 +228,7 @@
 <th>Name</th>
 <th>Role</th>
 <th>Type</th>
+<th>Hub Access</th>
 <th>Start Date</th>
 <th>Load</th>
 <th>Capacity</th>
@@ -243,6 +259,6 @@
 </div>
 
 </main>
-<script src="js/app.js?v=8"></script>
+<script src="js/app.js?v=9"></script>
 </body>
 </html>
