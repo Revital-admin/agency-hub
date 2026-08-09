@@ -65,23 +65,70 @@ function initAdminAuthGate() {
     });
   }
 
-  let attemptedSilentSignIn = false;
-  async function attemptSilentSignIn() {
-    if (attemptedSilentSignIn) return;
-    attemptedSilentSignIn = true;
+  // Reconciles whatever Firebase identity this browser already has cached
+  // (if any) against who Cloudflare Access says is ACTUALLY here right now,
+  // by hitting /api/mint-firebase-token - which always reads the live
+  // Cf-Access-Authenticated-User-Email header fresh on every call, not a
+  // cached value.
+  //
+  // BUG this replaces: the old version only ever called this exchange when
+  // Firebase had no cached user at all - a returning visit with an existing
+  // session skipped it entirely and trusted the cached identity forever.
+  // Firebase Auth's own session persistence has no way to know when the
+  // separate Cloudflare Access layer changes identity underneath it, so
+  // logging out via the Log Out link (which only clears the Access-layer
+  // session - see the /cdn-cgi/access/logout link in index.html) and back
+  // in as a DIFFERENT teammate on the same browser left the Hub silently
+  // still signed in, and still booting, as whoever the STALE cached
+  // Firebase session belonged to - including that stale identity's Team
+  // Access permissions, not the new visitor's. Now this check (and the
+  // re-sign-in it triggers when the two disagree) runs on every load,
+  // returning visit or not.
+  let identityCheckDone = false;
+  async function ensureCorrectFirebaseIdentity(currentUser) {
+    if (identityCheckDone) {
+      // Second time through in this same page load - this is the
+      // onAuthStateChanged re-fire from our own signInWithCustomToken call
+      // below, already resolved, just proceed with whatever we now have.
+      return currentUser;
+    }
+    identityCheckDone = true;
+
     try {
       const res = await fetch("/api/mint-firebase-token");
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.token) {
-        await firebase.auth().signInWithCustomToken(data.token);
-        // onAuthStateChanged below fires again and completes the boot.
-      } else {
+
+      if (!res.ok || !data.token) {
         console.log("Silent sign-in unavailable:", data.error || res.status);
-        showManualSignIn();
+        if (!currentUser) showManualSignIn();
+        // Fail safe to whatever cached identity we already had (if any)
+        // rather than locking someone out over a transient Access/network
+        // hiccup - same fail-open reasoning the rest of this gate uses.
+        return currentUser;
       }
+
+      const alreadyCorrect = !!(currentUser && currentUser.email &&
+        currentUser.email.toLowerCase() === (data.email || "").toLowerCase());
+      if (alreadyCorrect) return currentUser;
+
+      // Either no cached Firebase session yet (first visit / just cleared),
+      // or a stale one for someone OTHER than who Access says is here now -
+      // sign out any stale session first so the custom-token sign-in below
+      // isn't fighting an existing session for a different user.
+      if (currentUser) await firebase.auth().signOut();
+      try {
+        await firebase.auth().signInWithCustomToken(data.token);
+      } catch (signInErr) {
+        console.error("Custom token sign-in failed:", signInErr);
+        showManualSignIn("Sign-in failed: " + signInErr.message);
+      }
+      // onAuthStateChanged fires again with the corrected (or still absent,
+      // if the sign-in above failed) user - nothing more to do on this pass.
+      return null;
     } catch (e) {
       console.log("Silent sign-in failed (likely running locally without Access):", e);
-      showManualSignIn();
+      if (!currentUser) showManualSignIn();
+      return currentUser;
     }
   }
 
@@ -89,22 +136,24 @@ function initAdminAuthGate() {
   // silent exchange runs, so the page isn't just blank.
   if (gate) gate.style.display = "flex";
 
-  firebase.auth().onAuthStateChanged((user) => {
+  firebase.auth().onAuthStateChanged(async (user) => {
     const isAuthorizedAdmin = !!(user && user.email && user.email.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN));
 
-    if (isAuthorizedAdmin) {
-      if (gate) gate.style.display = "none";
-      firebaseAuthReady = true;
-      window.currentAdminEmail = user.email.toLowerCase();
-      recordLastSeen(window.currentAdminEmail);
-      boot();
-    } else if (user) {
+    if (!isAuthorizedAdmin && user) {
       // Signed into Firebase with the wrong account - sign back out.
       firebase.auth().signOut();
       showManualSignIn("That account isn't authorized for this hub.");
-    } else {
-      attemptSilentSignIn();
+      return;
     }
+
+    const verifiedUser = await ensureCorrectFirebaseIdentity(isAuthorizedAdmin ? user : null);
+    if (!verifiedUser) return; // no session yet, or mid re-sign-in - wait for the next onAuthStateChanged fire
+
+    if (gate) gate.style.display = "none";
+    firebaseAuthReady = true;
+    window.currentAdminEmail = verifiedUser.email.toLowerCase();
+    recordLastSeen(window.currentAdminEmail);
+    boot();
   });
 }
 

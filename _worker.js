@@ -172,7 +172,12 @@ async function handleMintFirebaseToken(request, env) {
 
   try {
     const token = await createFirebaseCustomToken(serviceAccount, accessEmail);
-    return jsonResponse({ token }, 200, { "Cache-Control": "no-store" });
+    // email is included alongside the token (not just implied by it) so the
+    // client can cheaply compare "who does Access say is here right now"
+    // against whatever Firebase identity it already has cached, without
+    // needing to decode the JWT itself - see the identity-recheck logic in
+    // initAdminAuthGate in app.js.
+    return jsonResponse({ token, email: accessEmail }, 200, { "Cache-Control": "no-store" });
   } catch (e) {
     console.error("Custom token mint failed:", e);
     return jsonResponse({ error: "Token mint failed: " + e.message }, 500);
