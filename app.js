@@ -4201,6 +4201,24 @@ let clientsDbDocVersion = 0;
 // they never take this path at all.
 let restrictedAllowedSections = null;
 
+// Dedicated, save-path-only flag for commitDatabaseToCloud's routing
+// decision (restricted REST write vs. normal admin shard write) - kept
+// deliberately separate from isRestrictedTeamMember (see that variable's
+// own comment above applyTeamAccessRestrictions), which is a sidebar/
+// notification DISPLAY flag only. Those two used to be the same variable;
+// a live devtools call to applyTeamAccessRestrictions() for testing
+// (simulating a restricted teammate's sidebar, in the same real admin tab)
+// silently flipped isRestrictedTeamMember to true and then never flipped
+// back, which in turn mis-routed every subsequent real save through the
+// restricted-write path for the rest of that tab's session - a save
+// routing bug, not just a display glitch, since it meant edits could go
+// through commitRestrictedClientEditsNow's section-filtered diff instead
+// of a real admin write. Only startRestrictedClientsDbSync and
+// applyRestrictedClientsDbSnapshot below (the actual clientsDb-sync
+// decision path, driven by a real /api/restricted-client-data exchange)
+// may set this - nothing UI-only should ever be able to change it.
+let isRestrictedClientsDbSync = false;
+
 // Set of client names with in-memory changes not yet confirmed as saved
 // to the cloud (see saveDatabase, ensureClientPortalListeners' fold-in
 // block, and rebuildClientsDbFromShards below). Needed because
@@ -4495,7 +4513,7 @@ function commitRestrictedClientEditsNow() {
 }
 
 function commitDatabaseToCloud() {
-  if (isRestrictedTeamMember) {
+  if (isRestrictedClientsDbSync) {
     commitRestrictedClientEdits();
     return;
   }
@@ -6431,6 +6449,11 @@ function loadDatabase() {
 // clientsDb sync path (unchanged behavior from before Team Access section
 // enforcement existed). See loadDatabase() above for how this gets chosen.
 function startUnrestrictedClientsDbSync() {
+  // Explicit, not just "leave it at its default false" - defensive in case
+  // this ever runs more than once in a session (it doesn't today, but
+  // costs nothing and matches startRestrictedClientsDbSync setting its own
+  // side explicitly too).
+  isRestrictedClientsDbSync = false;
   if (!(window.firebaseOnSnapshot && window.firebaseDoc && window.firebaseDb && window.firebaseGetDoc)) return;
   const metaRef = getClientsDbShardMetaDocRef();
   window.firebaseOnSnapshot(metaRef, async (metaSnap) => {
@@ -6512,6 +6535,7 @@ let restrictedLastServerClientState = {};
 // needed for the identical reason on the unrestricted path; see
 // pendingLocalClientEdits' own comment above rebuildClientsDbFromShards).
 function applyRestrictedClientsDbSnapshot(data) {
+  isRestrictedClientsDbSync = true;
   isRestrictedTeamMember = true;
   restrictedAllowedSections = data.sections || [];
   const incoming = data.clients || {};
@@ -6564,6 +6588,13 @@ function fetchRestrictedClientsDbSnapshot() {
 // commitRestrictedClientEdits) so their own edits reflect right away
 // regardless of the poll interval.
 function startRestrictedClientsDbSync() {
+  // Set immediately (not just inside applyRestrictedClientsDbSnapshot once
+  // the first fetch resolves) - this function is only ever called right
+  // after loadDatabase's own live read of agency/teamAccess confirmed this
+  // account is genuinely restricted, so there's no reason to leave the
+  // save-routing decision at its default (false) for the brief window
+  // before the first snapshot lands.
+  isRestrictedClientsDbSync = true;
   restrictedClientsDbFirstSyncPromise = fetchRestrictedClientsDbSnapshot();
   if (restrictedClientsDbPollTimer) clearInterval(restrictedClientsDbPollTimer);
   restrictedClientsDbPollTimer = setInterval(fetchRestrictedClientsDbSnapshot, 60000);
