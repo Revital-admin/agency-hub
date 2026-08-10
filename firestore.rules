@@ -136,11 +136,29 @@ service cloud.firestore {
     // name and silently 403'ing new ones added later.
     match /agency/{document} {
       allow read, write: if isAdmin() && (
-        // Team Access's own config: only fully-unrestricted admins can
-        // read or edit who's restricted and what roles grant - otherwise
-        // a restricted teammate with any section at all could reach in
-        // via devtools and grant themselves more access.
-        (document == 'teamAccess' || document == 'teamActivity') ? !isRestricted() :
+        // Team Access's own config: WRITE stays fully-unrestricted-admins-
+        // only - otherwise a restricted teammate with any section at all
+        // could reach in via devtools and grant themselves more access.
+        // READ has to stay open to every employee, restricted or not: the
+        // Hub's own client-side gate (initTeamAccessGate/loadDatabase in
+        // app.js) has to read this exact document to find out it's even
+        // restricted in the first place - denying restricted users read
+        // access here was a deadlock, not real security. It meant every
+        // restricted account's onSnapshot listener 403'd immediately, so
+        // applyTeamAccessRestrictions never ran and the sidebar silently
+        // stayed fully open - the "restriction" only ever worked for
+        // ADMIN accounts testing it, never for an actual restricted
+        // teammate. (Read access to this doc reveals who's restricted and
+        // to what, not a write capability, so it can't be used to
+        // self-escalate - see write's own !isRestricted() gate below.)
+        (document == 'teamAccess') ? (request.method in ['get', 'list'] || !isRestricted()) :
+        // teamActivity's lastSeen tracking (recordLastSeen in app.js) is
+        // called for every logged-in employee, restricted or not - same
+        // reasoning as teamAccess reads above, just for writes instead:
+        // this was silently 403ing every restricted teammate's own
+        // last-seen heartbeat. Reads (an admin-only "who's active" view)
+        // stay unrestricted-admin-only.
+        (document == 'teamActivity') ? (request.method in ['get', 'list'] ? !isRestricted() : true) :
         // Never section-restrictable in the Team Access UI - these four
         // tools sit in the sidebar footer, outside all 11 <nav-section>
         // groups, so Team Access can't restrict them for anyone no matter
