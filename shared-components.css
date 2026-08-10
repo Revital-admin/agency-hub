@@ -169,3 +169,52 @@
 
 .sub-content { flex: 1; min-width: 0; }
 
+/* ── Dismissible Cards (shared-dismissible-cards.js) ──
+   Same rules as the copy in the root style.css - duplicated here because
+   several tools (Meeting Notes Logger, Mood Board Builder, etc.) load
+   this vars.css/shared-components.css/forms.css chain instead of the
+   root style.css, and would otherwise render an unstyled, unpositioned
+   × button. Keep both copies in sync if this pattern changes. */
+.dismissible-card { position: relative; }
+.dismissible-card-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  z-index: 2;
+}
+.dismissible-card-close:hover {
+  color: var(--color-accent);
+  background: rgba(255, 255, 255, 0.05);
+}
+.dismissible-card.is-collapsed > *:not(.dismissible-card-collapsed-bar) {
+  display: none !important;
+}
+.dismissible-card-collapsed-bar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 2px;
+}
+.dismissible-card.is-collapsed .dismissible-card-collapsed-bar {
+  display: flex;
+}
+.dismissible-card-collapsed-bar:hover {
+  color: var(--color-text-primary);
+}
+.dismissible-card-collapsed-bar-show {
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
