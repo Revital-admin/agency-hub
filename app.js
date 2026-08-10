@@ -285,33 +285,13 @@ function applyTeamAccessRestrictions(allowedSections) {
   // Service Pricing Admin controls default pricing for every proposal -
   // same admin/leadership-only visibility rule as Team Access above, and
   // lives right next to it in the footer for the same reason (only
-  // full-access/unrestricted accounts see either one).
+  // full-access/unrestricted accounts see either one). Export All Data /
+  // Import Backups / Delete Client stay visible to everyone, unchanged -
+  // deliberately not gated (every employee should have these regardless
+  // of Team Access restriction).
   const servicePricingBtn = document.getElementById('servicePricingFooterBtn');
   if (servicePricingBtn) {
     servicePricingBtn.style.display = allowedSections ? 'none' : '';
-  }
-
-  // Export Full Backup / Import Backups / Delete Client used to stay
-  // visible to everyone regardless of restriction - Export in particular
-  // pulls a bundle of agency-wide docs straight from Firestore
-  // (fetchAllAgencyDocsForBackup), several of which (servicePricing,
-  // subscriptionTracker, teamAccess/teamActivity) are readable by any
-  // employee under firestore.rules by design, so a restricted teammate's
-  // export could include pricing figures and the full Team Access roster
-  // even though those sections are hidden everywhere else in their
-  // sidebar. Now gated the same admin/leadership-only way as the rest of
-  // this footer list.
-  const exportDataBtn = document.getElementById('exportDataBtn');
-  if (exportDataBtn) {
-    exportDataBtn.style.display = allowedSections ? 'none' : '';
-  }
-  const importDataBtn = document.getElementById('importDataBtn');
-  if (importDataBtn) {
-    importDataBtn.style.display = allowedSections ? 'none' : '';
-  }
-  const deleteClientBtn = document.getElementById('deleteClientBtn');
-  if (deleteClientBtn) {
-    deleteClientBtn.style.display = allowedSections ? 'none' : '';
   }
 
   // Subscription & Tool Cost Tracker is financial info too - same
