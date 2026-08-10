@@ -63,6 +63,24 @@ function persist() {
 
 function uid(prefix) { return prefix + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8); }
 
+// The parent Hub tracks "active client" as an object reference
+// (getActiveClient()), not by name - reverse-lookup which key in
+// getAllClients() it corresponds to, so this tool's own selector can
+// default to whatever's already active in the sidebar's Client
+// Workspace dropdown. Returns null if nothing's active yet (parent
+// still loading) or the reference doesn't match any client.
+function getGlobalActiveClientName() {
+  if (!isEmbedded) return null;
+  try {
+    const active = window.parent.getActiveClient && window.parent.getActiveClient();
+    if (!active) return null;
+    const clients = getClients();
+    return Object.keys(clients).find(name => clients[name] === active) || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function populateClientSelect() {
   const clients = getClients();
   const select = el('clientSelect');
@@ -75,7 +93,18 @@ function populateClientSelect() {
     opt.textContent = name;
     select.appendChild(opt);
   });
-  if (prevValue && clients[prevValue]) select.value = prevValue;
+  if (prevValue && clients[prevValue]) {
+    select.value = prevValue;
+  } else {
+    // Nothing picked in this tool yet this session - default to
+    // whichever client is already active elsewhere in the Hub, so
+    // opening this tool doesn't require re-picking the client you're
+    // already looking at everywhere else. Still just a starting point:
+    // switching this dropdown to a different client doesn't touch what's
+    // active anywhere else, same as before (see file header comment).
+    const activeName = getGlobalActiveClientName();
+    if (activeName && clients[activeName]) select.value = activeName;
+  }
 }
 
 function currentClientName() { return el('clientSelect').value; }
@@ -417,6 +446,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try { clientCount = isEmbedded ? Object.keys(window.parent.getAllClients() || {}).length : 0; } catch (e) {}
     if (clientCount > 0) {
       populateClientSelect();
+      renderInterface(); // pick up the just-defaulted active client, if any
       clearInterval(pollTimer);
     }
     if (pollAttempts > 20) clearInterval(pollTimer);
