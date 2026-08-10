@@ -157,6 +157,97 @@ function initAdminAuthGate() {
   });
 }
 
+// ── Idle Session Lock ──
+// Applies to every teammate, no exceptions - after IDLE_TIMEOUT_MS of no
+// mouse/keyboard/scroll activity ANYWHERE in the Hub (including inside
+// tool iframes, since those are same-origin), a full-screen overlay hides
+// all client data. Unlocking pings /api/user - the cheap Cloudflare Access
+// whoami already used elsewhere - to silently confirm the person's Access
+// session is still the same signed-in teammate. If it isn't (session
+// expired, different account, etc.) we force a full reload so Cloudflare
+// Access's own login flow takes over, rather than trying to fake a
+// re-auth client-side.
+const IDLE_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
+const IDLE_ACTIVITY_EVENTS = ["mousemove", "mousedown", "keydown", "scroll", "touchstart", "wheel"];
+let idleTimer = null;
+let idleLocked = false;
+
+function resetIdleTimer() {
+  if (idleLocked) return;
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(showIdleLockOverlay, IDLE_TIMEOUT_MS);
+}
+
+// Attaches the idle-reset listeners to a given document. Safe to call
+// repeatedly - each tool iframe gets a brand-new `document` object every
+// time its src is reloaded (see setIframeAbsoluteSrc), so there's no
+// stale-listener buildup to guard against here.
+function attachIdleListeners(doc) {
+  if (!doc) return;
+  try {
+    IDLE_ACTIVITY_EVENTS.forEach((evt) => {
+      doc.addEventListener(evt, resetIdleTimer, { passive: true, capture: true });
+    });
+  } catch (e) {
+    // Shouldn't happen (tools are same-origin), but never let this block boot.
+    console.warn("IdleSessionLock: couldn't attach listeners to iframe doc", e);
+  }
+}
+
+function showIdleLockOverlay() {
+  idleLocked = true;
+  const overlay = document.getElementById("idleLockOverlay");
+  const errorEl = document.getElementById("idleLockError");
+  const statusEl = document.getElementById("idleLockStatus");
+  if (errorEl) errorEl.style.display = "none";
+  if (statusEl) statusEl.textContent = "You've been idle for a while. Client data is hidden until you unlock.";
+  if (overlay) overlay.style.display = "flex";
+}
+
+async function attemptIdleUnlock() {
+  const errorEl = document.getElementById("idleLockError");
+  const statusEl = document.getElementById("idleLockStatus");
+  const unlockBtn = document.getElementById("idleLockUnlockBtn");
+  if (errorEl) errorEl.style.display = "none";
+  if (statusEl) statusEl.textContent = "Checking your session...";
+  if (unlockBtn) unlockBtn.disabled = true;
+
+  try {
+    const res = await fetch("/api/user", { credentials: "include" });
+    const data = await res.json();
+    const stillSameUser =
+      data && data.email && window.currentAdminEmail &&
+      data.email.toLowerCase() === window.currentAdminEmail;
+
+    if (stillSameUser) {
+      idleLocked = false;
+      const overlay = document.getElementById("idleLockOverlay");
+      if (overlay) overlay.style.display = "none";
+      resetIdleTimer();
+    } else {
+      // Session expired or switched accounts - don't try to fake it,
+      // let Cloudflare Access's own login flow handle re-auth.
+      window.location.reload();
+    }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = "Could not verify your session.";
+    if (errorEl) {
+      errorEl.textContent = "Check your connection and try again.";
+      errorEl.style.display = "block";
+    }
+  } finally {
+    if (unlockBtn) unlockBtn.disabled = false;
+  }
+}
+
+function initIdleSessionLock() {
+  attachIdleListeners(document);
+  resetIdleTimer();
+
+  const unlockBtn = document.getElementById("idleLockUnlockBtn");
+  if (unlockBtn) unlockBtn.addEventListener("click", attemptIdleUnlock);
+}
+
 // Records a lightweight "last seen in the Hub" timestamp per teammate,
 // in agency/teamActivity: { users: { "email": { lastSeen: isoString } } }.
 // Written with merge:true so each login only touches that one person's
@@ -388,6 +479,7 @@ function boot() {
   try { initAdminNotifBell(); } catch(e) { console.error("AdminNotifBell Error:", e); }
   try { loadAdminNotifications(); } catch(e) { console.error("AdminNotifications Error:", e); }
   try { initTeamAccessGate(); } catch(e) { console.error("TeamAccessGate Error:", e); }
+  try { initIdleSessionLock(); } catch(e) { console.error("IdleSessionLock Error:", e); }
   try { refreshAllViews(); } catch(e) { console.error("Refresh Error:", e); }
   // Overview Dashboard (tab-dashboard) is active by default at boot, so
   // no tab-click fires to trigger this the way it does for every other
@@ -2718,6 +2810,18 @@ function setIframeAbsoluteSrc(iframeSelector, relativeFallbackPath) {
     // clear it first.
     iframe.src = "about:blank";
     iframe.src = newSrc;
+    // Idle Session Lock: re-wire activity listeners into this tool on every
+    // (re)load, so mouse/keyboard activity inside a tool counts as activity
+    // and doesn't lock the Hub out from under someone mid-task. One `load`
+    // listener per iframe element, added once - attachIdleListeners() itself
+    // is what needs to run on every load, since each reload is a brand-new
+    // `document` object.
+    if (!iframe.dataset.idleListenerAttached) {
+      iframe.dataset.idleListenerAttached = "1";
+      iframe.addEventListener("load", () => {
+        if (typeof attachIdleListeners === "function") attachIdleListeners(iframe.contentDocument);
+      });
+    }
   }
 }
 

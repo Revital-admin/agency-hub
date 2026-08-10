@@ -57,7 +57,7 @@
 
   <!-- Central references and Application State Controller -->
   <script src="data-store.js?v=3"></script>
-  <script src="app.js?v=98"></script>
+  <script src="app.js?v=99"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
 </head>
@@ -75,6 +75,19 @@
     <p id="authGateStatus" style="max-width:380px; color:#9ca3af; margin:0;">Checking access&hellip;</p>
     <button id="authGateSignInBtn" style="display:none; padding:10px 20px; border-radius:8px; border:none; background:#10b981; color:#04120c; font-weight:600; cursor:pointer;">Sign in with Google</button>
     <p id="authGateError" style="display:none; color:#ef4444; max-width:380px; margin:0;"></p>
+  </div>
+
+  <!-- Idle Session Lock: after IDLE_TIMEOUT_MS of no mouse/keyboard/scroll
+       activity anywhere in the Hub (including inside tool iframes), app.js
+       shows this to hide client data from anyone walking up to an
+       unattended screen. Hidden by default. Applies to everyone, no
+       exceptions - see initIdleSessionLock() in app.js. -->
+  <div id="idleLockOverlay" style="display:none; position:fixed; inset:0; z-index:10000; background:#0b0f14; color:#e5e7eb; flex-direction:column; align-items:center; justify-content:center; gap:16px; font-family:inherit; text-align:center; padding:24px;">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+    <h2 style="margin:0;">Hub Locked</h2>
+    <p id="idleLockStatus" style="max-width:380px; color:#9ca3af; margin:0;">You've been idle for a while. Client data is hidden until you unlock.</p>
+    <button id="idleLockUnlockBtn" style="padding:10px 20px; border-radius:8px; border:none; background:#10b981; color:#04120c; font-weight:600; cursor:pointer;">Unlock</button>
+    <p id="idleLockError" style="display:none; color:#ef4444; max-width:380px; margin:0;"></p>
   </div>
 
   <!-- Dynamic Background Accents -->
