@@ -6,6 +6,30 @@
   --font-heading: 'Fraunces', Georgia, serif;
 }
 
+/* This block was missing entirely - every other tool on this same
+   vars.css/shared-components.css/forms.css chain (mood-board-builder,
+   meeting-notes-logger, etc.) defines .module-body itself with a
+   background + a default text color. Without it, bare/unclassed
+   elements (a plain <h3>, the .empty-state <p>) had NO ancestor color
+   rule to inherit and fell back to the browser default (black),
+   rendering as black-on-near-black text against .step-card's dark
+   background. This was the real cause of "the whole page is unreadable". */
+.module-body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-surface);
+  color: var(--color-text-primary, var(--text-bright));
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+}
+.module-container { padding: 24px; box-sizing: border-box; }
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--color-text-secondary, var(--text-muted));
+}
+
 .site-header { margin-bottom: 0; }
 
 .header-eyebrow {
