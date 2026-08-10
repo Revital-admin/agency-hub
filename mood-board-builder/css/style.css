@@ -606,7 +606,8 @@
 .moodboard-annotation-item-body { flex: 1; min-width: 0; }
 .moodboard-annotation-item-author { font-weight: 600; color: var(--color-text-primary); margin-right: 6px; }
 .moodboard-annotation-item-text { color: var(--color-text-secondary); word-break: break-word; }
-.moodboard-annotation-item-delete {
+.moodboard-annotation-item-delete,
+.moodboard-annotation-item-edit {
   flex-shrink: 0;
   background: none;
   border: none;
@@ -616,6 +617,7 @@
   padding: 0 2px;
 }
 .moodboard-annotation-item-delete:hover { color: #f87171; }
+.moodboard-annotation-item-edit:hover { color: var(--color-accent); }
 
 .moodboard-annotation-popup {
   position: fixed;

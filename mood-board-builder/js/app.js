@@ -684,6 +684,10 @@ let adminLightboxBoardId = null;
 let adminAnnotateTool = null; // null | "pin" | "circle"
 let adminCircleDragStart = null;
 let adminPendingAnnotationDraft = null;
+// Id of an existing admin-authored annotation currently being edited, or
+// null when the popup is being used to add a brand new one instead - see
+// startEditAdminAnnotation and saveAdminAnnotationDraft below.
+let adminEditingAnnotationId = null;
 
 function openAdminMoodBoardLightbox(boardId, idx) {
   const client = currentClient();
@@ -810,9 +814,15 @@ function renderAdminAnnotationList(annotations) {
         <span class="moodboard-annotation-item-author">${a.author === 'admin' ? 'You / Team' : 'Client'}</span>
         <span class="moodboard-annotation-item-text">${escapeHtml(a.comment)}</span>
       </div>
-      ${a.author === 'admin' ? `<button type="button" class="moodboard-annotation-item-delete" data-id="${escapeHtml(a.id)}" aria-label="Delete note" title="Delete">✕</button>` : ''}
+      ${a.author === 'admin' ? `
+      <button type="button" class="moodboard-annotation-item-edit" data-id="${escapeHtml(a.id)}" aria-label="Edit note" title="Edit">✎</button>
+      <button type="button" class="moodboard-annotation-item-delete" data-id="${escapeHtml(a.id)}" aria-label="Delete note" title="Delete">✕</button>
+      ` : ''}
     </div>
   `).join('');
+  list.querySelectorAll('.moodboard-annotation-item-edit').forEach(btn => {
+    btn.addEventListener('click', () => startEditAdminAnnotation(btn.getAttribute('data-id')));
+  });
   list.querySelectorAll('.moodboard-annotation-item-delete').forEach(btn => {
     btn.addEventListener('click', () => deleteAdminAnnotation(btn.getAttribute('data-id')));
   });
@@ -854,11 +864,19 @@ function clearAdminCircleDragPreview() {
   if (preview) preview.remove();
 }
 
-function showAdminAnnotationPopup(clientX, clientY) {
+// prefillComment is only passed by startEditAdminAnnotation below - a
+// brand new note (adminPendingAnnotationDraft set instead) always starts
+// blank. Title/Save-button text switch based on adminEditingAnnotationId
+// so it's visually obvious which mode the popup is in.
+function showAdminAnnotationPopup(clientX, clientY, prefillComment) {
   const popup = el('mbAdminAnnotationPopup');
   const input = el('mbAdminAnnotationCommentInput');
+  const title = el('mbAdminAnnotationPopupTitle');
+  const saveBtn = el('mbAdminAnnotationSaveBtn');
   if (!popup || !input) return;
-  input.value = '';
+  input.value = prefillComment || '';
+  if (title) title.textContent = adminEditingAnnotationId ? 'Edit note' : 'Internal note';
+  if (saveBtn) saveBtn.textContent = adminEditingAnnotationId ? 'Update Note' : 'Save Note';
   const popupWidth = 260;
   const left = Math.min(window.innerWidth - popupWidth - 16, Math.max(16, clientX - popupWidth / 2));
   const top = Math.min(window.innerHeight - 140, clientY + 12);
@@ -872,16 +890,62 @@ function hideAdminAnnotationPopup() {
   const popup = el('mbAdminAnnotationPopup');
   if (popup) popup.style.display = 'none';
   adminPendingAnnotationDraft = null;
+  adminEditingAnnotationId = null;
+}
+
+// Opens the same popup a new note uses, pre-filled with an existing
+// admin-authored annotation's text - positioned over that annotation's
+// own marker on the image (same percent-to-pixel math the pin/circle
+// tools use when placing a new one) so it doesn't pop up somewhere
+// unrelated. Only admin's own notes are editable, same restriction
+// deleteAdminAnnotation already enforces - a client's note is never
+// something the Hub side should be able to silently rewrite.
+function startEditAdminAnnotation(id) {
+  const current = currentAdminAnnotationImage();
+  if (!current) return;
+  const list = getAdminImageAnnotations(current.id);
+  const annotation = list.find(a => a.id === id);
+  if (!annotation || annotation.author !== 'admin') return;
+
+  const wrap = el('mbAdminImageWrap');
+  if (!wrap) return;
+  const rect = wrap.getBoundingClientRect();
+  const clientX = rect.left + (annotation.x / 100) * rect.width;
+  const clientY = rect.top + (annotation.y / 100) * rect.height;
+
+  adminPendingAnnotationDraft = null;
+  adminEditingAnnotationId = id;
+  showAdminAnnotationPopup(clientX, clientY, annotation.comment);
 }
 
 function saveAdminAnnotationDraft() {
   const input = el('mbAdminAnnotationCommentInput');
   const comment = input ? input.value.trim() : '';
-  if (!comment || !adminPendingAnnotationDraft) { hideAdminAnnotationPopup(); return; }
+  if (!comment) { hideAdminAnnotationPopup(); return; }
 
   const client = currentClient();
   const current = currentAdminAnnotationImage();
   if (!client || !current) { hideAdminAnnotationPopup(); return; }
+
+  // Editing an existing note in place - only the comment text (and an
+  // editedAt stamp) changes. Position/type/id/author/createdAt all stay
+  // exactly as they were, so this can't be confused with a brand new note
+  // by anything reading moodBoardAnnotations later.
+  if (adminEditingAnnotationId) {
+    const boardMap = (client.moodBoardAnnotations && client.moodBoardAnnotations[adminLightboxBoardId]) || {};
+    const list = Array.isArray(boardMap[current.id]) ? boardMap[current.id] : [];
+    const annotation = list.find(a => a.id === adminEditingAnnotationId);
+    if (annotation) {
+      annotation.comment = comment;
+      annotation.editedAt = new Date().toISOString();
+    }
+    hideAdminAnnotationPopup();
+    renderAdminAnnotations();
+    persist();
+    return;
+  }
+
+  if (!adminPendingAnnotationDraft) { hideAdminAnnotationPopup(); return; }
 
   if (!client.moodBoardAnnotations) client.moodBoardAnnotations = {};
   if (!client.moodBoardAnnotations[adminLightboxBoardId]) client.moodBoardAnnotations[adminLightboxBoardId] = {};
