@@ -1,5 +1,19 @@
 .container-wide { max-width: 1320px; }
-.container { position: relative; z-index: 1; margin: 0 auto; padding: 3rem 1.5rem 4rem; }
+/* min-width:0 - body (root style.css) is display:flex, making this
+   <main> a flex item. Flex items default to min-width:auto (won't
+   shrink below their content's natural minimum width), so the roster
+   table's no-wrap cells (client-cell/date-cell) were quietly forcing
+   this whole container - and everything in it, including the cards
+   above the table - a bit wider than the viewport, even though the
+   table itself has its own overflow-x:auto wrapper. The table's own
+   scroll wrapper only kicks in once .container has a real width to
+   measure against; without min-width:0 there was nothing capping that
+   width to the viewport in the first place. Same fix/reasoning as
+   .main-content in the root style.css. Harmless at most screen sizes
+   (few px), but put the new dismissible-card × button (right:14px,
+   sitting right at the card's edge) right in the cut-off zone -
+   that's what actually surfaced it. */
+.container { position: relative; z-index: 1; margin: 0 auto; padding: 3rem 1.5rem 4rem; min-width: 0; }
 
 .summary-bar {
   display: flex;
