@@ -1,4 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
+  if (window.initDismissibleCards) initDismissibleCards();
+
   const formInputs = document.querySelectorAll('input, textarea');
   const pdfContainer = document.getElementById('pdfContainer');
   const generateBtn = document.getElementById('generatePdfBtn');

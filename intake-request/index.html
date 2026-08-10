@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="../client-welcome-guide/css/style.css?v=5">
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="../shared-dismissible-cards.js?v=1"></script>
 </head>
 <body>
   <div class="bg-grid"></div>
@@ -87,7 +88,7 @@
           <textarea id="welcomeNote" rows="3" placeholder="e.g. We are so excited to help Acme Corp hit your $10k MRR goal!"></textarea>
         </div>
 
-        <div class="alert-box">
+        <div class="alert-box" data-dismiss-key="intake-request-welcome-guide-note">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
           <div>Once intake comes back, use the Welcome Guide tool to send the full onboarding guide - it links to their Client Portal instead of this intake form.</div>
         </div>

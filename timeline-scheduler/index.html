@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="../style.css?v=8">
 <link rel="stylesheet" href="css/style.css?v=5">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+<script src="../shared-dismissible-cards.js?v=1"></script>
 </head>
 <body>
 <div class="bg-grid"></div>
@@ -93,7 +94,7 @@
   </div>
 
   <!-- Start Next Cycle banner (shows when every phase on this timeline is done) -->
-  <div class="step-card cycle-complete-banner" id="cycleCompleteBanner" style="display:none;">
+  <div class="step-card cycle-complete-banner" id="cycleCompleteBanner" data-dismiss-key="timeline-scheduler-cycle-complete" style="display:none;">
     <div class="panel-header">
       <h2>All phases complete</h2>
       <p>This timeline is finished. If this is recurring work (like a monthly content batch), start the next cycle with the same template - it archives this one and creates a fresh copy with a new start date.</p>
@@ -120,7 +121,7 @@
 </div>
 
 <!-- Template Library -->
-<div class="step-card" id="templateLibraryTrigger">
+<div class="step-card" id="templateLibraryTrigger" data-dismiss-key="timeline-scheduler-template-library">
   <div class="contract-library-header">
     <h2>Timeline Template Library</h2>
     <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-top: 4px;">Manage the phase templates available above (Website Build, and any others you add).</p>

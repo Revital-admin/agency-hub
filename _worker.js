@@ -93,6 +93,10 @@ export default {
       return handleBookingCreate(request, env);
     }
 
+    if (url.pathname === "/api/team-roster/sync-time-off" && request.method === "POST") {
+      return handleTeamRosterTimeOffSync(request, env);
+    }
+
     if (url.pathname === "/api/pipeline/sync-clickup" && request.method === "POST") {
       return handlePipelineSyncClickUp(request, env);
     }
@@ -1422,6 +1426,238 @@ function escapeHtmlServer(str) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+// ── Team Roster Time Off -> Google Calendar sync ──
+//
+// Team Roster's Time Off entries (see team-roster/js/app.js) already show
+// who's out inside the Hub, but that's only visible to someone who
+// actually opens the tool. This mirrors every add/remove out to Google
+// Calendar so it shows up where the team already looks day to day:
+//   1. A shared "Revital Team Out" calendar (one event per time-off
+//      entry, all-day, visible to the whole domain) - the single place
+//      anyone can see who's out without opening the Hub at all.
+//   2. A "Busy" all-day block on that person's OWN calendar, so nobody
+//      accidentally gets a meeting invite scheduled against them while
+//      they're out.
+// Both use the same hub-calendar-booking service account (domain-wide
+// delegation, GOOGLE_SERVICE_ACCOUNT_KEY) already granted the
+// https://www.googleapis.com/auth/calendar scope for prospect booking
+// above - no separate Workspace admin setup needed for #2. #1 needs the
+// shared calendar to exist first; getOrCreateTeamCalendar below creates
+// it once (impersonating TEAM_CALENDAR_OWNER_EMAIL) and shares it
+// domain-wide via the Calendar ACL API, then caches the resulting
+// calendar ID in Firestore so every later sync is a single write, not a
+// search-then-write. NOTE: sharing via the ACL API makes the calendar
+// joinable, but each person still has to add it once from their own
+// Google Calendar (Other calendars -> Subscribe -> search "Revital Team
+// Out") - there's no API-only way to force it into everyone's calendar
+// list without full Workspace-admin console access, which this service
+// account doesn't have.
+const TEAM_CALENDAR_OWNER_EMAIL = "admin@revitalproductions.com";
+const TEAM_CALENDAR_SUMMARY = "Revital Team Out";
+const TEAM_CALENDAR_TIMEZONE = "America/New_York";
+
+// Google Calendar all-day events use an EXCLUSIVE end date (a single-day
+// event's end.date is the day AFTER it, not the day itself) - this
+// converts our inclusive startDate/endDate (same as Team Roster's own
+// timeOff entries) into that shape.
+function addOneDayToDateKey(dateKey) {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + 1);
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+}
+
+// Cached in Firestore (agency/teamCalendarConfig.calendarId) after first
+// creation so later syncs don't need to search for it. Doesn't re-verify
+// the calendar still exists on every call - if it was deleted out from
+// under this, the event-insert call below will fail with a clear 404
+// rather than silently doing nothing.
+async function getOrCreateTeamCalendar(env) {
+  const { accessToken: fsToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+  const cached = await firestoreGetDoc(fsToken, projectId, "agency/teamCalendarConfig");
+  if (cached && cached.calendarId) return cached.calendarId;
+
+  const calToken = await getGoogleAccessTokenForUser(env, "https://www.googleapis.com/auth/calendar", TEAM_CALENDAR_OWNER_EMAIL);
+
+  const createRes = await fetch("https://www.googleapis.com/calendar/v3/calendars", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${calToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      summary: TEAM_CALENDAR_SUMMARY,
+      description: "Who's out - synced automatically from the Client Onboarding & Audit Hub's Team Roster & Capacity tool. Subscribe once (Other calendars -> Subscribe to calendar) to see it going forward.",
+      timeZone: TEAM_CALENDAR_TIMEZONE
+    })
+  });
+  const createData = await createRes.json().catch(() => ({}));
+  if (!createRes.ok) throw new Error((createData.error && createData.error.message) || `Couldn't create the team calendar (${createRes.status})`);
+  const calendarId = createData.id;
+
+  // Share domain-wide (read access to see events, not edit) so anyone
+  // who looks for it by name can subscribe - see the file-level comment
+  // above for why this still requires one manual Subscribe per person.
+  try {
+    await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/acl`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${calToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "reader", scope: { type: "domain", value: ADMIN_EMAIL_DOMAIN } })
+    });
+  } catch (e) {
+    // Non-fatal: the calendar still exists and events will still sync,
+    // it just won't be auto-discoverable domain-wide until this is set
+    // by hand in Google Calendar's own sharing settings.
+    console.error("Couldn't set domain-wide sharing on the team calendar (calendar still created):", e);
+  }
+
+  await firestoreSetDoc(fsToken, projectId, "agency/teamCalendarConfig", { calendarId, createdAt: new Date().toISOString() });
+  return calendarId;
+}
+
+// Creates the two calendar events (shared team calendar + the person's
+// own Busy block) for one Time Off entry. Each half is independent and
+// best-effort - e.g. a person whose email isn't on file (or isn't a real
+// mailbox) simply doesn't get the personal Busy block, but still shows
+// up on the shared team calendar. Returns whichever event IDs were
+// actually created so the caller can store them for later deletion, plus
+// any non-fatal warnings to surface to the person who triggered this.
+async function upsertTimeOffCalendarEvents(env, { memberName, memberEmail, startDate, endDate, note }) {
+  const result = { teamEventId: null, personalEventId: null, warnings: [] };
+  const endExclusive = addOneDayToDateKey(endDate || startDate);
+  const summary = `${memberName} - Out`;
+
+  try {
+    const calendarId = await getOrCreateTeamCalendar(env);
+    const calToken = await getGoogleAccessTokenForUser(env, "https://www.googleapis.com/auth/calendar", TEAM_CALENDAR_OWNER_EMAIL);
+    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${calToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        summary,
+        description: note || undefined,
+        start: { date: startDate },
+        end: { date: endExclusive },
+        transparency: "transparent" // doesn't block availability lookups against the shared calendar itself
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((data.error && data.error.message) || `Team calendar event failed (${res.status})`);
+    result.teamEventId = data.id;
+  } catch (e) {
+    result.warnings.push(`Shared team calendar: ${e.message}`);
+  }
+
+  if (memberEmail && memberEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+    try {
+      const personalToken = await getGoogleAccessTokenForUser(env, "https://www.googleapis.com/auth/calendar", memberEmail);
+      const res = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${personalToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          summary: "Out (Revital)",
+          start: { date: startDate },
+          end: { date: endExclusive },
+          transparency: "opaque", // shows as Busy so nobody double-books this person
+          visibility: "private"
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data.error && data.error.message) || `Personal calendar event failed (${res.status})`);
+      result.personalEventId = data.id;
+    } catch (e) {
+      result.warnings.push(`Personal calendar: ${e.message}`);
+    }
+  }
+
+  return result;
+}
+
+// Best-effort deletes for both halves of a Time Off entry - a 404/410
+// (already gone, e.g. someone deleted it by hand in Google Calendar)
+// is treated as success rather than surfaced as an error, since the end
+// state either way is "the event doesn't exist," which is what a delete
+// is trying to achieve.
+async function deleteTimeOffCalendarEvents(env, { teamEventId, personalEventId, memberEmail }) {
+  const warnings = [];
+  if (teamEventId) {
+    try {
+      const calendarId = await getOrCreateTeamCalendar(env);
+      const calToken = await getGoogleAccessTokenForUser(env, "https://www.googleapis.com/auth/calendar", TEAM_CALENDAR_OWNER_EMAIL);
+      const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(teamEventId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${calToken}` }
+      });
+      if (!res.ok && res.status !== 404 && res.status !== 410) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data.error && data.error.message) || `Team calendar delete failed (${res.status})`);
+      }
+    } catch (e) {
+      warnings.push(`Shared team calendar: ${e.message}`);
+    }
+  }
+  if (personalEventId && memberEmail) {
+    try {
+      const personalToken = await getGoogleAccessTokenForUser(env, "https://www.googleapis.com/auth/calendar", memberEmail);
+      const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(personalEventId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${personalToken}` }
+      });
+      if (!res.ok && res.status !== 404 && res.status !== 410) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data.error && data.error.message) || `Personal calendar delete failed (${res.status})`);
+      }
+    } catch (e) {
+      warnings.push(`Personal calendar: ${e.message}`);
+    }
+  }
+  return { warnings };
+}
+
+// ── POST /api/team-roster/sync-time-off ──
+// Admin-domain-only (same gate as handleRestrictedClientDataWrite) -
+// this isn't public like the booking routes above. Team Roster calls
+// this right after its own Firestore save already succeeded, so a
+// failure here is deliberately non-fatal to that save - see the
+// warnings array, which the client surfaces as a soft banner rather
+// than rolling back the (already-persisted) time-off entry.
+async function handleTeamRosterTimeOffSync(request, env) {
+  const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+  const { action } = payload || {};
+
+  if (action === "upsert") {
+    const { memberName, memberEmail, startDate, endDate, note } = payload;
+    if (!memberName || !startDate) {
+      return jsonResponse({ error: "memberName and startDate are required" }, 400);
+    }
+    try {
+      const result = await upsertTimeOffCalendarEvents(env, { memberName, memberEmail, startDate, endDate, note });
+      return jsonResponse({ ok: true, ...result });
+    } catch (e) {
+      return jsonResponse({ error: e.message }, 500);
+    }
+  }
+
+  if (action === "delete") {
+    const { teamEventId, personalEventId, memberEmail } = payload;
+    try {
+      const result = await deleteTimeOffCalendarEvents(env, { teamEventId, personalEventId, memberEmail });
+      return jsonResponse({ ok: true, ...result });
+    } catch (e) {
+      return jsonResponse({ error: e.message }, 500);
+    }
+  }
+
+  return jsonResponse({ error: "action must be 'upsert' or 'delete'" }, 400);
 }
 
 // ── Sales Pipeline Board -> ClickUp sync ──

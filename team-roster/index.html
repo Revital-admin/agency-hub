@@ -17,6 +17,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="../shared-contract-pdf-tools.js?v=1"></script>
+<script src="../shared-dismissible-cards.js?v=1"></script>
 </head>
 <body>
 <div class="bg-grid"></div>
@@ -49,7 +50,7 @@
      members' email fields surfaces anyone using the Hub who was never
      added here - see refreshHubAccessData/renderUnrosteredCallout in
      js/app.js. Hidden entirely when there's nothing to show. -->
-<div class="step-card" id="unrosteredCallout" style="display:none;">
+<div class="step-card" id="unrosteredCallout" data-dismiss-key="team-roster-unrostered-callout" style="display:none;">
 <div class="section-title" style="margin-bottom: 10px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
 <h2 style="font-family: var(--font-heading); color: var(--color-accent); font-size: 1.1rem;">Signed Into the Hub, Not on This Roster</h2>
 </div>
@@ -87,7 +88,7 @@
      contractTemplates + R2), just given its own access point so managing
      contractor paperwork never requires opening the client tool. Hidden
      for restricted teammates, same gate as Add/Edit/Remove above. -->
-<div class="step-card" id="contractorDocCard" style="display:none;">
+<div class="step-card" id="contractorDocCard" data-dismiss-key="team-roster-contractor-docs" style="display:none;">
 <div class="section-title" style="margin-bottom: 12px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
 <h2 style="font-family: var(--font-heading); color: var(--color-accent); font-size: 1.1rem;">Contractor Documents</h2>
 </div>

@@ -119,8 +119,15 @@ function renderUnrosteredCallout() {
       resetForm();
       el('formCard').style.display = 'block';
       el('email').value = btn.getAttribute('data-email');
-      el('memberName').focus();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // scrollIntoView the form first, then focus with preventScroll so
+      // the unguarded .focus() call (which auto-scrolls to whatever
+      // position the input happens to render at) can't fight the
+      // explicit scroll and leave the view stranded mid-page - same fix
+      // as newMemberBtn above, same root cause (this card renders below
+      // Contractor Documents, which the old top:0 scroll didn't account
+      // for either).
+      el('formCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      el('memberName').focus({ preventScroll: true });
     });
   });
 }
@@ -265,6 +272,37 @@ function renderTimeOffSection() {
   });
 }
 
+// Best-effort call to /api/team-roster/sync-time-off (see _worker.js) -
+// mirrors a Time Off add/remove out to Google Calendar (the shared
+// "Revital Team Out" calendar, plus a Busy block on the person's own
+// calendar). Deliberately never throws: this runs AFTER the roster's
+// own Firestore save has already succeeded, so a Calendar API hiccup
+// (expired delegation, rate limit, whatever) shouldn't look like the
+// Time Off entry itself failed to save - it didn't. Returns null on
+// any failure; callers treat that as "no calendar event IDs to store."
+async function syncTimeOffToCalendar(payload) {
+  if (!isEmbedded) return null;
+  try {
+    const res = await fetch('/api/team-roster/sync-time-off', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `Sync failed (${res.status})`);
+    if (data.warnings && data.warnings.length && window.parent.showBanner) {
+      window.parent.showBanner('error', "Time off saved, but calendar sync had trouble: " + data.warnings.join('; '));
+    }
+    return data;
+  } catch (e) {
+    console.warn("Couldn't sync time off to Google Calendar (the time-off entry itself is still saved):", e);
+    if (window.parent.showBanner) {
+      window.parent.showBanner('error', "Time off saved, but couldn't sync it to Google Calendar: " + e.message);
+    }
+    return null;
+  }
+}
+
 async function addTimeOff() {
   const entry = members.find(m => m.id === editingId);
   if (!entry) return;
@@ -277,7 +315,8 @@ async function addTimeOff() {
   }
   if (!Array.isArray(entry.timeOff)) entry.timeOff = [];
   const previous = entry.timeOff;
-  entry.timeOff = [...entry.timeOff, { id: uid(), startDate: start, endDate: end, note }]
+  const newEntry = { id: uid(), startDate: start, endDate: end, note };
+  entry.timeOff = [...entry.timeOff, newEntry]
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
   const ok = await persist();
@@ -290,18 +329,53 @@ async function addTimeOff() {
   el('timeOffNote').value = '';
   renderTimeOffSection();
   refreshViews();
+
+  // Fire the calendar sync after the roster save is already confirmed,
+  // then patch the resulting event IDs onto this same entry so Remove
+  // (below) can clean them up later. A second small persist() just for
+  // those two ID fields - not worth blocking the user's Add click on.
+  const calResult = await syncTimeOffToCalendar({
+    action: 'upsert',
+    memberName: entry.memberName,
+    memberEmail: entry.email || '',
+    startDate: newEntry.startDate,
+    endDate: newEntry.endDate,
+    note: newEntry.note
+  });
+  if (calResult) {
+    const live = members.find(m => m.id === editingId);
+    const liveEntry = live && Array.isArray(live.timeOff) ? live.timeOff.find(t => t.id === newEntry.id) : null;
+    if (liveEntry) {
+      liveEntry.gcalTeamEventId = calResult.teamEventId || null;
+      liveEntry.gcalPersonalEventId = calResult.personalEventId || null;
+      await persist();
+    }
+  }
 }
 
 async function removeTimeOff(id) {
   const entry = members.find(m => m.id === editingId);
   if (!entry || !Array.isArray(entry.timeOff)) return;
+  const removed = entry.timeOff.find(t => t.id === id);
   const previous = entry.timeOff;
   entry.timeOff = entry.timeOff.filter(t => t.id !== id);
 
   const ok = await persist();
-  if (!ok) entry.timeOff = previous;
+  if (!ok) { entry.timeOff = previous; renderTimeOffSection(); refreshViews(); return; }
   renderTimeOffSection();
   refreshViews();
+
+  // Same non-blocking, best-effort pattern as addTimeOff - the roster
+  // entry is already gone either way, this just tidies up the calendar
+  // events that went with it.
+  if (removed && (removed.gcalTeamEventId || removed.gcalPersonalEventId)) {
+    syncTimeOffToCalendar({
+      action: 'delete',
+      teamEventId: removed.gcalTeamEventId || null,
+      personalEventId: removed.gcalPersonalEventId || null,
+      memberEmail: entry.email || ''
+    });
+  }
 }
 
 // ── Calendar view (rolling 30-day time-off timeline) ──
@@ -1602,6 +1676,12 @@ function applyEditPermission() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // Contractor Documents and the Unrostered callout are both long, both
+  // auxiliary to the actual roster/form below them - see
+  // shared-dismissible-cards.js for why these two got the × treatment
+  // first (same investigation as the Add-to-Roster scroll fix above).
+  if (window.initDismissibleCards) initDismissibleCards();
+
   applyEditPermission();
   resetForm();
   await Promise.all([loadMembers(), refreshCapacitySnapshot(), refreshHubAccessData()]);
@@ -1610,7 +1690,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   el('newMemberBtn').addEventListener('click', () => {
     resetForm();
     el('formCard').style.display = 'block';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Was window.scrollTo({top:0}) - that scrolled to the literal top of
+    // the page, which (now that Contractor Documents and the Unrostered
+    // callout both sit above this card) landed on those instead of the
+    // form itself. Looked like clicking "+ Add Team Member" did nothing.
+    // scrollIntoView targets the form card directly regardless of what's
+    // stacked above it.
+    el('formCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
   el('saveMemberBtn').addEventListener('click', saveMember);
   el('cancelEditBtn').addEventListener('click', resetForm);

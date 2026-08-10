@@ -3287,3 +3287,57 @@ textarea {
 #logoutBtn:hover {
   background: rgba(239, 68, 68, 0.1);
 }
+
+/* ── Dismissible Cards (shared-dismissible-cards.js) ──
+   Opt-in × button for secondary/auxiliary cards - NOT meant for a tool's
+   main/only content, just the "extra" cards stacked above or around it
+   (Team Roster's Contractor Documents and "Signed Into the Hub, Not on
+   This Roster" callout were the first two - both long, both sitting
+   above the actual form, both something you want out of the way most of
+   the time but don't want to lose entirely). Collapses to a slim bar
+   with the card's own heading text + "Show", rather than vanishing with
+   no way back - state persists per-browser via localStorage, keyed by
+   each card's own data-dismiss-key so it's independent per card/tool.
+   See shared-dismissible-cards.js for the JS half. */
+.dismissible-card { position: relative; }
+.dismissible-card-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted, var(--color-text-secondary));
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  z-index: 2;
+}
+.dismissible-card-close:hover {
+  color: var(--color-accent);
+  background: rgba(255, 255, 255, 0.05);
+}
+.dismissible-card.is-collapsed > *:not(.dismissible-card-collapsed-bar) {
+  display: none !important;
+}
+.dismissible-card-collapsed-bar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.85rem;
+  color: var(--text-muted, var(--color-text-secondary));
+  cursor: pointer;
+  padding: 2px;
+}
+.dismissible-card.is-collapsed .dismissible-card-collapsed-bar {
+  display: flex;
+}
+.dismissible-card-collapsed-bar:hover {
+  color: var(--color-text, #fff);
+}
+.dismissible-card-collapsed-bar-show {
+  text-decoration: underline;
+  white-space: nowrap;
+}

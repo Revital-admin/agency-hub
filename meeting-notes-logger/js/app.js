@@ -369,6 +369,8 @@ function saveMeeting() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  if (window.initDismissibleCards) initDismissibleCards();
+
   populateClientSelect();
   el('clientSelect').addEventListener('change', renderState);
   el('addActionItemBtn').addEventListener('click', () => addActionItemRow());

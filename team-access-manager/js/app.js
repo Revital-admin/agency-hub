@@ -483,7 +483,7 @@ function startEdit(email) {
   setCheckedSections(norm.sections);
   renderStaleKeyWarning(norm.sections);
   el("saveRestrictionBtn").textContent = "Update Access";
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  el("restrictEmailInput").closest(".step-card").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function resetForm() {

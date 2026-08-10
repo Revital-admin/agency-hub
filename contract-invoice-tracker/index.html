@@ -17,6 +17,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="../shared-contract-pdf-tools.js?v=1"></script>
+<script src="../shared-dismissible-cards.js?v=1"></script>
 </head>
 <body>
 <div class="bg-grid"></div>
@@ -121,7 +122,7 @@
      the full list of templates was cluttering the page every time it
      grew, and it's only needed occasionally (adding a new one, or
      replacing one with an updated version), not on every visit. -->
-<div class="step-card" id="contractLibraryTrigger">
+<div class="step-card" id="contractLibraryTrigger" data-dismiss-key="contract-invoice-tracker-template-library">
 <div class="contract-library-header">
 <h2>Contract Template Library</h2>
 <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-top: 4px;">Add, replace, or remove the contract PDFs available in "Send Contract" below.</p>

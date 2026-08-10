@@ -596,6 +596,7 @@ function renderTasteProfile() {
     ${rows}
     <div class="scale-mini-overall">Average Overall Fit: <strong>${overallText}</strong></div>
   `;
+  if (window.initDismissibleCards) initDismissibleCards();
 }
 
 const BOARD_CARD_THUMB_LIMIT = 5;
@@ -982,6 +983,8 @@ function deleteAdminAnnotation(id) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  if (window.initDismissibleCards) initDismissibleCards();
+
   populateClientSelect();
   el('clientSelect').addEventListener('change', renderState);
   el('saveBoardBtn').addEventListener('click', saveBoard);

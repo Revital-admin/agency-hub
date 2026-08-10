@@ -839,6 +839,7 @@ function wireStaticEvents() {
 /* ---------- init ---------- */
 
 async function init() {
+  if (window.initDismissibleCards) initDismissibleCards();
   if (isEmbedded && window.parent.getAllClients) {
     const all = window.parent.getAllClients() || {};
     const active = getClient();

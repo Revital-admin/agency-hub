@@ -13,6 +13,7 @@
        downloaded Gemini/Google Meet notes doc can be dragged in directly
        without the user manually copy-pasting. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.11.0/mammoth.browser.min.js"></script>
+  <script src="../shared-dismissible-cards.js?v=1"></script>
 </head>
 <body class="module-body">
   <div class="module-container">
@@ -38,7 +39,7 @@
           </div>
         </div>
 
-        <div class="step-card summary-card" id="summaryCard" style="display: none;">
+        <div class="step-card summary-card" id="summaryCard" style="display: none;" data-dismiss-key="meeting-notes-logger-action-items-overview">
           <h3>Action Items Overview</h3>
           <div class="stats-grid">
             <div class="stat-box">

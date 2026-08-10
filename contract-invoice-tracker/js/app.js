@@ -2008,6 +2008,7 @@ function initListeners() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  if (window.initDismissibleCards) initDismissibleCards();
   applyContractLibraryEditPermission();
   populateClientDatalist();
   await loadRecords();
