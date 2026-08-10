@@ -2488,8 +2488,13 @@ function renderDashboard() {
   document.getElementById("dashSocialAuditProgress").style.width = `${socialAuditPct}%`;
 
   // Logged Website Competitors count
+  // client.webComp may be entirely absent for restricted Team Access users
+  // whose filtered clientsDb data omits the strategy-competition section -
+  // guard instead of assuming it's always present (was crashing the whole
+  // sync/render cycle for those users, see "Couldn't sync with the cloud
+  // database" banner bug).
   let loggedWebComps = 0;
-  client.webComp.names.forEach(name => {
+  (client.webComp && Array.isArray(client.webComp.names) ? client.webComp.names : []).forEach(name => {
     if (name && name !== "Competitor A" && name !== "Competitor B" && name !== "Competitor C" && name.trim() !== "") {
       loggedWebComps++;
     }
@@ -2498,7 +2503,7 @@ function renderDashboard() {
   document.getElementById("dashWebCompetitorProgress").style.width = `${(loggedWebComps / 3) * 100}%`;
 
   let loggedSocialComps = 0;
-  client.socialComp.names.forEach(name => {
+  (client.socialComp && Array.isArray(client.socialComp.names) ? client.socialComp.names : []).forEach(name => {
     if (name && name !== "Competitor A" && name !== "Competitor B" && name !== "Competitor C" && name.trim() !== "") {
       loggedSocialComps++;
     }
