@@ -2079,12 +2079,10 @@ async function handleRestrictedClientDataWrite(request, env) {
     // commitDatabaseToCloud already uses client-side (see app.js), just
     // scoped to one shard instead of all of them, and without needing
     // this caller to have had the rest of the shard's other clients in
-    // memory at all. NOTE: there's a small unguarded race window between
-    // this read and the write below if two saves land on the same shard
-    // at nearly the same instant (no version check like
-    // commitDatabaseToCloud's clientsDbDocVersion guard) - acceptable for
-    // this team's size and write frequency today, but worth adding if
-    // restricted-user write volume ever grows.
+    // memory at all. There's still a small unguarded race window between
+    // this read and the write below if two saves land on THIS SAME shard
+    // at nearly the same instant - acceptable for this team's size and
+    // write frequency today, same as before.
     const meta = await firestoreGetDoc(accessToken, projectId, "agency/clientsDbShardMeta");
     const shardCount = meta && typeof meta.count === "number" ? meta.count : 0;
 
@@ -2104,6 +2102,31 @@ async function handleRestrictedClientDataWrite(request, env) {
 
     targetShardData[clientName] = Object.assign({}, targetShardData[clientName], fields);
     await firestoreSetDoc(accessToken, projectId, `agency/clientsDb-shard-${targetShardIndex}`, targetShardData);
+
+    // Bump the shared version counter (agency/clientsDbShardMeta.version)
+    // that commitDatabaseToCloud's optimistic-concurrency check reads (see
+    // its own comment in app.js) - closing the gap where this endpoint's
+    // writes were completely invisible to that check. Every unrestricted
+    // admin tab holds a LIVE onSnapshot listener on this same meta doc
+    // (startUnrestrictedClientsDbSync in app.js), so bumping it here
+    // updates their cached clientsDbDocVersion in real time too - this
+    // isn't just "the next save gets rejected," it's "every open admin
+    // tab immediately knows a restricted teammate just wrote something."
+    // Without this, an admin's next full-shard save (which re-serializes
+    // ALL clients from whatever it already had in memory) could silently
+    // clobber a restricted teammate's just-saved fields with no conflict
+    // ever surfacing, since the version it was comparing against never
+    // moved. Re-fetches the meta doc fresh right before writing it
+    // (instead of reusing the `meta` read above) so a write that landed on
+    // a DIFFERENT shard while this one was in flight still gets its bump
+    // counted, not silently overwritten.
+    const freshMeta = await firestoreGetDoc(accessToken, projectId, "agency/clientsDbShardMeta");
+    const currentVersion = freshMeta && typeof freshMeta.version === "number" ? freshMeta.version : 0;
+    const currentCount = freshMeta && typeof freshMeta.count === "number" ? freshMeta.count : shardCount;
+    await firestoreSetDoc(accessToken, projectId, "agency/clientsDbShardMeta", {
+      count: currentCount,
+      version: currentVersion + 1
+    });
 
     return jsonResponse({ success: true }, 200, { "Cache-Control": "no-store" });
   } catch (e) {
