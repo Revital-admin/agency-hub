@@ -1506,7 +1506,12 @@ function startEdit(id) {
   updateComplianceFieldsVisibility();
   renderTimeOffSection();
   renderOnboardingSection();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  // Same bug/fix as newMemberBtn and the Unrostered callout's Add
+  // button above: this landed on Contractor Documents / the Unrostered
+  // callout instead of the form being edited, since window.scrollTo({top:0})
+  // scrolls to literal page top regardless of what's stacked above the
+  // form. Missed this one in the first pass since it's Edit, not Add.
+  el('formCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function removeMember(id) {
