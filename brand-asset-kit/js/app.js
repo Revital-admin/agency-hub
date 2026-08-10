@@ -134,8 +134,17 @@ function renderState() {
 function autoSelectActiveClient() {
   if (!isEmbedded) return;
   try {
+    // getActiveClient() returns the active client's DATA object (keyed by
+    // name in the parent's clientsDb), not the name itself - the object has
+    // no .name field of its own. Reading active.name here always returned
+    // undefined, so this function has silently been a no-op. Reverse-lookup
+    // the name instead, same fix as Brand Roadmap's identical bug.
     const active = window.parent.getActiveClient && window.parent.getActiveClient();
-    const activeName = active && active.name;
+    let activeName = null;
+    if (active) {
+      const clients = getClients();
+      activeName = Object.keys(clients).find(name => clients[name] === active) || null;
+    }
     const select = el('clientSelect');
     if (activeName && Array.from(select.options).some(o => o.value === activeName)) {
       select.value = activeName;

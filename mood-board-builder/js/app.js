@@ -33,6 +33,24 @@ function persist() {
   if (isEmbedded) window.parent.saveDatabase();
 }
 
+// Reverse-lookup: the parent Hub's getActiveClient() returns the active
+// client OBJECT, not its name, and the parent's own activeClientName isn't
+// exposed on window (top-level let/const don't attach to window). Used only
+// to pick a sensible FIRST default for this tool's own independent
+// dropdown (see file header) - doesn't create any ongoing two-way sync with
+// the global active client, so it doesn't undercut that independence.
+function getGlobalActiveClientName() {
+  if (!isEmbedded) return null;
+  try {
+    const active = window.parent.getActiveClient && window.parent.getActiveClient();
+    if (!active) return null;
+    const clients = getClients();
+    return Object.keys(clients).find(name => clients[name] === active) || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function populateClientSelect() {
   const clients = getClients();
   const select = el('clientSelect');
@@ -45,7 +63,12 @@ function populateClientSelect() {
     opt.textContent = name;
     select.appendChild(opt);
   });
-  if (prevValue && clients[prevValue]) select.value = prevValue;
+  if (prevValue && clients[prevValue]) {
+    select.value = prevValue;
+  } else if (!prevValue) {
+    const activeName = getGlobalActiveClientName();
+    if (activeName && clients[activeName]) select.value = activeName;
+  }
 }
 
 let editingBoardId = null;
@@ -1001,7 +1024,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const hasClients = Object.keys(getClients()).length > 0;
     if (hasClients || clientPollAttempts > 30) {
       clearInterval(clientPoll);
-      if (hasClients) populateClientSelect();
+      if (hasClients) {
+        populateClientSelect();
+        renderState();
+      }
     }
   }, 250);
 });
