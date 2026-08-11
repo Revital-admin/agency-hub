@@ -57,7 +57,7 @@
 
   <!-- Central references and Application State Controller -->
   <script src="data-store.js?v=3"></script>
-  <script src="app.js?v=99"></script>
+  <script src="app.js?v=100"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
 </head>
@@ -478,6 +478,12 @@
             <button class="nav-item-btn" data-tab="tab-teamroster">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
               <span>Team Roster &amp; Capacity</span>
+            </button>
+          </li>
+          <li>
+            <button class="nav-item-btn" data-tab="tab-mytimeoff">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <span>My Time Off</span>
             </button>
           </li>
           <li>
@@ -1881,6 +1887,11 @@
 
       <!-- ── TEAM ROSTER & CAPACITY ── -->
       <section id="tab-teamroster" class="tab-section tab-fullbleed" style="width: 100%; height: 100vh; padding: 0;">
+        <iframe src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
+      </section>
+
+      <!-- ── MY TIME OFF ── -->
+      <section id="tab-mytimeoff" class="tab-section tab-fullbleed" style="width: 100%; height: 100vh; padding: 0;">
         <iframe src="" style="width: 100%; height: 100%; border: none;" allow="clipboard-write"></iframe>
       </section>
 

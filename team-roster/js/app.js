@@ -132,6 +132,106 @@ function renderUnrosteredCallout() {
   });
 }
 
+// ── Pending Time Off Requests (approval step for My Time Off) ──
+function renderPendingTimeOffCard() {
+  const card = el('pendingTimeOffCard');
+  const list = el('pendingTimeOffList');
+  if (!card || !list) return;
+
+  if (isRestrictedUser) { card.style.display = 'none'; return; }
+
+  const pending = [];
+  members.forEach(m => {
+    (m.pendingTimeOff || []).forEach(req => {
+      if (req.status === 'pending') pending.push({ member: m, req });
+    });
+  });
+  pending.sort((a, b) => (a.req.requestedAt || '').localeCompare(b.req.requestedAt || ''));
+
+  if (!pending.length) { card.style.display = 'none'; return; }
+
+  card.style.display = 'block';
+  list.innerHTML = pending.map(({ member, req }) => `
+    <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--color-border); flex-wrap:wrap;">
+      <div style="flex:1; min-width:220px;">
+        <div style="font-size:0.88rem; font-weight:600;">${escapeHtml(member.memberName || 'Unknown')}</div>
+        <div style="font-size:0.78rem; color:var(--text-muted);">${formatShortDate(req.startDate)} &ndash; ${formatShortDate(req.endDate)}${req.note ? ' &middot; ' + escapeHtml(req.note) : ''}</div>
+      </div>
+      <button type="button" class="btn btn-secondary pending-timeoff-approve-btn" data-member-id="${escapeHtml(member.id)}" data-req-id="${escapeHtml(req.id)}" style="padding:5px 12px; font-size:0.78rem;">Approve</button>
+      <button type="button" class="btn btn-secondary pending-timeoff-decline-btn" data-member-id="${escapeHtml(member.id)}" data-req-id="${escapeHtml(req.id)}" style="padding:5px 12px; font-size:0.78rem; color:#ef4444;">Decline</button>
+    </div>`).join('');
+
+  list.querySelectorAll('.pending-timeoff-approve-btn').forEach(btn => {
+    btn.addEventListener('click', () => approveTimeOffRequest(btn.getAttribute('data-member-id'), btn.getAttribute('data-req-id')));
+  });
+  list.querySelectorAll('.pending-timeoff-decline-btn').forEach(btn => {
+    btn.addEventListener('click', () => declineTimeOffRequest(btn.getAttribute('data-member-id'), btn.getAttribute('data-req-id')));
+  });
+}
+
+// Approving moves the request out of pendingTimeOff and into the same
+// timeOff array/Google Calendar sync path addTimeOff() uses directly, so
+// there's exactly one place that talks to the calendar API, not two.
+async function approveTimeOffRequest(memberId, reqId) {
+  const member = members.find(m => m.id === memberId);
+  if (!member || !Array.isArray(member.pendingTimeOff)) return;
+  const req = member.pendingTimeOff.find(r => r.id === reqId);
+  if (!req) return;
+
+  const previousPending = member.pendingTimeOff;
+  const previousTimeOff = member.timeOff;
+  member.pendingTimeOff = member.pendingTimeOff.filter(r => r.id !== reqId);
+  if (!Array.isArray(member.timeOff)) member.timeOff = [];
+  const newEntry = { id: uid(), startDate: req.startDate, endDate: req.endDate, note: req.note, requestedByEmail: req.requestedByEmail || null };
+  member.timeOff = [...member.timeOff, newEntry].sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+  const ok = await persist();
+  if (!ok) {
+    member.pendingTimeOff = previousPending;
+    member.timeOff = previousTimeOff;
+    return;
+  }
+  renderPendingTimeOffCard();
+  refreshViews();
+
+  const calResult = await syncTimeOffToCalendar({
+    action: 'upsert',
+    memberName: member.memberName,
+    memberEmail: member.email || '',
+    startDate: newEntry.startDate,
+    endDate: newEntry.endDate,
+    note: newEntry.note
+  });
+  if (calResult) {
+    const live = members.find(m => m.id === memberId);
+    const liveEntry = live && Array.isArray(live.timeOff) ? live.timeOff.find(t => t.id === newEntry.id) : null;
+    if (liveEntry) {
+      liveEntry.gcalTeamEventId = calResult.teamEventId || null;
+      liveEntry.gcalPersonalEventId = calResult.personalEventId || null;
+      await persist();
+    }
+  }
+}
+
+// Declining leaves the request in pendingTimeOff with status:'declined'
+// (rather than deleting it outright) so My Time Off can still show the
+// teammate their request was seen and turned down, not just silently
+// vanish. declined/approved-elsewhere entries older than 30 days get
+// swept out on save so this doesn't grow forever.
+async function declineTimeOffRequest(memberId, reqId) {
+  const member = members.find(m => m.id === memberId);
+  if (!member || !Array.isArray(member.pendingTimeOff)) return;
+  const req = member.pendingTimeOff.find(r => r.id === reqId);
+  if (!req) return;
+  const previous = member.pendingTimeOff;
+  req.status = 'declined';
+  req.decidedAt = new Date().toISOString();
+
+  const ok = await persist();
+  if (!ok) { member.pendingTimeOff = previous; return; }
+  renderPendingTimeOffCard();
+}
+
 // Small "last active" caption shown under a roster row's name (see
 // renderTable) - deliberately not gating anything (a restricted section
 // header wouldn't make sense here), purely informational, same spirit as
@@ -217,10 +317,20 @@ function toggleClientExpand(id) {
 // ── Time Off (lightweight - not a payroll/HR system) ──
 // Each entry has its own timeOff: [{id, startDate, endDate, note}] list,
 // same optimistic-concurrency save as everything else here. Deliberately
-// small: no accrual, no approval workflow, no balance tracking - this is
-// just "so the rest of the team can see who's out" visible right next to
-// the same capacity info they're already checking before assigning new
-// client work, not a replacement for whatever actually runs payroll.
+// small: no accrual, no balance tracking - this is just "so the rest of
+// the team can see who's out" visible right next to the same capacity
+// info they're already checking before assigning new client work, not a
+// replacement for whatever actually runs payroll.
+//
+// A lightweight approval step was added on top of this: each member also
+// carries a pendingTimeOff: [{id, startDate, endDate, note, status,
+// requestedByEmail, requestedAt}] list (status is 'pending' or
+// 'declined' - approved entries get MOVED into the real timeOff array
+// above, not left here with a status). Requests are created by the
+// teammate themselves in the separate My Time Off self-service tool
+// (my-time-off/), which writes directly into this same agency/teamRoster
+// doc. See renderPendingTimeOffCard/approveTimeOffRequest/
+// declineTimeOffRequest below.
 function formatShortDate(iso) {
   if (!iso) return '';
   const d = new Date(iso + 'T00:00:00');
@@ -582,6 +692,22 @@ function getDocRef() {
   return window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "teamRoster");
 }
 
+// Drops declined time-off requests older than 30 days so pendingTimeOff
+// doesn't grow forever once My Time Off is in regular use - mutates
+// in-memory only, rides along on whatever save happens next rather than
+// forcing an extra write on every load.
+function pruneOldDeclinedTimeOffRequests(list) {
+  const cutoff = Date.now() - 30 * 86400000;
+  list.forEach(m => {
+    if (!Array.isArray(m.pendingTimeOff)) return;
+    m.pendingTimeOff = m.pendingTimeOff.filter(req => {
+      if (req.status !== 'declined') return true;
+      const decided = req.decidedAt ? new Date(req.decidedAt).getTime() : 0;
+      return !decided || decided > cutoff;
+    });
+  });
+}
+
 async function loadMembers() {
   if (isEmbedded && window.parent.firebaseGetDoc) {
     try {
@@ -590,6 +716,7 @@ async function loadMembers() {
       const data = snap && snap.exists ? snap.data() : null;
       members = (data && data.list) || [];
       docVersion = (data && data.version) || 0;
+      pruneOldDeclinedTimeOffRequests(members);
       return;
     } catch (e) {
       console.error("Couldn't load team roster from the cloud:", e);
@@ -601,6 +728,7 @@ async function loadMembers() {
   try {
     const saved = localStorage.getItem('team-roster-list');
     members = saved ? JSON.parse(saved) : [];
+    pruneOldDeclinedTimeOffRequests(members);
   } catch (e) { members = []; }
 }
 
@@ -1558,6 +1686,7 @@ function updateSummary() {
 function renderTable() {
   updateSummary();
   renderUnrosteredCallout();
+  renderPendingTimeOffCard();
 
   const filter = (el('filterInput').value || '').trim().toLowerCase();
   const rows = members.filter(m => {

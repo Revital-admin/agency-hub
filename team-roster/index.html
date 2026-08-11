@@ -43,6 +43,22 @@
 <div class="summary-stat"><span class="summary-num" id="summaryAtCapacity">0</span><span class="summary-label">At Capacity</span></div>
 </div>
 
+<!-- Pending Time Off Requests - submitted by teammates themselves from
+     the "My Time Off" self-service tool (my-time-off/), not entered here
+     directly. Lives in each member's own pendingTimeOff array in this
+     same agency/teamRoster doc (see js/app.js loadMembers/persist) so
+     approving just moves the entry into that member's real timeOff array
+     - reusing the exact same Google Calendar sync addTimeOff() already
+     does, rather than a separate approval pipeline. Hidden entirely when
+     there's nothing pending. -->
+<div class="step-card" id="pendingTimeOffCard" data-dismiss-key="team-roster-pending-timeoff" style="display:none;">
+<div class="section-title" style="margin-bottom: 10px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent); font-size: 1.1rem;">Pending Time Off Requests</h2>
+</div>
+<p style="font-size:0.8rem; color:var(--text-muted); margin-bottom: 10px;">Submitted from My Time Off. Approving adds it to their roster entry and syncs it to Google Calendar the same way manually adding time off here does.</p>
+<div id="pendingTimeOffList"></div>
+</div>
+
 <!-- Signed into the Hub but not on this roster yet - built from
      agency/teamActivity, which every teammate's login already writes a
      lastSeen timestamp into (see recordLastSeen in app.js), regardless of
@@ -260,6 +276,6 @@
 </div>
 
 </main>
-<script src="js/app.js?v=10"></script>
+<script src="js/app.js?v=11"></script>
 </body>
 </html>

@@ -644,6 +644,7 @@ let iframeNeedsReload = {
   "tab-businessinsurance": true,
   "tab-activitylog": true,
   "tab-teamroster": true,
+  "tab-mytimeoff": true,
   "tab-hourslog": true,
   "tab-testimonialtracker": true,
   "tab-reviewtracker": true,
@@ -1312,6 +1313,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-teamroster":
       renderTeamRoster();
+      break;
+    case "tab-mytimeoff":
+      renderMyTimeOff();
       break;
     case "tab-hourslog":
       renderHoursLog();
@@ -3101,6 +3105,11 @@ function renderActivityLogTab() {
 // ── Team Roster & Capacity Controller ──
 function renderTeamRoster() {
   setIframeAbsoluteSrc('#tab-teamroster iframe', "team-roster/index.html");
+}
+
+// ── My Time Off Controller ──
+function renderMyTimeOff() {
+  setIframeAbsoluteSrc('#tab-mytimeoff iframe', "my-time-off/index.html");
 }
 
 function renderHoursLog() {

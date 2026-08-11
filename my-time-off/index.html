@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Time Off</title>
+<link rel="stylesheet" href="../style.css?v=3">
+<link rel="stylesheet" href="css/style.css?v=1">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+<main class="main-content" style="max-width: 720px;">
+
+<header class="site-header">
+<div class="header-eyebrow">
+<span class="dot"></span>
+<span>Account Management</span>
+</div>
+<h1 class="site-title">My <em>Time Off</em></h1>
+<p class="site-subtitle">Request time off - it goes to an admin for approval, then syncs to the shared team calendar and your own once it's approved.</p>
+</header>
+
+<!-- Shown if the signed-in email doesn't match anyone in Team Roster yet
+     (e.g. brand new hire not added there). Nothing else on this page can
+     work without a matching roster entry - see js/app.js init(). -->
+<div class="step-card" id="notOnRosterState" style="display:none; text-align:center;">
+<p style="color: var(--color-text-secondary); margin: 0;">You're signed into the Hub, but not on the Team Roster yet. Ask an admin to add you there before requesting time off.</p>
+</div>
+
+<div id="myTimeOffContent" style="display:none;">
+
+<div class="step-card">
+<div class="section-title" style="margin-bottom: 12px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent); font-size: 1.1rem;">Request Time Off</h2>
+</div>
+<div style="display:flex; gap:14px; flex-wrap:wrap;">
+<div class="form-group" style="flex:1; min-width:160px; margin-bottom:14px;">
+<label for="mtoStart">Start Date</label>
+<input type="date" id="mtoStart">
+</div>
+<div class="form-group" style="flex:1; min-width:160px; margin-bottom:14px;">
+<label for="mtoEnd">End Date (optional)</label>
+<input type="date" id="mtoEnd">
+</div>
+</div>
+<div class="form-group">
+<label for="mtoNote">Note (optional)</label>
+<input type="text" id="mtoNote" placeholder="e.g. Vacation, appointment...">
+</div>
+<button class="btn-primary" id="mtoSubmitBtn" type="button">Submit Request</button>
+<span id="mtoFormStatus" class="form-status"></span>
+</div>
+
+<div class="step-card" style="margin-top: 24px;">
+<div class="section-title" style="margin-bottom: 12px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent); font-size: 1.1rem;">My Requests</h2>
+</div>
+<div id="myRequestsList"></div>
+<p id="myRequestsEmptyState" class="empty-state" style="display:none;">No time off requested yet.</p>
+</div>
+
+</div>
+</main>
+
+<script src="js/app.js?v=1"></script>
+</body>
+</html>
