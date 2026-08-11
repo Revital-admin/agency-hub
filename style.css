@@ -382,6 +382,15 @@ body {
 .brand-logo-svg {
   color: var(--primary);
   filter: drop-shadow(0 0 8px rgba(246, 141, 95, 0.4));
+  /* Flex items shrink by default - without this, adding the idle-lock
+     PIN button (Aug 2026) as a second icon next to the notification bell
+     made .brand-section's children no longer fit at natural size, and
+     the logo (having no fixed width of its own, unlike the 44px icon
+     buttons) took the squeeze: it rendered squashed to a sliver instead
+     of its real 24x24 square. flex-shrink:0 keeps it a fixed size no
+     matter how many icon buttons sit next to it; .brand-name is left to
+     wrap onto a second line instead, which it already does by design. */
+  flex-shrink: 0;
 }
 
 .brand-name {
