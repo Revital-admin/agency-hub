@@ -2,10 +2,21 @@
    CONTRACT & INVOICE STATUS TRACKER — APP LOGIC
    (standalone: clients tracked here are NOT clientsDb entries - a
    contract often goes out before someone is a fully onboarded client,
-   so this keeps its own list at agency/contractInvoices rather than
-   forcing you to create a full Client Workspace just to track a
-   contract/invoice. Existing client names still show up as
-   autocomplete suggestions.)
+   so this keeps its own records rather than forcing you to create a
+   full Client Workspace just to track a contract/invoice. Existing
+   client names still show up as autocomplete suggestions.)
+
+   Storage (Aug 2026): one Firestore document per record, in a top-level
+   contractInvoiceRecords collection - NOT the old agency/contractInvoices
+   {list: [...]} single document. Same storage-scaling migration already
+   applied to Hours & Time Log and Resource Bookings this same round -
+   applied here last, since this collection's growth is bounded by
+   client/contract count rather than activity volume (lower urgency, but
+   the same underlying risk that once forced clientsDb into an emergency
+   shard migration - see data-loss-prevention-plan.md). The Stripe
+   webhook handler (_worker.js's applyStripeEventToContractInvoices)
+   reads/writes this same collection now instead of rewriting the whole
+   list on every billing event.
    ============================================================ */
 
 let isEmbedded = false;
@@ -20,7 +31,6 @@ try {
 const SANDBOX_NAME = "Quick Sandbox (One-Offs)";
 
 let records = [];
-let docVersion = 0; // optimistic-concurrency guard, see persist() below
 
 // Same partial gate as Team Roster/SOP Wiki/Email Template Library:
 // everyone can still view the library and send contracts, but only
@@ -51,19 +61,32 @@ const INVOICE_STATUSES = ['Not Sent', 'Sent', 'Paid', 'Overdue'];
 
 function el(id) { return document.getElementById(id); }
 
-function getRecordsDocRef() {
+/* ── Data load/save (per-document collection - see header comment) ──
+   No docVersion / optimistic-concurrency guard anymore: each record is
+   its own document, so two people editing DIFFERENT clients' records at
+   once can never conflict the way whole-list saves used to. Editing the
+   exact same record at once is still last-write-wins, same as any
+   single Firestore document - matches the tradeoff already made for
+   Resource Bookings and Hours & Time Log's own migrations. */
+
+function getRecordDocRef(id) {
   if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb) return null;
-  return window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "contractInvoices");
+  return window.parent.firebaseDoc(window.parent.firebaseDb, "contractInvoiceRecords", id);
+}
+
+function getRecordsCollectionRef() {
+  if (!isEmbedded || !window.parent.firebaseCollection || !window.parent.firebaseDb) return null;
+  return window.parent.firebaseCollection(window.parent.firebaseDb, "contractInvoiceRecords");
 }
 
 async function loadRecords() {
-  if (isEmbedded && window.parent.firebaseGetDoc) {
+  // getContractInvoiceRecords() (parent app.js) runs the one-time
+  // migration off agency/contractInvoices the first time it's called,
+  // then reads contractInvoiceRecords - reuse it here instead of
+  // duplicating that logic (Budget Pacing Tracker also calls it).
+  if (isEmbedded && typeof window.parent.getContractInvoiceRecords === 'function') {
     try {
-      const ref = getRecordsDocRef();
-      const snap = await window.parent.firebaseGetDoc(ref);
-      const data = snap && snap.exists ? snap.data() : null;
-      records = (data && data.list) || [];
-      docVersion = (data && data.version) || 0;
+      records = await window.parent.getContractInvoiceRecords();
       return;
     } catch (e) {
       console.error("Couldn't load contract/invoice records from the cloud:", e);
@@ -80,42 +103,50 @@ async function loadRecords() {
   } catch (e) { records = []; }
 }
 
-// Optimistic-concurrency guard: this saves by overwriting the whole doc
-// on every edit, so re-check the version right before writing and
-// refuse to clobber a newer save made elsewhere in the meantime.
-async function persist() {
-  if (isEmbedded && window.parent.saveVersionedAgencyDoc) {
-    const result = await window.parent.saveVersionedAgencyDoc({
-      docRef: getRecordsDocRef(),
-      currentVersion: docVersion,
-      buildPayload: (v) => ({ list: records, version: v }),
-    });
-    if (!result.ok) {
-      if (result.reason === 'error') console.error("Couldn't save contract/invoice records to the cloud:", result.error);
-      if (window.parent.showBanner) {
-        window.parent.showBanner('error', result.reason === 'conflict'
-          ? "Someone else updated this list while you had it open. Reload the page to see their changes, then redo your edit."
-          : "Couldn't save — your change may be lost on reload: " + result.error.message);
-      }
-      return false;
-    }
-    docVersion = result.version;
-    // agency/contractInvoices lives outside clientsDb (see header
-    // comment), so saving here never goes through the parent's own
-    // saveDatabase() - which is what actually pushes fresh
-    // billingSummary data out to each client's public portal doc (see
-    // syncPublicPortalDocs and fetchBillingSummaries in the parent
-    // Hub's app.js). Without this call, a client's Billing tab and
-    // renewal banner would only pick up a status/date change here the
-    // next time the admin happened to save something unrelated
-    // elsewhere in the Hub - could be hours or days later.
-    if (window.parent.saveDatabase) window.parent.saveDatabase();
+// Saves exactly one record. Also kicks off the parent's saveDatabase()
+// afterward - contractInvoiceRecords lives outside clientsDb, so saving
+// here never goes through the parent's own saveDatabase() on its own,
+// which is what actually pushes fresh billingSummary data out to each
+// client's public portal doc (see syncPublicPortalDocs and
+// fetchBillingSummaries in the parent Hub's app.js). Without this call,
+// a client's Billing tab and renewal banner would only pick up a
+// status/date change here the next time the admin happened to save
+// something unrelated elsewhere in the Hub - could be hours or days later.
+async function saveOneRecord(record) {
+  if (!isEmbedded || !window.parent.firebaseSetDocFromJSON) {
+    try { localStorage.setItem('contract-invoice-tracker-list', JSON.stringify(records)); } catch (e) {}
     return true;
   }
   try {
-    localStorage.setItem('contract-invoice-tracker-list', JSON.stringify(records));
-  } catch (e) {}
-  return true;
+    const { id, ...rest } = record;
+    await window.parent.firebaseSetDocFromJSON(getRecordDocRef(id), JSON.stringify(rest));
+    if (window.parent.saveDatabase) window.parent.saveDatabase();
+    return true;
+  } catch (e) {
+    console.error("Couldn't save contract/invoice record:", e);
+    if (window.parent.showBanner) {
+      window.parent.showBanner('error', "Couldn't save — your change may be lost on reload: " + e.message);
+    }
+    return false;
+  }
+}
+
+async function deleteOneRecord(id) {
+  if (!isEmbedded || !window.parent.firebaseDeleteDoc) {
+    try { localStorage.setItem('contract-invoice-tracker-list', JSON.stringify(records)); } catch (e) {}
+    return true;
+  }
+  try {
+    await window.parent.firebaseDeleteDoc(getRecordDocRef(id));
+    if (window.parent.saveDatabase) window.parent.saveDatabase();
+    return true;
+  } catch (e) {
+    console.error("Couldn't delete contract/invoice record:", e);
+    if (window.parent.showBanner) {
+      window.parent.showBanner('error', "Couldn't delete: " + e.message);
+    }
+    return false;
+  }
 }
 
 function uid() {
@@ -140,14 +171,17 @@ function daysBetween(fromStr, toStrVal) {
 
 // Sweep every record and flip a stale "Sent" invoice to "Overdue" once
 // its due date has passed, so the status reflects reality without
-// anyone having to notice and update it by hand.
+// anyone having to notice and update it by hand. Returns the list of
+// records that changed, so the caller can save just those (per-document
+// storage - see header comment - means there's no single whole-list
+// save to fall back on anymore).
 function reconcileOverdueInvoices() {
-  let changed = false;
+  const changed = [];
   records.forEach(r => {
     if (r.invoiceStatus !== 'Sent' || !r.invoiceDueDate) return;
     if (daysBetween(r.invoiceDueDate, todayStr()) >= 1) {
       r.invoiceStatus = 'Overdue';
-      changed = true;
+      changed.push(r);
     }
   });
   return changed;
@@ -357,7 +391,7 @@ function billingCellHtml(r) {
 
 function renderTable() {
   const changed = reconcileOverdueInvoices();
-  if (changed) persist();
+  changed.forEach(r => saveOneRecord(r));
 
   renderSummary();
 
@@ -411,7 +445,7 @@ function wireRowListeners() {
       if (sel.value === 'Sent' && !r.contractSentDate) r.contractSentDate = todayStr();
       if (sel.value === 'Signed' && !r.contractSignedDate) r.contractSignedDate = todayStr();
       if (sel.value === 'Not Sent') { r.contractSentDate = ''; r.contractSignedDate = ''; }
-      await persist();
+      await saveOneRecord(r);
       renderTable();
     });
   });
@@ -424,7 +458,7 @@ function wireRowListeners() {
       if (sel.value === 'Sent' && !r.invoiceSentDate) r.invoiceSentDate = todayStr();
       if (sel.value === 'Paid') r.invoicePaidDate = todayStr();
       if (sel.value === 'Not Sent') { r.invoiceSentDate = ''; r.invoiceDueDate = ''; r.invoicePaidDate = ''; }
-      await persist();
+      await saveOneRecord(r);
       renderTable();
 
       if (isEmbedded && window.parent.showBanner && sel.value === 'Paid') {
@@ -438,7 +472,7 @@ function wireRowListeners() {
       const r = findRecord(inp.getAttribute('data-id'));
       if (!r) return;
       r.contractRenewalDate = inp.value;
-      await persist();
+      await saveOneRecord(r);
       renderTable();
     });
   });
@@ -452,7 +486,7 @@ function wireRowListeners() {
         r.invoiceStatus = 'Sent';
         r.invoiceSentDate = r.invoiceSentDate || todayStr();
       }
-      await persist();
+      await saveOneRecord(r);
       renderTable();
     });
   });
@@ -464,7 +498,7 @@ function wireRowListeners() {
       const r = findRecord(inp.getAttribute('data-id'));
       if (!r) return;
       r.invoiceAmount = inp.value.trim();
-      await persist();
+      await saveOneRecord(r);
     });
   });
 
@@ -473,7 +507,7 @@ function wireRowListeners() {
       const r = findRecord(inp.getAttribute('data-id'));
       if (!r) return;
       r.notes = inp.value;
-      await persist();
+      await saveOneRecord(r);
     });
   });
 
@@ -570,7 +604,7 @@ async function sendBillingLink(id) {
       mode
     };
     delete r.recurringPendingAmount;
-    await persist();
+    await saveOneRecord(r);
     renderTable();
     if (isEmbedded && window.parent.showBanner) {
       window.parent.showBanner('success', `Billing link created for ${r.clientName} - copy it from the Recurring Billing column to send.`);
@@ -592,7 +626,7 @@ async function resetCycle(id) {
   r.invoiceSentDate = '';
   r.invoiceDueDate = '';
   r.invoicePaidDate = '';
-  const ok = await persist();
+  const ok = await saveOneRecord(r);
   renderTable();
 
   if (ok && isEmbedded && window.parent.showBanner) {
@@ -605,7 +639,7 @@ async function deleteRecord(id) {
   if (!confirm(`Stop tracking ${r ? r.clientName : 'this client'}? This can't be undone.`)) return;
   const previous = records;
   records = records.filter(rec => rec.id !== id);
-  const ok = await persist();
+  const ok = await deleteOneRecord(id);
   if (!ok) {
     records = previous;
   }
@@ -1767,7 +1801,7 @@ if (sendContractSendBtn) {
       if (record && record.contractStatus === 'Not Sent') {
         record.contractStatus = 'Sent';
         record.contractSentDate = record.contractSentDate || todayStr();
-        await persist();
+        await saveOneRecord(record);
         renderTable();
       }
 
@@ -1936,7 +1970,7 @@ async function performDocusignSend(templates, soloMsa, fieldValues) {
     if (record && record.contractStatus === 'Not Sent') {
       record.contractStatus = 'Sent';
       record.contractSentDate = record.contractSentDate || todayStr();
-      await persist();
+      await saveOneRecord(record);
       renderTable();
     }
 
@@ -1969,7 +2003,7 @@ async function addTrackedClient() {
     return;
   }
 
-  records.push({
+  const newRecord = {
     id: uid(),
     clientName,
     contractStatus: 'Not Sent',
@@ -1982,9 +2016,10 @@ async function addTrackedClient() {
     invoicePaidDate: '',
     invoiceAmount: '',
     notes: ''
-  });
+  };
+  records.push(newRecord);
 
-  const ok = await persist();
+  const ok = await saveOneRecord(newRecord);
   if (!ok) {
     records.pop();
     renderTable();

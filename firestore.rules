@@ -209,6 +209,21 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Contract & Invoice Tracker, migrated (Aug 2026) off the old
+    // agency/contractInvoices single-doc {list: [...]} pattern to one
+    // document per record - same reasoning as resourceBookings/
+    // hoursLogEntries above, applied here last since this collection's
+    // growth is bounded by client/contract count rather than activity
+    // volume (lower urgency, same underlying risk). Without this block,
+    // client-side reads/writes to contractInvoiceRecords would fall
+    // through to the deny-all catch-all below - the Worker's
+    // service-account REST access (including the Stripe webhook
+    // handler) isn't affected, but the Tracker tool itself and Budget
+    // Pacing Tracker both read this collection via the browser SDK.
+    match /contractInvoiceRecords/{recordId} {
+      allow read, write: if isAdmin();
+    }
+
     match /hub/settings {
       allow read, write: if isAdmin();
     }

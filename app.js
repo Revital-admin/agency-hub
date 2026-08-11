@@ -3576,19 +3576,42 @@ async function getHoursLogEntries() {
   }
 }
 
-// Raw agency/contractInvoices records - Budget Pacing Tracker uses this
-// to look up a client's recurringBilling.monthlyAmount (Stripe
-// subscription revenue) for margin math, without duplicating Contract &
-// Invoice Tracker's own read logic. See getRecordsDocRef/loadRecords in
+// One-time, idempotent backfill from the old agency/contractInvoices
+// {list: [...]} document into the new one-document-per-record
+// contractInvoiceRecords collection (Aug 2026 storage-scaling work -
+// same pattern as migrateHoursLogIfNeeded above, and _worker.js's own
+// twin of this function, used by the Stripe webhook handler). Safe to
+// call from anywhere, anytime - only does real work the first time.
+async function migrateContractInvoicesIfNeeded() {
+  if (!window.firebaseDb || !window.firebaseCollection || !window.firebaseGetDocs || !window.firebaseDoc || !window.firebaseGetDoc || !window.firebaseSetDoc) return;
+  try {
+    const existing = await window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb, "contractInvoiceRecords"));
+    if (existing.length > 0) return;
+    const oldRef = window.firebaseDoc(window.firebaseDb, "agency", "contractInvoices");
+    const oldSnap = await window.firebaseGetDoc(oldRef);
+    const oldData = oldSnap && oldSnap.exists ? oldSnap.data() : null;
+    const oldRecords = (oldData && Array.isArray(oldData.list)) ? oldData.list : [];
+    if (!oldRecords.length) return;
+    await Promise.all(oldRecords.filter(r => r.id).map(record => {
+      const { id, ...rest } = record;
+      return window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb, "contractInvoiceRecords", id), rest);
+    }));
+  } catch (e) {
+    console.error("Contract/invoice migration to per-document storage failed:", e);
+  }
+}
+
+// Raw contractInvoiceRecords - Budget Pacing Tracker uses this to look
+// up a client's recurringBilling.monthlyAmount (Stripe subscription
+// revenue) for margin math, without duplicating Contract & Invoice
+// Tracker's own read logic. See getRecordsCollectionRef/loadRecords in
 // contract-invoice-tracker/js/app.js for the canonical version of this
 // same read.
 async function getContractInvoiceRecords() {
-  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return [];
+  if (!window.firebaseDb || !window.firebaseCollection || !window.firebaseGetDocs) return [];
   try {
-    const ref = window.firebaseDoc(window.firebaseDb, "agency", "contractInvoices");
-    const snap = await window.firebaseGetDoc(ref);
-    const data = snap && snap.exists ? snap.data() : null;
-    return (data && data.list) || [];
+    await migrateContractInvoicesIfNeeded();
+    return await window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb, "contractInvoiceRecords"));
   } catch (e) {
     console.warn("Couldn't load contract/invoice records:", e);
     return [];

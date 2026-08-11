@@ -2302,22 +2302,24 @@ async function verifyStripeWebhookSignature(env, rawBody, sigHeader) {
 }
 
 // Applies one Stripe event to the matching Contract & Invoice Tracker
-// record's recurringBilling sub-object. Reads the whole agency/
-// contractInvoices doc, mutates just the one matching record, writes
-// the whole list back - same overwrite shape the Tracker's own
-// saveVersionedAgencyDoc uses, but without that same optimistic-
-// concurrency retry (a genuine small race window against a human
-// editing the Tracker at the exact same instant a webhook lands, judged
-// acceptable given how infrequent both events are - flagging here
-// rather than pretending it's impossible).
+// record's recurringBilling sub-object. Reads the whole
+// contractInvoiceRecords collection (list-and-filter, since we only
+// know which record to update by matching a Stripe id against a field,
+// not by document id - see migrateContractInvoicesIfNeeded above for
+// why this is a collection now, not a single agency/contractInvoices
+// doc), then writes back ONLY the one changed record - actually cheaper
+// than the old whole-list-rewrite-per-webhook-event this replaced, and
+// with the added benefit that it can never conflict with a human
+// editing a DIFFERENT record in the Tracker at the same moment. Editing
+// the exact same record at once is still last-write-wins, same
+// tradeoff as Resource Bookings/Hours Log's per-document saves.
 async function applyStripeEventToContractInvoices(env, event, billingMode) {
   const relevantTypes = ["checkout.session.completed", "invoice.paid", "invoice.payment_failed", "customer.subscription.deleted"];
   if (!relevantTypes.includes(event.type)) return;
 
   const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
-  const doc = await firestoreGetDoc(accessToken, projectId, "agency/contractInvoices");
-  const list = (doc && doc.list) || [];
-  const version = (doc && doc.version) || 0;
+  await migrateContractInvoicesIfNeeded(accessToken, projectId);
+  const list = await firestoreListCollection(accessToken, projectId, "contractInvoiceRecords");
 
   const obj = event.data.object;
   let record = null;
@@ -2358,7 +2360,8 @@ async function applyStripeEventToContractInvoices(env, event, billingMode) {
     return;
   }
 
-  await firestoreSetDoc(accessToken, projectId, "agency/contractInvoices", { list, version: version + 1 });
+  const { id: recordId, ...recordRest } = record;
+  await firestoreSetDoc(accessToken, projectId, `contractInvoiceRecords/${recordId}`, recordRest);
 
   // Failed-payment alert - without this, a declined card only shows up as
   // a status change in the Tracker (same "Payment Failed" badge
@@ -2572,6 +2575,31 @@ async function migrateHoursLogIfNeeded(accessToken, projectId) {
     // blocking whatever the caller actually wanted to do. Logged for
     // follow-up, not surfaced to whoever's request triggered this.
     console.error("Hours log migration to per-document storage failed:", e);
+  }
+}
+
+// Same idempotent one-time backfill as migrateHoursLogIfNeeded above,
+// but for agency/contractInvoices -> contractInvoiceRecords/{recordId}
+// (Aug 2026 storage-scaling work, applied last since this collection's
+// growth is bounded by client/contract count rather than activity
+// volume - lower urgency than Hours Log or Resource Bookings, but same
+// underlying risk). Called from applyStripeEventToContractInvoices
+// below (the only Worker-side touchpoint) and from the client-side twin
+// in root app.js's getContractInvoiceRecords/migrateContractInvoicesIfNeeded.
+async function migrateContractInvoicesIfNeeded(accessToken, projectId) {
+  try {
+    const existing = await firestoreListCollection(accessToken, projectId, "contractInvoiceRecords");
+    if (existing.length > 0) return;
+    const oldDoc = await firestoreGetDoc(accessToken, projectId, "agency/contractInvoices");
+    const oldRecords = (oldDoc && Array.isArray(oldDoc.list)) ? oldDoc.list : [];
+    if (!oldRecords.length) return;
+    for (const record of oldRecords) {
+      if (!record.id) continue;
+      const { id, ...rest } = record;
+      await firestoreSetDoc(accessToken, projectId, `contractInvoiceRecords/${id}`, rest);
+    }
+  } catch (e) {
+    console.error("Contract/invoice migration to per-document storage failed:", e);
   }
 }
 
