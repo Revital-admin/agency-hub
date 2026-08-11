@@ -53,11 +53,28 @@
     window.firebaseDoc = function(db, collectionPath, docPath) { return db.collection(collectionPath).doc(docPath); };
     window.firebaseOnSnapshot = function(docRef, callback, errorCallback) { return docRef.onSnapshot(callback, errorCallback); };
     window.firebaseGetDoc = function(docRef) { return docRef.get(); };
+    // Subcollection helpers (Aug 2026 storage-scaling work) - everything
+    // above this predates any tool storing one-document-per-record;
+    // every existing agency/* doc packs a growing list into a single
+    // document instead. New tools that need per-record documents (so a
+    // growing collection never risks Firestore's ~1MB single-document
+    // limit the way clientsDb once did - see data-loss-prevention-plan.md)
+    // should use these instead of the list-in-one-doc pattern.
+    window.firebaseCollection = function(db, ...pathSegments) { return db.collection(pathSegments.join('/')); };
+    // Returns a plain array of {id, ...data()} objects rather than the
+    // raw QuerySnapshot - every caller just wants the records, and this
+    // keeps the shape consistent with the {list: [...]} arrays every
+    // other agency doc already hands back, so existing render logic
+    // barely has to change when a tool migrates to this pattern.
+    window.firebaseGetDocs = function(collectionRef) {
+      return collectionRef.get().then(snap => snap.docs.map(d => Object.assign({ id: d.id }, d.data())));
+    };
+    window.firebaseDeleteDoc = function(docRef) { return docRef.delete(); };
   </script>
 
   <!-- Central references and Application State Controller -->
   <script src="data-store.js?v=3"></script>
-  <script src="app.js?v=101"></script>
+  <script src="app.js?v=102"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
 </head>

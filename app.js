@@ -3377,6 +3377,31 @@ async function saveVersionedAgencyDoc({ docRef, currentVersion, buildPayload }) 
     // cross-iframe Firestore write in the Hub.
     const payload = buildPayload(nextVersion);
     await window.firebaseSetDocFromJSON(docRef, JSON.stringify(payload));
+
+    // Safety-net backup - same "always-recent full copy" pattern as
+    // clientsDb's own backup shards (see commitDatabaseToCloud/the Aug
+    // 2026 data-loss-prevention work), just unsharded: every doc that
+    // goes through this shared helper (Team Roster, Hours & Time Log,
+    // Resource Bookings, Contract & Invoice Tracker, template libraries,
+    // and everything else listed in this function's header comment) is
+    // small enough to stay under Firestore's ~1MB document limit -
+    // clientsDb is the one exception with its own bespoke sharded
+    // backup. Adding this here, once, gives every one of those tools a
+    // recovery copy for free instead of copy-pasting a backup write into
+    // each tool's own persist() function. Written AFTER the real save
+    // above succeeds (so a rejected/conflicting save - see the version
+    // check above - can never overwrite the backup with stale data,
+    // same ordering bug already fixed once for clientsDb) and is
+    // fire-and-forget: a backup failure should never block or alarm the
+    // user about the real save, which already succeeded.
+    try {
+      const backupRef = window.firebaseDoc(window.firebaseDb, "agency", docRef.id + "Backup");
+      window.firebaseSetDocFromJSON(backupRef, JSON.stringify(Object.assign({}, payload, { backedUpAt: new Date().toISOString() })))
+        .catch(err => console.error(`Safety-net backup write failed for agency/${docRef.id}:`, err));
+    } catch (err) {
+      console.error(`Couldn't kick off safety-net backup for agency/${docRef.id}:`, err);
+    }
+
     return { ok: true, version: nextVersion };
   } catch (e) {
     return { ok: false, reason: "error", error: e };

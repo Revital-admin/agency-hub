@@ -4,13 +4,26 @@
    compared against Team Roster's existing weeklyCapacityHours field -
    the Hub's own version of Productive's Resource Planner "By Person"
    view (see the Aug 2026 tech-stack-plan conversation this was built
-   from). Bookings live in their own agency-wide doc
-   (agency/resourceBookings, same versioned-list shape as Hours & Time
-   Log), separate from Hours & Time Log itself: a booking is a PLAN
-   ("Sarah is booked on Client X, 15 hrs/wk, through end of month"),
-   Hours & Time Log is the ACTUAL ("Sarah logged 4.5 hrs on Client X
-   today") - related but not the same data, same distinction Productive
-   draws between bookings and time tracking.
+   from). A booking is a PLAN ("Sarah is booked on Client X, 15 hrs/wk,
+   through end of month"), Hours & Time Log is the ACTUAL ("Sarah logged
+   4.5 hrs on Client X today") - related but not the same data, same
+   distinction Productive draws between bookings and time tracking.
+
+   Storage: one Firestore document per booking, in a top-level
+   `resourceBookings` collection (each doc id = the booking's own id) -
+   NOT the "one big doc holding a growing list" pattern every other
+   agency/* tool uses (Hours & Time Log, Team Roster, Contract & Invoice
+   Tracker, etc.). That pattern is what forced clientsDb into an
+   emergency shard migration once it grew past Firestore's ~1MB
+   per-document limit (see data-loss-prevention-plan.md) - bookings
+   accumulate forever with no natural pruning, so building this tool
+   fresh (Aug 2026, no real data yet) on the pattern that already broke
+   once elsewhere would just be scheduling the same problem for later.
+   Per-document storage also means editing one booking can never
+   version-conflict with someone else editing a different one, unlike
+   the shared-doc tools. See window.firebaseCollection/firebaseGetDocs/
+   firebaseDeleteDoc (index.html) for the new helpers this relies on,
+   and resourceBookings' own rule block in firestore.rules.
    ============================================================ */
 
 let isEmbedded = false;
@@ -25,7 +38,6 @@ try {
 function el(id) { return document.getElementById(id); }
 
 let bookings = [];
-let docVersion = 0;
 let members = [];
 let currentWeekStart = startOfWeek(new Date());
 let editingBookingId = null;
@@ -60,21 +72,23 @@ function escapeHtml(str) {
 
 function uid() { return 'bkg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8); }
 
-/* ── Data load/save ── */
+/* ── Data load/save (per-document subcollection - see header comment) ── */
 
-function getDocRef() {
+function getBookingDocRef(bookingId) {
   if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb) return null;
-  return window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "resourceBookings");
+  return window.parent.firebaseDoc(window.parent.firebaseDb, "resourceBookings", bookingId);
+}
+
+function getBookingsCollectionRef() {
+  if (!isEmbedded || !window.parent.firebaseCollection || !window.parent.firebaseDb) return null;
+  return window.parent.firebaseCollection(window.parent.firebaseDb, "resourceBookings");
 }
 
 async function loadBookings() {
-  if (isEmbedded && window.parent.firebaseGetDoc) {
+  if (isEmbedded && window.parent.firebaseGetDocs) {
     try {
-      const ref = getDocRef();
-      const snap = await window.parent.firebaseGetDoc(ref);
-      const data = snap && snap.exists ? snap.data() : null;
-      bookings = (data && data.list) || [];
-      docVersion = (data && data.version) || 0;
+      const ref = getBookingsCollectionRef();
+      bookings = await window.parent.firebaseGetDocs(ref);
       return;
     } catch (e) {
       console.error("Couldn't load bookings from the cloud:", e);
@@ -86,25 +100,37 @@ async function loadBookings() {
   bookings = [];
 }
 
-async function persistBookings() {
-  if (isEmbedded && window.parent.saveVersionedAgencyDoc) {
-    const result = await window.parent.saveVersionedAgencyDoc({
-      docRef: getDocRef(),
-      currentVersion: docVersion,
-      buildPayload: (v) => ({ list: bookings, version: v }),
-    });
-    if (!result.ok) {
-      if (window.parent.showBanner) {
-        window.parent.showBanner('error', result.reason === 'conflict'
-          ? "Someone else changed bookings while you had this open. Reload to see their changes, then redo yours."
-          : "Couldn't save: " + result.error.message);
-      }
-      return false;
-    }
-    docVersion = result.version;
+// Writes exactly one booking - no version guard needed (unlike every
+// other agency/* tool's shared-doc save) since each booking is its own
+// document and can never conflict with an edit to a DIFFERENT booking.
+// Two people editing the exact same booking at once is still
+// last-write-wins, same as it would be for any single Firestore
+// document - an acceptable tradeoff nobody is likely to hit given how
+// this tool is actually used (one admin adjusting one person's
+// schedule at a time).
+async function saveOneBooking(booking) {
+  if (!isEmbedded || !window.parent.firebaseSetDocFromJSON) return true;
+  try {
+    const { id, ...rest } = booking;
+    await window.parent.firebaseSetDocFromJSON(getBookingDocRef(booking.id), JSON.stringify(rest));
     return true;
+  } catch (e) {
+    console.error("Couldn't save booking:", e);
+    if (window.parent.showBanner) window.parent.showBanner('error', "Couldn't save: " + e.message);
+    return false;
   }
-  return true;
+}
+
+async function deleteOneBooking(bookingId) {
+  if (!isEmbedded || !window.parent.firebaseDeleteDoc) return true;
+  try {
+    await window.parent.firebaseDeleteDoc(getBookingDocRef(bookingId));
+    return true;
+  } catch (e) {
+    console.error("Couldn't delete booking:", e);
+    if (window.parent.showBanner) window.parent.showBanner('error', "Couldn't delete: " + e.message);
+    return false;
+  }
 }
 
 async function loadMembers() {
@@ -311,7 +337,7 @@ async function saveBooking() {
       bookings.push(booking);
     }
 
-    const ok = await persistBookings();
+    const ok = await saveOneBooking(booking);
     if (!ok) return;
 
     const calResult = await syncBookingToCalendar('upsert', {
@@ -325,7 +351,7 @@ async function saveBooking() {
     });
     if (calResult && calResult.calendarEventId) {
       booking.calendarEventId = calResult.calendarEventId;
-      await persistBookings();
+      await saveOneBooking(booking);
     }
 
     closeBookingForm();
@@ -341,9 +367,9 @@ async function deleteBooking() {
   const booking = bookings.find(b => b.id === editingBookingId);
   if (!booking) return;
 
-  bookings = bookings.filter(b => b.id !== editingBookingId);
-  const ok = await persistBookings();
+  const ok = await deleteOneBooking(editingBookingId);
   if (!ok) return;
+  bookings = bookings.filter(b => b.id !== editingBookingId);
 
   if (booking.calendarEventId) {
     syncBookingToCalendar('delete', { calendarEventId: booking.calendarEventId });

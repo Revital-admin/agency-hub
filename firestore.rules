@@ -118,7 +118,6 @@ service cloud.firestore {
         'vendorRentalTracker': 'production',
         'changeOrders': 'account-ops',
         'hoursLog': 'account-ops',
-        'resourceBookings': 'account-ops',
         'revisionFeedbackLog': 'account-ops',
         'teamRoster': 'account-ops',
         'timelineTemplates': 'account-ops',
@@ -181,6 +180,18 @@ service cloud.firestore {
         // rather than silently 403ing a document nobody's gotten to yet.
         hasAccountDataAccess()
       );
+    }
+
+    // Resource Booking Calendar (Aug 2026) - one document per booking
+    // instead of a growing list packed into a single agency/* document,
+    // so this collection can never hit Firestore's ~1MB single-document
+    // limit no matter how many bookings accumulate over the years (the
+    // exact problem that forced clientsDb into an emergency shard
+    // migration - see data-loss-prevention-plan.md). Same admin-only
+    // gate as everything else agency-wide; no per-section restriction
+    // yet since Team Ops is visible to every employee regardless.
+    match /resourceBookings/{bookingId} {
+      allow read, write: if isAdmin();
     }
 
     match /hub/settings {
