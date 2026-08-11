@@ -760,6 +760,10 @@ async function persist() {
       return false;
     }
     docVersion = result.version;
+    // Best-effort, never blocks the save this rides along with - see
+    // syncContractorPortalProjections's own comment for why this runs on
+    // every save rather than only when the link is first generated.
+    syncContractorPortalProjections();
     return true;
   }
   try { localStorage.setItem('team-roster-list', JSON.stringify(members)); } catch (e) {}
@@ -768,6 +772,169 @@ async function persist() {
 
 function uid() { return 'tm-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8); }
 function todayStr() { return new Date().toISOString().slice(0, 10); }
+
+// ── Contractor Portal projection sync ──
+// contractorPortal/{token} is a small READ-ONLY (from the contractor's
+// side) projection doc - just enough identity info for the Contractor
+// Portal to display and for the worker's API routes (see
+// handleContractorPortalData in _worker.js) to resolve a token back to a
+// real teamRoster member id. Kept in sync here, from the admin side,
+// rather than trying to keep it live-synced some other way - every
+// successful roster save re-writes the projection for anyone who has a
+// token, so editing a contractor's role/start date/agreement status
+// always reaches their portal on the next save, with no separate "don't
+// forget to update their portal too" step.
+function contractorPortalDocRef(token) {
+  if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb) return null;
+  return window.parent.firebaseDoc(window.parent.firebaseDb, "contractorPortal", token);
+}
+
+async function syncContractorPortalProjections() {
+  if (!isEmbedded || !window.parent.firebaseSetDocFromJSON) return;
+  const withTokens = members.filter(m => m.contractorPortalToken);
+  for (const m of withTokens) {
+    const ref = contractorPortalDocRef(m.contractorPortalToken);
+    if (!ref) continue;
+    const projection = {
+      memberId: m.id,
+      memberName: m.memberName || "",
+      role: m.role || "",
+      employmentType: m.employmentType || "",
+      startDate: m.startDate || "",
+      agreementStatus: m.agreementStatus === "Sent" ? "Sent" : "Not Sent",
+      agreementSentDate: m.agreementSentDate || null,
+      revoked: false,
+      updatedAt: new Date().toISOString()
+    };
+    try {
+      await window.parent.firebaseSetDocFromJSON(ref, JSON.stringify(projection));
+    } catch (e) {
+      console.error(`Couldn't sync Contractor Portal projection for ${m.memberName}:`, e);
+    }
+  }
+}
+
+async function generateContractorPortalLink(memberId) {
+  const member = members.find(m => m.id === memberId);
+  if (!member) return;
+  const token = (window.parent.generateSecureToken ? window.parent.generateSecureToken() : null);
+  if (!token) {
+    if (window.parent.showBanner) window.parent.showBanner('error', "Couldn't generate a link - reload and try again.");
+    return;
+  }
+  const previous = member.contractorPortalToken;
+  member.contractorPortalToken = token;
+  const ok = await persist();
+  if (!ok) { member.contractorPortalToken = previous; return; }
+  await syncContractorPortalProjections();
+  renderPortalAccessSection();
+  if (window.parent.showBanner) window.parent.showBanner('success', `Portal link generated for ${member.memberName}.`);
+}
+
+async function revokeContractorPortalAccess(memberId) {
+  const member = members.find(m => m.id === memberId);
+  if (!member || !member.contractorPortalToken) return;
+  if (!confirm(`Revoke ${member.memberName}'s Contractor Portal link? The old link will stop working immediately.`)) return;
+  const token = member.contractorPortalToken;
+  const previous = token;
+  member.contractorPortalToken = null;
+  const ok = await persist();
+  if (!ok) { member.contractorPortalToken = previous; return; }
+  // Mark the old projection doc revoked (rather than deleting it) so a
+  // still-open portal tab immediately sees "Invalid or revoked link" via
+  // the worker's own check, instead of a raw 404 that could look like a
+  // transient error.
+  const ref = contractorPortalDocRef(token);
+  if (ref && window.parent.firebaseSetDocFromJSON) {
+    try {
+      await window.parent.firebaseSetDocFromJSON(ref, JSON.stringify({ revoked: true, revokedAt: new Date().toISOString() }));
+    } catch (e) {
+      console.error("Couldn't mark Contractor Portal projection revoked:", e);
+    }
+  }
+  renderPortalAccessSection();
+  if (window.parent.showBanner) window.parent.showBanner('success', `Revoked ${member.memberName}'s Contractor Portal access.`);
+}
+
+// Assigned Clients drives what a contractor sees in their own Contractor
+// Portal (client name + creative brief/brand basics + deliverable/task
+// info - see contractor-portal/js/app.js and _worker.js's
+// handleContractorPortalClientWork). Stored as an array of client NAMES
+// on the roster entry (clientsDb is keyed by name, not a separate id -
+// same convention agency/hoursLog's clientName field already uses), so
+// no id-lookup layer is needed anywhere this touches.
+function renderAssignedClientsSection() {
+  const section = el('assignedClientsSection');
+  if (!section) return;
+  const member = members.find(m => m.id === editingId);
+  const isContractor = member && member.employmentType === 'Contractor';
+  if (!member || !isContractor || !isHubAdmin) { section.style.display = 'none'; return; }
+
+  section.style.display = 'block';
+  const list = el('assignedClientsList');
+  const empty = el('assignedClientsEmpty');
+  const allClients = (isEmbedded && window.parent.getAllClients) ? window.parent.getAllClients() : {};
+  const clientNames = Object.keys(allClients).sort((a, b) => a.localeCompare(b));
+  const assigned = new Set(member.assignedClients || []);
+
+  if (!clientNames.length) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  list.innerHTML = clientNames.map(name => `
+    <label style="display:flex; align-items:center; gap:6px; font-size:0.82rem; font-weight:400; cursor:pointer;">
+      <input type="checkbox" data-assigned-client="${escapeHtml(name)}" ${assigned.has(name) ? 'checked' : ''} style="width:auto;">
+      ${escapeHtml(name)}
+    </label>
+  `).join('');
+
+  list.querySelectorAll('[data-assigned-client]').forEach(cb => {
+    cb.addEventListener('change', () => toggleAssignedClient(member.id, cb.getAttribute('data-assigned-client'), cb.checked));
+  });
+}
+
+async function toggleAssignedClient(memberId, clientName, checked) {
+  const member = members.find(m => m.id === memberId);
+  if (!member) return;
+  const previous = member.assignedClients || [];
+  const set = new Set(previous);
+  if (checked) set.add(clientName); else set.delete(clientName);
+  member.assignedClients = Array.from(set);
+
+  const ok = await persist();
+  if (!ok) {
+    member.assignedClients = previous;
+    renderAssignedClientsSection();
+  }
+}
+
+function renderPortalAccessSection() {
+  const section = el('portalAccessSection');
+  if (!section) return;
+  const member = members.find(m => m.id === editingId);
+  const isContractor = member && member.employmentType === 'Contractor';
+  if (!member || !isContractor || !isHubAdmin) { section.style.display = 'none'; return; }
+
+  section.style.display = 'block';
+  const note = el('portalAccessNote');
+  const linkRow = el('portalAccessLinkRow');
+  const generateBtn = el('generatePortalLinkBtn');
+  const linkInput = el('portalAccessLinkInput');
+
+  if (member.contractorPortalToken) {
+    note.style.display = 'none';
+    linkRow.style.display = 'flex';
+    generateBtn.style.display = 'none';
+    linkInput.value = `${window.location.origin}/contractor-portal/index.html?t=${member.contractorPortalToken}`;
+  } else {
+    note.style.display = 'block';
+    linkRow.style.display = 'none';
+    generateBtn.style.display = '';
+  }
+}
 
 /* ── Send Contractor Agreement (Docusign) ──
    Contractors don't belong in the Contract & Invoice Tracker's per-client
@@ -1510,7 +1677,16 @@ async function performSendAgreement() {
   }
 }
 
-const FORM_FIELDS = ['memberName', 'role', 'employmentType', 'email', 'startDate', 'currentClientCount', 'maxClientCount', 'weeklyCapacityHours', 'notes', 'insuranceExpirationDate'];
+const FORM_FIELDS = ['memberName', 'role', 'employmentType', 'email', 'startDate', 'currentClientCount', 'maxClientCount', 'weeklyCapacityHours', 'notes', 'insuranceExpirationDate', 'hourlyRate'];
+
+// Hub Admins only - pay data. The field itself is always in FORM_FIELDS
+// (so it round-trips normally through gatherForm/startEdit like any
+// other field), just visually hidden for everyone else, same pattern as
+// the Contractor Documents card. See rateSection in index.html.
+function updateRateFieldVisibility() {
+  const section = el('rateSection');
+  if (section) section.style.display = isHubAdmin ? '' : 'none';
+}
 
 // Full month/day/year date display (e.g. "Jan 5, 2024") - used for Start
 // Date in the roster table. Distinct from formatShortDate above (no year,
@@ -1572,6 +1748,9 @@ function resetForm() {
   updateComplianceFieldsVisibility();
   renderTimeOffSection();
   renderOnboardingSection();
+  renderPortalAccessSection();
+  renderAssignedClientsSection();
+  updateRateFieldVisibility();
 }
 
 // Merges onto `base` (the previous entry, when editing) rather than
@@ -1645,6 +1824,9 @@ function startEdit(id) {
   updateComplianceFieldsVisibility();
   renderTimeOffSection();
   renderOnboardingSection();
+  renderPortalAccessSection();
+  renderAssignedClientsSection();
+  updateRateFieldVisibility();
   // Same bug/fix as newMemberBtn and the Unrostered callout's Add
   // button above: this landed on Contractor Documents / the Unrostered
   // callout instead of the form being edited, since window.scrollTo({top:0})
@@ -1814,6 +1996,7 @@ function applyEditPermission() {
     const currentEmail = (window.parent.currentAdminEmail || "").toLowerCase();
     isRestrictedUser = !!(currentEmail && Object.prototype.hasOwnProperty.call(users, currentEmail));
     isHubAdmin = !!(currentEmail && hubAdmins.includes(currentEmail));
+    updateRateFieldVisibility();
 
     el('newMemberBtn').style.display = isRestrictedUser ? 'none' : '';
     el('actionsHeader').style.display = isRestrictedUser ? 'none' : '';
@@ -1869,5 +2052,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   if (sendAgreementSendBtn) {
     sendAgreementSendBtn.addEventListener('click', performSendAgreement);
+  }
+
+  const generatePortalLinkBtn = el('generatePortalLinkBtn');
+  const copyPortalLinkBtn = el('copyPortalLinkBtn');
+  const revokePortalLinkBtn = el('revokePortalLinkBtn');
+  if (generatePortalLinkBtn) generatePortalLinkBtn.addEventListener('click', () => generateContractorPortalLink(editingId));
+  if (revokePortalLinkBtn) revokePortalLinkBtn.addEventListener('click', () => revokeContractorPortalAccess(editingId));
+  if (copyPortalLinkBtn) {
+    copyPortalLinkBtn.addEventListener('click', async () => {
+      const input = el('portalAccessLinkInput');
+      try {
+        await navigator.clipboard.writeText(input.value);
+        if (window.parent.showBanner) window.parent.showBanner('success', 'Link copied.');
+      } catch (e) {
+        input.select();
+        if (window.parent.showBanner) window.parent.showBanner('error', "Couldn't copy automatically - link is selected, copy it manually.");
+      }
+    });
   }
 });

@@ -1,0 +1,102 @@
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+}
+.container-wide { max-width: 1320px; }
+
+.tracker-controls { margin-bottom: 20px; }
+.tracker-controls-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+.week-label {
+  font-family: var(--font-display);
+  font-size: 16px;
+  color: var(--color-text-primary);
+  min-width: 200px;
+  text-align: center;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 4px 20px;
+}
+
+.form-status { font-size: 13px; }
+.form-status.status-ok { color: #4ade80; }
+.form-status.status-err { color: #ef4444; }
+
+.table-card { padding: 0; overflow: hidden; }
+.tracker-table-wrap { overflow-x: auto; }
+
+.booking-grid { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+.booking-grid th {
+  text-align: left;
+  padding: 12px 10px;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+.booking-grid td {
+  padding: 8px;
+  border-bottom: 1px solid var(--color-border);
+  border-left: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  vertical-align: top;
+  height: 60px;
+}
+.booking-grid td:first-child, .booking-grid th:first-child { border-left: none; }
+.booking-grid tr:last-child td { border-bottom: none; }
+
+.member-cell { white-space: nowrap; }
+.member-name { font-weight: 600; }
+.member-capacity {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 100px;
+  font-family: var(--font-mono, monospace);
+}
+.capacity-good { background: rgba(74,222,128,0.15); color: #4ade80; }
+.capacity-warn { background: rgba(246,141,95,0.15); color: var(--color-accent); }
+.capacity-over { background: rgba(239,68,68,0.15); color: #ef4444; }
+.capacity-unset { background: rgba(255,255,255,0.06); color: var(--color-text-muted); }
+
+.day-cell { cursor: pointer; }
+.day-cell:hover { background: rgba(255,255,255,0.03); }
+
+.booking-chip {
+  display: block;
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-md);
+  color: var(--color-text-primary);
+  margin-bottom: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.booking-chip:hover { border-color: var(--color-accent); }
+
+.add-chip-btn {
+  font-size: 16px;
+  line-height: 1;
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.add-chip-btn:hover { color: var(--color-accent); }
+
+.empty-state { text-align: center; padding: 40px 20px; color: var(--color-text-muted); font-size: 14px; }

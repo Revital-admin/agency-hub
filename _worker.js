@@ -97,6 +97,30 @@ export default {
       return handleTeamRosterTimeOffSync(request, env);
     }
 
+    if (url.pathname === "/api/resource-booking/sync-calendar" && request.method === "POST") {
+      return handleResourceBookingCalendarSync(request, env);
+    }
+
+    // Contractor Portal - deliberately no Cf-Access check, since this has
+    // to work for someone with no revitalproductions.com account at all,
+    // holding only their own magic-link token. Unlike /api/booking/* above,
+    // this lives on the SAME hostname as the rest of the Hub (hub.*), which
+    // Cloudflare Access protects wholesale - so both /contractor-portal/*
+    // (the static page) and /api/contractor-portal/* (these routes) need a
+    // manual "Bypass" policy added in the Cloudflare Access dashboard, the
+    // same way /portal/* already has one. Without that, Access will block
+    // the request before it ever reaches this Worker code. See
+    // handleContractorPortal* below for how the token itself is verified.
+    if (url.pathname === "/api/contractor-portal/data" && request.method === "GET") {
+      return handleContractorPortalData(request, env);
+    }
+    if (url.pathname === "/api/contractor-portal/time-off" && request.method === "POST") {
+      return handleContractorPortalTimeOff(request, env);
+    }
+    if (url.pathname === "/api/contractor-portal/hours" && request.method === "POST") {
+      return handleContractorPortalHours(request, env);
+    }
+
     if (url.pathname === "/api/pipeline/sync-clickup" && request.method === "POST") {
       return handlePipelineSyncClickUp(request, env);
     }
@@ -1613,6 +1637,152 @@ async function deleteTimeOffCalendarEvents(env, { teamEventId, personalEventId, 
   return { warnings };
 }
 
+// ── Resource Booking calendar sync ──
+// A separate shared calendar from "Revital Team Out" - a booking is a
+// planned work assignment, not an absence, so it doesn't get a personal
+// Busy block on anyone's own calendar the way Time Off does (that would
+// clutter personal calendars and read as "unavailable" for real
+// meetings, which isn't what a booking means). This is visibility-only:
+// Resource Booking Calendar's own grid inside the Hub is the actual
+// source of truth for capacity math - see resource-booking-calendar/
+// js/app.js's getWeekLoad. The calendar event just lets anyone glance
+// at Google Calendar and see who's booked where, same caching pattern
+// as getOrCreateTeamCalendar above (own config doc so this only
+// searches/creates once).
+const TEAM_BOOKINGS_CALENDAR_SUMMARY = "Revital Team Bookings";
+
+async function getOrCreateTeamBookingsCalendar(env) {
+  const { accessToken: fsToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+  const cached = await firestoreGetDoc(fsToken, projectId, "agency/teamBookingsCalendarConfig");
+  if (cached && cached.calendarId) return cached.calendarId;
+
+  const calToken = await getGoogleAccessTokenForUser(env, "https://www.googleapis.com/auth/calendar", TEAM_CALENDAR_OWNER_EMAIL);
+
+  const createRes = await fetch("https://www.googleapis.com/calendar/v3/calendars", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${calToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      summary: TEAM_BOOKINGS_CALENDAR_SUMMARY,
+      description: "Who's booked on which client this week - synced automatically from the Client Onboarding & Audit Hub's Booking Calendar tool. Subscribe once (Other calendars -> Subscribe to calendar) to see it going forward.",
+      timeZone: TEAM_CALENDAR_TIMEZONE
+    })
+  });
+  const createData = await createRes.json().catch(() => ({}));
+  if (!createRes.ok) throw new Error((createData.error && createData.error.message) || `Couldn't create the team bookings calendar (${createRes.status})`);
+  const calendarId = createData.id;
+
+  try {
+    await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/acl`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${calToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "reader", scope: { type: "domain", value: ADMIN_EMAIL_DOMAIN } })
+    });
+  } catch (e) {
+    console.error("Couldn't set domain-wide sharing on the team bookings calendar (calendar still created):", e);
+  }
+
+  await firestoreSetDoc(fsToken, projectId, "agency/teamBookingsCalendarConfig", { calendarId, createdAt: new Date().toISOString() });
+  return calendarId;
+}
+
+// Creates or updates (delete-then-recreate, simpler than PATCH given how
+// few fields change) the one calendar event for a booking. Returns the
+// event id so the caller can store it on the booking for later
+// updates/deletes.
+async function upsertBookingCalendarEvent(env, { calendarEventId, memberName, clientName, startDate, endDate, hoursPerWeek, notes }) {
+  const calendarId = await getOrCreateTeamBookingsCalendar(env);
+  const calToken = await getGoogleAccessTokenForUser(env, "https://www.googleapis.com/auth/calendar", TEAM_CALENDAR_OWNER_EMAIL);
+
+  if (calendarEventId) {
+    try {
+      await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(calendarEventId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${calToken}` }
+      });
+    } catch (e) {
+      // Non-fatal - if the old event is already gone this is a no-op
+      // anyway, and the insert below still creates a fresh one.
+    }
+  }
+
+  const endExclusive = addOneDayToDateKey(endDate || startDate);
+  const summary = `${memberName} — ${clientName} (${hoursPerWeek} hrs/wk)`;
+  const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${calToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      summary,
+      description: notes || undefined,
+      start: { date: startDate },
+      end: { date: endExclusive },
+      transparency: "transparent"
+    })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data.error && data.error.message) || `Booking calendar event failed (${res.status})`);
+  return data.id;
+}
+
+async function deleteBookingCalendarEvent(env, { calendarEventId }) {
+  if (!calendarEventId) return;
+  const calendarId = await getOrCreateTeamBookingsCalendar(env);
+  const calToken = await getGoogleAccessTokenForUser(env, "https://www.googleapis.com/auth/calendar", TEAM_CALENDAR_OWNER_EMAIL);
+  const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(calendarEventId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${calToken}` }
+  });
+  if (!res.ok && res.status !== 404 && res.status !== 410) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data.error && data.error.message) || `Booking calendar delete failed (${res.status})`);
+  }
+}
+
+// ── POST /api/resource-booking/sync-calendar ──
+// Admin-domain-only, same gate/reasoning as
+// /api/team-roster/sync-time-off - Booking Calendar calls this right
+// after its own Firestore save already succeeded, so any failure here
+// is non-fatal to that save (see syncBookingToCalendar in
+// resource-booking-calendar/js/app.js, which just banners a warning).
+async function handleResourceBookingCalendarSync(request, env) {
+  const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+  const { action } = payload || {};
+
+  if (action === "upsert") {
+    const { calendarEventId, memberName, clientName, startDate, endDate, hoursPerWeek, notes } = payload;
+    if (!memberName || !clientName || !startDate || !hoursPerWeek) {
+      return jsonResponse({ error: "memberName, clientName, startDate, and hoursPerWeek are required" }, 400);
+    }
+    try {
+      const newEventId = await upsertBookingCalendarEvent(env, { calendarEventId, memberName, clientName, startDate, endDate, hoursPerWeek, notes });
+      return jsonResponse({ ok: true, calendarEventId: newEventId });
+    } catch (e) {
+      return jsonResponse({ error: e.message }, 500);
+    }
+  }
+
+  if (action === "delete") {
+    const { calendarEventId } = payload;
+    try {
+      await deleteBookingCalendarEvent(env, { calendarEventId });
+      return jsonResponse({ ok: true });
+    } catch (e) {
+      return jsonResponse({ error: e.message }, 500);
+    }
+  }
+
+  return jsonResponse({ error: "action must be 'upsert' or 'delete'" }, 400);
+}
+
 // ── POST /api/team-roster/sync-time-off ──
 // Admin-domain-only (same gate as handleRestrictedClientDataWrite) -
 // this isn't public like the booking routes above. Team Roster calls
@@ -1658,6 +1828,258 @@ async function handleTeamRosterTimeOffSync(request, env) {
   }
 
   return jsonResponse({ error: "action must be 'upsert' or 'delete'" }, 400);
+}
+
+// ── Contractor Portal ──
+// A lightweight, no-login access tier for contractors/freelancers who
+// don't have a revitalproductions.com account - same magic-token model as
+// the client-facing Portal (see firestore.rules' contractorPortal/{token}
+// comment), but for a couple of reasons that model alone isn't enough
+// here: time off and hours both live in SHARED documents
+// (agency/teamRoster, agency/hoursLog) covering every teammate at once,
+// not a one-doc-per-person collection like clients/{clientId}. Opening
+// Firestore rules to let an anonymous token-holder write into either of
+// those shared docs directly would mean trusting the browser not to
+// corrupt or leak everyone else's entries, not just their own. So instead
+// these three routes do the read-modify-write themselves, server-side,
+// using the worker's own privileged Firestore access (getGoogleAccessToken
+// + firestoreGetDoc/firestoreSetDoc, same helpers getOrCreateTeamCalendar
+// already uses) - the contractor's browser never touches teamRoster or
+// hoursLog directly, only ever contractorPortal/{token} (read-only, via
+// the Firestore client SDK) and these three API routes.
+async function getContractorProjection(env, token) {
+  if (!token || typeof token !== "string" || token.length < 16) return null;
+  const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+  const projection = await firestoreGetDoc(accessToken, projectId, `contractorPortal/${token}`);
+  if (!projection || projection.revoked) return null;
+  return { projection, accessToken, projectId };
+}
+
+// Mirrors pushAdminNotification's client-side shape (root app.js) exactly,
+// minus the in-memory dedupe/read-state that only makes sense browser-side
+// - written directly since a Worker request has no window.parent to call
+// the real client-side helper through.
+async function pushAdminNotificationServerSide(accessToken, projectId, message) {
+  try {
+    const doc = await firestoreGetDoc(accessToken, projectId, "agency/adminNotifications");
+    const list = (doc && Array.isArray(doc.list)) ? doc.list : [];
+    list.unshift({
+      id: "an_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+      type: "contractor_portal",
+      message,
+      clientName: null,
+      draftEmail: null,
+      createdAt: new Date().toISOString(),
+      read: false,
+      sent: false
+    });
+    if (list.length > 30) list.length = 30;
+    await firestoreSetDoc(accessToken, projectId, "agency/adminNotifications", { list });
+  } catch (e) {
+    // Best-effort only - never let a notification failure block the
+    // actual time-off/hours write, which has already succeeded by the
+    // time this is called.
+    console.error("Couldn't push admin notification from Contractor Portal:", e);
+  }
+}
+
+// ── GET /api/contractor-portal/data?t=<token> ──
+// Single combined read: this contractor's own roster info, their own
+// time off (approved + pending + recently-declined), and their own hours
+// log entries. Everything scoped server-side to the ONE member the token
+// resolves to - the response never includes any other teammate's data.
+async function handleContractorPortalData(request, env) {
+  const url = new URL(request.url);
+  const token = url.searchParams.get("t") || "";
+
+  let resolved;
+  try {
+    resolved = await getContractorProjection(env, token);
+  } catch (e) {
+    return jsonResponse({ error: e.message }, 500);
+  }
+  if (!resolved) return jsonResponse({ error: "Invalid or revoked link" }, 403);
+  const { projection, accessToken, projectId } = resolved;
+
+  try {
+    const rosterDoc = await firestoreGetDoc(accessToken, projectId, "agency/teamRoster");
+    const members = (rosterDoc && Array.isArray(rosterDoc.list)) ? rosterDoc.list : [];
+    const member = members.find(m => m.id === projection.memberId);
+
+    const hoursDoc = await firestoreGetDoc(accessToken, projectId, "agency/hoursLog");
+    const allHours = (hoursDoc && Array.isArray(hoursDoc.list)) ? hoursDoc.list : [];
+    const myHours = allHours.filter(h => (h.memberName || "") === projection.memberName);
+
+    // "See assigned client work" (Phase 2) - member.assignedClients (set by
+    // an admin in Team Roster, see renderAssignedClientsSection in
+    // team-roster/js/app.js) is an array of client NAMES, since clientsDb
+    // is itself keyed by name. Deliberately a narrow, hand-picked field
+    // projection rather than the raw client object - clientsDb-shard-N
+    // packs nearly every admin tool's per-client data (invoicing,
+    // proposals, audits, portal config) into one object, and a contractor
+    // should only ever see the three things they actually need: the
+    // client's name, their brand basics (same fields the client Portal's
+    // own renderBrandKit already exposes to an even less-trusted
+    // audience), and their creative brief - which already includes a
+    // "deliverables" field (see creative-brief-generator/js/app.js), so
+    // that single object covers both "brief" and "specific deliverable
+    // info" without a separate task-tracking system. Nothing else on the
+    // client object is included.
+    let clientWork = [];
+    if (member && Array.isArray(member.assignedClients) && member.assignedClients.length) {
+      const allClients = await fetchAllClientsFromFirestore(accessToken, projectId);
+      clientWork = member.assignedClients
+        .filter(name => allClients[name])
+        .map(name => {
+          const c = allClients[name];
+          const kit = c.brandKit || {};
+          const brief = c.creativeBrief || {};
+          return {
+            name,
+            brandKit: {
+              primaryColor: kit.primaryColor || null,
+              secondaryColor: kit.secondaryColor || null,
+              accentColor: kit.accentColor || null,
+              fontPrimary: kit.fontPrimary || null,
+              fontSecondary: kit.fontSecondary || null,
+              toneOfVoice: kit.toneOfVoice || null,
+              logoUrl: kit.logoUrl || null
+            },
+            creativeBrief: {
+              campaignName: brief.campaignName || null,
+              objective: brief.objective || null,
+              targetAudience: brief.targetAudience || null,
+              keyMessage: brief.keyMessage || null,
+              toneOfVoice: brief.toneOfVoice || null,
+              deliverables: brief.deliverables || null,
+              references: brief.references || null
+            }
+          };
+        });
+    }
+
+    return jsonResponse({
+      ok: true,
+      memberName: projection.memberName,
+      role: member ? member.role : projection.role,
+      employmentType: member ? member.employmentType : projection.employmentType,
+      startDate: member ? member.startDate : projection.startDate,
+      agreementStatus: member && member.agreementStatus === "Sent" ? "Sent" : "Not Sent",
+      agreementSentDate: member ? (member.agreementSentDate || null) : null,
+      timeOff: member && Array.isArray(member.timeOff) ? member.timeOff : [],
+      pendingTimeOff: member && Array.isArray(member.pendingTimeOff) ? member.pendingTimeOff : [],
+      hours: myHours,
+      clientWork
+    });
+  } catch (e) {
+    return jsonResponse({ error: e.message }, 500);
+  }
+}
+
+// ── POST /api/contractor-portal/time-off ──
+// body: { t: token, action: 'request'|'cancel', startDate, endDate, note, reqId }
+async function handleContractorPortalTimeOff(request, env) {
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+  const { t: token, action } = payload || {};
+
+  let resolved;
+  try {
+    resolved = await getContractorProjection(env, token);
+  } catch (e) {
+    return jsonResponse({ error: e.message }, 500);
+  }
+  if (!resolved) return jsonResponse({ error: "Invalid or revoked link" }, 403);
+  const { projection, accessToken, projectId } = resolved;
+
+  try {
+    const rosterDoc = await firestoreGetDoc(accessToken, projectId, "agency/teamRoster");
+    const members = (rosterDoc && Array.isArray(rosterDoc.list)) ? rosterDoc.list : [];
+    const member = members.find(m => m.id === projection.memberId);
+    if (!member) return jsonResponse({ error: "Roster entry not found - contact an admin." }, 404);
+    if (!Array.isArray(member.pendingTimeOff)) member.pendingTimeOff = [];
+
+    if (action === "request") {
+      const { startDate, endDate, note } = payload;
+      if (!startDate) return jsonResponse({ error: "startDate is required" }, 400);
+      member.pendingTimeOff.push({
+        id: "cp-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+        startDate,
+        endDate: endDate || startDate,
+        note: note || "",
+        status: "pending",
+        requestedByEmail: null,
+        requestedVia: "contractor-portal",
+        requestedAt: new Date().toISOString()
+      });
+    } else if (action === "cancel") {
+      const { reqId } = payload;
+      const before = member.pendingTimeOff.length;
+      member.pendingTimeOff = member.pendingTimeOff.filter(r => !(r.id === reqId && r.status === "pending"));
+      if (member.pendingTimeOff.length === before) {
+        return jsonResponse({ error: "Request not found or already decided" }, 404);
+      }
+    } else {
+      return jsonResponse({ error: "action must be 'request' or 'cancel'" }, 400);
+    }
+
+    const nextVersion = (rosterDoc && rosterDoc.version || 0) + 1;
+    await firestoreSetDoc(accessToken, projectId, "agency/teamRoster", { list: members, version: nextVersion });
+
+    if (action === "request") {
+      await pushAdminNotificationServerSide(accessToken, projectId,
+        `${projection.memberName} requested time off via Contractor Portal (${payload.startDate}${payload.endDate && payload.endDate !== payload.startDate ? ` – ${payload.endDate}` : ""}) - approve/decline in Team Roster.`);
+    }
+
+    return jsonResponse({ ok: true });
+  } catch (e) {
+    return jsonResponse({ error: e.message }, 500);
+  }
+}
+
+// ── POST /api/contractor-portal/hours ──
+// body: { t: token, date, clientName, hours, billable, notes }
+async function handleContractorPortalHours(request, env) {
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+  const { t: token, date, clientName, hours, billable, notes } = payload || {};
+  if (!date || !hours) return jsonResponse({ error: "date and hours are required" }, 400);
+
+  let resolved;
+  try {
+    resolved = await getContractorProjection(env, token);
+  } catch (e) {
+    return jsonResponse({ error: e.message }, 500);
+  }
+  if (!resolved) return jsonResponse({ error: "Invalid or revoked link" }, 403);
+  const { projection, accessToken, projectId } = resolved;
+
+  try {
+    const hoursDoc = await firestoreGetDoc(accessToken, projectId, "agency/hoursLog");
+    const list = (hoursDoc && Array.isArray(hoursDoc.list)) ? hoursDoc.list : [];
+    list.push({
+      id: "hrs-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+      date,
+      memberName: projection.memberName,
+      clientName: clientName || "",
+      hours: Math.max(0, parseFloat(hours) || 0),
+      billable: !!billable,
+      notes: notes || ""
+    });
+    const nextVersion = (hoursDoc && hoursDoc.version || 0) + 1;
+    await firestoreSetDoc(accessToken, projectId, "agency/hoursLog", { list, version: nextVersion });
+    return jsonResponse({ ok: true });
+  } catch (e) {
+    return jsonResponse({ error: e.message }, 500);
+  }
 }
 
 // ── Sales Pipeline Board -> ClickUp sync ──

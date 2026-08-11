@@ -77,6 +77,40 @@
     <div class="progress-bar-track"><div class="progress-bar-fill" id="timelineProgressFill" style="width:0%;"></div></div>
   </div>
 
+  <!-- Project Budget - a dollar figure for this specific timeline,
+       compared against actual labor cost (Hours & Time Log entries for
+       this client x each logger's Team Roster hourlyRate, same cost
+       calculation Budget Pacing Tracker uses, duplicated here rather
+       than shared since these are two separate iframes - see
+       getLaborCost in js/app.js). Hours & Time Log has no per-project
+       id, only client name, so "actual" is scoped by date range
+       (Project Start Date through today, or through completion) rather
+       than a strict per-timeline foreign key - see the caveat text
+       rendered alongside the figure. -->
+  <div class="step-card">
+    <div class="panel-header">
+      <h2>Project Budget</h2>
+      <p>Compared against actual labor cost logged for this client since the Project Start Date below. If this client has more than one active timeline at once, actual cost may include hours from the other one too.</p>
+    </div>
+    <div class="timeline-startdate-row">
+      <div class="form-group" style="margin-bottom:0;">
+        <label for="projectBudget">Project Budget ($)</label>
+        <input type="number" id="projectBudget" min="0" step="1" placeholder="e.g. 5000">
+      </div>
+    </div>
+    <div class="timeline-summary-row" style="margin-top:12px;">
+      <div class="timeline-summary-stat">
+        <div class="timeline-stat-value" id="statActualCost">—</div>
+        <div class="timeline-stat-label">Actual Labor Cost</div>
+      </div>
+      <div class="timeline-summary-stat">
+        <div class="timeline-stat-value" id="statBudgetRemaining">—</div>
+        <div class="timeline-stat-label">Remaining vs. Budget</div>
+      </div>
+    </div>
+    <p id="budgetMissingRateNote" style="font-size:11px; color: var(--color-text-muted); margin:8px 0 0; display:none;"></p>
+  </div>
+
   <!-- Project Start Date -->
   <div class="step-card">
     <div class="panel-header">
@@ -166,6 +200,6 @@ Conduct the official client kickoff | 8"></textarea>
 </main>
 
 <script src="js/data.js?v=8"></script>
-<script src="js/app.js?v=7"></script>
+<script src="js/app.js?v=8"></script>
 </body>
 </html>

@@ -646,6 +646,7 @@ let iframeNeedsReload = {
   "tab-teamroster": true,
   "tab-mytimeoff": true,
   "tab-hourslog": true,
+  "tab-resourcebooking": true,
   "tab-testimonialtracker": true,
   "tab-reviewtracker": true,
   "tab-intakequalifier": true,
@@ -1319,6 +1320,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-hourslog":
       renderHoursLog();
+      break;
+    case "tab-resourcebooking":
+      renderResourceBooking();
       break;
     case "tab-testimonialtracker":
       renderTestimonialTracker();
@@ -3116,6 +3120,10 @@ function renderHoursLog() {
   setIframeAbsoluteSrc('#tab-hourslog iframe', "hours-tracker/index.html");
 }
 
+function renderResourceBooking() {
+  setIframeAbsoluteSrc('#tab-resourcebooking iframe', "resource-booking-calendar/index.html");
+}
+
 // ── Newly-wired iframe reload fixes (see the switch-case comment above) ──
 function renderBrandAssetKit() {
   setIframeAbsoluteSrc('#tab-brandassetkit iframe', "brand-asset-kit/index.html?v=2");
@@ -3471,6 +3479,67 @@ async function getTeamHoursCapacitySnapshot() {
   } catch (e) {
     console.warn("Couldn't build the team hours capacity snapshot:", e);
     return {};
+  }
+}
+
+// Raw agency/teamRoster member list, unfiltered - for tools outside
+// Team Roster itself that need per-person data (e.g. Budget Pacing
+// Tracker joining hoursLog entries against each member's hourlyRate to
+// compute labor cost). Deliberately returns everything on each member
+// record, including hourlyRate - callers are trusted admin-only iframes
+// (same trust level as getAllClients()), not the Contractor Portal,
+// which gets its own narrow server-side projection instead (see
+// handleContractorPortalData in _worker.js) and never sees this.
+async function getTeamRosterMembers() {
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return [];
+  try {
+    const ref = window.firebaseDoc(window.firebaseDb, "agency", "teamRoster");
+    const snap = await window.firebaseGetDoc(ref);
+    const data = snap && snap.exists ? snap.data() : null;
+    return (data && data.list) || [];
+  } catch (e) {
+    console.warn("Couldn't load team roster members:", e);
+    return [];
+  }
+}
+
+// Raw agency/hoursLog entries, unfiltered (every member, every client,
+// every date) - callers filter/aggregate for their own purpose (Budget
+// Pacing Tracker filters by client name + date range for retainer
+// utilization and labor cost; Team Roster's own
+// getTeamHoursCapacitySnapshot above filters to this week only). Kept
+// separate from that function rather than generalizing it, since its
+// "this week, grouped by person" shape is specific to the capacity
+// view and callers here want raw entries to group however they need.
+async function getHoursLogEntries() {
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return [];
+  try {
+    const ref = window.firebaseDoc(window.firebaseDb, "agency", "hoursLog");
+    const snap = await window.firebaseGetDoc(ref);
+    const data = snap && snap.exists ? snap.data() : null;
+    return (data && data.list) || [];
+  } catch (e) {
+    console.warn("Couldn't load hours log entries:", e);
+    return [];
+  }
+}
+
+// Raw agency/contractInvoices records - Budget Pacing Tracker uses this
+// to look up a client's recurringBilling.monthlyAmount (Stripe
+// subscription revenue) for margin math, without duplicating Contract &
+// Invoice Tracker's own read logic. See getRecordsDocRef/loadRecords in
+// contract-invoice-tracker/js/app.js for the canonical version of this
+// same read.
+async function getContractInvoiceRecords() {
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return [];
+  try {
+    const ref = window.firebaseDoc(window.firebaseDb, "agency", "contractInvoices");
+    const snap = await window.firebaseGetDoc(ref);
+    const data = snap && snap.exists ? snap.data() : null;
+    return (data && data.list) || [];
+  } catch (e) {
+    console.warn("Couldn't load contract/invoice records:", e);
+    return [];
   }
 }
 

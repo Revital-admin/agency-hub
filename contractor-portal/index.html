@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contractor Portal</title>
+<link rel="stylesheet" href="../vars.css">
+<link rel="stylesheet" href="css/style.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<!-- No login, no Cloudflare Access, no Firebase SDK on this page at all -
+     everything goes through fetch() calls to /api/contractor-portal/*
+     (see js/app.js), which validate the ?t= token server-side against
+     contractorPortal/{token} on every request. This page never talks to
+     Firestore directly. -->
+
+<div class="cp-shell">
+
+  <header class="cp-header">
+    <div class="cp-brand">
+      <span class="cp-dot"></span>
+      <span>REVITAL HUB</span>
+    </div>
+    <h1 class="cp-title">Contractor <em>Portal</em></h1>
+  </header>
+
+  <div id="cpLoading" class="cp-card cp-center">
+    <p>Loading...</p>
+  </div>
+
+  <div id="cpInvalid" class="cp-card cp-center" style="display:none;">
+    <h2 style="margin:0 0 8px;">Link not valid</h2>
+    <p style="color: var(--color-text-secondary); margin:0;">This link is invalid or has been revoked. Contact your Revital contact for a current one.</p>
+  </div>
+
+  <div id="cpContent" style="display:none;">
+
+    <div class="cp-card">
+      <div class="cp-card-title">My Info</div>
+      <div class="cp-info-grid">
+        <div><span class="cp-info-label">Name</span><span id="cpName" class="cp-info-value"></span></div>
+        <div><span class="cp-info-label">Role</span><span id="cpRole" class="cp-info-value"></span></div>
+        <div><span class="cp-info-label">Start Date</span><span id="cpStartDate" class="cp-info-value"></span></div>
+        <div><span class="cp-info-label">Agreement Status</span><span id="cpAgreementStatus" class="cp-info-value"></span></div>
+      </div>
+    </div>
+
+    <div id="cpClientWorkWrap"></div>
+
+    <div class="cp-card">
+      <div class="cp-card-title">Request Time Off</div>
+      <div class="cp-form-row">
+        <div class="cp-form-group">
+          <label for="cpTimeOffStart">Start Date</label>
+          <input type="date" id="cpTimeOffStart">
+        </div>
+        <div class="cp-form-group">
+          <label for="cpTimeOffEnd">End Date (optional)</label>
+          <input type="date" id="cpTimeOffEnd">
+        </div>
+      </div>
+      <div class="cp-form-group">
+        <label for="cpTimeOffNote">Note (optional)</label>
+        <input type="text" id="cpTimeOffNote" placeholder="e.g. Vacation, appointment...">
+      </div>
+      <button class="cp-btn-primary" id="cpTimeOffSubmitBtn" type="button">Submit Request</button>
+      <span id="cpTimeOffStatus" class="cp-form-status"></span>
+
+      <div class="cp-card-subtitle">My Requests</div>
+      <div id="cpTimeOffList"></div>
+      <p id="cpTimeOffEmpty" class="cp-empty-state" style="display:none;">No time off requested yet.</p>
+    </div>
+
+    <div class="cp-card">
+      <div class="cp-card-title">Log Hours</div>
+      <div class="cp-form-row">
+        <div class="cp-form-group">
+          <label for="cpHoursDate">Date</label>
+          <input type="date" id="cpHoursDate">
+        </div>
+        <div class="cp-form-group">
+          <label for="cpHoursAmount">Hours</label>
+          <input type="number" id="cpHoursAmount" min="0" step="0.25" placeholder="e.g. 3.5">
+        </div>
+      </div>
+      <div class="cp-form-row">
+        <div class="cp-form-group" style="flex:2;">
+          <label for="cpHoursClient">Client</label>
+          <input type="text" id="cpHoursClient" placeholder="Which client was this for?">
+        </div>
+        <div class="cp-form-group cp-checkbox-group">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+            <input type="checkbox" id="cpHoursBillable" checked style="width:auto;"> Billable
+          </label>
+        </div>
+      </div>
+      <div class="cp-form-group">
+        <label for="cpHoursNotes">Notes (optional)</label>
+        <input type="text" id="cpHoursNotes" placeholder="What did you work on?">
+      </div>
+      <button class="cp-btn-primary" id="cpHoursSubmitBtn" type="button">Log Hours</button>
+      <span id="cpHoursStatus" class="cp-form-status"></span>
+
+      <div class="cp-card-subtitle">Recent Entries</div>
+      <div id="cpHoursList"></div>
+      <p id="cpHoursEmpty" class="cp-empty-state" style="display:none;">No hours logged yet.</p>
+    </div>
+
+  </div>
+
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

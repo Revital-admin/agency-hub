@@ -168,6 +168,17 @@
 <div class="form-group"><label for="maxClientCount">Max Capacity</label><input type="number" id="maxClientCount" min="0" step="1" placeholder="0"></div>
 <div class="form-group" id="weeklyCapacityHoursGroup"><label for="weeklyCapacityHours">Weekly Capacity (hrs)</label><input type="number" id="weeklyCapacityHours" min="0" step="0.5" placeholder="e.g. 30"><p style="font-size:0.72rem; color:var(--text-muted); margin:4px 0 0;">Optional. Set this to track load automatically from logged hours (Hours &amp; Time Log) this week instead of the manual client count above.</p></div>
 </div>
+
+<!-- Billable Rate - Hub Admins only (pay data), same gating as Contractor
+     Documents. Drives cost/margin-per-client math elsewhere (Budget
+     Pacing Tracker) by joining this against Hours & Time Log entries -
+     see updateRateFieldVisibility in js/app.js. Hidden, not removed, for
+     non-Hub-Admins so an existing value round-trips untouched on save. -->
+<div class="form-group" id="rateSection" style="display:none;">
+<label for="hourlyRate">Billable Rate ($/hr)</label>
+<input type="number" id="hourlyRate" min="0" step="0.5" placeholder="e.g. 45">
+<p style="font-size:0.72rem; color:var(--text-muted); margin:4px 0 0;">Internal cost rate - never shown to this person or in their Contractor Portal. Used to compute labor cost per client.</p>
+</div>
 <div class="form-group"><label for="notes">Notes</label><textarea id="notes" rows="2" placeholder="Specialties, availability notes, time off coming up..."></textarea></div>
 
 <!-- Compliance (W-9, insurance) - contractor-only, same show/hide as the
@@ -184,6 +195,38 @@
 </div>
 <div class="form-group"><label for="insuranceExpirationDate">General Liability Insurance Expires</label><input type="date" id="insuranceExpirationDate"><p style="font-size:0.72rem; color:var(--text-muted); margin:4px 0 0;">Optional - only if this role carries it (e.g. on-location shoots/events).</p></div>
 </div>
+</div>
+
+<!-- Contractor Portal - only for contractors, only once a member exists
+     (same "nothing to attach it to yet" reasoning as everything else
+     below). A no-login, magic-link access tier for people without a
+     revitalproductions.com account - lets them submit time off, log
+     hours, and see their own roster info without an admin having to type
+     it in for them. See generateContractorPortalLink/
+     revokeContractorPortalAccess in js/app.js. -->
+<div class="form-group" id="portalAccessSection" style="display:none;">
+<label>Contractor Portal Access</label>
+<p id="portalAccessNote" style="font-size:0.78rem; color:var(--text-muted); margin:0 0 8px;">No link generated yet - they have no way to reach the Hub without one.</p>
+<div id="portalAccessLinkRow" style="display:none; gap:8px; align-items:center; flex-wrap:wrap;">
+<input type="text" id="portalAccessLinkInput" readonly style="flex:1; min-width:260px;">
+<button type="button" id="copyPortalLinkBtn" class="btn btn-secondary" style="padding:8px 14px; font-size:0.8rem;">Copy Link</button>
+<button type="button" id="revokePortalLinkBtn" class="btn btn-secondary" style="padding:8px 14px; font-size:0.8rem; color:#ef4444;">Revoke</button>
+</div>
+<button type="button" id="generatePortalLinkBtn" class="btn btn-secondary" style="padding:8px 14px; font-size:0.8rem;">Generate Portal Link</button>
+</div>
+
+<!-- Assigned Clients - which clients' creative brief/brand basics and
+     deliverable/task info show up in this contractor's own Contractor
+     Portal (see contractor-portal/). Same isContractor && isHubAdmin
+     gating as Portal Access above, since it controls what client data a
+     non-employee gets to see. Nothing shows in their portal until at
+     least one client is checked here. See renderAssignedClientsSection/
+     toggleAssignedClient in js/app.js. -->
+<div class="form-group" id="assignedClientsSection" style="display:none;">
+<label>Assigned Clients</label>
+<p style="font-size:0.78rem; color:var(--text-muted); margin:0 0 8px;">Controls which clients' brief/brand basics and deliverables this contractor can see in their Contractor Portal. Nothing shows there until at least one is checked.</p>
+<div id="assignedClientsList" style="display:flex; flex-wrap:wrap; gap:6px 16px; max-height:180px; overflow-y:auto; padding:4px 0;"></div>
+<p id="assignedClientsEmpty" style="display:none; font-size:0.8rem; color:var(--text-muted);">No clients in the Hub yet.</p>
 </div>
 
 <!-- Time Off - only shown once a member exists (editingId set), same
@@ -276,6 +319,6 @@
 </div>
 
 </main>
-<script src="js/app.js?v=12"></script>
+<script src="js/app.js?v=14"></script>
 </body>
 </html>

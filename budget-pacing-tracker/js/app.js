@@ -22,6 +22,89 @@ function persist() {
   if (isEmbedded) window.parent.saveDatabase();
 }
 
+// ── Live labor cost / retainer utilization ──
+// Team Roster's hourlyRate (Hub Admin-only field) joined against
+// agency/hoursLog entries, scoped to each tracked client's own
+// startDate/endDate window. Loaded once via the parent's generic
+// getTeamRosterMembers/getHoursLogEntries/getContractInvoiceRecords
+// helpers (see app.js) rather than duplicating those reads here.
+// Deliberately NOT realtime - same one-shot-load-then-poll-for-clients
+// pattern this file already uses for getClients(), so a stale minute or
+// two here is consistent with how the rest of this tool already
+// behaves, not a regression.
+let teamRosterMembers = [];
+let hoursLogEntries = [];
+let contractInvoiceRecords = [];
+
+async function loadAuxData() {
+  if (!isEmbedded) return;
+  try {
+    const [members, hours, invoices] = await Promise.all([
+      typeof window.parent.getTeamRosterMembers === 'function' ? window.parent.getTeamRosterMembers() : [],
+      typeof window.parent.getHoursLogEntries === 'function' ? window.parent.getHoursLogEntries() : [],
+      typeof window.parent.getContractInvoiceRecords === 'function' ? window.parent.getContractInvoiceRecords() : []
+    ]);
+    teamRosterMembers = members || [];
+    hoursLogEntries = hours || [];
+    contractInvoiceRecords = invoices || [];
+  } catch (e) {
+    console.warn("Couldn't load rate/hours/billing data for cost math:", e);
+  }
+}
+
+function getClientHoursInRange(clientName, startDate, endDate) {
+  const start = startDate ? new Date(startDate + 'T00:00:00') : null;
+  const end = endDate ? new Date(endDate + 'T23:59:59') : null;
+  return hoursLogEntries.filter(e => {
+    if ((e.clientName || '') !== clientName) return false;
+    const d = new Date((e.date || '') + 'T00:00:00');
+    if (isNaN(d.getTime())) return false;
+    if (start && d < start) return false;
+    if (end && d > end) return false;
+    return true;
+  });
+}
+
+function getMemberRate(memberName) {
+  const key = (memberName || '').trim().toLowerCase();
+  if (!key) return null;
+  const m = teamRosterMembers.find(m => (m.memberName || '').trim().toLowerCase() === key);
+  const rate = m ? parseFloat(m.hourlyRate) : NaN;
+  return (m && !isNaN(rate) && rate > 0) ? rate : null;
+}
+
+// Returns { cost, totalHours, missingRateHours } for a client's logged
+// hours in [startDate, endDate]. missingRateHours is hours logged by
+// someone with no hourlyRate set on their roster entry yet - excluded
+// from cost rather than silently treated as $0/hr, and surfaced in the
+// UI so the number's known incompleteness is visible instead of hidden.
+function getLaborCost(clientName, startDate, endDate) {
+  const entries = getClientHoursInRange(clientName, startDate, endDate);
+  let cost = 0;
+  let totalHours = 0;
+  let missingRateHours = 0;
+  entries.forEach(e => {
+    const hrs = parseFloat(e.hours) || 0;
+    totalHours += hrs;
+    const rate = getMemberRate(e.memberName);
+    if (rate === null) { missingRateHours += hrs; return; }
+    cost += hrs * rate;
+  });
+  return { cost, totalHours, missingRateHours };
+}
+
+// Active Stripe recurring billing amount for this client, if any (see
+// Contract & Invoice Tracker's recurringBilling.status). Returns null
+// (not 0) when there's no active subscription, so callers can tell
+// "no revenue" apart from "no billing set up" and skip showing a
+// misleading $0 margin.
+function getActiveMonthlyBilling(clientName) {
+  const rec = contractInvoiceRecords.find(r => (r.clientName || '') === clientName && r.recurringBilling && r.recurringBilling.status === 'active');
+  if (!rec) return null;
+  const amount = parseFloat(rec.recurringBilling.monthlyAmount);
+  return isNaN(amount) ? null : amount;
+}
+
 function populateClientSelect() {
   const clients = getClients();
   const select = el('newClientSelect');
@@ -82,8 +165,42 @@ function renderTable() {
 
   tracked.forEach(name => {
     const p = clients[name].budgetPacing;
-    const pct = p.totalBudget ? Math.min(100, Math.round((p.spentToDate / p.totalBudget) * 100)) : 0;
-    const paceClass = getPacingClass(p.spentToDate, p.totalBudget, p.startDate, p.endDate);
+    const isRetainerHours = p.budgetType === 'Retainer Hours';
+
+    // Retainer Hours clients get a live spentToDate computed from Hours
+    // & Time Log instead of the manual figure - see getClientHoursInRange
+    // above. Ad Spend has no equivalent live source (ad platform spend
+    // isn't logged in the Hub anywhere), so it stays fully manual.
+    const liveHours = isRetainerHours ? getClientHoursInRange(name, p.startDate, p.endDate) : null;
+    const liveHoursTotal = liveHours ? liveHours.reduce((sum, e) => sum + (parseFloat(e.hours) || 0), 0) : null;
+    const effectiveSpent = isRetainerHours ? (liveHoursTotal || 0) : p.spentToDate;
+
+    const pct = p.totalBudget ? Math.min(100, Math.round((effectiveSpent / p.totalBudget) * 100)) : 0;
+    const paceClass = getPacingClass(effectiveSpent, p.totalBudget, p.startDate, p.endDate);
+
+    const labor = getLaborCost(name, p.startDate, p.endDate);
+    const monthlyBilling = getActiveMonthlyBilling(name);
+    const margin = monthlyBilling !== null ? monthlyBilling - labor.cost : null;
+
+    const spentFieldHtml = isRetainerHours ? `
+        <div class="form-group" style="margin:0">
+          <label style="font-size:10px">Spent to Date (live, from Hours &amp; Time Log)</label>
+          <input type="text" class="form-control" value="${formatValue('Retainer Hours', effectiveSpent)}" disabled>
+        </div>
+      ` : `
+        <div class="form-group" style="margin:0">
+          <label style="font-size:10px">Spent to Date</label>
+          <input type="text" inputmode="decimal" class="form-control spent-input" data-client="${name}" value="${formatNumberWithCommas(p.spentToDate)}">
+        </div>
+      `;
+
+    const costMarginHtml = `
+      <div class="pacing-stats" style="margin-top:8px; padding-top:8px; border-top:1px solid var(--color-border, rgba(255,255,255,0.08));">
+        <span class="spent">Labor Cost (period): $${labor.cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+        ${margin !== null ? `<span class="total" style="color:${margin >= 0 ? '#4ade80' : '#ef4444'};">Margin vs. billing: ${margin >= 0 ? '' : '-'}$${Math.abs(margin).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>` : `<span class="total" style="opacity:0.6;">No active billing on file</span>`}
+      </div>
+      ${labor.missingRateHours > 0 ? `<p style="font-size:10px; color:var(--color-text-muted, #8a887f); margin:4px 0 0;">${labor.missingRateHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs excluded - no billable rate set for that team member yet.</p>` : ''}
+    `;
 
     const card = document.createElement('div');
     card.className = 'pacing-card';
@@ -102,15 +219,14 @@ function renderTable() {
       </div>
 
       <div class="pacing-stats">
-        <span class="spent">${formatValue(p.budgetType, p.spentToDate)} Spent</span>
+        <span class="spent">${formatValue(p.budgetType, effectiveSpent)} Spent</span>
         <span class="total">${formatValue(p.budgetType, p.totalBudget)} Total</span>
       </div>
 
+      ${costMarginHtml}
+
       <div class="card-actions">
-        <div class="form-group" style="margin:0">
-          <label style="font-size:10px">Spent to Date</label>
-          <input type="text" inputmode="decimal" class="form-control spent-input" data-client="${name}" value="${formatNumberWithCommas(p.spentToDate)}">
-        </div>
+        ${spentFieldHtml}
         <div class="form-group" style="margin:0">
           <label style="font-size:10px">Total Budget</label>
           <input type="text" inputmode="decimal" class="form-control total-input" data-client="${name}" value="${formatNumberWithCommas(p.totalBudget)}">
@@ -228,6 +344,12 @@ el('addTrackerBtn').addEventListener('click', () => {
 document.addEventListener('DOMContentLoaded', () => {
   populateClientSelect();
   renderTable();
+
+  // Rate/hours/billing data for the cost-and-margin panel loads
+  // separately from client data (three more Firestore reads) - render
+  // once immediately with whatever's cached, then again once this
+  // resolves so the panel doesn't sit blank/stale on first load.
+  loadAuxData().then(() => renderTable());
 
   // The parent Hub loads its client database asynchronously (instant
   // localStorage boot, then a Firestore sync on top of that). If this

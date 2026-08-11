@@ -69,6 +69,61 @@ function persistClient() {
   }
 }
 
+// ── Budget vs. actuals ──
+// Same cost calculation as Budget Pacing Tracker's getLaborCost (see
+// that file's header comment) - deliberately duplicated rather than
+// shared between these two separate iframes. Keep both in sync if the
+// rate-lookup or cost-summing logic ever changes.
+let tlTeamRosterMembers = [];
+let tlHoursLogEntries = [];
+
+async function loadTlAuxData() {
+  if (!isEmbedded) return;
+  try {
+    const [members, hours] = await Promise.all([
+      typeof window.parent.getTeamRosterMembers === 'function' ? window.parent.getTeamRosterMembers() : [],
+      typeof window.parent.getHoursLogEntries === 'function' ? window.parent.getHoursLogEntries() : []
+    ]);
+    tlTeamRosterMembers = members || [];
+    tlHoursLogEntries = hours || [];
+  } catch (e) {
+    console.warn("Couldn't load rate/hours data for budget-vs-actuals:", e);
+  }
+}
+
+function tlGetMemberRate(memberName) {
+  const key = (memberName || '').trim().toLowerCase();
+  if (!key) return null;
+  const m = tlTeamRosterMembers.find(m => (m.memberName || '').trim().toLowerCase() === key);
+  const rate = m ? parseFloat(m.hourlyRate) : NaN;
+  return (m && !isNaN(rate) && rate > 0) ? rate : null;
+}
+
+// endDate defaults to today if the timeline isn't completed yet, or its
+// completedAt date if it is - "actual cost so far" for an active
+// project, "final actual cost" for a finished one.
+function getProjectActualCost(clientName, timeline) {
+  const startDate = timeline.projectStartDate || (timeline.createdAt || null);
+  const endDate = timeline.completedAt || todayISO();
+  const start = startDate ? new Date(startDate + 'T00:00:00') : null;
+  const end = new Date(endDate + 'T23:59:59');
+
+  let cost = 0;
+  let missingRateHours = 0;
+  tlHoursLogEntries.forEach(e => {
+    if ((e.clientName || '') !== clientName) return;
+    const d = new Date((e.date || '') + 'T00:00:00');
+    if (isNaN(d.getTime())) return;
+    if (start && d < start) return;
+    if (d > end) return;
+    const hrs = parseFloat(e.hours) || 0;
+    const rate = tlGetMemberRate(e.memberName);
+    if (rate === null) { missingRateHours += hrs; return; }
+    cost += hrs * rate;
+  });
+  return { cost, missingRateHours };
+}
+
 function showBanner(type, message) {
   if (isEmbedded && window.parent.showBanner) {
     window.parent.showBanner(type, message);
@@ -260,6 +315,7 @@ function buildTimelineFromTemplate(template, opts) {
     templateId: template.id,
     templateName: template.name,
     projectStartDate: null,
+    projectBudget: null,
     phases: template.phases.map(p => ({
       order: p.order,
       name: p.name,
@@ -441,6 +497,32 @@ function renderSummary(timeline) {
 
   const pct = total ? Math.round((done / total) * 100) : 0;
   document.getElementById('timelineProgressFill').style.width = pct + '%';
+
+  const clientName = window.__timelineActiveClientName;
+  const actualCostEl = document.getElementById('statActualCost');
+  const remainingEl = document.getElementById('statBudgetRemaining');
+  const noteEl = document.getElementById('budgetMissingRateNote');
+  if (actualCostEl && remainingEl && clientName) {
+    const { cost, missingRateHours } = getProjectActualCost(clientName, timeline);
+    actualCostEl.textContent = '$' + cost.toLocaleString(undefined, { maximumFractionDigits: 0 });
+    const budget = parseFloat(timeline.projectBudget);
+    if (!isNaN(budget) && budget > 0) {
+      const remaining = budget - cost;
+      remainingEl.textContent = (remaining >= 0 ? '$' : '-$') + Math.abs(remaining).toLocaleString(undefined, { maximumFractionDigits: 0 });
+      remainingEl.style.color = remaining >= 0 ? '#4ade80' : '#ef4444';
+    } else {
+      remainingEl.textContent = 'No budget set';
+      remainingEl.style.color = '';
+    }
+    if (noteEl) {
+      if (missingRateHours > 0) {
+        noteEl.style.display = 'block';
+        noteEl.textContent = `${missingRateHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs excluded from actual cost - no billable rate set for that team member yet.`;
+      } else {
+        noteEl.style.display = 'none';
+      }
+    }
+  }
 }
 
 function renderPhases(timeline) {
@@ -716,6 +798,9 @@ function renderAll() {
   const startInput = document.getElementById('projectStartDate');
   if (startInput) startInput.value = timeline.projectStartDate || '';
 
+  const budgetInput = document.getElementById('projectBudget');
+  if (budgetInput) budgetInput.value = timeline.projectBudget != null ? timeline.projectBudget : '';
+
   const markCompleteBtn = document.getElementById('markCompleteBtn');
   const reopenBtn = document.getElementById('reopenTimelineBtn');
   if (timeline.status === 'completed') {
@@ -763,6 +848,17 @@ function wireStaticEvents() {
     if (!timeline) return;
     timeline.projectStartDate = document.getElementById('projectStartDate').value || null;
     persistClient();
+  });
+
+  document.getElementById('projectBudget').addEventListener('change', () => {
+    const client = getClient();
+    if (!client) return;
+    const timeline = getSelectedTimeline(client);
+    if (!timeline) return;
+    const val = document.getElementById('projectBudget').value;
+    timeline.projectBudget = val === '' ? null : parseFloat(val);
+    persistClient();
+    renderSummary(timeline);
   });
 
   document.getElementById('markCompleteBtn').addEventListener('click', () => {
@@ -849,6 +945,7 @@ async function init() {
   wireStaticEvents();
   await loadTemplateLibrary();
   renderAll();
+  loadTlAuxData().then(() => renderAll());
 }
 
 if (document.readyState === 'loading') {

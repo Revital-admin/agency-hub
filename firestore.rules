@@ -118,6 +118,7 @@ service cloud.firestore {
         'vendorRentalTracker': 'production',
         'changeOrders': 'account-ops',
         'hoursLog': 'account-ops',
+        'resourceBookings': 'account-ops',
         'revisionFeedbackLog': 'account-ops',
         'teamRoster': 'account-ops',
         'timelineTemplates': 'account-ops',
@@ -238,6 +239,28 @@ service cloud.firestore {
       // security issue.
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
                         .hasOnly(['clientChecklist', 'pendingApprovals', 'approvalHistory', 'testimonialSubmission', 'notifications', 'lastVisitedAt', 'moodBoardViews', 'moodBoardStyleFeedback', 'moodBoardAnnotations']);
+    }
+
+    // Contractor Portal - same magic-token-as-document-ID model as
+    // clients/{clientId} above, for a single contractor's own read-only
+    // projection of their Team Roster entry (memberName, role,
+    // employmentType, startDate, agreementStatus). Time off and hours
+    // requests are NOT read/written through this collection or these
+    // rules at all - they go through server-side Worker routes
+    // (/api/contractor-portal/*) using the worker's own privileged
+    // Firestore access, precisely because those touch shared documents
+    // (agency/teamRoster, agency/hoursLog) that would otherwise have to
+    // stay wide open to every contractor's magic link to allow writes.
+    // This doc is purely identity + display info, kept in sync by Team
+    // Roster's own admin UI whenever a contractor's info changes - see
+    // syncContractorPortalProjections in team-roster/js/app.js.
+    match /contractorPortal/{token} {
+      allow get: if true;
+      allow list: if false;
+      // Only an actual signed-in admin can create/update/revoke a
+      // contractor's portal projection - never the contractor themselves,
+      // and never an anonymous holder of some other token.
+      allow write: if isAdmin();
     }
 
     // Deny everything else by default.

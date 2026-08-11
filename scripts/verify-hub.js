@@ -72,6 +72,7 @@ const KNOWN_NON_TAB_TOOLS = {
   'booking': 'Public prospect booking page, reached at book.<domain> (outside Cloudflare Access), not an admin nav tab.',
   'billing-success': 'Stripe Checkout success_url redirect target, reached at book.<domain>/billing-success/ (outside Cloudflare Access), not an admin nav tab.',
   'billing-canceled': 'Stripe Checkout cancel_url redirect target, reached at book.<domain>/billing-canceled/ (outside Cloudflare Access), not an admin nav tab.',
+  'contractor-portal': 'Contractor-facing magic-link portal (served directly to contractors via /contractor-portal/?t=<token>, outside Cloudflare Access), not an admin nav tab.',
 };
 
 let failures = 0;
