@@ -194,24 +194,47 @@ function attachIdleListeners(doc) {
   }
 }
 
-function showIdleLockOverlay() {
+// Shows the lock overlay AND figures out which form to present - PIN
+// entry if the team already has one set up, or the one-time setup form
+// if not (see handleIdleLockStatus in _worker.js). Defaults to the PIN
+// form on a status-check failure (offline, etc.) rather than silently
+// falling back to the old click-to-unlock behavior - a broken network
+// check shouldn't become a security hole.
+async function showIdleLockOverlay() {
   idleLocked = true;
   const overlay = document.getElementById("idleLockOverlay");
   const errorEl = document.getElementById("idleLockError");
   const statusEl = document.getElementById("idleLockStatus");
+  const pinForm = document.getElementById("idleLockPinForm");
+  const setupForm = document.getElementById("idleLockSetupForm");
   if (errorEl) errorEl.style.display = "none";
   if (statusEl) statusEl.textContent = "You've been idle for a while. Client data is hidden until you unlock.";
   if (overlay) overlay.style.display = "flex";
+
+  let hasPin = true;
+  try {
+    const res = await fetch("/api/idle-lock/status", { credentials: "include" });
+    const data = await res.json();
+    hasPin = !!(data && data.hasPin);
+  } catch (e) {
+    hasPin = true;
+  }
+
+  if (pinForm) pinForm.style.display = hasPin ? "flex" : "none";
+  if (setupForm) setupForm.style.display = hasPin ? "none" : "flex";
+  const focusInput = document.getElementById(hasPin ? "idleLockPinInput" : "idleLockSetupPinInput");
+  if (focusInput) focusInput.focus();
 }
 
-async function attemptIdleUnlock() {
-  const errorEl = document.getElementById("idleLockError");
+// Runs after the PIN itself checks out (either just-entered or
+// just-created) - re-confirms the browser's Cloudflare Access session is
+// still the same signed-in teammate, same as the original click-to-unlock
+// behavior. The PIN stops a random person from getting past the overlay;
+// this second check still catches a genuinely expired/switched Access
+// session.
+async function finishIdleUnlockAfterPin() {
   const statusEl = document.getElementById("idleLockStatus");
-  const unlockBtn = document.getElementById("idleLockUnlockBtn");
-  if (errorEl) errorEl.style.display = "none";
   if (statusEl) statusEl.textContent = "Checking your session...";
-  if (unlockBtn) unlockBtn.disabled = true;
-
   try {
     const res = await fetch("/api/user", { credentials: "include" });
     const data = await res.json();
@@ -224,13 +247,46 @@ async function attemptIdleUnlock() {
       const overlay = document.getElementById("idleLockOverlay");
       if (overlay) overlay.style.display = "none";
       resetIdleTimer();
-    } else {
-      // Session expired or switched accounts - don't try to fake it,
-      // let Cloudflare Access's own login flow handle re-auth.
-      window.location.reload();
+      return true;
     }
+    window.location.reload();
+    return false;
   } catch (e) {
+    const errorEl = document.getElementById("idleLockError");
     if (statusEl) statusEl.textContent = "Could not verify your session.";
+    if (errorEl) {
+      errorEl.textContent = "Check your connection and try again.";
+      errorEl.style.display = "block";
+    }
+    return false;
+  }
+}
+
+async function attemptIdleUnlock(pin) {
+  const errorEl = document.getElementById("idleLockError");
+  const unlockBtn = document.getElementById("idleLockUnlockBtn");
+  if (errorEl) errorEl.style.display = "none";
+  if (unlockBtn) unlockBtn.disabled = true;
+
+  try {
+    const res = await fetch("/api/idle-lock/verify-pin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ pin })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      if (errorEl) {
+        errorEl.textContent = (data && data.error) || "Wrong PIN.";
+        errorEl.style.display = "block";
+      }
+      const input = document.getElementById("idleLockPinInput");
+      if (input) { input.value = ""; input.focus(); }
+      return;
+    }
+    await finishIdleUnlockAfterPin();
+  } catch (e) {
     if (errorEl) {
       errorEl.textContent = "Check your connection and try again.";
       errorEl.style.display = "block";
@@ -240,12 +296,140 @@ async function attemptIdleUnlock() {
   }
 }
 
+async function attemptIdleSetupAndUnlock(pin, confirmPin) {
+  const errorEl = document.getElementById("idleLockError");
+  const setupBtn = document.getElementById("idleLockSetupBtn");
+  if (errorEl) errorEl.style.display = "none";
+
+  if (!/^\d{4,8}$/.test(pin)) {
+    if (errorEl) { errorEl.textContent = "PIN must be 4-8 digits."; errorEl.style.display = "block"; }
+    return;
+  }
+  if (pin !== confirmPin) {
+    if (errorEl) { errorEl.textContent = "PINs don't match."; errorEl.style.display = "block"; }
+    return;
+  }
+
+  if (setupBtn) setupBtn.disabled = true;
+  try {
+    const res = await fetch("/api/idle-lock/set-pin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ pin })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      if (errorEl) { errorEl.textContent = (data && data.error) || "Couldn't save PIN."; errorEl.style.display = "block"; }
+      return;
+    }
+    await finishIdleUnlockAfterPin();
+  } catch (e) {
+    if (errorEl) { errorEl.textContent = "Check your connection and try again."; errorEl.style.display = "block"; }
+  } finally {
+    if (setupBtn) setupBtn.disabled = false;
+  }
+}
+
+// ── Change Team PIN modal ── (reachable any time via the sidebar key
+// icon, not just from the lock screen - see changePinBtn in index.html.)
+function openChangePinModal() {
+  const modal = document.getElementById("changePinModal");
+  const statusEl = document.getElementById("changePinStatus");
+  const errorEl = document.getElementById("changePinError");
+  const newInput = document.getElementById("changePinNewInput");
+  const confirmInput = document.getElementById("changePinConfirmInput");
+  if (!modal) return;
+  if (errorEl) errorEl.style.display = "none";
+  if (newInput) newInput.value = "";
+  if (confirmInput) confirmInput.value = "";
+  if (statusEl) statusEl.textContent = "Loading...";
+  modal.style.display = "flex";
+
+  fetch("/api/idle-lock/status", { credentials: "include" })
+    .then(res => res.json())
+    .then(data => {
+      if (statusEl) {
+        statusEl.textContent = data && data.hasPin
+          ? "A team PIN is already set. Enter a new one below to change it for everyone."
+          : "No team PIN is set up yet. Create one below.";
+      }
+    })
+    .catch(() => { if (statusEl) statusEl.textContent = "Set a PIN below."; });
+}
+
+function closeChangePinModal() {
+  const modal = document.getElementById("changePinModal");
+  if (modal) modal.style.display = "none";
+}
+
+async function saveChangedPin() {
+  const errorEl = document.getElementById("changePinError");
+  const saveBtn = document.getElementById("changePinSaveBtn");
+  const pin = (document.getElementById("changePinNewInput") || {}).value || "";
+  const confirmPin = (document.getElementById("changePinConfirmInput") || {}).value || "";
+  if (errorEl) errorEl.style.display = "none";
+
+  if (!/^\d{4,8}$/.test(pin)) {
+    if (errorEl) { errorEl.textContent = "PIN must be 4-8 digits."; errorEl.style.display = "block"; }
+    return;
+  }
+  if (pin !== confirmPin) {
+    if (errorEl) { errorEl.textContent = "PINs don't match."; errorEl.style.display = "block"; }
+    return;
+  }
+
+  if (saveBtn) saveBtn.disabled = true;
+  try {
+    const res = await fetch("/api/idle-lock/set-pin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ pin })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      if (errorEl) { errorEl.textContent = (data && data.error) || "Couldn't save PIN."; errorEl.style.display = "block"; }
+      return;
+    }
+    closeChangePinModal();
+    if (typeof showBanner === "function") showBanner("success", "Team idle-lock PIN saved.");
+  } catch (e) {
+    if (errorEl) { errorEl.textContent = "Check your connection and try again."; errorEl.style.display = "block"; }
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+  }
+}
+
 function initIdleSessionLock() {
   attachIdleListeners(document);
   resetIdleTimer();
 
-  const unlockBtn = document.getElementById("idleLockUnlockBtn");
-  if (unlockBtn) unlockBtn.addEventListener("click", attemptIdleUnlock);
+  const pinForm = document.getElementById("idleLockPinForm");
+  if (pinForm) {
+    pinForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const input = document.getElementById("idleLockPinInput");
+      attemptIdleUnlock(input ? input.value : "");
+    });
+  }
+
+  const setupForm = document.getElementById("idleLockSetupForm");
+  if (setupForm) {
+    setupForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const pinInput = document.getElementById("idleLockSetupPinInput");
+      const confirmInput = document.getElementById("idleLockSetupPinConfirmInput");
+      attemptIdleSetupAndUnlock(pinInput ? pinInput.value : "", confirmInput ? confirmInput.value : "");
+    });
+  }
+
+  const changeBtn = document.getElementById("changePinBtn");
+  if (changeBtn) changeBtn.addEventListener("click", openChangePinModal);
+  const cancelBtn = document.getElementById("changePinCancelBtn");
+  if (cancelBtn) cancelBtn.addEventListener("click", closeChangePinModal);
+  const saveBtn = document.getElementById("changePinSaveBtn");
+  if (saveBtn) saveBtn.addEventListener("click", saveChangedPin);
 }
 
 // Records a lightweight "last seen in the Hub" timestamp per teammate,

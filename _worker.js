@@ -125,6 +125,18 @@ export default {
       return handlePipelineSyncClickUp(request, env);
     }
 
+    if (url.pathname === "/api/idle-lock/status" && request.method === "GET") {
+      return handleIdleLockStatus(request, env);
+    }
+
+    if (url.pathname === "/api/idle-lock/set-pin" && request.method === "POST") {
+      return handleIdleLockSetPin(request, env);
+    }
+
+    if (url.pathname === "/api/idle-lock/verify-pin" && request.method === "POST") {
+      return handleIdleLockVerifyPin(request, env);
+    }
+
     if (url.pathname === "/api/billing/create-subscription-checkout" && request.method === "POST") {
       return handleCreateSubscriptionCheckout(request, env);
     }
@@ -2216,6 +2228,139 @@ async function stripeApiRequest(env, path, formParams, billingMode) {
 //     recurring off monthlyAmount, one not off setupAmount) - Stripe
 //     bills both together on the first invoice, then just the recurring
 //     amount every month after.
+// ── Idle Lock PIN (Aug 2026) ──
+// The 20-minute idle-lock overlay (see initIdleSessionLock in app.js)
+// used to unlock with a single click, which only re-confirmed the
+// browser's existing Cloudflare Access cookie was still valid - it
+// didn't actually challenge the person standing at the keyboard. Anyone
+// with physical access to an already-signed-in, unlocked computer could
+// click through it. This adds one real PIN, shared by the whole team
+// (not per-person - the point is stopping a random person from walking
+// up and clicking Unlock, not authenticating a specific teammate), that
+// must be typed correctly to dismiss the overlay. Stored as a salted
+// SHA-256 hash in agency/idleLockPin, never in plaintext or in any
+// client-side code - the actual comparison only ever happens here,
+// server-side.
+async function sha256Hex(text) {
+  const buffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function idleLockRequireAccess(request) {
+  const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) return null;
+  return accessEmail;
+}
+
+// ── GET /api/idle-lock/status ──
+// Tells the client whether a team PIN has been set up yet, so the lock
+// overlay can show a "create a PIN" flow the first time versus a normal
+// "enter the PIN" prompt afterward.
+async function handleIdleLockStatus(request, env) {
+  const accessEmail = idleLockRequireAccess(request);
+  if (!accessEmail) return jsonResponse({ error: "Not authorized" }, 403);
+
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const doc = await firestoreGetDoc(accessToken, projectId, "agency/idleLockPin");
+    return jsonResponse({ hasPin: !!(doc && doc.hash) });
+  } catch (e) {
+    return jsonResponse({ error: "Request failed: " + e.message }, 500);
+  }
+}
+
+// ── POST /api/idle-lock/set-pin ──
+// Body: { pin: "1234" }. Any signed-in teammate can set/change it (same
+// trust level as everything else in the Hub - there's no per-person
+// ownership of this shared code), which overwrites it for the whole
+// team going forward.
+async function handleIdleLockSetPin(request, env) {
+  const accessEmail = idleLockRequireAccess(request);
+  if (!accessEmail) return jsonResponse({ error: "Not authorized" }, 403);
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+  const pin = ((payload && payload.pin) || "").toString().trim();
+  if (!/^\d{4,8}$/.test(pin)) {
+    return jsonResponse({ error: "PIN must be 4-8 digits" }, 400);
+  }
+
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const saltBytes = crypto.getRandomValues(new Uint8Array(16));
+    const salt = Array.from(saltBytes).map(b => b.toString(16).padStart(2, "0")).join("");
+    const hash = await sha256Hex(salt + pin);
+    await firestoreSetDoc(accessToken, projectId, "agency/idleLockPin", {
+      salt, hash,
+      updatedAt: new Date().toISOString(),
+      updatedBy: accessEmail,
+      failedAttempts: 0,
+      lockedUntil: null
+    });
+    return jsonResponse({ ok: true });
+  } catch (e) {
+    return jsonResponse({ error: "Request failed: " + e.message }, 500);
+  }
+}
+
+// ── POST /api/idle-lock/verify-pin ──
+// Body: { pin: "1234" }. Simple brute-force guard - 5 wrong guesses in a
+// row locks further attempts out for 60 seconds. That's plenty against
+// the actual threat this defends against (someone physically at the
+// keyboard guessing a few times), without needing real infrastructure
+// (this is a single shared low-stakes code, not a password).
+async function handleIdleLockVerifyPin(request, env) {
+  const accessEmail = idleLockRequireAccess(request);
+  if (!accessEmail) return jsonResponse({ error: "Not authorized" }, 403);
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+  const pin = ((payload && payload.pin) || "").toString().trim();
+
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const doc = await firestoreGetDoc(accessToken, projectId, "agency/idleLockPin");
+    if (!doc || !doc.hash) {
+      return jsonResponse({ error: "No PIN has been set up yet" }, 400);
+    }
+
+    if (doc.lockedUntil && new Date(doc.lockedUntil).getTime() > Date.now()) {
+      const waitSec = Math.ceil((new Date(doc.lockedUntil).getTime() - Date.now()) / 1000);
+      return jsonResponse({ ok: false, error: `Too many attempts - try again in ${waitSec}s` }, 429);
+    }
+
+    const candidateHash = await sha256Hex(doc.salt + pin);
+    if (candidateHash === doc.hash) {
+      if (doc.failedAttempts || doc.lockedUntil) {
+        await firestoreSetDoc(accessToken, projectId, "agency/idleLockPin", { ...doc, failedAttempts: 0, lockedUntil: null });
+      }
+      return jsonResponse({ ok: true });
+    }
+
+    const failedAttempts = (doc.failedAttempts || 0) + 1;
+    const lockedUntil = failedAttempts >= 5 ? new Date(Date.now() + 60000).toISOString() : null;
+    await firestoreSetDoc(accessToken, projectId, "agency/idleLockPin", {
+      ...doc,
+      failedAttempts: lockedUntil ? 0 : failedAttempts,
+      lockedUntil
+    });
+    return jsonResponse({
+      ok: false,
+      error: lockedUntil ? "Too many attempts - try again in 60s" : "Wrong PIN"
+    }, 401);
+  } catch (e) {
+    return jsonResponse({ error: "Request failed: " + e.message }, 500);
+  }
+}
+
 async function handleCreateSubscriptionCheckout(request, env) {
   const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
   if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
