@@ -2193,11 +2193,29 @@ async function stripeApiRequest(env, path, formParams, billingMode) {
 
 // ── POST /api/billing/create-subscription-checkout ──
 // Admin-gated (called from inside the Hub, same as the other write
-// routes). Creates a Stripe Checkout Session in subscription mode with
-// an inline dynamic price (price_data) rather than requiring a
-// pre-created Stripe Price object per possible dollar amount - agency
-// retainers are bespoke per client, so a fixed catalog of Prices
-// doesn't fit. Returns the hosted checkout URL to send the client.
+// routes). Creates a Stripe Checkout Session with an inline dynamic
+// price (price_data) rather than requiring a pre-created Stripe Price
+// object per possible dollar amount - agency retainers/project fees are
+// bespoke per client, so a fixed catalog of Prices doesn't fit. Returns
+// the hosted checkout URL to send the client.
+//
+// billingType (Aug 2026, added alongside Proposal Calculator's own
+// "Generate Payment Link" button - see generateProposalPaymentLink in
+// root app.js; the route name is unchanged for backward compatibility
+// with Contract & Invoice Tracker's existing "Send Billing Link", which
+// never sends billingType and so keeps getting the original behavior):
+//   - "recurring" (default) - a monthly subscription, mode: subscription,
+//     one recurring line item off monthlyAmount.
+//   - "one_time" - a single charge off setupAmount, mode: payment, one
+//     non-recurring line item. No subscription is created, so this
+//     record never receives invoice.paid/invoice.payment_failed events
+//     later - see applyStripeEventToContractInvoices, which marks it
+//     "paid" directly off checkout.session.completed instead of "active".
+//   - "combined" - a one-time setup fee billed alongside an ongoing
+//     monthly retainer, mode: subscription with TWO line items (one
+//     recurring off monthlyAmount, one not off setupAmount) - Stripe
+//     bills both together on the first invoice, then just the recurring
+//     amount every month after.
 async function handleCreateSubscriptionCheckout(request, env) {
   const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
   if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
@@ -2210,28 +2228,56 @@ async function handleCreateSubscriptionCheckout(request, env) {
   } catch (e) {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
-  const { recordId, clientName, monthlyAmount, clientEmail, mode } = payload || {};
+  const { recordId, clientName, monthlyAmount, setupAmount, clientEmail, mode, serviceLabel } = payload || {};
+  const billingType = ["one_time", "combined"].includes(payload && payload.billingType) ? payload.billingType : "recurring";
   const billingMode = mode === "live" ? "live" : "test";
-  if (!recordId || !clientName || !monthlyAmount) {
-    return jsonResponse({ error: "recordId, clientName, and monthlyAmount are required" }, 400);
-  }
-  const amountCents = Math.round(Number(monthlyAmount) * 100);
-  if (!Number.isFinite(amountCents) || amountCents <= 0) {
-    return jsonResponse({ error: "monthlyAmount must be a positive number" }, 400);
+  if (!recordId || !clientName) {
+    return jsonResponse({ error: "recordId and clientName are required" }, 400);
   }
 
+  const needsMonthly = billingType === "recurring" || billingType === "combined";
+  const needsSetup = billingType === "one_time" || billingType === "combined";
+  const monthlyCents = Math.round(Number(monthlyAmount) * 100);
+  const setupCents = Math.round(Number(setupAmount) * 100);
+  if (needsMonthly && (!Number.isFinite(monthlyCents) || monthlyCents <= 0)) {
+    return jsonResponse({ error: "monthlyAmount must be a positive number" }, 400);
+  }
+  if (needsSetup && (!Number.isFinite(setupCents) || setupCents <= 0)) {
+    return jsonResponse({ error: "setupAmount must be a positive number" }, 400);
+  }
+
+  const label = (serviceLabel || "").trim();
+  const recurringName = `${clientName} - ${label || "Monthly Retainer"}`;
+  const oneTimeName = billingType === "combined"
+    ? `${clientName} - ${label ? label + " Setup Fee" : "One-Time Setup Fee"}`
+    : `${clientName} - ${label || "One-Time Project Fee"}`;
+
   const params = new URLSearchParams();
-  params.append("mode", "subscription");
-  params.append("line_items[0][price_data][currency]", "usd");
-  params.append("line_items[0][price_data][product_data][name]", `${clientName} - Monthly Retainer`);
-  params.append("line_items[0][price_data][recurring][interval]", "month");
-  params.append("line_items[0][price_data][unit_amount]", String(amountCents));
-  params.append("line_items[0][quantity]", "1");
+  params.append("mode", billingType === "one_time" ? "payment" : "subscription");
+
+  let lineIndex = 0;
+  if (needsMonthly) {
+    params.append(`line_items[${lineIndex}][price_data][currency]`, "usd");
+    params.append(`line_items[${lineIndex}][price_data][product_data][name]`, recurringName);
+    params.append(`line_items[${lineIndex}][price_data][recurring][interval]`, "month");
+    params.append(`line_items[${lineIndex}][price_data][unit_amount]`, String(monthlyCents));
+    params.append(`line_items[${lineIndex}][quantity]`, "1");
+    lineIndex++;
+  }
+  if (needsSetup) {
+    params.append(`line_items[${lineIndex}][price_data][currency]`, "usd");
+    params.append(`line_items[${lineIndex}][price_data][product_data][name]`, oneTimeName);
+    params.append(`line_items[${lineIndex}][price_data][unit_amount]`, String(setupCents));
+    params.append(`line_items[${lineIndex}][quantity]`, "1");
+    lineIndex++;
+  }
+
   params.append("success_url", "https://book.revitalproductions.com/billing-success/");
   params.append("cancel_url", "https://book.revitalproductions.com/billing-canceled/");
   params.append("metadata[hubRecordId]", recordId);
   params.append("metadata[hubClientName]", clientName);
   params.append("metadata[hubMode]", billingMode);
+  params.append("metadata[hubBillingType]", billingType);
   if (clientEmail) params.append("customer_email", clientEmail);
 
   try {
@@ -2326,13 +2372,21 @@ async function applyStripeEventToContractInvoices(env, event, billingMode) {
 
   if (event.type === "checkout.session.completed") {
     const recordId = obj.metadata && obj.metadata.hubRecordId;
+    // "one_time" checkouts (mode: payment) never create a subscription,
+    // so this is the only event they'll ever get - land straight on
+    // "paid" rather than "active", since there's no ongoing billing to
+    // track. "recurring"/"combined" checkouts do create a subscription
+    // (obj.subscription is set), so "active" is correct for those - see
+    // handleCreateSubscriptionCheckout's billingType comment above.
+    const billingType = (obj.metadata && obj.metadata.hubBillingType) || "recurring";
     record = list.find(r => r.id === recordId);
     if (record) {
       record.recurringBilling = record.recurringBilling || {};
       record.recurringBilling.stripeCustomerId = obj.customer || null;
       record.recurringBilling.stripeSubscriptionId = obj.subscription || null;
-      record.recurringBilling.status = "active";
+      record.recurringBilling.status = billingType === "one_time" ? "paid" : "active";
       record.recurringBilling.mode = billingMode;
+      record.recurringBilling.billingType = billingType;
     }
   } else {
     // invoice.* events reference the subscription id via obj.subscription;

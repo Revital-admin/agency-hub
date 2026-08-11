@@ -41,6 +41,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const propStripeUrl = document.getElementById('propStripeUrl');
   const genPaymentLinkBtn = document.getElementById('genPaymentLinkBtn');
   const genPaymentLinkStatus = document.getElementById('genPaymentLinkStatus');
+  const genPaymentLinkType = document.getElementById('genPaymentLinkType');
+  const genPaymentLinkLabel = document.getElementById('genPaymentLinkLabel');
   const propAov = document.getElementById('propAov');
   const propConvRate = document.getElementById('propConvRate');
   const propStartDate = document.getElementById('propStartDate');
@@ -445,18 +447,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   pdfBtn.addEventListener('click', generatePDFProposal);
 
-  // Auto-generates a real Stripe subscription Checkout link from this
-  // proposal's own computed monthly total (Aug 2026), replacing the old
-  // manual copy-paste-from-Stripe-Dashboard step. Reuses the same
+  // Auto-generates a real Stripe Checkout link from this proposal's own
+  // computed totals (Aug 2026), replacing the old manual
+  // copy-paste-from-Stripe-Dashboard step. Reuses the same
   // /api/billing/create-subscription-checkout route Contract & Invoice
   // Tracker's "Send Billing Link" button calls (see
   // generateProposalPaymentLink in the root app.js) - that shared helper
   // also finds-or-creates a matching Contract & Invoice Tracker record so
-  // the resulting subscription is tracked and reconciled by the Stripe
-  // webhook the normal way, not just embedded in this one PDF. Defaults to
-  // LIVE mode since a proposal's Stripe link is meant to actually charge
-  // the client once they sign - there's no reason to send someone a test
-  // link when closing a deal.
+  // the resulting billing is tracked and reconciled by the Stripe webhook
+  // the normal way, not just embedded in this one PDF. Defaults to LIVE
+  // mode since a proposal's Stripe link is meant to actually charge the
+  // client once they sign - there's no reason to send someone a test link
+  // when closing a deal.
+  //
+  // Three link types, matching what a proposal can actually contain:
+  //   - Monthly Retainer Only: the existing/original behavior - one
+  //     recurring line item off the Monthly Retainer total.
+  //   - One-Time Fee Only: a single charge (no subscription) off the
+  //     One-Time Setup Fee total - for project-only proposals with no
+  //     ongoing retainer.
+  //   - Setup Fee + Monthly Retainer: both totals in ONE checkout - the
+  //     setup fee bills once on the first invoice, then just the
+  //     recurring amount every month after (Stripe's own supported way
+  //     to combine a one-time and recurring line item in one session).
   if (genPaymentLinkBtn) {
     genPaymentLinkBtn.addEventListener('click', async () => {
       const setStatus = (msg, isError) => {
@@ -467,16 +480,27 @@ document.addEventListener('DOMContentLoaded', async () => {
       setStatus('', false);
 
       const clientName = (propClientName && propClientName.value.trim()) || '';
+      const billingType = genPaymentLinkType ? genPaymentLinkType.value : 'recurring';
+      const serviceLabel = (genPaymentLinkLabel && genPaymentLinkLabel.value.trim()) || '';
       const monthlyNum = parseInt((totalMonthlyEl.textContent || '').replace(/[^0-9]/g, '')) || 0;
+      const setupNum = parseInt((totalSetupEl.textContent || '').replace(/[^0-9]/g, '')) || 0;
+      const needsMonthly = billingType === 'recurring' || billingType === 'combined';
+      const needsSetup = billingType === 'one_time' || billingType === 'combined';
 
       if (!clientName) { setStatus('Enter a client name first.', true); return; }
-      if (!monthlyNum) { setStatus('No monthly total yet - select services above first.', true); return; }
+      if (needsMonthly && !monthlyNum) { setStatus('No monthly total yet - select services above first.', true); return; }
+      if (needsSetup && !setupNum) { setStatus('No one-time setup fee yet - add a setup fee above first.', true); return; }
       if (!isEmbedded || !window.parent.generateProposalPaymentLink) {
         setStatus("Can't generate a link outside the Hub.", true);
         return;
       }
 
-      const confirmed = confirm(`This creates a LIVE Stripe payment link for ${clientName} at $${monthlyNum.toLocaleString()}/mo - once they check out, their card is actually charged every month. Continue?`);
+      const amountDesc = billingType === 'combined'
+        ? `a $${setupNum.toLocaleString()} setup fee plus $${monthlyNum.toLocaleString()}/mo`
+        : billingType === 'one_time'
+          ? `a one-time $${setupNum.toLocaleString()} charge`
+          : `$${monthlyNum.toLocaleString()}/mo`;
+      const confirmed = confirm(`This creates a LIVE Stripe payment link for ${clientName} - ${amountDesc}. Once they check out, they'll actually be charged. Continue?`);
       if (!confirmed) return;
 
       genPaymentLinkBtn.disabled = true;
@@ -484,7 +508,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       genPaymentLinkBtn.textContent = 'Generating...';
 
       try {
-        const result = await window.parent.generateProposalPaymentLink({ clientName, monthlyAmount: monthlyNum, mode: 'live' });
+        const result = await window.parent.generateProposalPaymentLink({
+          clientName,
+          billingType,
+          monthlyAmount: needsMonthly ? monthlyNum : undefined,
+          setupAmount: needsSetup ? setupNum : undefined,
+          serviceLabel,
+          mode: 'live'
+        });
         if (propStripeUrl) propStripeUrl.value = result.checkoutUrl;
         saveState();
         setStatus(result.isNewRecord
@@ -734,6 +765,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       working: propWorking ? propWorking.value : "",
       opps: propOpps ? propOpps.value : "",
       stripe: propStripeUrl ? propStripeUrl.value : "",
+      billingLinkType: genPaymentLinkType ? genPaymentLinkType.value : "recurring",
+      billingServiceLabel: genPaymentLinkLabel ? genPaymentLinkLabel.value : "",
       aov: propAov ? propAov.value : "",
       convRate: propConvRate ? propConvRate.value : "",
       startDate: propStartDate ? propStartDate.value : "",
@@ -762,6 +795,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (propWorking && state.working) propWorking.value = state.working;
         if (propOpps && state.opps) propOpps.value = state.opps;
         if (propStripeUrl && state.stripe) propStripeUrl.value = state.stripe;
+        if (genPaymentLinkType && state.billingLinkType) genPaymentLinkType.value = state.billingLinkType;
+        if (genPaymentLinkLabel && state.billingServiceLabel) genPaymentLinkLabel.value = state.billingServiceLabel;
         if (propAov && state.aov) setFormattedValue(propAov, state.aov);
         if (propConvRate && state.convRate) propConvRate.value = state.convRate;
         if (propStartDate && state.startDate) propStartDate.value = state.startDate;

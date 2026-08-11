@@ -355,7 +355,8 @@ const BILLING_STATUS_LABELS = {
   active: 'Active',
   past_due: 'Payment Failed',
   canceled: 'Canceled',
-  pending_checkout: 'Link Sent'
+  pending_checkout: 'Link Sent',
+  paid: 'Paid'
 };
 
 function billingCellHtml(r) {
@@ -372,7 +373,22 @@ function billingCellHtml(r) {
   }
 
   const label = BILLING_STATUS_LABELS[rb.status] || rb.status;
-  const amountText = rb.monthlyAmount ? formatCurrency(Number(rb.monthlyAmount)) + '/mo' : '';
+  // Links created from the Tracker's own "Send Billing Link" form are
+  // always billingType-less (recurring), so this still falls back to the
+  // original monthlyAmount-only display - the setup/combined cases only
+  // come from Proposal Calculator's "Generate Payment Link" (Aug 2026).
+  const billingType = rb.billingType || 'recurring';
+  let amountText = '';
+  if (billingType === 'combined') {
+    const parts = [];
+    if (rb.setupAmount) parts.push(formatCurrency(Number(rb.setupAmount)) + ' setup');
+    if (rb.monthlyAmount) parts.push(formatCurrency(Number(rb.monthlyAmount)) + '/mo');
+    amountText = parts.join(' + ');
+  } else if (billingType === 'one_time') {
+    amountText = rb.setupAmount ? formatCurrency(Number(rb.setupAmount)) + ' one-time' : '';
+  } else {
+    amountText = rb.monthlyAmount ? formatCurrency(Number(rb.monthlyAmount)) + '/mo' : '';
+  }
   const modeText = rb.mode === 'live' ? '' : ' (Test)';
   const badge = `<span class="billing-badge status-${rb.status}">${label}${amountText ? ' &middot; ' + amountText : ''}${modeText}</span>`;
 

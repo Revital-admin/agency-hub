@@ -3619,21 +3619,32 @@ async function getContractInvoiceRecords() {
 }
 
 // Called from Proposal Calculator's "Generate Payment Link" button (Aug
-// 2026) so a proposal's monthly total can turn into a real, sendable
-// Stripe Checkout link without a trip through Contract & Invoice Tracker
-// first. Finds-or-creates the matching contractInvoiceRecords doc (same
-// shape as Tracker's own addTrackedClient, so the client shows up there
+// 2026) so a proposal's own totals can turn into a real, sendable Stripe
+// Checkout link without a trip through Contract & Invoice Tracker first.
+// Finds-or-creates the matching contractInvoiceRecords doc (same shape
+// as Tracker's own addTrackedClient, so the client shows up there
 // normally afterward), then calls the same
 // /api/billing/create-subscription-checkout route Tracker's "Send
 // Billing Link" button uses (see handleCreateSubscriptionCheckout in
 // _worker.js) and saves the resulting recurringBilling sub-object onto
 // the record. Throws on any failure - the caller (proposal-calculator)
 // is responsible for showing the error to the user.
-async function generateProposalPaymentLink({ clientName, monthlyAmount, mode }) {
+//
+// billingType mirrors what the Worker route now supports:
+//   - "recurring" (default) - monthlyAmount only, ongoing subscription.
+//   - "one_time" - setupAmount only, single charge, no subscription.
+//   - "combined" - both amounts, billed together in one checkout (the
+//     setup fee once, then the recurring amount every month after).
+async function generateProposalPaymentLink({ clientName, monthlyAmount, setupAmount, billingType, serviceLabel, mode }) {
   const name = (clientName || '').trim();
-  const amount = Number(monthlyAmount);
+  const type = ['one_time', 'combined'].includes(billingType) ? billingType : 'recurring';
+  const monthly = Number(monthlyAmount) || 0;
+  const setup = Number(setupAmount) || 0;
+  const needsMonthly = type === 'recurring' || type === 'combined';
+  const needsSetup = type === 'one_time' || type === 'combined';
   if (!name) throw new Error("A client name is required.");
-  if (!amount || amount <= 0) throw new Error("A monthly amount greater than zero is required.");
+  if (needsMonthly && monthly <= 0) throw new Error("A monthly amount greater than zero is required.");
+  if (needsSetup && setup <= 0) throw new Error("A one-time amount greater than zero is required.");
   if (!window.firebaseSetDocFromJSON || !window.firebaseDoc || !window.firebaseDb) {
     throw new Error("Can't reach the database right now.");
   }
@@ -3667,14 +3678,25 @@ async function generateProposalPaymentLink({ clientName, monthlyAmount, mode }) 
   const res = await fetch('/api/billing/create-subscription-checkout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ recordId: record.id, clientName: name, monthlyAmount: amount, mode: billingMode, clientEmail })
+    body: JSON.stringify({
+      recordId: record.id,
+      clientName: name,
+      mode: billingMode,
+      clientEmail,
+      billingType: type,
+      monthlyAmount: needsMonthly ? monthly : undefined,
+      setupAmount: needsSetup ? setup : undefined,
+      serviceLabel: serviceLabel || ''
+    })
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Request failed');
 
   record.recurringBilling = {
     status: 'pending_checkout',
-    monthlyAmount: amount,
+    billingType: type,
+    monthlyAmount: needsMonthly ? monthly : null,
+    setupAmount: needsSetup ? setup : null,
     checkoutUrl: data.checkoutUrl,
     stripeCustomerId: null,
     stripeSubscriptionId: null,

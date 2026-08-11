@@ -55,6 +55,12 @@
 
         <label>Stripe Payment Link</label>
         <input type="url" id="propStripeUrl" class="num-input" placeholder="Paste client-specific Stripe payment link here, or generate one below" style="margin-bottom: 6px;">
+        <select id="genPaymentLinkType" class="num-input" style="margin-bottom: 6px;">
+          <option value="recurring">Monthly Retainer Only</option>
+          <option value="one_time">One-Time Fee Only</option>
+          <option value="combined">Setup Fee + Monthly Retainer (billed together)</option>
+        </select>
+        <input type="text" id="genPaymentLinkLabel" class="num-input" placeholder="Service label (optional) - e.g. AV &amp; Production Services" style="margin-bottom: 6px;">
         <button type="button" id="genPaymentLinkBtn" class="btn-copy" style="width: 100%; margin-bottom: 4px;">Generate Live Payment Link</button>
         <div id="genPaymentLinkStatus" style="font-size: 12px; margin-bottom: 12px; min-height: 16px;"></div>
 
@@ -696,6 +702,6 @@
   </div>
 
   <script src="../shared-number-format.js"></script>
-  <script src="js/app.js?v=73"></script>
+  <script src="js/app.js?v=74"></script>
 </body>
 </html>
