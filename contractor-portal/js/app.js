@@ -150,6 +150,8 @@
         ${emptyNote}
       </div>`;
     }).join('');
+
+    wrap.innerHTML = `<div class="cp-brand" style="justify-content:center; margin:0 0 12px;"><span class="cp-dot"></span><span>Your Client Work</span></div>` + wrap.innerHTML;
   }
 
   function renderHours(data) {

@@ -27,18 +27,19 @@
   </header>
 
   <div id="cpLoading" class="cp-card cp-center">
-    <p>Loading...</p>
+    <div class="cp-spinner"></div>
+    <p style="color: var(--color-text-secondary); margin:0;">Loading your info...</p>
   </div>
 
   <div id="cpInvalid" class="cp-card cp-center" style="display:none;">
-    <h2 style="margin:0 0 8px;">Link not valid</h2>
+    <h2 style="margin:0 0 8px; font-family: var(--font-display);">Link not valid</h2>
     <p style="color: var(--color-text-secondary); margin:0;">This link is invalid or has been revoked. Contact your Revital contact for a current one.</p>
   </div>
 
   <div id="cpContent" style="display:none;">
 
     <div class="cp-card">
-      <div class="cp-card-title">My Info</div>
+      <div class="cp-card-title"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--color-accent);"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>My Info</div>
       <div class="cp-info-grid">
         <div><span class="cp-info-label">Name</span><span id="cpName" class="cp-info-value"></span></div>
         <div><span class="cp-info-label">Role</span><span id="cpRole" class="cp-info-value"></span></div>
@@ -50,7 +51,7 @@
     <div id="cpClientWorkWrap"></div>
 
     <div class="cp-card">
-      <div class="cp-card-title">Request Time Off</div>
+      <div class="cp-card-title"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--color-accent);"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>Request Time Off</div>
       <div class="cp-form-row">
         <div class="cp-form-group">
           <label for="cpTimeOffStart">Start Date</label>
@@ -74,7 +75,7 @@
     </div>
 
     <div class="cp-card">
-      <div class="cp-card-title">Log Hours</div>
+      <div class="cp-card-title"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--color-accent);"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>Log Hours</div>
       <div class="cp-form-row">
         <div class="cp-form-group">
           <label for="cpHoursDate">Date</label>
