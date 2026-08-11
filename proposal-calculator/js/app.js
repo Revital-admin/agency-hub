@@ -39,6 +39,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const propWorking = document.getElementById('propWorking');
   const propOpps = document.getElementById('propOpps');
   const propStripeUrl = document.getElementById('propStripeUrl');
+  const genPaymentLinkBtn = document.getElementById('genPaymentLinkBtn');
+  const genPaymentLinkStatus = document.getElementById('genPaymentLinkStatus');
   const propAov = document.getElementById('propAov');
   const propConvRate = document.getElementById('propConvRate');
   const propStartDate = document.getElementById('propStartDate');
@@ -442,6 +444,61 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   pdfBtn.addEventListener('click', generatePDFProposal);
+
+  // Auto-generates a real Stripe subscription Checkout link from this
+  // proposal's own computed monthly total (Aug 2026), replacing the old
+  // manual copy-paste-from-Stripe-Dashboard step. Reuses the same
+  // /api/billing/create-subscription-checkout route Contract & Invoice
+  // Tracker's "Send Billing Link" button calls (see
+  // generateProposalPaymentLink in the root app.js) - that shared helper
+  // also finds-or-creates a matching Contract & Invoice Tracker record so
+  // the resulting subscription is tracked and reconciled by the Stripe
+  // webhook the normal way, not just embedded in this one PDF. Defaults to
+  // LIVE mode since a proposal's Stripe link is meant to actually charge
+  // the client once they sign - there's no reason to send someone a test
+  // link when closing a deal.
+  if (genPaymentLinkBtn) {
+    genPaymentLinkBtn.addEventListener('click', async () => {
+      const setStatus = (msg, isError) => {
+        if (!genPaymentLinkStatus) return;
+        genPaymentLinkStatus.textContent = msg;
+        genPaymentLinkStatus.style.color = isError ? '#c0392b' : '#2e7d32';
+      };
+      setStatus('', false);
+
+      const clientName = (propClientName && propClientName.value.trim()) || '';
+      const monthlyNum = parseInt((totalMonthlyEl.textContent || '').replace(/[^0-9]/g, '')) || 0;
+
+      if (!clientName) { setStatus('Enter a client name first.', true); return; }
+      if (!monthlyNum) { setStatus('No monthly total yet - select services above first.', true); return; }
+      if (!isEmbedded || !window.parent.generateProposalPaymentLink) {
+        setStatus("Can't generate a link outside the Hub.", true);
+        return;
+      }
+
+      const confirmed = confirm(`This creates a LIVE Stripe payment link for ${clientName} at $${monthlyNum.toLocaleString()}/mo - once they check out, their card is actually charged every month. Continue?`);
+      if (!confirmed) return;
+
+      genPaymentLinkBtn.disabled = true;
+      const origLabel = genPaymentLinkBtn.textContent;
+      genPaymentLinkBtn.textContent = 'Generating...';
+
+      try {
+        const result = await window.parent.generateProposalPaymentLink({ clientName, monthlyAmount: monthlyNum, mode: 'live' });
+        if (propStripeUrl) propStripeUrl.value = result.checkoutUrl;
+        saveState();
+        setStatus(result.isNewRecord
+          ? `Live link created and added to Contract & Invoice Tracker as a new client.`
+          : `Live link created and saved to ${clientName}'s existing Tracker record.`, false);
+        if (window.parent.showBanner) window.parent.showBanner('success', `Live payment link created for ${clientName}.`);
+      } catch (e) {
+        setStatus(e.message || "Couldn't generate a payment link.", true);
+      } finally {
+        genPaymentLinkBtn.disabled = false;
+        genPaymentLinkBtn.textContent = origLabel;
+      }
+    });
+  }
 
   // Init - persist:false, see calculate()'s own param comment below: this
   // first call is just rendering the totals from whatever loadState()

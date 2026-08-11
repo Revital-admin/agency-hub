@@ -3618,6 +3618,75 @@ async function getContractInvoiceRecords() {
   }
 }
 
+// Called from Proposal Calculator's "Generate Payment Link" button (Aug
+// 2026) so a proposal's monthly total can turn into a real, sendable
+// Stripe Checkout link without a trip through Contract & Invoice Tracker
+// first. Finds-or-creates the matching contractInvoiceRecords doc (same
+// shape as Tracker's own addTrackedClient, so the client shows up there
+// normally afterward), then calls the same
+// /api/billing/create-subscription-checkout route Tracker's "Send
+// Billing Link" button uses (see handleCreateSubscriptionCheckout in
+// _worker.js) and saves the resulting recurringBilling sub-object onto
+// the record. Throws on any failure - the caller (proposal-calculator)
+// is responsible for showing the error to the user.
+async function generateProposalPaymentLink({ clientName, monthlyAmount, mode }) {
+  const name = (clientName || '').trim();
+  const amount = Number(monthlyAmount);
+  if (!name) throw new Error("A client name is required.");
+  if (!amount || amount <= 0) throw new Error("A monthly amount greater than zero is required.");
+  if (!window.firebaseSetDocFromJSON || !window.firebaseDoc || !window.firebaseDb) {
+    throw new Error("Can't reach the database right now.");
+  }
+
+  const billingMode = mode === 'live' ? 'live' : 'test';
+  const existing = await getContractInvoiceRecords();
+  let record = existing.find(r => (r.clientName || '').trim().toLowerCase() === name.toLowerCase());
+  const isNewRecord = !record;
+  if (!record) {
+    record = {
+      id: 'ci-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+      clientName: name,
+      contractStatus: 'Not Sent',
+      contractSentDate: '',
+      contractSignedDate: '',
+      contractRenewalDate: '',
+      invoiceStatus: 'Not Sent',
+      invoiceSentDate: '',
+      invoiceDueDate: '',
+      invoicePaidDate: '',
+      invoiceAmount: '',
+      notes: ''
+    };
+  }
+
+  const clients = getAllClients() || {};
+  const clientKey = Object.keys(clients).find(k => k.trim().toLowerCase() === name.toLowerCase());
+  const clientRecord = clientKey ? clients[clientKey] : null;
+  const clientEmail = (clientRecord && clientRecord.portalConfig && clientRecord.portalConfig.clientContactEmail) || '';
+
+  const res = await fetch('/api/billing/create-subscription-checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recordId: record.id, clientName: name, monthlyAmount: amount, mode: billingMode, clientEmail })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+
+  record.recurringBilling = {
+    status: 'pending_checkout',
+    monthlyAmount: amount,
+    checkoutUrl: data.checkoutUrl,
+    stripeCustomerId: null,
+    stripeSubscriptionId: null,
+    mode: billingMode
+  };
+
+  const { id, ...rest } = record;
+  await window.firebaseSetDocFromJSON(window.firebaseDoc(window.firebaseDb, "contractInvoiceRecords", id), JSON.stringify(rest));
+
+  return { checkoutUrl: data.checkoutUrl, isNewRecord };
+}
+
 // Same underlying timeOff data as Team Roster's Calendar view (see
 // team-roster/js/app.js's renderTimeline) - just "today's column" of
 // that same data, surfaced on the dashboard so checking who's out

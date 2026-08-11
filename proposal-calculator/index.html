@@ -54,7 +54,9 @@
         <textarea id="propTestimonial" class="num-input" placeholder="Paste a relevant client quote here - name and company optional." style="min-height: 60px; resize: vertical; margin-bottom: 12px;"></textarea>
 
         <label>Stripe Payment Link</label>
-        <input type="url" id="propStripeUrl" class="num-input" placeholder="Paste client-specific Stripe payment link here" style="margin-bottom: 12px;">
+        <input type="url" id="propStripeUrl" class="num-input" placeholder="Paste client-specific Stripe payment link here, or generate one below" style="margin-bottom: 6px;">
+        <button type="button" id="genPaymentLinkBtn" class="btn-copy" style="width: 100%; margin-bottom: 4px;">Generate Live Payment Link</button>
+        <div id="genPaymentLinkStatus" style="font-size: 12px; margin-bottom: 12px; min-height: 16px;"></div>
 
         <label>Proposed Start Date</label>
         <input type="text" id="propStartDate" class="num-input" placeholder="e.g. August 1, 2026" style="margin-bottom: 12px;">
@@ -694,6 +696,6 @@
   </div>
 
   <script src="../shared-number-format.js"></script>
-  <script src="js/app.js?v=72"></script>
+  <script src="js/app.js?v=73"></script>
 </body>
 </html>
