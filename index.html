@@ -475,18 +475,6 @@
             </button>
           </li>
           <li>
-            <button class="nav-item-btn" data-tab="tab-teamroster">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-              <span>Team Roster &amp; Capacity</span>
-            </button>
-          </li>
-          <li>
-            <button class="nav-item-btn" data-tab="tab-mytimeoff">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              <span>My Time Off</span>
-            </button>
-          </li>
-          <li>
             <button class="nav-item-btn" data-tab="tab-meetingnotes">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
               <span>Meeting Notes</span>
@@ -516,15 +504,46 @@
               <span>Change Order Generator</span>
             </button>
           </li>
+
+          <!-- AUDITS -->
+
+            </ul>
+          </li>
+
+          <!-- Team Ops - split out from Account Ops (Aug 2026 reorg): these
+               3 tools are agency-wide/team-internal (Team Roster, My Time
+               Off, Hours & Time Log all explicitly say "not tied to a
+               single client" in their own file headers), unlike everything
+               above which is client work. Doesn't belong in Agency Globals
+               either - that section is a generators/reference-library
+               bucket (SOP Wiki, email templates, etc.), not team/staffing
+               tools. Visible to everyone by default, same as every other
+               section - restrict individual people via Team Access
+               Manager if needed. -->
+          <li class="nav-section" data-section="team-ops">
+            <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <span>TEAM OPS</span>
+              <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
+            <ul class="nav-section-items">
+          <li>
+            <button class="nav-item-btn" data-tab="tab-teamroster">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+              <span>Team Roster &amp; Capacity</span>
+            </button>
+          </li>
+          <li>
+            <button class="nav-item-btn" data-tab="tab-mytimeoff">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <span>My Time Off</span>
+            </button>
+          </li>
           <li>
             <button class="nav-item-btn" data-tab="tab-hourslog">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
               <span>Hours &amp; Time Log</span>
             </button>
           </li>
-
-          <!-- AUDITS -->
-
             </ul>
           </li>
 

@@ -38,6 +38,7 @@ const SECTION_DEFS = [
   { key: "production", label: "Production" },
   { key: "content-creation", label: "Content Creation" },
   { key: "account-ops", label: "Account Ops" },
+  { key: "team-ops", label: "Team Ops" },
   { key: "audits", label: "Audits" },
   { key: "strategy-competition", label: "Strategy & Competition" },
   { key: "sales-pipeline", label: "Sales Pipeline" },
@@ -60,7 +61,7 @@ const SECTION_KEYS = new Set(SECTION_DEFS.map(s => s.key));
 // constant is never consulted again; edit roles from the UI, not here.
 const DEFAULT_ROLE_TIERS = {
   "Full Access — Leadership": {
-    sections: ["core", "ad-accounts-access", "reporting-health", "production", "content-creation", "account-ops", "audits", "strategy-competition", "sales-pipeline", "retention-social-proof", "agency-globals"],
+    sections: ["core", "ad-accounts-access", "reporting-health", "production", "content-creation", "account-ops", "team-ops", "audits", "strategy-competition", "sales-pipeline", "retention-social-proof", "agency-globals"],
     note: "Founder / CEO, Creative Director, Executive Producer, Chief Operating Officer (COO), Head of Strategy"
   },
   "Sales & Business Development": {
