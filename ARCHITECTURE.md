@@ -87,6 +87,8 @@ There's no shared component library beyond CSS (`style.css`, `vars.css`, `shared
 
 - **`reference-docs/where_to_log_what_hub_vs_clickup.pdf`** — the *external* system boundary: which lifecycle events belong in the Hub vs. ClickUp. Complements this doc, which is about the *internal* boundary (core vs. tool).
 - **`data-loss-prevention-plan.md`** — accurate, still current. The full story behind the shard-load-completeness guard described above.
+- **`BACKUP_RESTORE_RUNBOOK.md`** — accurate, still current. What Firestore/app-level backups exist, how to verify they're current, and how to restore from one.
+- **`CLOUDFLARE_RATE_LIMITING.md`** — accurate, still current. What's rate-limited on the two unauthenticated public endpoints (Booking, Contractor Portal), why only one has a rule (Cloudflare Free plan's 1-rule-per-zone cap), and what to add once that's lifted.
 - **`Auto-Send Email Integration Plan.md`** — **stale**. It says "there is no email-sending backend anywhere in the Hub" and proposes building `/api/send-email`. That route has since been fully built and is in production use by 8 tools (see above). This doc should be deleted or marked superseded so nobody re-reads it as current state.
 - **`README.md`** — **stale**. Describes an early localStorage-only, GitHub-Pages-hosted prototype with no Firebase/Firestore/R2/Cloudflare Worker/DocuSign at all. Worth a rewrite pointing here instead, since right now it actively misdescribes the stack to anyone opening the repo fresh.
 - **`functions/api/user.js`** — **dead code**. `_worker.js` itself notes the Cloudflare Pages Functions convention this file follows "never actually ran" once the project moved to deploying as a Worker with static assets. Safe to delete.
