@@ -23,6 +23,14 @@ let members = [];
 let editingId = null;
 let docVersion = 0; // optimistic-concurrency guard, see persist() below
 let isRestrictedUser = false;
+// Separate, opposite-default gate from isRestrictedUser above: that one
+// hides sections for specific restricted people and defaults to "visible"
+// for everyone else. isHubAdmin gates a couple of specifically sensitive
+// cards here (Contractor Documents, "Signed Into the Hub, Not on This
+// Roster") that default to HIDDEN for everyone except the emails in
+// agency/teamAccess.hubAdmins - see applyEditPermission below, and
+// team-access-manager's Hub Admins card, which manages that list.
+let isHubAdmin = false;
 
 // Live caseload data, keyed by lowercased email, built by the parent's
 // getAccountManagerCapacitySnapshot() (see app.js) - matches Account
@@ -97,7 +105,10 @@ function renderUnrosteredCallout() {
   const list = el('unrosteredList');
   if (!card || !list) return;
 
-  if (isRestrictedUser) { card.style.display = 'none'; return; }
+  // Hub-admin-only: this list is effectively "who's signed in but not
+  // rostered", which reveals real teammate emails/access activity - not
+  // something every teammate should see just by opening Team Roster.
+  if (!isHubAdmin) { card.style.display = 'none'; return; }
 
   const rosteredEmails = new Set(members.map(m => (m.email || '').trim().toLowerCase()).filter(Boolean));
   const unrostered = Object.keys(teamActivitySnapshot)
@@ -1760,7 +1771,7 @@ function renderTable() {
       <td>${escapeHtml(m.notes) || '—'}</td>
       <td class="roster-actions-cell" style="display:${isRestrictedUser ? 'none' : ''};">
         <div class="row-actions">
-          ${isContractor ? `<button class="send-agreement-btn" data-id="${m.id}">Send Agreement</button>` : ''}
+          ${isContractor && isHubAdmin ? `<button class="send-agreement-btn" data-id="${m.id}">Send Agreement</button>` : ''}
           <button class="edit-btn" data-id="${m.id}">Edit</button>
           <button class="remove-btn" data-id="${m.id}">Remove</button>
         </div>
@@ -1783,25 +1794,34 @@ function renderTable() {
   tbody.querySelectorAll('.roster-capacity-toggle').forEach(tag => tag.addEventListener('click', () => toggleClientExpand(tag.getAttribute('data-id'))));
 }
 
-// Same partial gate as Email Template Library/SOP Wiki: everyone can view
-// the roster (useful for anyone assigning new client work), but only
-// admin/leadership can add, edit, or remove team members.
+// Two independent gates read off the same agency/teamAccess doc: the
+// restriction-map gate (same partial-gate pattern as Email Template
+// Library/SOP Wiki - everyone can view the roster, only unrestricted
+// people can add/edit/remove members), and the separate, opposite-default
+// Hub Admins gate for a couple of specifically sensitive cards - see
+// isHubAdmin's definition above.
 function applyEditPermission() {
   if (!window.parent || !window.parent.firebaseDoc || !window.parent.firebaseDb || !window.parent.firebaseOnSnapshot) return;
   const ref = window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "teamAccess");
   window.parent.firebaseOnSnapshot(ref, (docSnap) => {
     const data = docSnap && docSnap.exists ? docSnap.data() : null;
     const users = (data && data.users) ? data.users : {};
+    // Same in-memory-default-until-someone-saves seed Team Access Manager
+    // uses for roleTiers: if hubAdmins has never been saved to this doc,
+    // fall back to just the founder account rather than leaving nobody
+    // able to see Contractor Documents at all on a fresh install.
+    const hubAdmins = Array.isArray(data && data.hubAdmins) ? data.hubAdmins : ["admin@revitalproductions.com"];
     const currentEmail = (window.parent.currentAdminEmail || "").toLowerCase();
     isRestrictedUser = !!(currentEmail && Object.prototype.hasOwnProperty.call(users, currentEmail));
+    isHubAdmin = !!(currentEmail && hubAdmins.includes(currentEmail));
 
     el('newMemberBtn').style.display = isRestrictedUser ? 'none' : '';
     el('actionsHeader').style.display = isRestrictedUser ? 'none' : '';
     if (isRestrictedUser) el('formCard').style.display = 'none';
     const contractorDocCard = el('contractorDocCard');
     if (contractorDocCard) {
-      contractorDocCard.style.display = isRestrictedUser ? 'none' : 'block';
-      if (!isRestrictedUser) renderContractorDocManager();
+      contractorDocCard.style.display = isHubAdmin ? 'block' : 'none';
+      if (isHubAdmin) renderContractorDocManager();
     }
     renderTable();
   }, (err) => {

@@ -26,6 +26,28 @@ You don't have access to manage Team Access.
 
 <div id="teamAccessContent">
 
+<!-- Hub Admins - separate from, and the OPPOSITE default of, the
+     restriction system below. Restrictions hide sections for specific
+     people and default to full access for everyone else. This list gates
+     a small number of specifically sensitive views (Team Roster's
+     Contractor Documents and "Signed Into the Hub, Not on This Roster"
+     cards) that default to HIDDEN for everyone except the emails listed
+     here - being unrestricted below does NOT make someone a Hub Admin.
+     See hubAdmins in js/app.js. -->
+<div class="step-card" id="hubAdminsCard">
+<div class="section-title" style="margin-bottom: 12px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent);">Hub Admins</h2>
+</div>
+<p style="font-size:0.85rem; color:var(--color-text-secondary); margin-bottom: 14px;">People who can see and manage sensitive info in Team Roster - Contractor Documents and who's signed into the Hub but not rostered. Being unrestricted above doesn't grant this on its own; only being listed here does.</p>
+<div id="hubAdminsList" style="margin-bottom: 14px;"></div>
+<div style="display:flex; gap:8px; align-items:center;">
+<div class="form-group" style="margin-bottom:0; flex:1;">
+<input type="email" id="hubAdminEmailInput" placeholder="teammate@revitalproductions.com">
+</div>
+<button type="button" id="addHubAdminBtn" class="btn btn-secondary">+ Add Admin</button>
+</div>
+</div>
+
 <!-- Access Roles - the actual source of truth. Each role's section list
      lives here, centrally, once. A teammate assigned a role always gets
      that role's CURRENT sections, live - edit a role here and everyone
@@ -92,6 +114,6 @@ You don't have access to manage Team Access.
 </div>
 
 </main>
-<script src="js/app.js?v=11"></script>
+<script src="js/app.js?v=12"></script>
 </body>
 </html>

@@ -93,6 +93,18 @@ try {
 let roleTiers = {}; // { roleName: { sections: [...], note: "" } }
 let teamAccessUsers = {}; // { email: { role: name|null, sections: [...] (if role is null) } }
 let teamActivity = {}; // { email: { lastSeen: isoString } }
+// Hub Admins - a SEPARATE, opposite-default concept from the restriction
+// map above. `users` controls "which sidebar sections can this person
+// see" and defaults to full access for anyone not listed. hubAdmins
+// controls a small number of specifically sensitive views (right now:
+// Team Roster's Contractor Documents and "Signed Into the Hub, Not on
+// This Roster" cards) that default to HIDDEN for everyone except the
+// emails listed here, regardless of their restriction status or role.
+// Seeded in-memory (not yet in Firestore) with just admin@revitalproductions.com
+// the first time this doc is ever read with no hubAdmins field, so a
+// fresh install never accidentally locks the founder account out before
+// anyone's opened this tool to seed it - see listenToTeamAccess below.
+let hubAdmins = [];
 let editingEmail = null; // set while the person form is editing an existing entry
 // Which role (by name) is currently expanded for editing in the Access
 // Roles list below - null means all 5 are collapsed to a single summary
@@ -505,7 +517,7 @@ function saveTeamAccessDoc() {
   return window.parent.saveVersionedAgencyDoc({
     docRef: ref,
     currentVersion: docVersion,
-    buildPayload: (v) => ({ users: teamAccessUsers, roleTiers: roleTiers, version: v }),
+    buildPayload: (v) => ({ users: teamAccessUsers, roleTiers: roleTiers, hubAdmins: hubAdmins, version: v }),
   }).then(result => {
     if (!result.ok) {
       const err = new Error(result.reason === "conflict"
@@ -571,6 +583,63 @@ function removeRestriction(email) {
   });
 }
 
+// ── Hub Admins ──
+function renderHubAdminsList() {
+  const listEl = el("hubAdminsList");
+  if (!listEl) return;
+  if (!hubAdmins.length) {
+    listEl.innerHTML = `<p class="role-tier-hint" style="margin:0;">No admins set yet - Team Roster falls back to admin@revitalproductions.com until you add someone here.</p>`;
+    return;
+  }
+  listEl.innerHTML = hubAdmins.map(email => `
+    <div style="display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--color-border);">
+      <span style="flex:1; font-size:0.85rem;">${escapeHtml(email)}</span>
+      <div class="row-actions" style="flex-direction:row; min-width:0;">
+        <button type="button" class="hub-admin-remove-btn" data-email="${escapeHtml(email)}">Remove</button>
+      </div>
+    </div>`).join("");
+  listEl.querySelectorAll(".hub-admin-remove-btn").forEach(btn => {
+    btn.addEventListener("click", () => removeHubAdmin(btn.getAttribute("data-email")));
+  });
+}
+
+function addHubAdmin() {
+  const input = el("hubAdminEmailInput");
+  const email = (input.value || "").trim().toLowerCase();
+  if (!email || !email.includes("@")) {
+    showFormStatus("Enter a valid email first.", "error");
+    return;
+  }
+  if (hubAdmins.includes(email)) {
+    input.value = "";
+    return;
+  }
+  const previous = hubAdmins;
+  hubAdmins = [...hubAdmins, email];
+  saveTeamAccessDoc().then(() => {
+    input.value = "";
+    renderHubAdminsList();
+    if (window.parent.showBanner) window.parent.showBanner("success", `${email} added as a Hub Admin.`);
+  }).catch(err => {
+    hubAdmins = previous;
+    console.error("Couldn't add Hub Admin:", err);
+    showFormStatus(err.message || "Save failed - try again.", "error");
+  });
+}
+
+function removeHubAdmin(email) {
+  if (!confirm(`Remove ${email} as a Hub Admin? They'll lose access to Contractor Documents and the "Signed Into the Hub" list in Team Roster.`)) return;
+  const previous = hubAdmins;
+  hubAdmins = hubAdmins.filter(e => e !== email);
+  saveTeamAccessDoc().then(() => {
+    renderHubAdminsList();
+  }).catch(err => {
+    hubAdmins = previous;
+    console.error("Couldn't remove Hub Admin:", err);
+    showFormStatus(err.message || "Couldn't remove - try again.", "error");
+  });
+}
+
 function listenToTeamActivity() {
   if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb || !window.parent.firebaseOnSnapshot) return;
   const ref = window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "teamActivity");
@@ -601,6 +670,7 @@ function listenToTeamAccess() {
     // until an actual save happens (adding/editing a role, or saving a
     // person) - doesn't clobber anything by just being viewed.
     roleTiers = (data && data.roleTiers && Object.keys(data.roleTiers).length) ? data.roleTiers : JSON.parse(JSON.stringify(DEFAULT_ROLE_TIERS));
+    hubAdmins = (data && Array.isArray(data.hubAdmins)) ? data.hubAdmins : ["admin@revitalproductions.com"];
     docVersion = (data && data.version) || 0;
 
     // Gate the panel itself: a restricted teammate should never be able
@@ -620,6 +690,7 @@ function listenToTeamAccess() {
     el("notAuthorizedState").style.display = "none";
     populateRoleSelect();
     renderRolesList();
+    renderHubAdminsList();
     renderTable();
   }, (err) => {
     console.error("Team access listener error:", err);
@@ -630,6 +701,7 @@ function listenToTeamAccess() {
 document.addEventListener("DOMContentLoaded", () => {
   renderSectionCheckboxes();
   el("saveRestrictionBtn").addEventListener("click", saveRestriction);
+  el("addHubAdminBtn").addEventListener("click", addHubAdmin);
   el("roleSelect").addEventListener("change", () => {
     renderRoleSelectionUI();
     renderStaleKeyWarning(getCheckedSections());
