@@ -3471,12 +3471,11 @@ async function getAccountManagerCapacitySnapshot() {
 // Team Roster's expand-to-see-clients affordance works the same way for
 // both live-data branches).
 async function getTeamHoursCapacitySnapshot() {
-  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return {};
   try {
-    const ref = window.firebaseDoc(window.firebaseDb, "agency", "hoursLog");
-    const snap = await window.firebaseGetDoc(ref);
-    const data = snap && snap.exists ? snap.data() : null;
-    const entries = (data && data.list) || [];
+    // Shared read (and shared one-time migration check) with
+    // getHoursLogEntries below, rather than this function keeping its
+    // own separate copy of the same Firestore read.
+    const entries = await getHoursLogEntries();
 
     const now = new Date();
     const startOfWeek = new Date(now);
@@ -3536,13 +3535,41 @@ async function getTeamRosterMembers() {
 // separate from that function rather than generalizing it, since its
 // "this week, grouped by person" shape is specific to the capacity
 // view and callers here want raw entries to group however they need.
-async function getHoursLogEntries() {
-  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return [];
+// One-time, idempotent backfill from the old agency/hoursLog
+// {list: [...]} document into the new one-document-per-entry
+// hoursLogEntries collection (Aug 2026 storage-scaling work - see
+// resource-booking-calendar/js/app.js's header comment for the full
+// reasoning, and _worker.js's migrateHoursLogIfNeeded for the
+// server-side twin of this exact function, used by the Contractor
+// Portal's own hours read/write path). Safe to call from anywhere,
+// anytime: it only ever does real work the first time (new collection
+// still empty + old doc has data), and re-running it writes the same
+// documents at the same ids again, which Firestore treats as a no-op
+// overwrite rather than a duplicate.
+async function migrateHoursLogIfNeeded() {
+  if (!window.firebaseDb || !window.firebaseCollection || !window.firebaseGetDocs || !window.firebaseDoc || !window.firebaseGetDoc || !window.firebaseSetDoc) return;
   try {
-    const ref = window.firebaseDoc(window.firebaseDb, "agency", "hoursLog");
-    const snap = await window.firebaseGetDoc(ref);
-    const data = snap && snap.exists ? snap.data() : null;
-    return (data && data.list) || [];
+    const existing = await window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb, "hoursLogEntries"));
+    if (existing.length > 0) return;
+    const oldRef = window.firebaseDoc(window.firebaseDb, "agency", "hoursLog");
+    const oldSnap = await window.firebaseGetDoc(oldRef);
+    const oldData = oldSnap && oldSnap.exists ? oldSnap.data() : null;
+    const oldEntries = (oldData && Array.isArray(oldData.list)) ? oldData.list : [];
+    if (!oldEntries.length) return;
+    await Promise.all(oldEntries.filter(e => e.id).map(entry => {
+      const { id, ...rest } = entry;
+      return window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb, "hoursLogEntries", id), rest);
+    }));
+  } catch (e) {
+    console.error("Hours log migration to per-document storage failed:", e);
+  }
+}
+
+async function getHoursLogEntries() {
+  if (!window.firebaseDb || !window.firebaseCollection || !window.firebaseGetDocs) return [];
+  try {
+    await migrateHoursLogIfNeeded();
+    return await window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb, "hoursLogEntries"));
   } catch (e) {
     console.warn("Couldn't load hours log entries:", e);
     return [];

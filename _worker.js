@@ -1906,8 +1906,8 @@ async function handleContractorPortalData(request, env) {
     const members = (rosterDoc && Array.isArray(rosterDoc.list)) ? rosterDoc.list : [];
     const member = members.find(m => m.id === projection.memberId);
 
-    const hoursDoc = await firestoreGetDoc(accessToken, projectId, "agency/hoursLog");
-    const allHours = (hoursDoc && Array.isArray(hoursDoc.list)) ? hoursDoc.list : [];
+    await migrateHoursLogIfNeeded(accessToken, projectId);
+    const allHours = await firestoreListCollection(accessToken, projectId, "hoursLogEntries");
     const myHours = allHours.filter(h => (h.memberName || "") === projection.memberName);
 
     // "See assigned client work" (Phase 2) - member.assignedClients (set by
@@ -2063,10 +2063,9 @@ async function handleContractorPortalHours(request, env) {
   const { projection, accessToken, projectId } = resolved;
 
   try {
-    const hoursDoc = await firestoreGetDoc(accessToken, projectId, "agency/hoursLog");
-    const list = (hoursDoc && Array.isArray(hoursDoc.list)) ? hoursDoc.list : [];
-    list.push({
-      id: "hrs-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    await migrateHoursLogIfNeeded(accessToken, projectId);
+    const id = "hrs-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    await firestoreSetDoc(accessToken, projectId, `hoursLogEntries/${id}`, {
       date,
       memberName: projection.memberName,
       clientName: clientName || "",
@@ -2074,8 +2073,6 @@ async function handleContractorPortalHours(request, env) {
       billable: !!billable,
       notes: notes || ""
     });
-    const nextVersion = (hoursDoc && hoursDoc.version || 0) + 1;
-    await firestoreSetDoc(accessToken, projectId, "agency/hoursLog", { list, version: nextVersion });
     return jsonResponse({ ok: true });
   } catch (e) {
     return jsonResponse({ error: e.message }, 500);
@@ -2508,6 +2505,74 @@ async function firestoreSetDoc(accessToken, projectId, relativePath, dataObj) {
     throw new Error(msg);
   }
   return data;
+}
+
+// Lists every document directly under a collection (relativePath e.g.
+// "hoursLogEntries") - the REST API's collection-list endpoint, distinct
+// from firestoreGetDoc above which only ever fetches one named document.
+// pageSize=1000 covers this Hub's actual scale comfortably (a growing
+// internal tool for a small agency, not a high-volume consumer app) -
+// worth revisiting with real pagination (using the response's
+// nextPageToken) if any collection here ever approaches that many
+// documents, which isn't expected for years given current usage.
+async function firestoreListCollection(accessToken, projectId, relativePath) {
+  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${relativePath}?pageSize=1000`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = (data.error && data.error.message) || `Firestore list failed (${res.status}) for ${relativePath}`;
+    throw new Error(msg);
+  }
+  const docs = data.documents || [];
+  return docs.map(doc => {
+    const id = doc.name.split('/').pop();
+    return Object.assign({ id }, firestoreDocToJs(doc));
+  });
+}
+
+// 404 on delete (already gone) is treated as success, not an error - the
+// end state either way is "the document doesn't exist," same reasoning
+// as deleteTimeOffCalendarEvents' calendar-side deletes above.
+async function firestoreDeleteDoc(accessToken, projectId, relativePath) {
+  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${relativePath}`;
+  const res = await fetch(url, { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!res.ok && res.status !== 404) {
+    const data = await res.json().catch(() => ({}));
+    const msg = (data.error && data.error.message) || `Firestore delete failed (${res.status}) for ${relativePath}`;
+    throw new Error(msg);
+  }
+}
+
+// One-time, idempotent backfill from the old "one doc holding a growing
+// list" shape (agency/hoursLog, {list: [...]}) into the new one-
+// document-per-entry collection (hoursLogEntries/{entryId}) - see the
+// Aug 2026 storage-scaling work (same reasoning as Resource Bookings'
+// migration, documented in resource-booking-calendar/js/app.js's header
+// comment). Safe to call on every request: it only ever does work the
+// first time (new collection empty + old doc has data), and re-running
+// it writes the exact same documents with the exact same ids, which is
+// a no-op, not a duplication - so both this Worker path and the
+// browser-side hours-tracker tool can each independently call this
+// (or its client-side twin) without coordinating who goes first.
+async function migrateHoursLogIfNeeded(accessToken, projectId) {
+  try {
+    const existing = await firestoreListCollection(accessToken, projectId, "hoursLogEntries");
+    if (existing.length > 0) return; // already migrated (or genuinely empty either way)
+    const oldDoc = await firestoreGetDoc(accessToken, projectId, "agency/hoursLog");
+    const oldEntries = (oldDoc && Array.isArray(oldDoc.list)) ? oldDoc.list : [];
+    if (!oldEntries.length) return; // nothing to migrate
+    for (const entry of oldEntries) {
+      if (!entry.id) continue; // shouldn't happen, but skip anything unkeyable rather than throw
+      const { id, ...rest } = entry;
+      await firestoreSetDoc(accessToken, projectId, `hoursLogEntries/${id}`, rest);
+    }
+  } catch (e) {
+    // Best-effort - if this fails, the caller's own subsequent read of
+    // hoursLogEntries just comes back empty/incomplete rather than
+    // blocking whatever the caller actually wanted to do. Logged for
+    // follow-up, not surfaced to whoever's request triggered this.
+    console.error("Hours log migration to per-document storage failed:", e);
+  }
 }
 
 // Mirrors app.js's rebuildClientsDbFromShards: clientsDb is bin-packed

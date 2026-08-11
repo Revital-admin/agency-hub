@@ -1,12 +1,25 @@
 /* ============================================================
    HOURS & TIME LOG — APP LOGIC
-   (agency-wide: not tied to a single client, so this stores its own
-   list at agency/hoursLog, same shape as Referral Tracker. Exists to
-   pair actual hours worked against Proposal Calculator's *estimated*
-   monthly fee (client.proposal.computedMonthly, inside clientsDb) -
-   Proposal Calculator only ever captures the estimate at sale time,
-   nothing before this tracked what was actually spent delivering it.
-   See renderRollup() for that comparison.)
+   Exists to pair actual hours worked against Proposal Calculator's
+   *estimated* monthly fee (client.proposal.computedMonthly, inside
+   clientsDb) - Proposal Calculator only ever captures the estimate at
+   sale time, nothing before this tracked what was actually spent
+   delivering it. See renderRollup() for that comparison.
+
+   Storage (Aug 2026): one Firestore document per entry, in a top-level
+   hoursLogEntries collection - NOT the old agency/hoursLog
+   {list: [...]} single document. Hours accumulate forever with no
+   natural pruning, so this was the collection most likely to eventually
+   hit Firestore's ~1MB single-document limit the way clientsDb once did
+   (see data-loss-prevention-plan.md) - probably sooner than most, since
+   it grows with usage, not revenue. migrateHoursLogEntriesIfNeeded
+   below does a one-time, idempotent copy of whatever's in the old doc
+   into the new collection the first time this tool loads after the
+   update - see that function's own comment for why it's safe to run
+   more than once (including a second copy of the same check server-side,
+   in _worker.js's migrateHoursLogIfNeeded, for the Contractor Portal's
+   own hours read/write path). The old agency/hoursLog document is left
+   untouched, not deleted, as an extra passive backup.
    ============================================================ */
 
 let isEmbedded = false;
@@ -21,23 +34,36 @@ try {
 const INTERNAL_CLIENT_NAME = "Internal / Non-Billable";
 
 let entries = [];
-let docVersion = 0; // optimistic-concurrency guard, see persist() below
 
 function el(id) { return document.getElementById(id); }
 
-function getDocRef() {
+/* ── Data load/save (per-document collection - see header comment) ──
+   No docVersion / optimistic-concurrency guard anymore: each entry is
+   its own document, so two people logging hours at the same time can
+   never conflict with each other the way whole-list saves used to.
+   Editing/deleting the exact same entry at once is still last-write-
+   wins, same as any single Firestore document - a fine tradeoff for
+   how this tool is actually used. */
+
+function getEntryDocRef(id) {
   if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb) return null;
-  return window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "hoursLog");
+  return window.parent.firebaseDoc(window.parent.firebaseDb, "hoursLogEntries", id);
+}
+
+function getEntriesCollectionRef() {
+  if (!isEmbedded || !window.parent.firebaseCollection || !window.parent.firebaseDb) return null;
+  return window.parent.firebaseCollection(window.parent.firebaseDb, "hoursLogEntries");
 }
 
 async function loadEntries() {
-  if (isEmbedded && window.parent.firebaseGetDoc) {
+  // getHoursLogEntries() (parent app.js) runs the one-time migration off
+  // agency/hoursLog the first time it's called, then reads hoursLogEntries -
+  // reuse it here instead of duplicating that logic in every tool that
+  // needs the list (this tool, Team Roster's capacity view, Budget Pacing
+  // Tracker, Timeline Scheduler).
+  if (isEmbedded && typeof window.parent.getHoursLogEntries === 'function') {
     try {
-      const ref = getDocRef();
-      const snap = await window.parent.firebaseGetDoc(ref);
-      const data = snap && snap.exists ? snap.data() : null;
-      entries = (data && data.list) || [];
-      docVersion = (data && data.version) || 0;
+      entries = await window.parent.getHoursLogEntries();
       return;
     } catch (e) {
       console.error("Couldn't load the hours log from the cloud:", e);
@@ -54,27 +80,39 @@ async function loadEntries() {
   } catch (e) { entries = []; }
 }
 
-async function persist() {
-  if (isEmbedded && window.parent.saveVersionedAgencyDoc) {
-    const result = await window.parent.saveVersionedAgencyDoc({
-      docRef: getDocRef(),
-      currentVersion: docVersion,
-      buildPayload: (v) => ({ list: entries, version: v }),
-    });
-    if (!result.ok) {
-      if (result.reason === 'error') console.error("Couldn't save the hours log:", result.error);
-      if (window.parent.showBanner) {
-        window.parent.showBanner('error', result.reason === 'conflict'
-          ? "Someone else logged hours while you had this open. Reload the page to see their changes, then redo your entry."
-          : "Couldn't save — your entry may be lost: " + result.error.message);
-      }
-      return false;
-    }
-    docVersion = result.version;
+async function saveOneEntry(entry) {
+  if (!isEmbedded || !window.parent.firebaseSetDocFromJSON) {
+    try { localStorage.setItem('hours-tracker-list', JSON.stringify(entries)); } catch (e) {}
     return true;
   }
-  try { localStorage.setItem('hours-tracker-list', JSON.stringify(entries)); } catch (e) {}
-  return true;
+  try {
+    const { id, ...rest } = entry;
+    await window.parent.firebaseSetDocFromJSON(getEntryDocRef(id), JSON.stringify(rest));
+    return true;
+  } catch (e) {
+    console.error("Couldn't save the hours entry:", e);
+    if (window.parent.showBanner) {
+      window.parent.showBanner('error', "Couldn't save — your entry may be lost: " + e.message);
+    }
+    return false;
+  }
+}
+
+async function deleteOneEntry(id) {
+  if (!isEmbedded || !window.parent.firebaseDeleteDoc) {
+    try { localStorage.setItem('hours-tracker-list', JSON.stringify(entries)); } catch (e) {}
+    return true;
+  }
+  try {
+    await window.parent.firebaseDeleteDoc(getEntryDocRef(id));
+    return true;
+  } catch (e) {
+    console.error("Couldn't delete the hours entry:", e);
+    if (window.parent.showBanner) {
+      window.parent.showBanner('error', "Couldn't delete: " + e.message);
+    }
+    return false;
+  }
 }
 
 function uid() { return 'hrs-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8); }
@@ -244,7 +282,7 @@ function wireRowListeners() {
       if (!e) return;
       const previous = e.notes;
       e.notes = inp.value;
-      const ok = await persist();
+      const ok = await saveOneEntry(e);
       if (!ok) e.notes = previous;
     });
   });
@@ -258,7 +296,7 @@ async function deleteEntry(id) {
   if (!confirm("Delete this time entry? This can't be undone.")) return;
   const previous = entries;
   entries = entries.filter(e => e.id !== id);
-  const ok = await persist();
+  const ok = await deleteOneEntry(id);
   if (!ok) entries = previous;
   renderTable();
 }
@@ -284,7 +322,7 @@ async function addEntry() {
     return;
   }
 
-  entries.push({
+  const newEntry = {
     id: uid(),
     date: dateInput.value || todayStr(),
     memberName,
@@ -292,9 +330,10 @@ async function addEntry() {
     hours,
     billable: clientName === INTERNAL_CLIENT_NAME ? false : !!billableInput.checked,
     notes: notesInput.value.trim()
-  });
+  };
+  entries.push(newEntry);
 
-  const ok = await persist();
+  const ok = await saveOneEntry(newEntry);
   if (!ok) {
     entries.pop();
     renderTable();

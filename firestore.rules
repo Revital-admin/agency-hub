@@ -194,6 +194,21 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Hours & Time Log, migrated (Aug 2026) off the old agency/hoursLog
+    // single-doc {list: [...]} pattern to one document per entry, same
+    // reasoning as resourceBookings above - hours accumulate forever
+    // with no natural pruning, so this was the collection most likely
+    // to eventually hit Firestore's ~1MB single-doc limit the way
+    // clientsDb once did. Without this block, client-side reads/writes
+    // to hoursLogEntries would fall through to the deny-all catch-all
+    // below - the Worker's service-account REST access isn't affected
+    // (it bypasses rules entirely), but the Hours & Time Log tool
+    // itself, Team Roster's capacity view, Budget Pacing Tracker, and
+    // Timeline Scheduler all read this collection via the browser SDK.
+    match /hoursLogEntries/{entryId} {
+      allow read, write: if isAdmin();
+    }
+
     match /hub/settings {
       allow read, write: if isAdmin();
     }
