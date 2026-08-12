@@ -145,6 +145,10 @@ export default {
       return handleIdleLockVerifyPin(request, env);
     }
 
+    if (url.pathname === "/api/idle-lock/engage" && request.method === "POST") {
+      return handleIdleLockEngage(request, env);
+    }
+
     if (url.pathname === "/api/billing/create-subscription-checkout" && request.method === "POST") {
       return handleCreateSubscriptionCheckout(request, env);
     }
@@ -204,6 +208,29 @@ async function handleMintFirebaseToken(request, env) {
 
   if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
     return jsonResponse({ error: "Not authorized" }, 403);
+  }
+
+  // Idle-lock check (Aug 2026) - the real barrier now lives in
+  // firestore.rules (isIdleLocked(), checked on every read/write
+  // regardless of how a Firebase token was obtained), but refusing to
+  // even mint a token while locked is a cheap, clean fail-fast: without
+  // this, a locked-out reload would silently get a technically-valid
+  // token and then hit a wall of permission-denied errors from Firestore
+  // instead of a clean "enter your PIN" screen. See handleIdleLockEngage
+  // for what sets this, handleIdleLockVerifyPin for what clears it.
+  try {
+    const { accessToken: lockAccessToken, projectId: lockProjectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const lockDoc = await firestoreGetDoc(lockAccessToken, lockProjectId, "agency/idleLockPins");
+    const lockEntry = lockDoc ? lockDoc[accessEmail.toLowerCase()] : null;
+    if (lockEntry && lockEntry.lockedAt) {
+      return jsonResponse({ error: "locked" }, 423);
+    }
+  } catch (e) {
+    // Fail OPEN here deliberately, not closed - this is a UX fast-fail,
+    // not the security boundary (that's firestore.rules). A transient
+    // Firestore/auth hiccup on this check shouldn't lock someone out who
+    // was never actually idle-locked in the first place.
+    console.error("Idle-lock check failed during token mint (proceeding anyway):", e);
   }
 
   const keyJson = env.FIREBASE_SERVICE_ACCOUNT_KEY;
@@ -2508,7 +2535,15 @@ function generateRandomPin(digits) {
 // ── GET /api/idle-lock/status ──
 // Tells the client whether THE CALLER (not the team as a whole) has
 // their own PIN set up yet, so the lock overlay knows whether to show
-// the PIN-entry form or a "no PIN yet, ask an admin" message.
+// the PIN-entry form or a "no PIN yet, ask an admin" message. Also
+// returns `locked` (real, server-side idle-lock state - see
+// handleIdleLockEngage) and `isHubAdmin`, both added Aug 2026 alongside
+// the hardened idle lock: this single call has to work even when the
+// caller has no live Firestore session of their own (locked, or hasn't
+// signed into Firebase yet on a fresh page load), so it's the one place
+// the client can cheaply ask "am I locked" / "can I self-serve a PIN"
+// using the Worker's own privileged Firestore access instead of a
+// client-side Firestore read that idleLockPins' rules would deny anyway.
 async function handleIdleLockStatus(request, env) {
   const accessEmail = idleLockRequireAccess(request);
   if (!accessEmail) return jsonResponse({ error: "Not authorized" }, 403);
@@ -2517,7 +2552,42 @@ async function handleIdleLockStatus(request, env) {
     const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
     const doc = await firestoreGetDoc(accessToken, projectId, "agency/idleLockPins");
     const entry = doc ? doc[accessEmail.toLowerCase()] : null;
-    return jsonResponse({ hasPin: !!(entry && entry.hash) });
+    const isHubAdmin = await isHubAdminEmail(accessToken, projectId, accessEmail);
+    return jsonResponse({
+      hasPin: !!(entry && entry.hash),
+      locked: !!(entry && entry.lockedAt),
+      isHubAdmin
+    });
+  } catch (e) {
+    return jsonResponse({ error: "Request failed: " + e.message }, 500);
+  }
+}
+
+// ── POST /api/idle-lock/engage ──
+// Called by the client the instant idle timeout fires (or on a fresh
+// page load that discovers it's still locked from before - see
+// showIdleLockOverlay in app.js), NOT by a timer running here - the
+// Worker has no way to know when a browser tab goes idle on its own.
+// Stamps lockedAt for THE CALLER (never a client-supplied email - same
+// idleLockRequireAccess pattern as the rest of this section), which is
+// what firestore.rules' isIdleLocked() actually checks on every single
+// Firestore read/write, and what handleMintFirebaseToken below refuses
+// against. This is the real barrier - the client also signs itself out
+// of Firebase Auth at the same moment (see app.js), but a client-side
+// sign-out alone is just as bypassable by reload as the old overlay-only
+// lock was. This server-side flag is what a reload can't erase.
+async function handleIdleLockEngage(request, env) {
+  const accessEmail = idleLockRequireAccess(request);
+  if (!accessEmail) return jsonResponse({ error: "Not authorized" }, 403);
+  const emailKey = accessEmail.toLowerCase();
+
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const doc = (await firestoreGetDoc(accessToken, projectId, "agency/idleLockPins")) || {};
+    const entry = doc[emailKey] || {};
+    doc[emailKey] = { ...entry, lockedAt: new Date().toISOString() };
+    await firestoreSetDoc(accessToken, projectId, "agency/idleLockPins", doc);
+    return jsonResponse({ ok: true });
   } catch (e) {
     return jsonResponse({ error: "Request failed: " + e.message }, 500);
   }
@@ -2624,7 +2694,14 @@ async function handleIdleLockGeneratePin(request, env) {
       updatedAt: new Date().toISOString(),
       updatedBy: accessEmail,
       failedAttempts: 0,
-      lockedUntil: null
+      lockedUntil: null,
+      // A fresh PIN also lifts any active server-side idle lock (Aug
+      // 2026 - see isIdleLocked() in firestore.rules) - most relevant
+      // for the self-serve path (generateOwnPinAndUnlock in app.js),
+      // where generating a PIN and unlocking are the same action with no
+      // separate verify-pin step to clear it otherwise. Harmless no-op
+      // if targetEmail wasn't locked.
+      lockedAt: null
     };
     await firestoreSetDoc(accessToken, projectId, "agency/idleLockPins", existing);
 
@@ -2704,10 +2781,14 @@ async function handleIdleLockVerifyPin(request, env) {
 
     const candidateHash = await sha256Hex(entry.salt + pin);
     if (candidateHash === entry.hash) {
-      if (entry.failedAttempts || entry.lockedUntil) {
-        doc[emailKey] = { ...entry, failedAttempts: 0, lockedUntil: null };
-        await firestoreSetDoc(accessToken, projectId, "agency/idleLockPins", doc);
-      }
+      // Always clear lockedAt on a correct PIN, not just failedAttempts/
+      // lockedUntil - this is the one place that actually lifts the
+      // real, server-side idle lock (see handleIdleLockEngage). Written
+      // unconditionally (not just "if it was set") since a no-op write
+      // when already unset is harmless and simpler than tracking a third
+      // "did anything change" condition.
+      doc[emailKey] = { ...entry, failedAttempts: 0, lockedUntil: null, lockedAt: null };
+      await firestoreSetDoc(accessToken, projectId, "agency/idleLockPins", doc);
       return jsonResponse({ ok: true });
     }
 

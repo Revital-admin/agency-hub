@@ -20,6 +20,30 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ── Idle lock enforcement (Aug 2026) ──
+    // Before this, the 20-minute idle lock was purely a client-side
+    // overlay - a reload wiped out the JS state that "locked" the tab,
+    // and the underlying Firebase Auth session (which is what actually
+    // authorizes every read/write below) was never touched. This is the
+    // real barrier: agency/idleLockPins[email].lockedAt is set the
+    // instant the client detects idle timeout (see handleIdleLockEngage
+    // in _worker.js, called from showIdleLockOverlay in app.js) and only
+    // cleared by a correct PIN (handleIdleLockVerifyPin). Checking it
+    // here - inside isAdmin() itself - means it's enforced on every
+    // single document this whole rules file gates, regardless of how the
+    // caller obtained a Firebase token (the normal Cloudflare-Access
+    // custom-token exchange, OR the manual "Sign in with Google" popup
+    // fallback in app.js, which the token-minting-side lock check in
+    // _worker.js can't see). A reload can't erase this - it lives here,
+    // not in the browser tab.
+    function isIdleLocked() {
+      let pins = exists(/databases/$(database)/documents/agency/idleLockPins)
+        ? get(/databases/$(database)/documents/agency/idleLockPins).data
+        : {};
+      let entry = pins.get(request.auth.token.email.lower(), {});
+      return entry.get('lockedAt', null) != null;
+    }
+
     function isAdmin() {
       // Any @revitalproductions.com Google account counts as admin, not
       // just one hardcoded address - keeps this in sync with the same
@@ -27,7 +51,8 @@ service cloud.firestore {
       // could sign in but every Firestore read/write would still 403.
       return request.auth != null
         && request.auth.token.email != null
-        && request.auth.token.email.lower().matches('.*@revitalproductions[.]com$');
+        && request.auth.token.email.lower().matches('.*@revitalproductions[.]com$')
+        && !isIdleLocked();
     }
 
     // ── Team Access enforcement ──

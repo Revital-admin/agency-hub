@@ -99,6 +99,20 @@ function initAdminAuthGate() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || !data.token) {
+        // Idle-locked from a previous session on this browser (Aug
+        // 2026) - a fresh page load still finds the server-side lock in
+        // place (see handleMintFirebaseToken in _worker.js), since that
+        // lives in Firestore, not this tab's now-gone JS state. Show the
+        // PIN overlay, not the "Sign in with Google" manual gate - that
+        // button performs an independent Firebase sign-in Cloudflare
+        // Access has nothing to do with, which would otherwise let
+        // someone skip the PIN entirely (firestore.rules' isIdleLocked()
+        // still blocks any actual data either way, but the PIN overlay
+        // is the intended path, not a permission-denied wall of errors).
+        if (res.status === 423) {
+          try { showIdleLockOverlay(); } catch (e) { console.error("IdleSessionLock Error:", e); }
+          return currentUser;
+        }
         console.log("Silent sign-in unavailable:", data.error || res.status);
         if (!currentUser) showManualSignIn();
         // Fail safe to whatever cached identity we already had (if any)
@@ -194,23 +208,26 @@ function attachIdleListeners(doc) {
   }
 }
 
-// Shared by the sidebar PIN button (hide it for non-admins) - see
-// agency/teamAccess.hubAdmins, the same list Team Access Manager and
-// Team Roster's Contractor Documents gate already use. Defaults to just
-// the founder account if the doc has never been saved with a hubAdmins
-// field.
+// Shared by the sidebar PIN button (hide it for non-admins) and the
+// idle-lock overlay's self-serve path. Used to go straight to Firestore
+// (agency/teamAccess.hubAdmins) - broken as of the Aug 2026 idle-lock
+// hardening, since that read now requires a live, unlocked Firebase Auth
+// session (see isAdmin()/isIdleLocked() in firestore.rules), which is
+// exactly NOT guaranteed here: this needs to work while idle-locked, or
+// on a fresh page load before Firebase sign-in has completed at all -
+// both cases where a client-side Firestore read would just 403. Routed
+// through /api/idle-lock/status instead, which answers the same question
+// using the Worker's own privileged Firestore access (see
+// handleIdleLockStatus in _worker.js) - works regardless of the caller's
+// own Firebase Auth state, only needs the Cloudflare Access header.
 function checkIsHubAdmin() {
-  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return Promise.resolve(false);
-  const ref = window.firebaseDoc(window.firebaseDb, "agency", "teamAccess");
-  return window.firebaseGetDoc(ref).then((snap) => {
-    const data = snap && snap.exists ? snap.data() : null;
-    const hubAdmins = (data && Array.isArray(data.hubAdmins)) ? data.hubAdmins : ["admin@revitalproductions.com"];
-    const currentEmail = (window.currentAdminEmail || "").toLowerCase();
-    return !!(currentEmail && hubAdmins.map(e => (e || "").toLowerCase()).includes(currentEmail));
-  }).catch((e) => {
-    console.warn("Couldn't determine Hub Admin status:", e);
-    return false;
-  });
+  return fetch("/api/idle-lock/status", { credentials: "include" })
+    .then((res) => res.json())
+    .then((data) => !!(data && data.isHubAdmin))
+    .catch((e) => {
+      console.warn("Couldn't determine Hub Admin status:", e);
+      return false;
+    });
 }
 
 // Shows the lock overlay and checks whether THE CALLER (not the team as
@@ -218,12 +235,26 @@ function checkIsHubAdmin() {
 // handleIdleLockStatus in _worker.js). If not, there's no self-serve
 // path anymore - PINs are generated for people by a Hub Admin (see
 // Team PINs panel below), never typed in by the person themselves - so
-// this just explains what to do instead. Reloading the page still gets
-// someone back in for now (the lock is a client-side convenience, not a
-// hard barrier) until an admin generates them a real PIN. Defaults to
-// the PIN form on a status-check failure (offline, etc.) rather than
-// silently falling back to the old click-to-unlock behavior - a broken
-// network check shouldn't become a security hole.
+// this just explains what to do instead.
+//
+// Hardened Aug 2026 - this used to be a purely visual overlay: the
+// underlying Firebase Auth session (and every Firestore read it
+// authorizes) was untouched, so a plain page reload silently dropped the
+// whole lock. Two things now make it real:
+//   1. Signs out of Firebase Auth immediately, right here - Firestore
+//      denies everything to a signed-out session regardless of any CSS.
+//   2. Calls /api/idle-lock/engage, which stamps a server-side lockedAt
+//      for this person (see handleIdleLockEngage in _worker.js). That's
+//      what a reload can't erase: firestore.rules' isIdleLocked() checks
+//      it on every single read/write, and handleMintFirebaseToken
+//      refuses to even re-mint a token while it's set. A correct PIN is
+//      the only thing that clears it (handleIdleLockVerifyPin).
+// Called two ways: normally, from the idle timer firing (idleLocked was
+// false); also from ensureCorrectFirebaseIdentity when a fresh page load
+// discovers via a 423 from /api/mint-firebase-token that this account is
+// STILL locked from before (idleLocked was already false in that case
+// too, since this is a brand new page load with fresh JS state - the
+// server-side flag is what remembers, not this variable).
 async function showIdleLockOverlay() {
   idleLocked = true;
   const overlay = document.getElementById("idleLockOverlay");
@@ -236,11 +267,49 @@ async function showIdleLockOverlay() {
   if (statusEl) statusEl.textContent = "You've been idle for a while. Client data is hidden until you unlock.";
   if (overlay) overlay.style.display = "flex";
 
+  // window.currentAdminEmail is normally set inside onAuthStateChanged
+  // (initAdminAuthGate) AFTER a successful sign-in - on a fresh page
+  // load that's still locked from before, that never runs (see the 423
+  // branch in ensureCorrectFirebaseIdentity), so it'd still be unset
+  // here otherwise. generateOwnPinAndUnlock below needs a real value to
+  // self-serve correctly, so backfill it from the cheap Access whoami
+  // (no Firebase session required) if nothing's set it yet.
+  if (!window.currentAdminEmail) {
+    try {
+      const whoamiRes = await fetch("/api/user", { credentials: "include" });
+      const whoamiData = await whoamiRes.json();
+      if (whoamiData && whoamiData.email && whoamiData.email !== "Guest") {
+        window.currentAdminEmail = whoamiData.email.toLowerCase();
+      }
+    } catch (e) {
+      console.warn("IdleSessionLock: couldn't backfill currentAdminEmail", e);
+    }
+  }
+
+  // Best-effort, non-blocking - a failure here shouldn't prevent showing
+  // the PIN form itself (see the status-check fail-open reasoning
+  // below). Safe to call even if this browser never had a live Firebase
+  // session (fresh-load-while-still-locked case) - signOut() on no user
+  // is a harmless no-op, and engage() re-stamping an already-set lockedAt
+  // just refreshes the timestamp.
+  try {
+    if (window.firebase && firebase.auth && firebase.auth().currentUser) {
+      await firebase.auth().signOut();
+    }
+  } catch (e) {
+    console.warn("IdleSessionLock: sign-out failed", e);
+  }
+  fetch("/api/idle-lock/engage", { method: "POST", credentials: "include" }).catch((e) => {
+    console.warn("IdleSessionLock: engage call failed (client-side sign-out above still applies)", e);
+  });
+
   let hasPin = true;
+  let isHubAdmin = false;
   try {
     const res = await fetch("/api/idle-lock/status", { credentials: "include" });
     const data = await res.json();
     hasPin = !!(data && data.hasPin);
+    isHubAdmin = !!(data && data.isHubAdmin);
   } catch (e) {
     hasPin = true;
   }
@@ -249,13 +318,11 @@ async function showIdleLockOverlay() {
     if (pinForm) pinForm.style.display = "none";
     // A Hub Admin with no PIN yet has nobody to "ask" - they're the
     // admin, and the Team PINs panel that would fix this lives in the
-    // sidebar, which this overlay is covering. Without this, the very
-    // first admin to hit the lock before generating their own PIN would
-    // be stuck (reload works around it, but that shouldn't be the real
-    // fix) - so let them generate their own PIN for themselves right
-    // here, one time, without needing to reach the panel.
-    const isAdmin = await checkIsHubAdmin();
-    if (isAdmin) {
+    // sidebar, which this overlay is covering. So let them generate
+    // their own PIN for themselves right here, one time, without needing
+    // to reach the panel (which they now truly can't, since the real
+    // lock means the sidebar underneath isn't reachable either way).
+    if (isHubAdmin) {
       if (statusEl) statusEl.textContent = "You don't have a PIN yet. As a Hub Admin, you can generate your own right here:";
       showAdminSelfServePin();
     } else {
@@ -311,30 +378,39 @@ async function generateOwnPinAndUnlock() {
   }
 }
 
+// Runs after a correct PIN clears the server-side lock (verify-pin) or a
+// self-serve PIN generation does the same (generateOwnPinAndUnlock).
+// Rewritten Aug 2026: the old version only re-checked /api/user, because
+// back then unlocking just meant hiding an overlay over a Firebase
+// session that had never actually been touched. Now that showIdleLockOverlay
+// really signs out of Firebase Auth, this has to do a real sign-in again -
+// mint a fresh custom token (works now, since the server-side lock this
+// call is downstream of just got cleared) and redeem it. onAuthStateChanged
+// (initAdminAuthGate, above) fires in response and either no-ops (if the
+// Hub was already booted before idle) or - on a fresh page load that
+// started out locked - completes the sign-in flow and calls boot() for
+// the first time.
 async function finishIdleUnlockAfterPin() {
   const statusEl = document.getElementById("idleLockStatus");
-  if (statusEl) statusEl.textContent = "Checking your session...";
+  const errorEl = document.getElementById("idleLockError");
+  if (statusEl) statusEl.textContent = "Signing you back in...";
   try {
-    const res = await fetch("/api/user", { credentials: "include" });
-    const data = await res.json();
-    const stillSameUser =
-      data && data.email && window.currentAdminEmail &&
-      data.email.toLowerCase() === window.currentAdminEmail;
-
-    if (stillSameUser) {
-      idleLocked = false;
-      const overlay = document.getElementById("idleLockOverlay");
-      if (overlay) overlay.style.display = "none";
-      resetIdleTimer();
-      return true;
+    const res = await fetch("/api/mint-firebase-token", { credentials: "include" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.token) {
+      throw new Error((data && data.error) || "Could not sign you back in");
     }
-    window.location.reload();
-    return false;
+    await firebase.auth().signInWithCustomToken(data.token);
+
+    idleLocked = false;
+    const overlay = document.getElementById("idleLockOverlay");
+    if (overlay) overlay.style.display = "none";
+    resetIdleTimer();
+    return true;
   } catch (e) {
-    const errorEl = document.getElementById("idleLockError");
-    if (statusEl) statusEl.textContent = "Could not verify your session.";
+    if (statusEl) statusEl.textContent = "Could not sign you back in.";
     if (errorEl) {
-      errorEl.textContent = "Check your connection and try again.";
+      errorEl.textContent = e.message || "Check your connection and try again.";
       errorEl.style.display = "block";
     }
     return false;
@@ -790,7 +866,6 @@ function boot() {
   try { initAdminNotifBell(); } catch(e) { console.error("AdminNotifBell Error:", e); }
   try { loadAdminNotifications(); } catch(e) { console.error("AdminNotifications Error:", e); }
   try { initTeamAccessGate(); } catch(e) { console.error("TeamAccessGate Error:", e); }
-  try { initIdleSessionLock(); } catch(e) { console.error("IdleSessionLock Error:", e); }
   try { refreshAllViews(); } catch(e) { console.error("Refresh Error:", e); }
   // Overview Dashboard (tab-dashboard) is active by default at boot, so
   // no tab-click fires to trigger this the way it does for every other
@@ -4539,6 +4614,16 @@ function fetchCloudflareProfile() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  // Idle-lock UI wiring (PIN form, self-serve button, Team PINs panel)
+  // now runs unconditionally and BEFORE sign-in, not inside boot() (Aug
+  // 2026) - it has to work on a fresh page load that's still idle-locked
+  // from before, where boot() never runs at all because
+  // ensureCorrectFirebaseIdentity shows the idle-lock overlay instead of
+  // completing sign-in (see the 423 branch there). Every DOM element and
+  // function this touches already tolerates being called pre-sign-in
+  // (see checkIsHubAdmin, rewritten the same day to not require one).
+  try { initIdleSessionLock(); } catch(e) { console.error("IdleSessionLock Error:", e); }
+
   // Require Firebase sign-in as the admin account before booting the hub
   // (checkIdentity/boot logic lives in initAdminAuthGate() -> boot()).
   initAdminAuthGate();
