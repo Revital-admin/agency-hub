@@ -230,7 +230,9 @@ async function showIdleLockOverlay() {
   const errorEl = document.getElementById("idleLockError");
   const statusEl = document.getElementById("idleLockStatus");
   const pinForm = document.getElementById("idleLockPinForm");
+  const selfServeEl = document.getElementById("idleLockAdminSelfServe");
   if (errorEl) errorEl.style.display = "none";
+  if (selfServeEl) selfServeEl.style.display = "none";
   if (statusEl) statusEl.textContent = "You've been idle for a while. Client data is hidden until you unlock.";
   if (overlay) overlay.style.display = "flex";
 
@@ -245,7 +247,20 @@ async function showIdleLockOverlay() {
 
   if (!hasPin) {
     if (pinForm) pinForm.style.display = "none";
-    if (statusEl) statusEl.textContent = "You don't have a PIN yet. Ask a Hub Admin to generate one for you from the Team PINs panel (key icon in the sidebar), then come back to unlock.";
+    // A Hub Admin with no PIN yet has nobody to "ask" - they're the
+    // admin, and the Team PINs panel that would fix this lives in the
+    // sidebar, which this overlay is covering. Without this, the very
+    // first admin to hit the lock before generating their own PIN would
+    // be stuck (reload works around it, but that shouldn't be the real
+    // fix) - so let them generate their own PIN for themselves right
+    // here, one time, without needing to reach the panel.
+    const isAdmin = await checkIsHubAdmin();
+    if (isAdmin) {
+      if (statusEl) statusEl.textContent = "You don't have a PIN yet. As a Hub Admin, you can generate your own right here:";
+      showAdminSelfServePin();
+    } else {
+      if (statusEl) statusEl.textContent = "You don't have a PIN yet. Ask a Hub Admin to generate one for you from the Team PINs panel (key icon in the sidebar), then come back to unlock.";
+    }
     return;
   }
 
@@ -259,6 +274,42 @@ async function showIdleLockOverlay() {
 // as the original click-to-unlock behavior. The PIN stops a random
 // person from getting past the overlay; this second check still catches
 // a genuinely expired/switched Access session.
+function showAdminSelfServePin() {
+  const el = document.getElementById("idleLockAdminSelfServe");
+  if (el) el.style.display = "flex";
+}
+
+// The admin-self-serve escape hatch itself - generates a PIN for the
+// CURRENT signed-in admin's own email (never anyone else's, unlike the
+// full Team PINs panel) and unlocks immediately, same as entering a PIN
+// normally would. Shows the new PIN briefly first so it isn't generated
+// and thrown away silently - the admin still needs to know it for next
+// time.
+async function generateOwnPinAndUnlock() {
+  const btn = document.getElementById("idleLockAdminSelfServeBtn");
+  const statusEl = document.getElementById("idleLockStatus");
+  const errorEl = document.getElementById("idleLockError");
+  if (errorEl) errorEl.style.display = "none";
+  if (btn) { btn.disabled = true; btn.textContent = "Generating..."; }
+
+  try {
+    const res = await fetch("/api/idle-lock/generate-pin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email: window.currentAdminEmail })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error((data && data.error) || "Couldn't generate a PIN");
+
+    if (statusEl) statusEl.innerHTML = `Your new PIN is <strong style="letter-spacing:3px; color:#10b981;">${data.pin}</strong> - remember it, it won't be shown again. Unlocking now...`;
+    setTimeout(() => { finishIdleUnlockAfterPin(); }, 2500);
+  } catch (e) {
+    if (errorEl) { errorEl.textContent = e.message; errorEl.style.display = "block"; }
+    if (btn) { btn.disabled = false; btn.textContent = "Generate My PIN"; }
+  }
+}
+
 async function finishIdleUnlockAfterPin() {
   const statusEl = document.getElementById("idleLockStatus");
   if (statusEl) statusEl.textContent = "Checking your session...";
@@ -470,6 +521,9 @@ function initIdleSessionLock() {
       attemptIdleUnlock(input ? input.value : "");
     });
   }
+
+  const selfServeBtn = document.getElementById("idleLockAdminSelfServeBtn");
+  if (selfServeBtn) selfServeBtn.addEventListener("click", generateOwnPinAndUnlock);
 
   const pinsBtn = document.getElementById("teamPinsBtn");
   if (pinsBtn) {

@@ -74,7 +74,7 @@
 
   <!-- Central references and Application State Controller -->
   <script src="data-store.js?v=3"></script>
-  <script src="app.js?v=108"></script>
+  <script src="app.js?v=109"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
 </head>
@@ -111,6 +111,14 @@
       <input id="idleLockPinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="Your PIN" style="width:160px; text-align:center; letter-spacing:4px; font-size:18px; padding:10px 12px; border-radius:8px; border:1px solid #374151; background:#111827; color:#e5e7eb;">
       <button id="idleLockUnlockBtn" type="submit" style="padding:10px 20px; border-radius:8px; border:none; background:#10b981; color:#04120c; font-weight:600; cursor:pointer;">Unlock</button>
     </form>
+    <!-- Admin self-serve escape hatch - see showAdminSelfServePin in
+         app.js. Only ever shown to a confirmed Hub Admin who has no PIN
+         of their own yet, so the very first admin to hit the lock isn't
+         stuck (the normal Team PINs panel lives in the sidebar, which
+         this overlay covers). -->
+    <div id="idleLockAdminSelfServe" style="display:none; flex-direction:column; align-items:center; gap:10px;">
+      <button id="idleLockAdminSelfServeBtn" type="button" style="padding:10px 20px; border-radius:8px; border:none; background:#10b981; color:#04120c; font-weight:600; cursor:pointer;">Generate My PIN</button>
+    </div>
     <p id="idleLockError" style="display:none; color:#ef4444; max-width:380px; margin:0;"></p>
   </div>
 
