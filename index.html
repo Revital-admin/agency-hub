@@ -74,7 +74,7 @@
 
   <!-- Central references and Application State Controller -->
   <script src="data-store.js?v=3"></script>
-  <script src="app.js?v=106"></script>
+  <script src="app.js?v=108"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
 </head>
@@ -103,34 +103,36 @@
     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
     <h2 style="margin:0;">Hub Locked</h2>
     <p id="idleLockStatus" style="max-width:380px; color:#9ca3af; margin:0;">You've been idle for a while. Client data is hidden until you unlock.</p>
-    <!-- PIN entry (normal case - a team PIN already exists). -->
+    <!-- PIN entry - each person has their own PIN, generated for them by
+         a Hub Admin (see teamPinsModal below). If the caller doesn't have
+         one yet, showIdleLockOverlay in app.js hides this form entirely
+         and idleLockStatus explains what to do instead. -->
     <form id="idleLockPinForm" style="display:none; flex-direction:column; align-items:center; gap:10px;">
-      <input id="idleLockPinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="Team PIN" style="width:160px; text-align:center; letter-spacing:4px; font-size:18px; padding:10px 12px; border-radius:8px; border:1px solid #374151; background:#111827; color:#e5e7eb;">
+      <input id="idleLockPinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="Your PIN" style="width:160px; text-align:center; letter-spacing:4px; font-size:18px; padding:10px 12px; border-radius:8px; border:1px solid #374151; background:#111827; color:#e5e7eb;">
       <button id="idleLockUnlockBtn" type="submit" style="padding:10px 20px; border-radius:8px; border:none; background:#10b981; color:#04120c; font-weight:600; cursor:pointer;">Unlock</button>
-    </form>
-    <!-- First-time setup (no team PIN exists yet). -->
-    <form id="idleLockSetupForm" style="display:none; flex-direction:column; align-items:center; gap:10px;">
-      <p style="max-width:380px; color:#9ca3af; margin:0; font-size:13px;">No team PIN is set up yet. Create one now - everyone on the team will use this same code to unlock.</p>
-      <input id="idleLockSetupPinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="New PIN (4-8 digits)" style="width:180px; text-align:center; letter-spacing:2px; font-size:16px; padding:10px 12px; border-radius:8px; border:1px solid #374151; background:#111827; color:#e5e7eb;">
-      <input id="idleLockSetupPinConfirmInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="Confirm PIN" style="width:180px; text-align:center; letter-spacing:2px; font-size:16px; padding:10px 12px; border-radius:8px; border:1px solid #374151; background:#111827; color:#e5e7eb;">
-      <button id="idleLockSetupBtn" type="submit" style="padding:10px 20px; border-radius:8px; border:none; background:#10b981; color:#04120c; font-weight:600; cursor:pointer;">Set PIN &amp; Unlock</button>
     </form>
     <p id="idleLockError" style="display:none; color:#ef4444; max-width:380px; margin:0;"></p>
   </div>
 
-  <!-- Change Team PIN modal - reachable any time from the sidebar key
-       icon (not just from the lock screen), so the PIN can be set up or
-       rotated proactively. See idle lock PIN comment block in app.js. -->
-  <div id="changePinModal" style="display:none; position:fixed; inset:0; z-index:10001; background:rgba(0,0,0,0.6); align-items:center; justify-content:center;">
-    <div style="background:#111827; color:#e5e7eb; border-radius:12px; padding:24px; width:320px; display:flex; flex-direction:column; gap:12px; font-family:inherit;">
-      <h3 style="margin:0;">Team Idle-Lock PIN</h3>
-      <p id="changePinStatus" style="margin:0; font-size:13px; color:#9ca3af;">Loading...</p>
-      <input id="changePinNewInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="New PIN (4-8 digits)" style="padding:10px 12px; border-radius:8px; border:1px solid #374151; background:#0b0f14; color:#e5e7eb;">
-      <input id="changePinConfirmInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="Confirm PIN" style="padding:10px 12px; border-radius:8px; border:1px solid #374151; background:#0b0f14; color:#e5e7eb;">
-      <p id="changePinError" style="display:none; color:#ef4444; margin:0; font-size:13px;"></p>
-      <div style="display:flex; gap:8px; justify-content:flex-end;">
-        <button id="changePinCancelBtn" type="button" style="padding:8px 14px; border-radius:8px; border:1px solid #374151; background:transparent; color:#e5e7eb; cursor:pointer;">Cancel</button>
-        <button id="changePinSaveBtn" type="button" style="padding:8px 14px; border-radius:8px; border:none; background:#10b981; color:#04120c; font-weight:600; cursor:pointer;">Save</button>
+  <!-- Team PINs panel - Hub-Admin only, reachable any time from the
+       sidebar key icon. Generates a per-person idle-lock PIN (never
+       admin-typed) for each teammate to hand out during onboarding, or
+       regenerate/remove later. See idle lock PIN comment block in
+       app.js / _worker.js. -->
+  <div id="teamPinsModal" style="display:none; position:fixed; inset:0; z-index:10001; background:rgba(0,0,0,0.6); align-items:center; justify-content:center;">
+    <div style="background:#111827; color:#e5e7eb; border-radius:12px; padding:24px; width:420px; max-height:80vh; display:flex; flex-direction:column; gap:12px; font-family:inherit;">
+      <h3 style="margin:0;">Team Idle-Lock PINs</h3>
+      <p style="margin:0; font-size:13px; color:#9ca3af;">Each person gets their own PIN, generated here - not chosen by them. A generated PIN is shown once, right after you create it, so copy it and hand it to them directly.</p>
+      <div style="display:flex; gap:8px;">
+        <input id="teamPinsNewEmail" type="email" placeholder="new-teammate@revitalproductions.com" style="flex:1; padding:8px 10px; border-radius:8px; border:1px solid #374151; background:#0b0f14; color:#e5e7eb; font-size:13px;">
+        <button id="teamPinsAddBtn" type="button" style="padding:8px 14px; border-radius:8px; border:1px solid #374151; background:transparent; color:#e5e7eb; cursor:pointer; white-space:nowrap;">+ Add</button>
+      </div>
+      <p id="teamPinsError" style="display:none; color:#ef4444; margin:0; font-size:13px;"></p>
+      <div id="teamPinsList" style="overflow-y:auto; display:flex; flex-direction:column; gap:8px;">
+        <!-- Populated by JS - see renderTeamPinsList in app.js -->
+      </div>
+      <div style="display:flex; justify-content:flex-end;">
+        <button id="teamPinsCloseBtn" type="button" style="padding:8px 14px; border-radius:8px; border:1px solid #374151; background:transparent; color:#e5e7eb; cursor:pointer;">Close</button>
       </div>
     </div>
   </div>
@@ -169,7 +171,7 @@
           <path d="M12 2L2 7l10 5 10-5-10-5"/>
         </svg>
         <span class="brand-name">REVITAL HUB</span>
-        <button id="changePinBtn" class="admin-notif-bell-btn" aria-label="Team Idle-Lock PIN" title="Team Idle-Lock PIN" style="margin-left:auto;">
+        <button id="teamPinsBtn" class="admin-notif-bell-btn" aria-label="Team Idle-Lock PINs" title="Team Idle-Lock PINs" style="margin-left:auto;">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
         </button>
         <button id="adminNotifBellBtn" class="admin-notif-bell-btn" aria-label="Notifications">

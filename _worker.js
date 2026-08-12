@@ -129,8 +129,16 @@ export default {
       return handleIdleLockStatus(request, env);
     }
 
-    if (url.pathname === "/api/idle-lock/set-pin" && request.method === "POST") {
-      return handleIdleLockSetPin(request, env);
+    if (url.pathname === "/api/idle-lock/people" && request.method === "GET") {
+      return handleIdleLockListPeople(request, env);
+    }
+
+    if (url.pathname === "/api/idle-lock/generate-pin" && request.method === "POST") {
+      return handleIdleLockGeneratePin(request, env);
+    }
+
+    if (url.pathname === "/api/idle-lock/remove-pin" && request.method === "POST") {
+      return handleIdleLockRemovePin(request, env);
     }
 
     if (url.pathname === "/api/idle-lock/verify-pin" && request.method === "POST") {
@@ -2228,19 +2236,23 @@ async function stripeApiRequest(env, path, formParams, billingMode) {
 //     recurring off monthlyAmount, one not off setupAmount) - Stripe
 //     bills both together on the first invoice, then just the recurring
 //     amount every month after.
-// ── Idle Lock PIN (Aug 2026) ──
+// ── Idle Lock PIN (Aug 2026, per-person as of the second pass) ──
 // The 20-minute idle-lock overlay (see initIdleSessionLock in app.js)
 // used to unlock with a single click, which only re-confirmed the
 // browser's existing Cloudflare Access cookie was still valid - it
 // didn't actually challenge the person standing at the keyboard. Anyone
 // with physical access to an already-signed-in, unlocked computer could
-// click through it. This adds one real PIN, shared by the whole team
-// (not per-person - the point is stopping a random person from walking
-// up and clicking Unlock, not authenticating a specific teammate), that
-// must be typed correctly to dismiss the overlay. Stored as a salted
-// SHA-256 hash in agency/idleLockPin, never in plaintext or in any
-// client-side code - the actual comparison only ever happens here,
-// server-side.
+// click through it.
+//
+// First version used one PIN shared by the whole team. Switched to
+// per-person: each teammate gets their own PIN, generated (not
+// self-chosen) by a Hub Admin and handed to them directly as part of
+// onboarding - see handleIdleLockGeneratePin. All stored in a single
+// agency/idleLockPins doc, keyed by lowercased email:
+//   { "juan@revitalproductions.com": { salt, hash, updatedAt, updatedBy, failedAttempts, lockedUntil }, ... }
+// Hashes only, salted SHA-256, never plaintext at rest - the generated
+// PIN is returned in the API response exactly once, at creation time,
+// for the admin to copy and share.
 async function sha256Hex(text) {
   const buffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, "0")).join("");
@@ -2252,29 +2264,84 @@ function idleLockRequireAccess(request) {
   return accessEmail;
 }
 
+// Same agency/teamAccess.hubAdmins list Team Access Manager and Team
+// Roster already gate Contractor Documents / "Signed Into the Hub" on
+// (see team-roster/js/app.js) - reused here so "who can generate PINs
+// for other people" is the same small, deliberate list rather than a
+// new one to keep in sync. Defaults to just the founder account if the
+// doc has never been saved with a hubAdmins field, so a fresh install
+// never locks everyone out of generating the first PIN.
+async function isHubAdminEmail(accessToken, projectId, email) {
+  const doc = await firestoreGetDoc(accessToken, projectId, "agency/teamAccess");
+  const hubAdmins = (doc && Array.isArray(doc.hubAdmins)) ? doc.hubAdmins : ["admin@revitalproductions.com"];
+  return hubAdmins.map(e => (e || "").toLowerCase()).includes(email.toLowerCase());
+}
+
+function generateRandomPin(digits) {
+  const bytes = crypto.getRandomValues(new Uint32Array(digits));
+  return Array.from(bytes).map(b => String(b % 10)).join("");
+}
+
 // ── GET /api/idle-lock/status ──
-// Tells the client whether a team PIN has been set up yet, so the lock
-// overlay can show a "create a PIN" flow the first time versus a normal
-// "enter the PIN" prompt afterward.
+// Tells the client whether THE CALLER (not the team as a whole) has
+// their own PIN set up yet, so the lock overlay knows whether to show
+// the PIN-entry form or a "no PIN yet, ask an admin" message.
 async function handleIdleLockStatus(request, env) {
   const accessEmail = idleLockRequireAccess(request);
   if (!accessEmail) return jsonResponse({ error: "Not authorized" }, 403);
 
   try {
     const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
-    const doc = await firestoreGetDoc(accessToken, projectId, "agency/idleLockPin");
-    return jsonResponse({ hasPin: !!(doc && doc.hash) });
+    const doc = await firestoreGetDoc(accessToken, projectId, "agency/idleLockPins");
+    const entry = doc ? doc[accessEmail.toLowerCase()] : null;
+    return jsonResponse({ hasPin: !!(entry && entry.hash) });
   } catch (e) {
     return jsonResponse({ error: "Request failed: " + e.message }, 500);
   }
 }
 
-// ── POST /api/idle-lock/set-pin ──
-// Body: { pin: "1234" }. Any signed-in teammate can set/change it (same
-// trust level as everything else in the Hub - there's no per-person
-// ownership of this shared code), which overwrites it for the whole
-// team going forward.
-async function handleIdleLockSetPin(request, env) {
+// ── GET /api/idle-lock/people ──
+// Hub-Admin only. Lists everyone worth showing in the PIN generator
+// panel: every email in agency/teamActivity.users (anyone who's ever
+// actually signed into the Hub) UNIONED with every email already in
+// agency/idleLockPins (covers someone pre-provisioned with a PIN before
+// their first login - see handleIdleLockGeneratePin's newEmail path).
+async function handleIdleLockListPeople(request, env) {
+  const accessEmail = idleLockRequireAccess(request);
+  if (!accessEmail) return jsonResponse({ error: "Not authorized" }, 403);
+
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    if (!(await isHubAdminEmail(accessToken, projectId, accessEmail))) {
+      return jsonResponse({ error: "Only Hub Admins can view this" }, 403);
+    }
+    const [activityDoc, pinsDoc] = await Promise.all([
+      firestoreGetDoc(accessToken, projectId, "agency/teamActivity"),
+      firestoreGetDoc(accessToken, projectId, "agency/idleLockPins")
+    ]);
+    const activityUsers = (activityDoc && activityDoc.users) || {};
+    const pins = pinsDoc || {};
+    const allEmails = new Set([...Object.keys(activityUsers), ...Object.keys(pins)]);
+    const people = [...allEmails].map(email => ({
+      email,
+      lastSeen: (activityUsers[email] && activityUsers[email].lastSeen) || null,
+      hasPin: !!(pins[email] && pins[email].hash),
+      pinUpdatedAt: (pins[email] && pins[email].updatedAt) || null
+    })).sort((a, b) => a.email.localeCompare(b.email));
+    return jsonResponse({ people });
+  } catch (e) {
+    return jsonResponse({ error: "Request failed: " + e.message }, 500);
+  }
+}
+
+// ── POST /api/idle-lock/generate-pin ──
+// Body: { email: "juan@revitalproductions.com" }. Hub-Admin only.
+// Generates a random 6-digit PIN server-side (never admin-typed - the
+// whole point is a code nobody chose and nobody but this one response
+// ever sees in plaintext), stores its salted hash, and returns the
+// plaintext PIN once so the admin can hand it to that teammate.
+// Regenerating for someone who already has a PIN silently replaces it.
+async function handleIdleLockGeneratePin(request, env) {
   const accessEmail = idleLockRequireAccess(request);
   if (!accessEmail) return jsonResponse({ error: "Not authorized" }, 403);
 
@@ -2284,23 +2351,61 @@ async function handleIdleLockSetPin(request, env) {
   } catch (e) {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
-  const pin = ((payload && payload.pin) || "").toString().trim();
-  if (!/^\d{4,8}$/.test(pin)) {
-    return jsonResponse({ error: "PIN must be 4-8 digits" }, 400);
+  const targetEmail = ((payload && payload.email) || "").toString().trim().toLowerCase();
+  if (!targetEmail || !targetEmail.includes("@")) {
+    return jsonResponse({ error: "A valid email is required" }, 400);
   }
 
   try {
     const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    if (!(await isHubAdminEmail(accessToken, projectId, accessEmail))) {
+      return jsonResponse({ error: "Only Hub Admins can generate PINs" }, 403);
+    }
+
+    const pin = generateRandomPin(6);
     const saltBytes = crypto.getRandomValues(new Uint8Array(16));
     const salt = Array.from(saltBytes).map(b => b.toString(16).padStart(2, "0")).join("");
     const hash = await sha256Hex(salt + pin);
-    await firestoreSetDoc(accessToken, projectId, "agency/idleLockPin", {
+
+    const existing = (await firestoreGetDoc(accessToken, projectId, "agency/idleLockPins")) || {};
+    existing[targetEmail] = {
       salt, hash,
       updatedAt: new Date().toISOString(),
       updatedBy: accessEmail,
       failedAttempts: 0,
       lockedUntil: null
-    });
+    };
+    await firestoreSetDoc(accessToken, projectId, "agency/idleLockPins", existing);
+    return jsonResponse({ ok: true, pin });
+  } catch (e) {
+    return jsonResponse({ error: "Request failed: " + e.message }, 500);
+  }
+}
+
+// ── POST /api/idle-lock/remove-pin ──
+// Body: { email }. Hub-Admin only - for offboarding, or just revoking
+// someone's ability to unlock without deleting anything else about them.
+async function handleIdleLockRemovePin(request, env) {
+  const accessEmail = idleLockRequireAccess(request);
+  if (!accessEmail) return jsonResponse({ error: "Not authorized" }, 403);
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+  const targetEmail = ((payload && payload.email) || "").toString().trim().toLowerCase();
+  if (!targetEmail) return jsonResponse({ error: "A valid email is required" }, 400);
+
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    if (!(await isHubAdminEmail(accessToken, projectId, accessEmail))) {
+      return jsonResponse({ error: "Only Hub Admins can remove PINs" }, 403);
+    }
+    const existing = (await firestoreGetDoc(accessToken, projectId, "agency/idleLockPins")) || {};
+    delete existing[targetEmail];
+    await firestoreSetDoc(accessToken, projectId, "agency/idleLockPins", existing);
     return jsonResponse({ ok: true });
   } catch (e) {
     return jsonResponse({ error: "Request failed: " + e.message }, 500);
@@ -2308,14 +2413,15 @@ async function handleIdleLockSetPin(request, env) {
 }
 
 // ── POST /api/idle-lock/verify-pin ──
-// Body: { pin: "1234" }. Simple brute-force guard - 5 wrong guesses in a
-// row locks further attempts out for 60 seconds. That's plenty against
-// the actual threat this defends against (someone physically at the
-// keyboard guessing a few times), without needing real infrastructure
-// (this is a single shared low-stakes code, not a password).
+// Body: { pin: "483920" }. Checks against THE CALLER's own PIN only
+// (looked up by their Cf-Access-Authenticated-User-Email, not something
+// the client can spoof - that header comes from Cloudflare Access
+// itself). Simple brute-force guard - 5 wrong guesses in a row locks
+// further attempts out for 60 seconds.
 async function handleIdleLockVerifyPin(request, env) {
   const accessEmail = idleLockRequireAccess(request);
   if (!accessEmail) return jsonResponse({ error: "Not authorized" }, 403);
+  const emailKey = accessEmail.toLowerCase();
 
   let payload;
   try {
@@ -2327,31 +2433,30 @@ async function handleIdleLockVerifyPin(request, env) {
 
   try {
     const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
-    const doc = await firestoreGetDoc(accessToken, projectId, "agency/idleLockPin");
-    if (!doc || !doc.hash) {
-      return jsonResponse({ error: "No PIN has been set up yet" }, 400);
+    const doc = (await firestoreGetDoc(accessToken, projectId, "agency/idleLockPins")) || {};
+    const entry = doc[emailKey];
+    if (!entry || !entry.hash) {
+      return jsonResponse({ error: "You don't have a PIN yet - ask a Hub Admin to generate one for you" }, 400);
     }
 
-    if (doc.lockedUntil && new Date(doc.lockedUntil).getTime() > Date.now()) {
-      const waitSec = Math.ceil((new Date(doc.lockedUntil).getTime() - Date.now()) / 1000);
+    if (entry.lockedUntil && new Date(entry.lockedUntil).getTime() > Date.now()) {
+      const waitSec = Math.ceil((new Date(entry.lockedUntil).getTime() - Date.now()) / 1000);
       return jsonResponse({ ok: false, error: `Too many attempts - try again in ${waitSec}s` }, 429);
     }
 
-    const candidateHash = await sha256Hex(doc.salt + pin);
-    if (candidateHash === doc.hash) {
-      if (doc.failedAttempts || doc.lockedUntil) {
-        await firestoreSetDoc(accessToken, projectId, "agency/idleLockPin", { ...doc, failedAttempts: 0, lockedUntil: null });
+    const candidateHash = await sha256Hex(entry.salt + pin);
+    if (candidateHash === entry.hash) {
+      if (entry.failedAttempts || entry.lockedUntil) {
+        doc[emailKey] = { ...entry, failedAttempts: 0, lockedUntil: null };
+        await firestoreSetDoc(accessToken, projectId, "agency/idleLockPins", doc);
       }
       return jsonResponse({ ok: true });
     }
 
-    const failedAttempts = (doc.failedAttempts || 0) + 1;
+    const failedAttempts = (entry.failedAttempts || 0) + 1;
     const lockedUntil = failedAttempts >= 5 ? new Date(Date.now() + 60000).toISOString() : null;
-    await firestoreSetDoc(accessToken, projectId, "agency/idleLockPin", {
-      ...doc,
-      failedAttempts: lockedUntil ? 0 : failedAttempts,
-      lockedUntil
-    });
+    doc[emailKey] = { ...entry, failedAttempts: lockedUntil ? 0 : failedAttempts, lockedUntil };
+    await firestoreSetDoc(accessToken, projectId, "agency/idleLockPins", doc);
     return jsonResponse({
       ok: false,
       error: lockedUntil ? "Too many attempts - try again in 60s" : "Wrong PIN"

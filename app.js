@@ -194,19 +194,42 @@ function attachIdleListeners(doc) {
   }
 }
 
-// Shows the lock overlay AND figures out which form to present - PIN
-// entry if the team already has one set up, or the one-time setup form
-// if not (see handleIdleLockStatus in _worker.js). Defaults to the PIN
-// form on a status-check failure (offline, etc.) rather than silently
-// falling back to the old click-to-unlock behavior - a broken network
-// check shouldn't become a security hole.
+// Shared by the sidebar PIN button (hide it for non-admins) - see
+// agency/teamAccess.hubAdmins, the same list Team Access Manager and
+// Team Roster's Contractor Documents gate already use. Defaults to just
+// the founder account if the doc has never been saved with a hubAdmins
+// field.
+function checkIsHubAdmin() {
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return Promise.resolve(false);
+  const ref = window.firebaseDoc(window.firebaseDb, "agency", "teamAccess");
+  return window.firebaseGetDoc(ref).then((snap) => {
+    const data = snap && snap.exists ? snap.data() : null;
+    const hubAdmins = (data && Array.isArray(data.hubAdmins)) ? data.hubAdmins : ["admin@revitalproductions.com"];
+    const currentEmail = (window.currentAdminEmail || "").toLowerCase();
+    return !!(currentEmail && hubAdmins.map(e => (e || "").toLowerCase()).includes(currentEmail));
+  }).catch((e) => {
+    console.warn("Couldn't determine Hub Admin status:", e);
+    return false;
+  });
+}
+
+// Shows the lock overlay and checks whether THE CALLER (not the team as
+// a whole - PINs are per-person now) has their own PIN set up yet (see
+// handleIdleLockStatus in _worker.js). If not, there's no self-serve
+// path anymore - PINs are generated for people by a Hub Admin (see
+// Team PINs panel below), never typed in by the person themselves - so
+// this just explains what to do instead. Reloading the page still gets
+// someone back in for now (the lock is a client-side convenience, not a
+// hard barrier) until an admin generates them a real PIN. Defaults to
+// the PIN form on a status-check failure (offline, etc.) rather than
+// silently falling back to the old click-to-unlock behavior - a broken
+// network check shouldn't become a security hole.
 async function showIdleLockOverlay() {
   idleLocked = true;
   const overlay = document.getElementById("idleLockOverlay");
   const errorEl = document.getElementById("idleLockError");
   const statusEl = document.getElementById("idleLockStatus");
   const pinForm = document.getElementById("idleLockPinForm");
-  const setupForm = document.getElementById("idleLockSetupForm");
   if (errorEl) errorEl.style.display = "none";
   if (statusEl) statusEl.textContent = "You've been idle for a while. Client data is hidden until you unlock.";
   if (overlay) overlay.style.display = "flex";
@@ -220,18 +243,22 @@ async function showIdleLockOverlay() {
     hasPin = true;
   }
 
-  if (pinForm) pinForm.style.display = hasPin ? "flex" : "none";
-  if (setupForm) setupForm.style.display = hasPin ? "none" : "flex";
-  const focusInput = document.getElementById(hasPin ? "idleLockPinInput" : "idleLockSetupPinInput");
+  if (!hasPin) {
+    if (pinForm) pinForm.style.display = "none";
+    if (statusEl) statusEl.textContent = "You don't have a PIN yet. Ask a Hub Admin to generate one for you from the Team PINs panel (key icon in the sidebar), then come back to unlock.";
+    return;
+  }
+
+  if (pinForm) pinForm.style.display = "flex";
+  const focusInput = document.getElementById("idleLockPinInput");
   if (focusInput) focusInput.focus();
 }
 
-// Runs after the PIN itself checks out (either just-entered or
-// just-created) - re-confirms the browser's Cloudflare Access session is
-// still the same signed-in teammate, same as the original click-to-unlock
-// behavior. The PIN stops a random person from getting past the overlay;
-// this second check still catches a genuinely expired/switched Access
-// session.
+// Runs after the PIN itself checks out - re-confirms the browser's
+// Cloudflare Access session is still the same signed-in teammate, same
+// as the original click-to-unlock behavior. The PIN stops a random
+// person from getting past the overlay; this second check still catches
+// a genuinely expired/switched Access session.
 async function finishIdleUnlockAfterPin() {
   const statusEl = document.getElementById("idleLockStatus");
   if (statusEl) statusEl.textContent = "Checking your session...";
@@ -296,109 +323,139 @@ async function attemptIdleUnlock(pin) {
   }
 }
 
-async function attemptIdleSetupAndUnlock(pin, confirmPin) {
-  const errorEl = document.getElementById("idleLockError");
-  const setupBtn = document.getElementById("idleLockSetupBtn");
-  if (errorEl) errorEl.style.display = "none";
+// ── Team PINs panel ── (Hub-Admin only, reachable any time via the
+// sidebar key icon - see teamPinsBtn in index.html.) Lists everyone from
+// agency/teamActivity (anyone who's ever signed in) plus anyone
+// pre-added by email, each with a Generate/Regenerate button. A
+// generated PIN is shown once, inline in that person's row, right after
+// creation - see handleIdleLockGeneratePin in _worker.js.
+let teamPinsPeople = [];
 
-  if (!/^\d{4,8}$/.test(pin)) {
-    if (errorEl) { errorEl.textContent = "PIN must be 4-8 digits."; errorEl.style.display = "block"; }
-    return;
-  }
-  if (pin !== confirmPin) {
-    if (errorEl) { errorEl.textContent = "PINs don't match."; errorEl.style.display = "block"; }
-    return;
-  }
-
-  if (setupBtn) setupBtn.disabled = true;
-  try {
-    const res = await fetch("/api/idle-lock/set-pin", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ pin })
-    });
-    const data = await res.json();
-    if (!res.ok || !data.ok) {
-      if (errorEl) { errorEl.textContent = (data && data.error) || "Couldn't save PIN."; errorEl.style.display = "block"; }
-      return;
-    }
-    await finishIdleUnlockAfterPin();
-  } catch (e) {
-    if (errorEl) { errorEl.textContent = "Check your connection and try again."; errorEl.style.display = "block"; }
-  } finally {
-    if (setupBtn) setupBtn.disabled = false;
-  }
-}
-
-// ── Change Team PIN modal ── (reachable any time via the sidebar key
-// icon, not just from the lock screen - see changePinBtn in index.html.)
-function openChangePinModal() {
-  const modal = document.getElementById("changePinModal");
-  const statusEl = document.getElementById("changePinStatus");
-  const errorEl = document.getElementById("changePinError");
-  const newInput = document.getElementById("changePinNewInput");
-  const confirmInput = document.getElementById("changePinConfirmInput");
+function openTeamPinsModal() {
+  const modal = document.getElementById("teamPinsModal");
+  const errorEl = document.getElementById("teamPinsError");
+  const newEmailInput = document.getElementById("teamPinsNewEmail");
   if (!modal) return;
   if (errorEl) errorEl.style.display = "none";
-  if (newInput) newInput.value = "";
-  if (confirmInput) confirmInput.value = "";
-  if (statusEl) statusEl.textContent = "Loading...";
+  if (newEmailInput) newEmailInput.value = "";
   modal.style.display = "flex";
-
-  fetch("/api/idle-lock/status", { credentials: "include" })
-    .then(res => res.json())
-    .then(data => {
-      if (statusEl) {
-        statusEl.textContent = data && data.hasPin
-          ? "A team PIN is already set. Enter a new one below to change it for everyone."
-          : "No team PIN is set up yet. Create one below.";
-      }
-    })
-    .catch(() => { if (statusEl) statusEl.textContent = "Set a PIN below."; });
+  loadTeamPinsList();
 }
 
-function closeChangePinModal() {
-  const modal = document.getElementById("changePinModal");
+function closeTeamPinsModal() {
+  const modal = document.getElementById("teamPinsModal");
   if (modal) modal.style.display = "none";
 }
 
-async function saveChangedPin() {
-  const errorEl = document.getElementById("changePinError");
-  const saveBtn = document.getElementById("changePinSaveBtn");
-  const pin = (document.getElementById("changePinNewInput") || {}).value || "";
-  const confirmPin = (document.getElementById("changePinConfirmInput") || {}).value || "";
-  if (errorEl) errorEl.style.display = "none";
-
-  if (!/^\d{4,8}$/.test(pin)) {
-    if (errorEl) { errorEl.textContent = "PIN must be 4-8 digits."; errorEl.style.display = "block"; }
-    return;
-  }
-  if (pin !== confirmPin) {
-    if (errorEl) { errorEl.textContent = "PINs don't match."; errorEl.style.display = "block"; }
-    return;
-  }
-
-  if (saveBtn) saveBtn.disabled = true;
+async function loadTeamPinsList() {
+  const listEl = document.getElementById("teamPinsList");
+  const errorEl = document.getElementById("teamPinsError");
+  if (listEl) listEl.innerHTML = `<p style="margin:0; font-size:13px; color:#9ca3af;">Loading...</p>`;
   try {
-    const res = await fetch("/api/idle-lock/set-pin", {
+    const res = await fetch("/api/idle-lock/people", { credentials: "include" });
+    const data = await res.json();
+    if (!res.ok) throw new Error((data && data.error) || "Couldn't load the list");
+    teamPinsPeople = data.people || [];
+    renderTeamPinsList();
+  } catch (e) {
+    if (errorEl) { errorEl.textContent = e.message; errorEl.style.display = "block"; }
+    if (listEl) listEl.innerHTML = "";
+  }
+}
+
+function renderTeamPinsList() {
+  const listEl = document.getElementById("teamPinsList");
+  if (!listEl) return;
+  if (!teamPinsPeople.length) {
+    listEl.innerHTML = `<p style="margin:0; font-size:13px; color:#9ca3af;">Nobody yet - add a teammate's email above, or wait for them to sign in once.</p>`;
+    return;
+  }
+  listEl.innerHTML = teamPinsPeople.map(p => `
+    <div class="team-pins-row" style="display:flex; align-items:center; gap:8px; padding:8px; border:1px solid #374151; border-radius:8px;">
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtmlForPins(p.email)}</div>
+        <div style="font-size:11px; color:${p.hasPin ? '#10b981' : '#9ca3af'};">${p.hasPin ? 'PIN set' : 'No PIN yet'}</div>
+      </div>
+      <button type="button" class="team-pins-generate-btn" data-email="${escapeHtmlForPins(p.email)}" style="padding:6px 10px; border-radius:6px; border:none; background:#10b981; color:#04120c; font-weight:600; font-size:12px; cursor:pointer; white-space:nowrap;">${p.hasPin ? 'Regenerate' : 'Generate'}</button>
+      ${p.hasPin ? `<button type="button" class="team-pins-remove-btn" data-email="${escapeHtmlForPins(p.email)}" style="padding:6px 10px; border-radius:6px; border:1px solid #374151; background:transparent; color:#e5e7eb; font-size:12px; cursor:pointer; white-space:nowrap;">Remove</button>` : ''}
+    </div>
+  `).join("");
+
+  listEl.querySelectorAll(".team-pins-generate-btn").forEach(btn => {
+    btn.addEventListener("click", () => generateTeamPin(btn.getAttribute("data-email"), btn));
+  });
+  listEl.querySelectorAll(".team-pins-remove-btn").forEach(btn => {
+    btn.addEventListener("click", () => removeTeamPin(btn.getAttribute("data-email")));
+  });
+}
+
+function escapeHtmlForPins(s) {
+  return (s || "").toString().replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function generateTeamPin(email, btn) {
+  const errorEl = document.getElementById("teamPinsError");
+  if (errorEl) errorEl.style.display = "none";
+  if (btn) { btn.disabled = true; btn.textContent = "..."; }
+  try {
+    const res = await fetch("/api/idle-lock/generate-pin", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ pin })
+      body: JSON.stringify({ email })
     });
     const data = await res.json();
-    if (!res.ok || !data.ok) {
-      if (errorEl) { errorEl.textContent = (data && data.error) || "Couldn't save PIN."; errorEl.style.display = "block"; }
-      return;
+    if (!res.ok || !data.ok) throw new Error((data && data.error) || "Couldn't generate a PIN");
+
+    // Show the plaintext PIN once, inline, right in that person's row -
+    // it's never retrievable again after this.
+    const row = btn ? btn.closest(".team-pins-row") : null;
+    if (row) {
+      row.innerHTML = `<div style="flex:1; font-size:13px;"><strong>${escapeHtmlForPins(email)}</strong><br><span style="font-size:20px; letter-spacing:3px; color:#10b981; font-weight:700;">${escapeHtmlForPins(data.pin)}</span><br><span style="font-size:11px; color:#9ca3af;">Copy this now - it won't be shown again.</span></div>`;
     }
-    closeChangePinModal();
-    if (typeof showBanner === "function") showBanner("success", "Team idle-lock PIN saved.");
+    await loadTeamPinsList();
+    if (typeof showBanner === "function") showBanner("success", `PIN generated for ${email}.`);
   } catch (e) {
-    if (errorEl) { errorEl.textContent = "Check your connection and try again."; errorEl.style.display = "block"; }
-  } finally {
-    if (saveBtn) saveBtn.disabled = false;
+    if (errorEl) { errorEl.textContent = e.message; errorEl.style.display = "block"; }
+    if (btn) { btn.disabled = false; btn.textContent = "Generate"; }
   }
+}
+
+async function removeTeamPin(email) {
+  if (!confirm(`Remove ${email}'s PIN? They won't be able to unlock until an admin generates them a new one.`)) return;
+  const errorEl = document.getElementById("teamPinsError");
+  if (errorEl) errorEl.style.display = "none";
+  try {
+    const res = await fetch("/api/idle-lock/remove-pin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error((data && data.error) || "Couldn't remove PIN");
+    await loadTeamPinsList();
+  } catch (e) {
+    if (errorEl) { errorEl.textContent = e.message; errorEl.style.display = "block"; }
+  }
+}
+
+function addTeamPinsPerson() {
+  const input = document.getElementById("teamPinsNewEmail");
+  const errorEl = document.getElementById("teamPinsError");
+  const email = (input && input.value || "").trim().toLowerCase();
+  if (errorEl) errorEl.style.display = "none";
+  if (!email || !email.includes("@")) {
+    if (errorEl) { errorEl.textContent = "Enter a valid email first."; errorEl.style.display = "block"; }
+    return;
+  }
+  if (teamPinsPeople.some(p => p.email === email)) {
+    if (input) input.value = "";
+    return;
+  }
+  teamPinsPeople = [...teamPinsPeople, { email, lastSeen: null, hasPin: false }].sort((a, b) => a.email.localeCompare(b.email));
+  renderTeamPinsList();
+  if (input) input.value = "";
 }
 
 function initIdleSessionLock() {
@@ -414,22 +471,16 @@ function initIdleSessionLock() {
     });
   }
 
-  const setupForm = document.getElementById("idleLockSetupForm");
-  if (setupForm) {
-    setupForm.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const pinInput = document.getElementById("idleLockSetupPinInput");
-      const confirmInput = document.getElementById("idleLockSetupPinConfirmInput");
-      attemptIdleSetupAndUnlock(pinInput ? pinInput.value : "", confirmInput ? confirmInput.value : "");
-    });
+  const pinsBtn = document.getElementById("teamPinsBtn");
+  if (pinsBtn) {
+    pinsBtn.addEventListener("click", openTeamPinsModal);
+    pinsBtn.style.display = "none"; // hidden until checkIsHubAdmin confirms admin status
+    checkIsHubAdmin().then((isAdmin) => { pinsBtn.style.display = isAdmin ? "" : "none"; });
   }
-
-  const changeBtn = document.getElementById("changePinBtn");
-  if (changeBtn) changeBtn.addEventListener("click", openChangePinModal);
-  const cancelBtn = document.getElementById("changePinCancelBtn");
-  if (cancelBtn) cancelBtn.addEventListener("click", closeChangePinModal);
-  const saveBtn = document.getElementById("changePinSaveBtn");
-  if (saveBtn) saveBtn.addEventListener("click", saveChangedPin);
+  const closeBtn = document.getElementById("teamPinsCloseBtn");
+  if (closeBtn) closeBtn.addEventListener("click", closeTeamPinsModal);
+  const addBtn = document.getElementById("teamPinsAddBtn");
+  if (addBtn) addBtn.addEventListener("click", addTeamPinsPerson);
 }
 
 // Records a lightweight "last seen in the Hub" timestamp per teammate,
