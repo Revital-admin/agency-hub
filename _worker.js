@@ -782,35 +782,69 @@ async function handleContractsBackupRestore(request, env) {
 //      generate an RSA keypair for it (Service Integration section).
 //   2. Grant consent once by visiting, in a browser:
 //      https://account-d.docusign.com/oauth/auth?response_type=code&scope=signature%20impersonation&client_id=YOUR_INTEGRATION_KEY&redirect_uri=YOUR_REGISTERED_REDIRECT_URI
+//      (swap account-d.docusign.com for account.docusign.com to grant consent
+//      against the production account once Go-Live is approved.)
 //      and clicking Allow.
-//   3. Set four secrets:
+//   3. Test-mode secrets (sandbox - already set, points at demo.docusign.net):
 //        wrangler secret put DOCUSIGN_INTEGRATION_KEY
 //        wrangler secret put DOCUSIGN_USER_ID          (API Username GUID, not the Account ID)
 //        wrangler secret put DOCUSIGN_ACCOUNT_ID
 //        wrangler secret put DOCUSIGN_PRIVATE_KEY      (the RSA private key from step 1, full PEM)
+//   4. Live-mode secrets (production account, only exist once Go-Live is
+//      approved - same four values, from the production Apps and Keys page,
+//      under the _LIVE names):
+//        wrangler secret put DOCUSIGN_INTEGRATION_KEY_LIVE
+//        wrangler secret put DOCUSIGN_USER_ID_LIVE
+//        wrangler secret put DOCUSIGN_ACCOUNT_ID_LIVE
+//        wrangler secret put DOCUSIGN_PRIVATE_KEY_LIVE
 //
-// NOTE: hardcoded to the sandbox/demo endpoints (account-d.docusign.com /
-// demo.docusign.net). Going to production means switching both hosts to
-// account.docusign.com and fetching the real per-account base_uri from
-// account.docusign.com/oauth/userinfo instead of assuming demo.docusign.net -
-// production accounts live on different regional hosts.
-const DOCUSIGN_AUTH_HOST = "account-d.docusign.com";
-const DOCUSIGN_API_BASE = "https://demo.docusign.net/restapi/v2.1";
+// Test/live split mirrors the Stripe pattern elsewhere in this file
+// (STRIPE_SECRET_KEY vs STRIPE_SECRET_KEY_LIVE, gated by a `mode` the
+// frontend sends): `docusignMode` below is "test" unless the request
+// explicitly says "live", so a missing/blank mode always falls back to
+// the safe sandbox path. Test mode stays hardcoded to the fixed demo
+// host/API base below. Live mode can't be hardcoded the same way -
+// production accounts live on different regional data centers (na1,
+// na2, na3, eu, ...) - so getDocusignAccessToken looks it up once per
+// request via account.docusign.com/oauth/userinfo, per Docusign's own
+// Go-Live docs (https://developers.docusign.com/docs/esign-rest-api/go-live/).
+const DOCUSIGN_TEST_AUTH_HOST = "account-d.docusign.com";
+const DOCUSIGN_TEST_API_BASE = "https://demo.docusign.net/restapi/v2.1";
+const DOCUSIGN_LIVE_AUTH_HOST = "account.docusign.com";
 
-async function createDocusignJWT(env) {
+function docusignSecretsFor(env, mode) {
+  if (mode === "live") {
+    return {
+      integrationKey: env.DOCUSIGN_INTEGRATION_KEY_LIVE,
+      userId: env.DOCUSIGN_USER_ID_LIVE,
+      accountId: env.DOCUSIGN_ACCOUNT_ID_LIVE,
+      privateKey: env.DOCUSIGN_PRIVATE_KEY_LIVE
+    };
+  }
+  return {
+    integrationKey: env.DOCUSIGN_INTEGRATION_KEY,
+    userId: env.DOCUSIGN_USER_ID,
+    accountId: env.DOCUSIGN_ACCOUNT_ID,
+    privateKey: env.DOCUSIGN_PRIVATE_KEY
+  };
+}
+
+async function createDocusignJWT(env, mode) {
+  const authHost = mode === "live" ? DOCUSIGN_LIVE_AUTH_HOST : DOCUSIGN_TEST_AUTH_HOST;
+  const secrets = docusignSecretsFor(env, mode);
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: "RS256", typ: "JWT" };
   const payload = {
-    iss: env.DOCUSIGN_INTEGRATION_KEY,
-    sub: env.DOCUSIGN_USER_ID,
-    aud: DOCUSIGN_AUTH_HOST,
+    iss: secrets.integrationKey,
+    sub: secrets.userId,
+    aud: authHost,
     iat: now,
     exp: now + 3600,
     scope: "signature impersonation"
   };
 
   const unsigned = `${base64urlStr(JSON.stringify(header))}.${base64urlStr(JSON.stringify(payload))}`;
-  const key = await importPrivateKeyFlexible(env.DOCUSIGN_PRIVATE_KEY);
+  const key = await importPrivateKeyFlexible(secrets.privateKey);
   const signature = await crypto.subtle.sign(
     { name: "RSASSA-PKCS1-v1_5" },
     key,
@@ -819,9 +853,14 @@ async function createDocusignJWT(env) {
   return `${unsigned}.${base64url(signature)}`;
 }
 
-async function getDocusignAccessToken(env) {
-  const assertion = await createDocusignJWT(env);
-  const res = await fetch(`https://${DOCUSIGN_AUTH_HOST}/oauth/token`, {
+// Returns { accessToken, apiBase }. Test mode's apiBase is the fixed demo
+// host. Live mode calls /oauth/userinfo once to find this account's actual
+// base_uri (its regional data center) and derives apiBase from that -
+// Docusign explicitly warns against assuming a fixed production host.
+async function getDocusignAccessToken(env, mode) {
+  const authHost = mode === "live" ? DOCUSIGN_LIVE_AUTH_HOST : DOCUSIGN_TEST_AUTH_HOST;
+  const assertion = await createDocusignJWT(env, mode);
+  const res = await fetch(`https://${authHost}/oauth/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -833,11 +872,28 @@ async function getDocusignAccessToken(env) {
   if (!res.ok) {
     let msg = data.error_description || data.error || `Docusign auth failed (${res.status})`;
     if (data.error === "consent_required") {
-      msg += " - consent hasn't been granted yet; see the one-time consent URL in this file's header comment.";
+      msg += ` - consent hasn't been granted yet for ${mode} mode; see the one-time consent URL in this file's header comment.`;
     }
     throw new Error(msg);
   }
-  return data.access_token;
+
+  if (mode !== "live") {
+    return { accessToken: data.access_token, apiBase: DOCUSIGN_TEST_API_BASE };
+  }
+
+  const accountId = docusignSecretsFor(env, mode).accountId;
+  const userInfoRes = await fetch(`https://${authHost}/oauth/userinfo`, {
+    headers: { "Authorization": `Bearer ${data.access_token}` }
+  });
+  const userInfo = await userInfoRes.json().catch(() => ({}));
+  if (!userInfoRes.ok) {
+    throw new Error(userInfo.error_description || userInfo.error || `Docusign userinfo lookup failed (${userInfoRes.status})`);
+  }
+  const account = (userInfo.accounts || []).find(a => a.account_id === accountId) || (userInfo.accounts || [])[0];
+  if (!account || !account.base_uri) {
+    throw new Error("Docusign userinfo response didn't include a base_uri for the live account");
+  }
+  return { accessToken: data.access_token, apiBase: `${account.base_uri}/restapi/v2.1` };
 }
 
 async function handleDocusignSendEnvelope(request, env) {
@@ -847,15 +903,21 @@ async function handleDocusignSendEnvelope(request, env) {
   if (!isContractRequestAuthorized(request)) {
     return jsonResponse({ error: "Not authorized" }, 403);
   }
-  if (!env.DOCUSIGN_INTEGRATION_KEY || !env.DOCUSIGN_USER_ID || !env.DOCUSIGN_PRIVATE_KEY || !env.DOCUSIGN_ACCOUNT_ID) {
-    return jsonResponse({ error: "Server missing Docusign secrets - set DOCUSIGN_INTEGRATION_KEY, DOCUSIGN_USER_ID, DOCUSIGN_ACCOUNT_ID, and DOCUSIGN_PRIVATE_KEY" }, 500);
-  }
 
   let payload;
   try {
     payload = await request.json();
   } catch (e) {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+
+  // Same safe-by-default pattern as Stripe's billingMode: anything other
+  // than an explicit "live" falls back to the sandbox.
+  const docusignMode = payload && payload.docusignMode === "live" ? "live" : "test";
+  const requiredSecrets = docusignSecretsFor(env, docusignMode);
+  if (!requiredSecrets.integrationKey || !requiredSecrets.userId || !requiredSecrets.privateKey || !requiredSecrets.accountId) {
+    const suffix = docusignMode === "live" ? "_LIVE" : "";
+    return jsonResponse({ error: `Server missing Docusign ${docusignMode}-mode secrets - set DOCUSIGN_INTEGRATION_KEY${suffix}, DOCUSIGN_USER_ID${suffix}, DOCUSIGN_ACCOUNT_ID${suffix}, and DOCUSIGN_PRIVATE_KEY${suffix}` }, 500);
   }
 
   const { templateId, templateRoleName, signerName, signerEmail, emailSubject, documents, fieldValues, blankFields, blankCheckboxFields } = payload || {};
@@ -934,11 +996,13 @@ async function handleDocusignSendEnvelope(request, env) {
     }
   }
 
-  let accessToken;
+  let accessToken, docusignApiBase;
   try {
-    accessToken = await getDocusignAccessToken(env);
+    const tokenResult = await getDocusignAccessToken(env, docusignMode);
+    accessToken = tokenResult.accessToken;
+    docusignApiBase = tokenResult.apiBase;
   } catch (e) {
-    console.error("Docusign authentication failed:", e);
+    console.error(`Docusign authentication failed (${docusignMode} mode):`, e);
     return jsonResponse({ error: "Docusign authentication failed: " + e.message }, 502);
   }
 
@@ -1008,7 +1072,7 @@ async function handleDocusignSendEnvelope(request, env) {
   }
 
   try {
-    const dsRes = await fetch(`${DOCUSIGN_API_BASE}/accounts/${env.DOCUSIGN_ACCOUNT_ID}/envelopes`, {
+    const dsRes = await fetch(`${docusignApiBase}/accounts/${requiredSecrets.accountId}/envelopes`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${accessToken}`,
@@ -1019,13 +1083,13 @@ async function handleDocusignSendEnvelope(request, env) {
     const dsData = await dsRes.json().catch(() => ({}));
 
     if (!dsRes.ok) {
-      console.error("Docusign envelope creation failed:", dsRes.status, dsData);
+      console.error(`Docusign envelope creation failed (${docusignMode} mode):`, dsRes.status, dsData);
       return jsonResponse({ error: dsData.message || "Docusign API error", details: dsData }, 502);
     }
 
-    return jsonResponse({ success: true, envelopeId: dsData.envelopeId, status: dsData.status }, 200, { "Cache-Control": "no-store" });
+    return jsonResponse({ success: true, envelopeId: dsData.envelopeId, status: dsData.status, mode: docusignMode }, 200, { "Cache-Control": "no-store" });
   } catch (e) {
-    console.error("Docusign envelope request failed:", e);
+    console.error(`Docusign envelope request failed (${docusignMode} mode):`, e);
     return jsonResponse({ error: "Request to Docusign failed: " + e.message }, 500);
   }
 }
@@ -1124,7 +1188,7 @@ const BOOKING_ROSTER = [
   { id: "ronald", name: "Ronald", title: "Founder", email: "admin@revitalproductions.com" }
 ];
 
-const BOOKING_TIMEZONE = "America/New_York"; // business hours below are in this zone; change if the team isn't Eastern
+const BOOKING_TIMEZONE = "America/Chicago"; // Central - Revital's actual business hours (confirmed Aug 2026; was incorrectly hardcoded to America/New_York before)
 const BOOKING_DAY_START_HOUR = 9;  // 9am local, 24h clock
 const BOOKING_DAY_END_HOUR = 17;   // 5pm local
 const BOOKING_SLOT_MINUTES = 30;
@@ -1500,7 +1564,7 @@ function escapeHtmlServer(str) {
 // account doesn't have.
 const TEAM_CALENDAR_OWNER_EMAIL = "admin@revitalproductions.com";
 const TEAM_CALENDAR_SUMMARY = "Revital Team Out";
-const TEAM_CALENDAR_TIMEZONE = "America/New_York";
+const TEAM_CALENDAR_TIMEZONE = "America/Chicago"; // Central - matches the calendar's own Calendar Settings timezone (fixed Aug 2026; was America/New_York)
 
 // Google Calendar all-day events use an EXCLUSIVE end date (a single-day
 // event's end.date is the day AFTER it, not the day itself) - this
@@ -2555,6 +2619,19 @@ async function handleCreateSubscriptionCheckout(request, env) {
     params.append(`line_items[${lineIndex}][price_data][unit_amount]`, String(setupCents));
     params.append(`line_items[${lineIndex}][quantity]`, "1");
     lineIndex++;
+  }
+
+  // Real invoice document, not just a bare payment receipt (Aug 2026).
+  // For mode:"subscription" (recurring/combined) Stripe always generates
+  // a proper invoice per billing cycle on its own - no param needed here.
+  // For mode:"payment" (one_time) that's opt-in, so turn it on explicitly
+  // or a one-time charge would only produce a plain receipt. Whether
+  // Stripe actually EMAILS the invoice to the client is a Stripe Dashboard
+  // setting (Settings -> Billing -> Invoice/Emails -> "Email customers
+  // about finalized invoices"), not something this route controls -
+  // confirm that's on for both the test and live Stripe accounts.
+  if (billingType === "one_time") {
+    params.append("invoice_creation[enabled]", "true");
   }
 
   params.append("success_url", "https://book.revitalproductions.com/billing-success/");

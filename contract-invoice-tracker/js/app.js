@@ -1462,6 +1462,8 @@ const sendContractGmailBtn = el('sendContractGmailBtn');
 const sendContractCopyBtn = el('sendContractCopyBtn');
 const sendContractSendBtn = el('sendContractSendBtn');
 const sendContractDocusignBtn = el('sendContractDocusignBtn');
+const sendContractDocusignLiveToggleWrap = el('sendContractDocusignLiveToggleWrap');
+const sendContractDocusignLiveToggle = el('sendContractDocusignLiveToggle');
 const sendContractStatus = el('sendContractStatus');
 const sendContractCloseBtn = el('sendContractCloseBtn');
 
@@ -1493,6 +1495,9 @@ function updateDocusignButtonVisibility() {
   sendContractDocusignBtn.style.display = hasDocusign ? 'flex' : 'none';
   sendContractDocusignBtn.disabled = false;
   sendContractDocusignBtn.textContent = 'Send for E-Signature (DocuSign)';
+  if (sendContractDocusignLiveToggleWrap) {
+    sendContractDocusignLiveToggleWrap.style.display = hasDocusign ? 'inline-flex' : 'none';
+  }
 }
 
 let currentContractContext = null; // { record, from }
@@ -1863,6 +1868,18 @@ if (sendContractDocusignBtn) {
     const allAnchorEligible = templates.every(t => t.docusignAnchorTags);
     if (!soloMsa && !allAnchorEligible) return;
 
+    // Same test/live pattern as the billing-live-toggle: off by default
+    // (sandbox), and flipping it to Live gets a confirm() before anything
+    // real goes out, same as the Stripe live-billing-link toggle does.
+    const docusignMode = sendContractDocusignLiveToggle && sendContractDocusignLiveToggle.checked ? 'live' : 'test';
+    if (docusignMode === 'live') {
+      const recipientLabel = currentContractContext && currentContractContext.record
+        ? (currentContractContext.contactName || currentContractContext.record.clientName)
+        : (sendContractTo.value.trim() || 'this recipient');
+      const confirmed = confirm(`This sends a LIVE, legally-binding Docusign envelope to ${recipientLabel}. Continue?`);
+      if (!confirmed) return;
+    }
+
     // The combined-documents path (everything except the MSA's solo
     // Docusign-Template send) has fill-in-the-blank fields baked in as
     // invisible anchors (Client Name, Effective Date, fees, etc - see
@@ -1873,15 +1890,15 @@ if (sendContractDocusignBtn) {
     if (!soloMsa) {
       const fields = getMergedContractFields(templates);
       if (fields.length) {
-        openContractFieldFillPanel(fields, templates, soloMsa);
+        openContractFieldFillPanel(fields, templates, soloMsa, docusignMode);
         return;
       }
     }
-    await performDocusignSend(templates, soloMsa, {});
+    await performDocusignSend(templates, soloMsa, {}, docusignMode);
   });
 }
 
-function openContractFieldFillPanel(fields, templates, soloMsa) {
+function openContractFieldFillPanel(fields, templates, soloMsa, docusignMode) {
   const panel = el('contractFieldFillPanel');
   const container = el('contractFieldFillFields');
   const continueBtn = el('contractFieldFillContinueBtn');
@@ -1889,7 +1906,7 @@ function openContractFieldFillPanel(fields, templates, soloMsa) {
   if (!panel || !container || !continueBtn || !closeBtn) {
     // Panel markup missing for some reason - fall back to sending with no
     // field values rather than silently blocking the send entirely.
-    performDocusignSend(templates, soloMsa, {});
+    performDocusignSend(templates, soloMsa, {}, docusignMode);
     return;
   }
   const { record } = currentContractContext || {};
@@ -1916,7 +1933,7 @@ function openContractFieldFillPanel(fields, templates, soloMsa) {
     });
     panel.style.display = 'none';
     cleanup();
-    await performDocusignSend(templates, soloMsa, fieldValues);
+    await performDocusignSend(templates, soloMsa, fieldValues, docusignMode);
   }
   function onClose() {
     panel.style.display = 'none';
@@ -1926,10 +1943,12 @@ function openContractFieldFillPanel(fields, templates, soloMsa) {
   closeBtn.addEventListener('click', onClose);
 }
 
-async function performDocusignSend(templates, soloMsa, fieldValues) {
+async function performDocusignSend(templates, soloMsa, fieldValues, docusignMode) {
   const { record, contactName } = currentContractContext;
   const recipientLabel = record ? (contactName || record.clientName) : ((sendContractRecipientName && sendContractRecipientName.value.trim()) || sendContractTo.value.trim());
   const labelList = templates.map(t => t.label).join(', ');
+  const mode = docusignMode === 'live' ? 'live' : 'test';
+  const modeTag = mode === 'live' ? '' : '[TEST] ';
 
   sendContractDocusignBtn.disabled = true;
   sendContractDocusignBtn.textContent = templates.length > 1 ? 'Preparing documents...' : 'Sending for signature...';
@@ -1946,7 +1965,8 @@ async function performDocusignSend(templates, soloMsa, fieldValues) {
           templateRoleName: templates[0].docusignRoleName,
           signerName: recipientLabel,
           signerEmail: sendContractTo.value,
-          emailSubject: sendContractSubject.value
+          emailSubject: sendContractSubject.value,
+          docusignMode: mode
         })
       });
     } else {
@@ -1965,7 +1985,8 @@ async function performDocusignSend(templates, soloMsa, fieldValues) {
           signerName: recipientLabel,
           signerEmail: sendContractTo.value,
           emailSubject: sendContractSubject.value,
-          fieldValues
+          fieldValues,
+          docusignMode: mode
         })
       });
     }
@@ -1977,7 +1998,7 @@ async function performDocusignSend(templates, soloMsa, fieldValues) {
 
     sendContractDocusignBtn.textContent = 'Sent ✓';
     if (sendContractStatus) {
-      sendContractStatus.textContent = `Sent for e-signature via Docusign (envelope ${data.envelopeId}) - ${labelList}.`;
+      sendContractStatus.textContent = `${modeTag}Sent for e-signature via Docusign (envelope ${data.envelopeId}) - ${labelList}.`;
       sendContractStatus.style.color = 'var(--color-success, #10b981)';
     }
 
@@ -1991,10 +2012,10 @@ async function performDocusignSend(templates, soloMsa, fieldValues) {
     }
 
     if (isEmbedded && window.parent.logAdminActivity) {
-      window.parent.logAdminActivity('Contract sent for e-signature (Docusign)', recipientLabel);
+      window.parent.logAdminActivity(`${modeTag}Contract sent for e-signature (Docusign)`, recipientLabel);
     }
     if (isEmbedded && window.parent.showBanner) {
-      window.parent.showBanner('success', `${labelList} sent to ${recipientLabel} for e-signature via Docusign.`);
+      window.parent.showBanner('success', `${modeTag}${labelList} sent to ${recipientLabel} for e-signature via Docusign.`);
     }
   } catch (e) {
     console.error('Docusign envelope send failed:', e);

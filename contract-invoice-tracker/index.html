@@ -71,6 +71,10 @@
      for it (see docusignTemplateId in CONTRACT_TEMPLATES, js/app.js) -
      sends a real envelope for e-signature instead of a flat attachment. -->
 <button class="download-pdf-btn" id="sendContractDocusignBtn" type="button" style="padding: 10px 20px; display:none; background: #f68d5f; border-color: #f68d5f;">Send for E-Signature (DocuSign)</button>
+<!-- Off by default (sandbox). Same test/live pattern as the billing-live-toggle
+     above - mirrors DOCUSIGN_INTEGRATION_KEY vs _LIVE in _worker.js. Only
+     matters once Docusign Go-Live is approved and the _LIVE secrets exist. -->
+<label class="billing-mode-toggle" id="sendContractDocusignLiveToggleWrap" style="display:none;"><input type="checkbox" id="sendContractDocusignLiveToggle"> Live</label>
 </div>
 <div id="sendContractStatus" style="font-size: 0.8rem; margin-top: 8px;"></div>
 </div>

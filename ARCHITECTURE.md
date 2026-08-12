@@ -18,17 +18,29 @@ Cloudflare Access (Google SSO, @revitalproductions.com only)
 _worker.js  (Cloudflare Worker — the only backend)
         |
         +--> serves static assets (index.html, app.js, every tool's files)
-        +--> /api/user, /api/mint-firebase-token   (auth bridge)
-        +--> /api/send-email                        (Resend)
-        +--> /api/contracts  (GET/POST/DELETE)       (R2 file storage)
-        +--> /api/docusign/send-envelope             (DocuSign)
+        +--> /api/user, /api/mint-firebase-token     (auth bridge)
+        +--> /api/send-email                          (Resend)
+        +--> /api/contracts  (GET/POST/DELETE)         (R2 file storage)
+        +--> /api/docusign/send-envelope               (DocuSign, test+live modes)
+        +--> /api/billing/create-subscription-checkout (Stripe Checkout)
+        +--> /api/stripe/webhook                       (Stripe, test+live modes)
+        +--> /api/booking/*                            (public Prospect Booking,
+        |                                                Google Calendar via
+        |                                                domain-wide delegation)
+        +--> /api/contractor-portal/*                  (magic-token contractor access)
+        +--> /api/idle-lock/*                          (per-person session-lock PINs)
+        +--> /api/restricted-client-data               (section-level field access)
+        +--> /api/pipeline-sync-clickup                (one-way deal sync to ClickUp)
+        +--> /api/team-roster/sync-time-off,
+        |    /api/resource-booking/sync-calendar        (Google Calendar sync)
+        +--> scheduled()  (Cron Trigger — Weekly Agency Health Digest, no request)
         |
         v
 index.html + app.js  (the "core" — nav shell, client switcher,
                        clientsDb data model, shared Firestore access)
         |
         v
-61 tool directories, each an iframe with its own index.html/css/js,
+82 tool tabs, each an iframe with its own index.html/css/js,
 talking to the core via window.parent.*
         |
         v
@@ -61,7 +73,15 @@ Every client's data across every tool lives in one big in-memory object, `client
 
 - **`/api/contracts`** (POST/GET/DELETE) — R2-backed file storage for the Contract Template Library. POST validates the upload actually looks like a PDF.
 - **`/api/send-email`** — sends real email via Resend, server-side (API key never reaches the browser). Used by at least 8 different tools (Contract Tracker, QBR Generator, Change Order Generator, Client Welcome Guide, Renewal Tracker, Intake Request, Client Portal Manager, plus core `app.js`) — this is the closest thing to a shared "platform capability" outside the data layer, and any tool needing to send mail should call this rather than rolling its own `mailto:`-only flow.
-- **`/api/docusign/send-envelope`** — real e-signature envelopes. Documents (built-ins, uploaded library docs, anything with the baked-in `[[SIG_CLIENT]]`/`[[DATE_CLIENT]]` anchor strings) are anchor-tag agnostic — DocuSign matches the string wherever it appears, so this works the same regardless of which tool produced the PDF.
+- **`/api/docusign/send-envelope`** — real e-signature envelopes. Documents (built-ins, uploaded library docs, anything with the baked-in `[[SIG_CLIENT]]`/`[[DATE_CLIENT]]` anchor strings) are anchor-tag agnostic — DocuSign matches the string wherever it appears, so this works the same regardless of which tool produced the PDF. **Test and live mode run side by side** (added August 2026): `DOCUSIGN_*` secrets are the sandbox pair, `DOCUSIGN_*_LIVE` are production — a Live checkbox in the Contract & Invoice Tracker's send flow picks which one a given request uses, defaulting to test, with a confirm prompt before a live send. Live mode looks up its API base dynamically via `/oauth/userinfo` rather than a hardcoded host, since production Docusign accounts live on different regional data centers.
+- **`/api/billing/create-subscription-checkout`** + **`/api/stripe/webhook`** — real Stripe subscription billing (Checkout Sessions with inline dynamic pricing, not a pre-created Price catalog, since retainers are bespoke per client). Supports three billing shapes (recurring, one-time, combined setup-fee-plus-retainer). **Test and live mode both run permanently** — unlike DocuSign, there's no cutover; a Live checkbox picks the mode per send, and the single webhook URL tries the test signing secret then the live one since Stripe can't say up front which mode an incoming event belongs to. Keeps Contract & Invoice Tracker records in sync (active/paid/past_due/canceled) and emails invoices@ on a failed payment.
+- **`/api/booking/*`** — the public, no-login Prospect Booking page (book.revitalproductions.com), used both for first-touch discovery calls and existing-client meetings booked through the client portal. Checks real Google Calendar availability and creates the event via a service account with domain-wide delegation (`GOOGLE_SERVICE_ACCOUNT_KEY`), re-verifying the slot is still free immediately before booking to close the race window. Business hours are a hardcoded constant (`BOOKING_TIMEZONE`, currently `America/Chicago` — Central, fixed August 2026 after being wrongly set to Eastern). No admin UI yet for the bookable-people list; adding someone requires a code change and redeploy.
+- **`/api/contractor-portal/*`** — magic-token, no-login access for contractors without a Workspace account. The contractor's browser only ever reads `contractorPortal/{token}` and calls these routes; the Worker does the actual read-modify-write against the shared `agency/teamRoster` and `agency/hoursLog` documents server-side, so an anonymous token-holder never gets direct write access to data covering the whole team. Time-off requests land as pending, not auto-approved.
+- **`/api/idle-lock/*`** — per-person PINs (salted hash, never plaintext, admin-generated only) that lock the whole Hub after 20 minutes idle, independent of the underlying Cloudflare Access session — closes the gap where a still-authenticated, unlocked browser was otherwise walk-up accessible.
+- **`/api/restricted-client-data`** — the real per-section enforcement layer for Team Access restrictions. `firestore.rules` can only grant or deny a whole `clientsDb` document, never individual fields, so this endpoint does the actual per-section slicing once a restricted user is routed through it instead of Firestore directly. `CLIENT_FIELD_SECTIONS` here has to stay in sync with `SECTION_DEFS` (`team-access-manager/js/app.js`) and `nonGlobalsSections` (`firestore.rules`) — a field left off this map fails closed (invisible, not leaked) until added.
+- **`/api/pipeline/sync-clickup`** — one-way mirror of Sales Pipeline Board deal creates/stage-changes into ClickUp's own Sales Pipeline list, so that board reflects live state without anyone updating two systems by hand. ClickUp-side edits never flow back; the Hub is authoritative.
+- **`/api/team-roster/sync-time-off`** + **`/api/resource-booking/sync-calendar`** — mirror Team Roster time-off and resource bookings out to Google Calendar (the same domain-wide-delegation service account as Prospect Booking), so who's out/what's booked is visible without opening the Hub.
+- **Weekly Agency Health Digest** (`scheduled()`, Cron Trigger, `[triggers]` in `wrangler.toml`) — no HTTP request involved. Runs every Monday morning, server-side-reimplements the Agency Health Dashboard's own attention logic so the two never disagree, and emails whoever's in `HEALTH_DIGEST_RECIPIENTS` (defaults to admin@ if unset).
 
 ### 6. The `window.parent` API every tool relies on
 
@@ -74,7 +94,7 @@ Set up in `index.html`'s inline `<script>` block, not `app.js`:
 
 ## How a tool works
 
-Each of the 61 tool directories is a self-contained mini-app: its own `index.html`, `css/`, `js/app.js`. The pattern, consistently:
+Each of the 82 tool tabs is a self-contained mini-app: its own `index.html`, `css/`, `js/app.js`. The pattern, consistently:
 
 1. It's loaded into a `<section>`'s iframe by `app.js`'s `renderX()` → `setIframeAbsoluteSrc()`.
 2. It reads the active client via `window.parent.getActiveClient()` (or, for content shared across all clients rather than per-client, reads/writes a doc directly under Firestore's `agency/` collection, bypassing `clientsDb` entirely — the Contract Template Library is the clearest example).
@@ -90,7 +110,7 @@ There's no shared component library beyond CSS (`style.css`, `vars.css`, `shared
 - **`BACKUP_RESTORE_RUNBOOK.md`** — accurate, still current. What Firestore/app-level backups exist, how to verify they're current, and how to restore from one.
 - **`CLOUDFLARE_RATE_LIMITING.md`** — accurate, still current. What's rate-limited on the two unauthenticated public endpoints (Booking, Contractor Portal), why only one has a rule (Cloudflare Free plan's 1-rule-per-zone cap), and what to add once that's lifted.
 - **`Auto-Send Email Integration Plan.md`** — accurate, still current. Marked with a "Status: Implemented" header pointing at the real `/api/send-email` route, kept only as historical rationale for the Resend/vendor choice.
-- **`README.md`** — accurate, still current. Correctly describes the Cloudflare Worker/Firestore/R2/DocuSign stack and points here for the full architecture.
+- **`README.md`** — accurate, still current (updated August 2026 alongside this doc). Describes the full backend integration list (Resend, R2, DocuSign, Stripe, Google Calendar, ClickUp, Contractor Portal, Idle Lock, Health Digest) and points here for the full architecture.
 - ~~`functions/api/user.js`~~ — already deleted; the dead-code note that used to be here no longer applies.
 
 ## Data-duplication audit
