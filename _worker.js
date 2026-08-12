@@ -2334,13 +2334,41 @@ async function handleIdleLockListPeople(request, env) {
   }
 }
 
+// Minimal, self-contained Resend call for server-to-server use (i.e.
+// called directly from another handler, not over HTTP to /api/send-email
+// itself) - mirrors handleSendEmail's actual Resend request exactly, just
+// without that route's attachments/reply-to/multi-recipient handling,
+// which nothing here needs. Kept as its own function rather than
+// refactoring handleSendEmail to share it, so this addition can't
+// regress the existing, already-in-production send-email route.
+async function sendResendEmailDirect(env, { to, subject, body, from }) {
+  const apiKey = env.RESEND_API_KEY;
+  if (!apiKey) return { ok: false, error: "Server missing RESEND_API_KEY secret" };
+  const fromAddress = from || `Revital Productions <hello@${SEND_EMAIL_DOMAIN}>`;
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: fromAddress, to: [to], subject, text: body })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: data.message || "Resend API error" };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
 // ── POST /api/idle-lock/generate-pin ──
 // Body: { email: "juan@revitalproductions.com" }. Hub-Admin only.
 // Generates a random 6-digit PIN server-side (never admin-typed - the
 // whole point is a code nobody chose and nobody but this one response
-// ever sees in plaintext), stores its salted hash, and returns the
-// plaintext PIN once so the admin can hand it to that teammate.
-// Regenerating for someone who already has a PIN silently replaces it.
+// ever sees in plaintext), stores its salted hash, emails it directly to
+// that person (see sendResendEmailDirect above - same Resend service
+// every other Hub email already goes through), and ALSO returns the
+// plaintext PIN in the response so the admin can see/copy it themselves
+// if the email fails or they want it immediately. Regenerating for
+// someone who already has a PIN silently replaces it.
 async function handleIdleLockGeneratePin(request, env) {
   const accessEmail = idleLockRequireAccess(request);
   if (!accessEmail) return jsonResponse({ error: "Not authorized" }, 403);
@@ -2376,7 +2404,14 @@ async function handleIdleLockGeneratePin(request, env) {
       lockedUntil: null
     };
     await firestoreSetDoc(accessToken, projectId, "agency/idleLockPins", existing);
-    return jsonResponse({ ok: true, pin });
+
+    const emailResult = await sendResendEmailDirect(env, {
+      to: targetEmail,
+      subject: "Your Revital Hub idle-lock PIN",
+      body: `Hi,\n\nA Hub Admin generated a new idle-lock PIN for your account on the Client Onboarding & Audit Hub (hub.revitalproductions.com).\n\nYour PIN: ${pin}\n\nYou'll be asked for this after being idle for 20 minutes, to confirm it's really you before the Hub shows client data again. Keep it private - don't share it with anyone else, including coworkers.\n\nIf you didn't expect this, let ${accessEmail} know.\n\n- Revital Productions Hub`
+    });
+
+    return jsonResponse({ ok: true, pin, emailSent: emailResult.ok, emailError: emailResult.ok ? null : emailResult.error });
   } catch (e) {
     return jsonResponse({ error: "Request failed: " + e.message }, 500);
   }

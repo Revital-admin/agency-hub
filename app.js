@@ -302,7 +302,8 @@ async function generateOwnPinAndUnlock() {
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error((data && data.error) || "Couldn't generate a PIN");
 
-    if (statusEl) statusEl.innerHTML = `Your new PIN is <strong style="letter-spacing:3px; color:#10b981;">${data.pin}</strong> - remember it, it won't be shown again. Unlocking now...`;
+    const emailNote = data.emailSent ? " (also emailed to you)" : "";
+    if (statusEl) statusEl.innerHTML = `Your new PIN is <strong style="letter-spacing:3px; color:#10b981;">${data.pin}</strong>${emailNote} - remember it, it won't be shown again. Unlocking now...`;
     setTimeout(() => { finishIdleUnlockAfterPin(); }, 2500);
   } catch (e) {
     if (errorEl) { errorEl.textContent = e.message; errorEl.style.display = "block"; }
@@ -458,14 +459,35 @@ async function generateTeamPin(email, btn) {
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error((data && data.error) || "Couldn't generate a PIN");
 
+    // Update local state so the list is accurate next time it re-renders,
+    // but DON'T re-render right now - the PIN display below needs to stay
+    // on screen until the admin dismisses it, not get wiped out by a
+    // refresh a moment later.
+    const existing = teamPinsPeople.find(p => p.email === email);
+    if (existing) existing.hasPin = true;
+    else teamPinsPeople = [...teamPinsPeople, { email, lastSeen: null, hasPin: true }];
+
     // Show the plaintext PIN once, inline, right in that person's row -
-    // it's never retrievable again after this.
+    // it's never retrievable again after this. Also reports whether the
+    // auto-email actually went out (see sendResendEmailDirect in
+    // _worker.js) so a failed send doesn't just silently lose the PIN.
     const row = btn ? btn.closest(".team-pins-row") : null;
     if (row) {
-      row.innerHTML = `<div style="flex:1; font-size:13px;"><strong>${escapeHtmlForPins(email)}</strong><br><span style="font-size:20px; letter-spacing:3px; color:#10b981; font-weight:700;">${escapeHtmlForPins(data.pin)}</span><br><span style="font-size:11px; color:#9ca3af;">Copy this now - it won't be shown again.</span></div>`;
+      const emailNote = data.emailSent
+        ? `Emailed to ${escapeHtmlForPins(email)}. Also shown here once:`
+        : `Couldn't email it automatically${data.emailError ? ' (' + escapeHtmlForPins(data.emailError) + ')' : ''} - copy and share this now:`;
+      row.innerHTML = `
+        <div style="flex:1; font-size:13px;">
+          <strong>${escapeHtmlForPins(email)}</strong><br>
+          <span style="font-size:11px; color:${data.emailSent ? '#10b981' : '#f59e0b'};">${emailNote}</span><br>
+          <span style="font-size:20px; letter-spacing:3px; color:#10b981; font-weight:700;">${escapeHtmlForPins(data.pin)}</span>
+        </div>
+        <button type="button" class="team-pins-done-btn" style="padding:6px 10px; border-radius:6px; border:1px solid #374151; background:transparent; color:#e5e7eb; font-size:12px; cursor:pointer; white-space:nowrap;">Done</button>
+      `;
+      const doneBtn = row.querySelector(".team-pins-done-btn");
+      if (doneBtn) doneBtn.addEventListener("click", renderTeamPinsList);
     }
-    await loadTeamPinsList();
-    if (typeof showBanner === "function") showBanner("success", `PIN generated for ${email}.`);
+    if (typeof showBanner === "function") showBanner("success", data.emailSent ? `PIN generated and emailed to ${email}.` : `PIN generated for ${email}.`);
   } catch (e) {
     if (errorEl) { errorEl.textContent = e.message; errorEl.style.display = "block"; }
     if (btn) { btn.disabled = false; btn.textContent = "Generate"; }
