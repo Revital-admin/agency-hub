@@ -1677,7 +1677,19 @@ async function performSendAgreement() {
   }
 }
 
-const FORM_FIELDS = ['memberName', 'role', 'employmentType', 'email', 'startDate', 'currentClientCount', 'maxClientCount', 'weeklyCapacityHours', 'notes', 'insuranceExpirationDate', 'hourlyRate'];
+const FORM_FIELDS = ['memberName', 'role', 'employmentType', 'email', 'startDate', 'currentClientCount', 'maxClientCount', 'weeklyCapacityHours', 'notes', 'insuranceExpirationDate', 'hourlyRate', 'bookingTitle', 'specialtyKeywords'];
+
+// Shows/hides the Booking Page Title + Specialty Keywords fields alongside
+// the Bookable checkbox - same show/hide pattern as
+// updateComplianceFieldsVisibility. Both are meaningless (and confusing to
+// leave filled-but-unused) for anyone not actually checked as bookable.
+function updateBookableFieldVisibility() {
+  const isBookable = el('bookableForCalls').checked;
+  const titleGroup = el('bookingTitleGroup');
+  const keywordsGroup = el('specialtyKeywordsGroup');
+  if (titleGroup) titleGroup.style.display = isBookable ? '' : 'none';
+  if (keywordsGroup) keywordsGroup.style.display = isBookable ? '' : 'none';
+}
 
 // Hub Admins only - pay data. The field itself is always in FORM_FIELDS
 // (so it round-trips normally through gatherForm/startEdit like any
@@ -1740,12 +1752,16 @@ function resetForm() {
   el('notes').value = '';
   el('w9OnFile').checked = false;
   el('insuranceExpirationDate').value = '';
+  el('bookableForCalls').checked = false;
+  el('bookingTitle').value = '';
+  el('specialtyKeywords').value = '';
   el('formTitle').textContent = 'New Team Member';
   el('saveMemberBtn').textContent = 'Add Team Member';
   el('cancelEditBtn').style.display = 'none';
   el('formCard').style.display = 'none';
   updateCapacityFieldsVisibility();
   updateComplianceFieldsVisibility();
+  updateBookableFieldVisibility();
   renderTimeOffSection();
   renderOnboardingSection();
   renderPortalAccessSection();
@@ -1772,6 +1788,7 @@ function gatherForm(base) {
     }
   });
   entry.w9OnFile = el('w9OnFile').checked;
+  entry.bookableForCalls = el('bookableForCalls').checked;
   return entry;
 }
 
@@ -1816,12 +1833,14 @@ function startEdit(id) {
   editingId = id;
   FORM_FIELDS.forEach(fieldId => { el(fieldId).value = entry[fieldId] || ''; });
   el('w9OnFile').checked = !!entry.w9OnFile;
+  el('bookableForCalls').checked = !!entry.bookableForCalls;
   el('formTitle').textContent = 'Edit Team Member';
   el('saveMemberBtn').textContent = 'Update Team Member';
   el('cancelEditBtn').style.display = 'inline-block';
   el('formCard').style.display = 'block';
   updateCapacityFieldsVisibility();
   updateComplianceFieldsVisibility();
+  updateBookableFieldVisibility();
   renderTimeOffSection();
   renderOnboardingSection();
   renderPortalAccessSection();
@@ -1941,8 +1960,13 @@ function renderTable() {
     const complianceBadge = complianceIssues(m)
       .map(issue => `<div style="font-size:0.68rem; color:${issue.color}; margin-top:2px;">${escapeHtml(issue.text)}</div>`)
       .join('');
+    // Mirrors what /api/booking/roster actually exposes to prospects -
+    // see resolveBookingTarget's teamRoster read in _worker.js.
+    const bookableBadge = m.bookableForCalls
+      ? `<div style="font-size:0.68rem; color:#f68d5f; margin-top:2px;">📅 Bookable for calls</div>`
+      : '';
     let rowHtml = `<tr>
-      <td class="client-cell">${escapeHtml(m.memberName)}${timeOffBadge}${onboardingBadge}${complianceBadge}</td>
+      <td class="client-cell">${escapeHtml(m.memberName)}${timeOffBadge}${onboardingBadge}${complianceBadge}${bookableBadge}</td>
       <td>${escapeHtml(m.role)}${isContractor ? ' <span class="section-tag" style="margin-left:4px;">Contractor</span>' : ''}</td>
       <td>${escapeHtml(m.employmentType)}</td>
       <td>${hubAccessBadge(m)}</td>
@@ -2039,6 +2063,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   el('cancelEditBtn').addEventListener('click', resetForm);
   el('role').addEventListener('change', updateCapacityFieldsVisibility);
   el('employmentType').addEventListener('change', updateComplianceFieldsVisibility);
+  el('bookableForCalls').addEventListener('change', updateBookableFieldVisibility);
   el('filterInput').addEventListener('input', refreshViews);
   el('viewListBtn').addEventListener('click', () => switchRosterView('list'));
   el('viewCalendarBtn').addEventListener('click', () => switchRosterView('calendar'));

@@ -163,6 +163,33 @@
 </div>
 <div class="form-group"><label for="email">Email</label><input type="email" id="email" placeholder="name@revitalproductions.com"></div>
 <div class="form-group"><label for="startDate">Start Date</label><input type="date" id="startDate"><p style="font-size:0.72rem; color:var(--text-muted); margin:4px 0 0;">Optional. Applies to everyone (Contractor, Full-Time, Part-Time) - blank for existing members until backfilled.</p></div>
+</div>
+
+<!-- Prospect Booking roster - who can take Discovery Calls on the public
+     book.revitalproductions.com page. Checking this pulls the member into
+     /api/booking/roster (see handleBookingRoster in _worker.js), which
+     reads agency/teamRoster directly rather than a separate hardcoded
+     list - one source of truth for "who's a real team member" instead of
+     two lists that can drift apart. Requires Email above to be a real
+     Workspace mailbox, since booking impersonates it via domain-wide
+     delegation to check/write that person's actual calendar. -->
+<div class="form-group checkbox-form-group" style="display:flex; align-items:center; margin-top:10px;">
+<label for="bookableForCalls" style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+<input type="checkbox" id="bookableForCalls" style="width:auto;"> Bookable for prospect discovery calls
+</label>
+</div>
+<div class="form-group" id="bookingTitleGroup" style="display:none;">
+<label for="bookingTitle">Booking Page Title</label>
+<input type="text" id="bookingTitle" placeholder="e.g. Founder, Account Manager">
+<p style="font-size:0.72rem; color:var(--text-muted); margin:4px 0 0;">Shown to prospects on the booking page under their name. Defaults to their Role above if left blank.</p>
+</div>
+<div class="form-group" id="specialtyKeywordsGroup" style="display:none;">
+<label for="specialtyKeywords">Specialty Keywords</label>
+<input type="text" id="specialtyKeywords" placeholder="e.g. video, photography, drone">
+<p style="font-size:0.72rem; color:var(--text-muted); margin:4px 0 0;">Comma-separated. If a prospect's booking notes mention one of these words, they're routed to this person instead of round robin. Leave blank for a generic round-robin-only booker.</p>
+</div>
+
+<div class="form-grid">
 <div class="form-group" id="currentClientCountGroup"><label for="currentClientCount">Current Client Load</label><input type="number" id="currentClientCount" min="0" step="1" placeholder="0"></div>
 <div class="form-group" id="liveLoadNote" style="display:none;"><label>Current Client Load</label><p style="font-size:0.78rem; color:var(--text-muted); margin:0; padding-top:8px;">Calculated automatically from clients whose account manager email matches this person - no manual entry needed.</p></div>
 <div class="form-group"><label for="maxClientCount">Max Capacity</label><input type="number" id="maxClientCount" min="0" step="1" placeholder="0"></div>

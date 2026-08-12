@@ -1178,15 +1178,118 @@ async function getGoogleAccessToken(env, scope) {
 
 // ── Prospect Booking (book.revitalproductions.com) ──
 //
-// Bookable team members. id is used internally by the API/page, name and
-// title are shown to the prospect, email is the real Google Workspace
-// mailbox the hub-calendar-booking service account impersonates (via
-// domain-wide delegation - see getGoogleAccessTokenForUser below) to
-// check availability and create the event. There's no admin UI for this
-// list yet - add a person here and redeploy when the roster changes.
-const BOOKING_ROSTER = [
+// Bookable team members now come from agency/teamRoster (Team Roster &
+// Capacity's own doc - see its "Bookable for prospect discovery calls"
+// checkbox, Aug 2026) rather than a hardcoded list - one admin UI, one
+// source of truth, no redeploy needed to add or remove someone. id is
+// the roster member's own id, name/title are shown to the prospect
+// (title falls back to their Role if Booking Page Title was left blank),
+// email is the real Google Workspace mailbox the hub-calendar-booking
+// service account impersonates (via domain-wide delegation - see
+// getGoogleAccessTokenForUser below) to check availability and create
+// the event.
+//
+// FALLBACK_BOOKING_ROSTER only kicks in if nobody has been checked
+// bookable yet (fresh install, or everyone got unchecked by mistake) -
+// keeps the public booking page from silently showing zero options
+// instead of failing loudly or routing to nobody.
+const FALLBACK_BOOKING_ROSTER = [
   { id: "ronald", name: "Ronald", title: "Founder", email: "admin@revitalproductions.com" }
 ];
+
+async function getBookableTeamRosterMembers(accessToken, projectId) {
+  try {
+    const rosterDoc = await firestoreGetDoc(accessToken, projectId, "agency/teamRoster");
+    const members = (rosterDoc && Array.isArray(rosterDoc.list)) ? rosterDoc.list : [];
+    const bookable = members
+      .filter(m => m && m.bookableForCalls && m.email)
+      .map(m => ({
+        id: m.id,
+        name: m.memberName || m.email,
+        title: (m.bookingTitle && m.bookingTitle.trim()) || m.role || "",
+        email: m.email,
+        // Raw comma-separated string as entered in Team Roster - kept
+        // here (not pre-split) so FALLBACK_BOOKING_ROSTER entries, which
+        // have no keywords field at all, still shape-match cleanly.
+        specialtyKeywords: m.specialtyKeywords || ""
+      }));
+    return bookable.length > 0 ? bookable : FALLBACK_BOOKING_ROSTER;
+  } catch (e) {
+    console.error("Couldn't load bookable roster from agency/teamRoster, using fallback:", e);
+    return FALLBACK_BOOKING_ROSTER;
+  }
+}
+
+// ── Auto-routing: specialist keyword match, else round robin (Aug 2026) ──
+// Used by the public booking page's default flow (no personId/amEmail in
+// the request) - the prospect never picks a person; this decides for
+// them. Two-step:
+//   1. Specialist match: does the prospect's notes/description contain
+//      any bookable person's comma-separated Specialty Keywords (Team
+//      Roster)? If exactly one OR multiple people match, round-robin
+//      *within just the matches* rather than picking the first match
+//      blindly - keeps it fair if two people share an overlapping
+//      keyword (e.g. both list "video").
+//   2. No match (or nobody has keywords set at all): round-robin across
+//      the FULL bookable pool.
+// Round robin itself is a single rotating pointer (agency/
+// bookingRoundRobin.lastAssignedId) - finds that id's position in the
+// current pool and returns the next one, wrapping around. Not
+// transactionally locked (a second request landing in the same instant
+// could read the same pointer) - acceptable at this call volume, same
+// "best effort, not a hard lock" tolerance as the booking slot
+// double-check right before event creation. The pointer is only
+// persisted by the caller AFTER a booking actually completes (see
+// handleBookingBook), not at preview/availability-check time, so an
+// abandoned booking flow never "uses up" someone's turn for nothing.
+function matchSpecialistPool(roster, notes) {
+  const text = (notes || "").toLowerCase();
+  if (!text) return [];
+  return roster.filter(m => {
+    const keywords = (m.specialtyKeywords || "")
+      .split(",")
+      .map(k => k.trim().toLowerCase())
+      .filter(Boolean);
+    return keywords.some(k => text.includes(k));
+  });
+}
+
+function pickRoundRobin(pool, lastAssignedId) {
+  if (pool.length === 0) return null;
+  const lastIdx = pool.findIndex(p => p.id === lastAssignedId);
+  const nextIdx = lastIdx === -1 ? 0 : (lastIdx + 1) % pool.length;
+  return pool[nextIdx];
+}
+
+async function resolveAutoRoutedAssignment(accessToken, projectId, notes) {
+  const roster = await getBookableTeamRosterMembers(accessToken, projectId);
+  const specialists = matchSpecialistPool(roster, notes);
+  const pool = specialists.length > 0 ? specialists : roster;
+
+  let lastAssignedId = null;
+  try {
+    const rrDoc = await firestoreGetDoc(accessToken, projectId, "agency/bookingRoundRobin");
+    lastAssignedId = rrDoc ? rrDoc.lastAssignedId : null;
+  } catch (e) {
+    console.error("Couldn't read agency/bookingRoundRobin, defaulting to pool[0]:", e);
+  }
+
+  const assigned = pickRoundRobin(pool, lastAssignedId);
+  return { assigned, viaSpecialistMatch: specialists.length > 0 };
+}
+
+// Persists the round-robin pointer - called only after a booking actually
+// completes (see handleBookingBook), never at availability-check/preview
+// time. Best-effort: a failure here shouldn't fail the booking itself,
+// since the calendar event (source of truth) already exists by the time
+// this runs.
+async function advanceBookingRoundRobin(accessToken, projectId, assignedId) {
+  try {
+    await firestoreSetDoc(accessToken, projectId, "agency/bookingRoundRobin", { lastAssignedId: assignedId, updatedAt: new Date().toISOString() });
+  } catch (e) {
+    console.error("Couldn't persist agency/bookingRoundRobin pointer (booking itself still succeeded):", e);
+  }
+}
 
 const BOOKING_TIMEZONE = "America/Chicago"; // Central - Revital's actual business hours (confirmed Aug 2026; was incorrectly hardcoded to America/New_York before)
 const BOOKING_DAY_START_HOUR = 9;  // 9am local, 24h clock
@@ -1283,9 +1386,18 @@ function zonedTimeToUtc(dateKey, hour, minute, timeZone) {
 
 // ── GET /api/booking/roster ──
 // Public. Only exposes id/name/title, never the underlying mailbox
-// address, since this is reachable by anyone on the internet.
+// address, since this is reachable by anyone on the internet. Sourced
+// live from agency/teamRoster (see getBookableTeamRosterMembers) so
+// checking/unchecking someone in Team Roster takes effect immediately -
+// no redeploy needed.
 async function handleBookingRoster(request, env) {
-  return jsonResponse({ roster: BOOKING_ROSTER.map(({ id, name, title }) => ({ id, name, title })) });
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const roster = await getBookableTeamRosterMembers(accessToken, projectId);
+    return jsonResponse({ roster: roster.map(({ id, name, title }) => ({ id, name, title })) });
+  } catch (e) {
+    return jsonResponse({ roster: FALLBACK_BOOKING_ROSTER.map(({ id, name, title }) => ({ id, name, title })) });
+  }
 }
 
 // ── Account manager lookup for client bookings ──
@@ -1319,15 +1431,17 @@ async function findAccountManagerByEmail(env, rawEmail) {
   return null;
 }
 
-// Resolves "who is this booking for" from either the static prospect
-// roster (?personId=) or a live-verified account manager (?amEmail=),
-// used by both the availability and create handlers below so the two
-// entry points (public prospect booking vs. client-portal AM booking)
-// stay in sync.
+// Resolves "who is this booking for" from either the bookable prospect
+// roster (?personId=, now sourced from agency/teamRoster) or a
+// live-verified account manager (?amEmail=), used by both the
+// availability and create handlers below so the two entry points
+// (public prospect booking vs. client-portal AM booking) stay in sync.
 async function resolveBookingTarget(env, { personId, amEmail }) {
   if (personId) {
-    const person = BOOKING_ROSTER.find(p => p.id === personId);
-    return person ? { email: person.email, name: person.name } : null;
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const roster = await getBookableTeamRosterMembers(accessToken, projectId);
+    const person = roster.find(p => p.id === personId);
+    return person ? { id: person.id, email: person.email, name: person.name, title: person.title } : null;
   }
   if (amEmail) {
     return await findAccountManagerByEmail(env, amEmail);
@@ -1335,17 +1449,40 @@ async function resolveBookingTarget(env, { personId, amEmail }) {
   return null;
 }
 
-// ── GET /api/booking/availability?personId=...  or  ?amEmail=... ──
+// ── GET /api/booking/availability?personId=...  or  ?amEmail=...  or  ?notes=... ──
 // Public. Queries that person's real Google Calendar via freeBusy.query
 // (impersonated through domain-wide delegation) and returns open
 // BOOKING_SLOT_MINUTES-long slots across the next BOOKING_LOOKAHEAD_DAYS
 // days, business hours only, weekends excluded.
+//
+// Auto-routing (Aug 2026): when neither personId nor amEmail is given -
+// the default for the public prospect flow, which no longer shows a
+// "who would you like to talk to" picker - this resolves who via
+// resolveAutoRoutedAssignment (specialist keyword match, else round
+// robin) using whatever notes/description text came along. The response
+// includes assignedPersonId so the frontend can pass it straight back to
+// /api/booking/book as personId - the round-robin pointer only actually
+// advances there, once a booking is confirmed, not here at preview time.
 async function handleBookingAvailability(request, env) {
   const url = new URL(request.url);
-  const person = await resolveBookingTarget(env, {
-    personId: url.searchParams.get("personId"),
-    amEmail: url.searchParams.get("amEmail")
-  });
+  const personId = url.searchParams.get("personId");
+  const amEmail = url.searchParams.get("amEmail");
+  let person;
+  let assignedPersonId = null;
+  let viaSpecialistMatch = false;
+
+  if (personId || amEmail) {
+    person = await resolveBookingTarget(env, { personId, amEmail });
+  } else {
+    const notes = url.searchParams.get("notes") || "";
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const routing = await resolveAutoRoutedAssignment(accessToken, projectId, notes);
+    if (routing.assigned) {
+      person = { id: routing.assigned.id, email: routing.assigned.email, name: routing.assigned.name, title: routing.assigned.title };
+      assignedPersonId = routing.assigned.id;
+      viaSpecialistMatch = routing.viaSpecialistMatch;
+    }
+  }
   if (!person) return jsonResponse({ error: "Unknown person" }, 400);
 
   let accessToken;
@@ -1402,7 +1539,15 @@ async function handleBookingAvailability(request, env) {
     if (slots.length) slotsByDay[dateKey] = slots;
   }
 
-  return jsonResponse({ personName: person.name, timezone: BOOKING_TIMEZONE, slotMinutes: BOOKING_SLOT_MINUTES, slotsByDay });
+  return jsonResponse({
+    personName: person.name,
+    personTitle: person.title || "",
+    assignedPersonId,
+    viaSpecialistMatch,
+    timezone: BOOKING_TIMEZONE,
+    slotMinutes: BOOKING_SLOT_MINUTES,
+    slotsByDay
+  });
 }
 
 // ── POST /api/booking/book ──
@@ -1418,7 +1563,7 @@ async function handleBookingCreate(request, env) {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
 
-  const { personId, amEmail, startISO, name, email, company, notes } = payload || {};
+  const { personId, amEmail, startISO, name, email, company, notes, autoRouted } = payload || {};
   const person = await resolveBookingTarget(env, { personId, amEmail });
   if (!person) return jsonResponse({ error: "Unknown person" }, 400);
   if (!startISO || isNaN(new Date(startISO).getTime())) {
@@ -1517,6 +1662,20 @@ async function handleBookingCreate(request, env) {
       await sendHealthDigestEmail(env, recipients, subject, html, text);
     } catch (notifyErr) {
       console.error("Booking notification email failed (booking itself still succeeded):", notifyErr);
+    }
+
+    // Only advance the round-robin pointer for bookings that actually
+    // went through auto-routing (frontend sets autoRouted:true when it
+    // got here via the notes-based flow, not a direct personId link or
+    // a client-portal amEmail booking) - see resolveAutoRoutedAssignment.
+    // Best-effort, same reasoning as the notification email above.
+    if (autoRouted && person.id) {
+      try {
+        const { accessToken: rrToken, projectId: rrProjectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+        await advanceBookingRoundRobin(rrToken, rrProjectId, person.id);
+      } catch (rrErr) {
+        console.error("Couldn't advance booking round robin (booking itself still succeeded):", rrErr);
+      }
     }
 
     return jsonResponse({ ok: true, eventId: evData.id, htmlLink: evData.htmlLink });

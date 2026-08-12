@@ -186,28 +186,14 @@
   <h1 id="pageTitle">Book a 15-Minute Discovery Call</h1>
   <p class="subtitle" id="pageSubtitle">Book a quick discovery or send us a note — we reply within one business day. We'll send a calendar invite with the video link right away.</p>
 
-  <div id="personStep" class="card hidden">
-    <h2>Who would you like to talk to?</h2>
-    <div id="personList" class="person-list"></div>
-  </div>
-
-  <div id="timeStep" class="card hidden">
-    <h2>Pick a day and time</h2>
-    <div id="dayList" class="day-list"></div>
-    <div id="slotList" class="slot-list"></div>
-    <p id="timeMsg" class="msg muted"></p>
-  </div>
-
+  <!-- Contact info step - now shown FIRST (Aug 2026), not after time
+       selection, because who gets assigned depends on what's typed in
+       Description (see the auto-routing note in js/app.js). Skipped
+       entirely (never shown) when arriving prefilled from the
+       revitalproductions.com contact form (see isPrefilled in the script)
+       - those visitors go straight to resolving who they're assigned to. -->
   <div id="formStep" class="card hidden">
-    <button class="btn-text" id="changeSlotBtn">&larr; Choose a different time</button>
-    <div id="selectedSlotBanner" class="selected-slot-banner"></div>
-
-    <!-- Shown instead of the fields below when name/email arrived via the
-         URL (see PREFILL_FIELDS in the script) - i.e. someone already
-         filled out the contact form on revitalproductions.com and got
-         redirected here just to pick a time, so there's no reason to make
-         them type their info twice. -->
-    <div id="prefillSummary" class="hidden" style="margin-bottom:16px; font-size:0.9rem; color: var(--text-muted);"></div>
+    <h2>A couple quick details</h2>
 
     <div id="contactFields">
       <div class="form-group">
@@ -228,8 +214,28 @@
       </div>
     </div>
 
-    <button class="btn-primary" id="confirmBtn">BOOK 15 MIN CALL</button>
+    <button class="btn-primary" id="continueBtn">CONTINUE</button>
     <p id="formMsg" class="msg error hidden"></p>
+  </div>
+
+  <!-- Time step - no more "who would you like to talk to" picker. Who
+       it's with is decided automatically (specialist keyword match in
+       Description, else round robin - see js/app.js) and announced in
+       #assignmentBanner once availability loads, rather than asked of the
+       prospect up front. -->
+  <div id="timeStep" class="card hidden">
+    <button class="btn-text" id="backToFormBtn">&larr; Back</button>
+    <div id="assignmentBanner" class="selected-slot-banner hidden"></div>
+    <h2>Pick a day and time</h2>
+    <div id="dayList" class="day-list"></div>
+    <div id="slotList" class="slot-list"></div>
+    <p id="timeMsg" class="msg muted"></p>
+
+    <div id="slotConfirmRow" class="hidden" style="margin-top:16px;">
+      <div id="selectedSlotBanner" class="selected-slot-banner"></div>
+      <button class="btn-primary" id="confirmBtn">BOOK 15 MIN CALL</button>
+      <p id="confirmMsg" class="msg error hidden"></p>
+    </div>
   </div>
 
   <div id="confirmStep" class="card confirm-card hidden">
@@ -244,11 +250,21 @@
 <script>
 (function () {
   const el = (id) => document.getElementById(id);
-  let roster = [];
-  let selectedPerson = null;
+  // assignedPerson: { id, amEmail, name, title } - resolved AFTER contact
+  // info is submitted (Aug 2026), not chosen by the prospect anymore. id
+  // is set for auto-routed/direct-personId bookings, amEmail for
+  // client-portal bookings; whichever one is set is what gets sent back
+  // to /api/booking/book.
+  let assignedPerson = null;
   let availability = null; // { timezone, slotMinutes, slotsByDay }
   let selectedDay = null;
   let selectedSlotISO = null;
+  let contact = { name: "", email: "", company: "", notes: "" };
+  // True only when assignedPerson came from notes-based auto-routing
+  // (not a direct ?personId= link, not ?amEmail=) - controls whether the
+  // round-robin pointer advances on booking. See resolveAutoRoutedAssignment
+  // in _worker.js.
+  let isAutoRouted = false;
 
   // ── Prefill from the website's contact form ──
   // When someone submits the Name/Email/Company name/Description form on
@@ -256,8 +272,7 @@
   // with the same values as URL query params (see the Framer setup notes
   // - the site itself is untouched, only what happens after submit
   // changes). If they arrive that way, skip asking for the same info
-  // again: populate the (hidden) fields now and show a plain summary
-  // instead of the input form once they pick a time.
+  // again and go straight to resolving who they're assigned to.
   const qp = new URLSearchParams(window.location.search);
   const prefill = {
     name: (qp.get("name") || "").trim(),
@@ -266,29 +281,20 @@
     notes: (qp.get("notes") || qp.get("description") || "").trim()
   };
   const isPrefilled = !!(prefill.name && prefill.email);
-  if (isPrefilled) {
-    el("fName").value = prefill.name;
-    el("fEmail").value = prefill.email;
-    el("fCompany").value = prefill.company;
-    el("fNotes").value = prefill.notes;
-    el("contactFields").classList.add("hidden");
-    el("prefillSummary").classList.remove("hidden");
-    el("prefillSummary").innerHTML =
-      `Booking as <strong>${escapeHtml(prefill.name)}</strong> (${escapeHtml(prefill.email)})` +
-      (prefill.company ? ` &middot; ${escapeHtml(prefill.company)}` : "");
-    el("pageTitle").textContent = "Pick a Time for Your Call";
-    el("pageSubtitle").textContent = `Thanks, ${prefill.name.split(" ")[0]} — just pick a time that works for you and we'll send the calendar invite.`;
-  }
 
   // ── Client Portal -> "book your account manager" flow ──
   // The client portal links here with ?amEmail=<their assigned AM's
   // email> instead of a personId - that email is verified server-side
   // (has to actually be assigned as a real client's account manager in
   // Client Portal Manager, see findAccountManagerByEmail in _worker.js)
-  // rather than trusted blindly. When present, this skips the roster
-  // entirely and the "who would you like to talk to" step never shows -
-  // there's only ever one right answer for a given client.
+  // rather than trusted blindly. When present, there's only ever one
+  // right answer for a given client - no routing needed.
   const clientAmEmail = (qp.get("amEmail") || "").trim();
+
+  // ── Direct link to a specific person, bypassing routing ──
+  // Kept for cases like a promoted "book with Jane directly" link
+  // somewhere - most visitors never hit this, routing decides for them.
+  const directPersonId = (qp.get("personId") || "").trim();
 
   function fmtDayLabel(dateKey) {
     // dateKey is "YYYY-MM-DD" in the business timezone; render weekday/date
@@ -302,82 +308,89 @@
     return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   }
 
-  async function init() {
-    if (clientAmEmail) {
-      // Client-portal flow: nothing to pick, no roster call needed - go
-      // straight to that person's availability. Their display name comes
-      // back in the availability response itself (personName) since we
-      // don't have a roster entry for them client-side.
-      el("loadMsg").classList.add("hidden");
-      selectPerson({ id: null, amEmail: clientAmEmail, name: null });
-      return;
-    }
-
-    try {
-      const res = await fetch("/api/booking/roster");
-      const data = await res.json();
-      roster = data.roster || [];
-    } catch (e) {
-      el("loadMsg").textContent = "Could not load booking options. Please refresh, or reach out directly.";
-      return;
-    }
-
-    if (roster.length === 0) {
-      el("loadMsg").textContent = "Booking isn't available right now — please reach out directly.";
-      return;
-    }
-
-    el("loadMsg").classList.add("hidden");
-
-    if (roster.length === 1) {
-      selectPerson(roster[0]);
-    } else {
-      el("personStep").classList.remove("hidden");
-      const list = el("personList");
-      roster.forEach((p) => {
-        const btn = document.createElement("button");
-        btn.className = "pill-btn";
-        btn.innerHTML = `${escapeHtml(p.name)}<span class="pill-sub">${escapeHtml(p.title || "")}</span>`;
-        btn.addEventListener("click", () => selectPerson(p, btn));
-        list.appendChild(btn);
-      });
-    }
-  }
-
   function escapeHtml(str) {
     const d = document.createElement("div");
     d.textContent = str || "";
     return d.innerHTML;
   }
 
-  async function selectPerson(person, btnEl) {
-    selectedPerson = person;
-    document.querySelectorAll("#personList .pill-btn").forEach((b) => b.classList.remove("selected"));
-    if (btnEl) btnEl.classList.add("selected");
+  function init() {
+    el("loadMsg").classList.add("hidden");
 
+    if (isPrefilled) {
+      contact = { name: prefill.name, email: prefill.email, company: prefill.company, notes: prefill.notes };
+      el("pageTitle").textContent = "Pick a Time for Your Call";
+      el("pageSubtitle").textContent = `Thanks, ${prefill.name.split(" ")[0]} — just pick a time that works for you and we'll send the calendar invite.`;
+      resolveAndLoadAvailability();
+      return;
+    }
+
+    // Not prefilled - show the contact form first (skipped entirely for
+    // prefilled visitors above). This applies whether it's a first-touch
+    // prospect or a client-portal (?amEmail=) visitor who hasn't already
+    // filled out a form elsewhere - both need name/email either way.
+    el("formStep").classList.remove("hidden");
+  }
+
+  el("continueBtn").addEventListener("click", () => {
+    const name = el("fName").value.trim();
+    const email = el("fEmail").value.trim();
+    const company = el("fCompany").value.trim();
+    const notes = el("fNotes").value.trim();
+    const msgEl = el("formMsg");
+    msgEl.classList.add("hidden");
+
+    if (!name || !email) {
+      msgEl.textContent = "Please enter your name and email.";
+      msgEl.classList.remove("hidden");
+      return;
+    }
+
+    contact = { name, email, company, notes };
+    el("formStep").classList.add("hidden");
+    resolveAndLoadAvailability();
+  });
+
+  el("backToFormBtn").addEventListener("click", () => {
+    el("timeStep").classList.add("hidden");
+    el("formStep").classList.remove("hidden");
+  });
+
+  // Resolves who this booking is with (client-portal amEmail, a direct
+  // ?personId= link, or - the default path almost everyone takes -
+  // notes-based auto-routing on the backend) and loads their availability
+  // in one call. See the auto-routing comment on handleBookingAvailability
+  // in _worker.js for how "who" gets decided server-side.
+  async function resolveAndLoadAvailability() {
     el("timeStep").classList.remove("hidden");
-    el("timeMsg").textContent = "Loading availability...";
+    el("assignmentBanner").classList.add("hidden");
+    el("slotConfirmRow").classList.add("hidden");
+    el("timeMsg").textContent = "Finding a time...";
     el("dayList").innerHTML = "";
     el("slotList").innerHTML = "";
 
+    isAutoRouted = !clientAmEmail && !directPersonId;
+
     try {
-      const qs = person.amEmail
-        ? "amEmail=" + encodeURIComponent(person.amEmail)
-        : "personId=" + encodeURIComponent(person.id);
+      const qs = clientAmEmail
+        ? "amEmail=" + encodeURIComponent(clientAmEmail)
+        : directPersonId
+          ? "personId=" + encodeURIComponent(directPersonId)
+          : "notes=" + encodeURIComponent(contact.notes);
       const res = await fetch("/api/booking/availability?" + qs);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load availability");
       availability = data;
-      // amEmail bookings don't know the person's display name up front
-      // (no roster entry client-side) - the server resolves and returns
-      // it, so fill it in now for the "with {name}" labels below.
-      if (data.personName) {
-        person.name = data.personName;
-        if (clientAmEmail) {
-          el("pageTitle").textContent = "Book a Time with " + data.personName;
-          el("pageSubtitle").textContent = "Pick a time that works for you and we'll send a calendar invite right away.";
-        }
-      }
+      assignedPerson = {
+        id: data.assignedPersonId || directPersonId || null,
+        amEmail: clientAmEmail || null,
+        name: data.personName,
+        title: data.personTitle || ""
+      };
+
+      el("assignmentBanner").classList.remove("hidden");
+      el("assignmentBanner").innerHTML =
+        `<span>You'll be talking with <strong>${escapeHtml(assignedPerson.name)}</strong>${assignedPerson.title ? " &middot; " + escapeHtml(assignedPerson.title) : ""}</span>`;
     } catch (e) {
       el("timeMsg").textContent = "Couldn't load availability: " + e.message;
       return;
@@ -405,6 +418,7 @@
     selectedDay = dateKey;
     document.querySelectorAll("#dayList .pill-btn").forEach((b) => b.classList.remove("selected"));
     btnEl.classList.add("selected");
+    el("slotConfirmRow").classList.add("hidden");
 
     const slotList = el("slotList");
     slotList.innerHTML = "";
@@ -412,71 +426,64 @@
       const btn = document.createElement("button");
       btn.className = "slot-btn";
       btn.textContent = fmtTime(iso);
-      btn.addEventListener("click", () => selectSlot(iso));
+      btn.addEventListener("click", () => selectSlot(iso, btn));
       slotList.appendChild(btn);
     });
   }
 
-  function selectSlot(iso) {
+  function selectSlot(iso, btnEl) {
     selectedSlotISO = iso;
-    el("timeStep").classList.add("hidden");
-    el("formStep").classList.remove("hidden");
-    const d = new Date(iso);
+    document.querySelectorAll("#slotList .slot-btn").forEach((b) => b.classList.remove("selected"));
+    btnEl.classList.add("selected");
+    el("slotConfirmRow").classList.remove("hidden");
     el("selectedSlotBanner").innerHTML =
-      `<span>${escapeHtml(fmtDayLabel(selectedDay))} at ${escapeHtml(fmtTime(iso))} with ${escapeHtml(selectedPerson.name)}</span>`;
+      `<span>${escapeHtml(fmtDayLabel(selectedDay))} at ${escapeHtml(fmtTime(iso))} with ${escapeHtml(assignedPerson.name)}</span>`;
   }
 
-  el("changeSlotBtn").addEventListener("click", () => {
-    el("formStep").classList.add("hidden");
-    el("timeStep").classList.remove("hidden");
-  });
-
   el("confirmBtn").addEventListener("click", async () => {
-    const name = el("fName").value.trim();
-    const email = el("fEmail").value.trim();
-    const company = el("fCompany").value.trim();
-    const notes = el("fNotes").value.trim();
-    const msgEl = el("formMsg");
+    const msgEl = el("confirmMsg");
     msgEl.classList.add("hidden");
-
-    if (!name || !email) {
-      msgEl.textContent = "Please enter your name and email.";
-      msgEl.classList.remove("hidden");
-      return;
-    }
 
     const btn = el("confirmBtn");
     btn.disabled = true;
     btn.textContent = "Booking...";
 
     try {
-      const targetField = selectedPerson.amEmail
-        ? { amEmail: selectedPerson.amEmail }
-        : { personId: selectedPerson.id };
+      const targetField = assignedPerson.amEmail
+        ? { amEmail: assignedPerson.amEmail }
+        : { personId: assignedPerson.id };
       const res = await fetch("/api/booking/book", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...targetField, startISO: selectedSlotISO, name, email, company, notes })
+        body: JSON.stringify({
+          ...targetField,
+          startISO: selectedSlotISO,
+          name: contact.name,
+          email: contact.email,
+          company: contact.company,
+          notes: contact.notes,
+          autoRouted: isAutoRouted
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Booking failed");
 
-      el("formStep").classList.add("hidden");
+      el("timeStep").classList.add("hidden");
       el("confirmStep").classList.remove("hidden");
       el("confirmText").textContent =
-        `You're confirmed with ${selectedPerson.name} on ${fmtDayLabel(selectedDay)} at ${fmtTime(selectedSlotISO)}. A calendar invite is on its way to ${email}.`;
+        `You're confirmed with ${assignedPerson.name} on ${fmtDayLabel(selectedDay)} at ${fmtTime(selectedSlotISO)}. A calendar invite is on its way to ${contact.email}.`;
     } catch (e) {
-      // 409 = someone else took the slot in the meantime - send them back
-      // to pick a fresh one instead of leaving them stuck on a dead slot.
+      // 409 = someone else took the slot in the meantime - reload
+      // availability for the same assigned person instead of leaving them
+      // stuck on a dead slot.
       msgEl.textContent = e.message;
       msgEl.classList.remove("hidden");
       btn.disabled = false;
       btn.textContent = "BOOK 15 MIN CALL";
       if (String(e.message).toLowerCase().includes("booked by someone else")) {
         setTimeout(() => {
-          el("formStep").classList.add("hidden");
-          el("timeStep").classList.remove("hidden");
-          selectPerson(selectedPerson);
+          el("slotConfirmRow").classList.add("hidden");
+          resolveAndLoadAvailability();
         }, 1500);
       }
     }
