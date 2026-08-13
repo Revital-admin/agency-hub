@@ -104,6 +104,7 @@ function resetForm() {
   el('mbIdeaSummary').value = '';
   el('mbVisualDirection').value = '';
   el('mbKeyElements').value = '';
+  el('mbNotes').value = '';
   el('mbShared').checked = false;
   el('embedLabel').value = '';
   el('embedUrl').value = '';
@@ -120,10 +121,14 @@ function addDraftEmbedLink() {
     if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', 'Enter a URL for this reference link.');
     return;
   }
-  draftEmbedLinks.push({ id: uid(), label: label || url, url });
+  const isVideo = !!getVideoEmbedInfo(url);
+  draftEmbedLinks.push({ id: uid(), label: label || url, url, isVideo });
   el('embedLabel').value = '';
   el('embedUrl').value = '';
   renderEmbedLinksList();
+  if (isVideo && isEmbedded && window.parent.showBanner) {
+    window.parent.showBanner('success', `Added "${label || url}" as a reference video.`);
+  }
 }
 
 let imageDropCounter = 0;
@@ -150,6 +155,27 @@ function handleDroppedImage(file) {
   });
 }
 
+let videoDropCounter = 0;
+
+// Same "drop it straight into the list" pattern as handleDroppedImage
+// above, but there's no compression step for video the way there is for
+// images (processVideoFile just validates the file and reads its raw
+// bytes as a data URL) - so this only realistically works for a short,
+// low-res clip. See the size-cap comment on processVideoFile in
+// shared-dropzone.js. Anything bigger belongs as a URL reference
+// instead (YouTube/Vimeo/Loom link), which addDraftEmbedLink handles.
+function handleDroppedVideo(file) {
+  processVideoFile(file).then(dataUrl => {
+    videoDropCounter++;
+    const label = (file.name || `Video ${videoDropCounter}`).replace(/\.[^.]+$/, '');
+    draftEmbedLinks.push({ id: uid(), label, url: dataUrl, isVideo: true });
+    renderEmbedLinksList();
+    if (isEmbedded && window.parent.showBanner) window.parent.showBanner('success', `Added "${label}" as a reference video.`);
+  }).catch(errMsg => {
+    if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', errMsg);
+  });
+}
+
 function removeDraftEmbedLink(id) {
   draftEmbedLinks = draftEmbedLinks.filter(l => l.id !== id);
   renderEmbedLinksList();
@@ -159,6 +185,40 @@ function isImageEntry(l) {
   return l.isImage || (l.url || '').startsWith('data:image');
 }
 
+// Recognizes YouTube, Vimeo, and Loom share links and converts them into
+// an embeddable iframe URL (their normal watch/share URLs don't embed
+// directly - YouTube in particular refuses to render at all in an
+// <iframe> unless it's the /embed/ path). Anything else that looks like
+// a direct video file (.mp4/.webm/.mov/.ogg) instead gets rendered with
+// a native <video> tag pointed straight at that URL. Returns null for a
+// plain reference link that isn't a recognized video source.
+function getVideoEmbedInfo(url) {
+  if (!url) return null;
+  const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([\w-]{6,})/);
+  if (ytMatch) return { kind: 'iframe', src: `https://www.youtube.com/embed/${ytMatch[1]}` };
+
+  const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeoMatch) return { kind: 'iframe', src: `https://player.vimeo.com/video/${vimeoMatch[1]}` };
+
+  const loomMatch = url.match(/loom\.com\/share\/([\w-]+)/);
+  if (loomMatch) return { kind: 'iframe', src: `https://www.loom.com/embed/${loomMatch[1]}` };
+
+  if (/\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(url)) return { kind: 'file', src: url };
+
+  return null;
+}
+
+// Videos and images both live in draftEmbedLinks/board.embedLinks
+// alongside plain reference links (same "one array, split by type when
+// rendering" pattern isImageEntry/renderEmbedLinksList already use) - an
+// entry is a video either because it was uploaded as a file (isVideo
+// flag, data:video URL) or because its pasted URL matches a recognized
+// video source above.
+function isVideoEntry(l) {
+  if (!l) return false;
+  return !!(l.isVideo || (l.url || '').startsWith('data:video') || getVideoEmbedInfo(l.url || ''));
+}
+
 // Images and plain URL references share one underlying draftEmbedLinks
 // array (and the same saved board.embedLinks field) so existing boards
 // saved before this split still load exactly as they were - only the
@@ -166,6 +226,7 @@ function isImageEntry(l) {
 // same list by isImageEntry().
 function renderEmbedLinksList() {
   renderImageGrid();
+  renderVideoGrid();
   renderLinksList();
   renderClientSizeWarning();
 }
@@ -216,9 +277,14 @@ function estimateClientTotalBytes() {
     ideaSummary: el('mbIdeaSummary') ? el('mbIdeaSummary').value : '',
     visualDirection: el('mbVisualDirection') ? el('mbVisualDirection').value : '',
     keyElements: el('mbKeyElements') ? el('mbKeyElements').value : '',
+    internalNotes: el('mbNotes') ? el('mbNotes').value : '',
     embedLinks: draftEmbedLinks
   };
   clone.moodBoards = (clone.moodBoards || []).concat([draftBoard]);
+  // (internalNotes is plain text, not a data URL, so it's already
+  // covered by the JSON.stringify below without any special handling -
+  // this comment exists just to make clear the field wasn't overlooked
+  // when this estimate was extended for it.)
 
   try {
     return new Blob([JSON.stringify(clone)]).size;
@@ -354,9 +420,60 @@ function reorderImages(draggedId, targetId) {
   renderImageGrid();
 }
 
+// Videos get their own small grid, same tile-with-caption-and-remove
+// shape as the image grid above, but no drag-to-reorder (a board rarely
+// has enough videos to make reordering worth the added complexity, and
+// the annotate/pin tools further down are image-only anyway). An
+// uploaded video renders with a native <video> tag; a pasted YouTube/
+// Vimeo/Loom link renders with the embeddable iframe getVideoEmbedInfo()
+// resolved for it; anything else that still matched isVideoEntry (a
+// direct .mp4/.webm/.mov/.ogg URL) falls back to a <video> tag pointed
+// straight at that URL.
+function renderVideoGrid() {
+  const grid = el('videoGrid');
+  const empty = el('videoGridEmptyState');
+  if (!grid) return;
+  const videos = draftEmbedLinks.filter(isVideoEntry);
+
+  if (videos.length === 0) {
+    grid.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  grid.innerHTML = videos.map(l => `
+    <div class="mb-video-tile" data-id="${l.id}">
+      <div class="mb-video-preview">${renderVideoPreviewMarkup(l)}</div>
+      <button data-id="${l.id}" class="mb-image-remove-btn" aria-label="Remove video" title="Remove">✕</button>
+      <input type="text" class="mb-image-caption-input" data-id="${l.id}" value="${escapeHtml(l.label)}" placeholder="Add a caption..." aria-label="Video caption">
+    </div>
+  `).join('');
+  grid.querySelectorAll('.mb-image-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => removeDraftEmbedLink(btn.getAttribute('data-id')));
+  });
+  grid.querySelectorAll('.mb-image-caption-input').forEach(input => {
+    input.addEventListener('input', () => {
+      const entry = draftEmbedLinks.find(l => l.id === input.getAttribute('data-id'));
+      if (entry) entry.label = input.value;
+    });
+  });
+}
+
+function renderVideoPreviewMarkup(l) {
+  if ((l.url || '').startsWith('data:video')) {
+    return `<video src="${l.url}" controls preload="metadata"></video>`;
+  }
+  const embed = getVideoEmbedInfo(l.url);
+  if (embed && embed.kind === 'iframe') {
+    return `<iframe src="${embed.src}" frameborder="0" allow="fullscreen" allowfullscreen></iframe>`;
+  }
+  return `<video src="${embed ? embed.src : l.url}" controls preload="metadata"></video>`;
+}
+
 function renderLinksList() {
   const list = el('embedLinksList');
-  const links = draftEmbedLinks.filter(l => !isImageEntry(l));
+  const links = draftEmbedLinks.filter(l => !isImageEntry(l) && !isVideoEntry(l));
   if (links.length === 0) {
     list.innerHTML = '<p style="color:var(--color-text-secondary); font-size:13px; margin:0;">No reference links added yet.</p>';
     return;
@@ -397,6 +514,12 @@ function saveBoard() {
     ideaSummary: el('mbIdeaSummary').value.trim(),
     visualDirection: el('mbVisualDirection').value.trim(),
     keyElements: el('mbKeyElements').value.trim(),
+    // Deliberately never rendered in the Portal (see renderMoodBoards in
+    // portal/js/app.js, which only ever reads title/category/ideaSummary/
+    // visualDirection/keyElements/embedLinks) - this is the one field on
+    // a mood board that's team-only even when the board itself is
+    // shared with the client.
+    internalNotes: el('mbNotes').value.trim(),
     embedLinks: draftEmbedLinks,
     sharedWithClient: el('mbShared').checked,
     createdDate: editingBoardId
@@ -432,6 +555,7 @@ function startEditBoard(id) {
   el('mbIdeaSummary').value = board.ideaSummary || '';
   el('mbVisualDirection').value = board.visualDirection || '';
   el('mbKeyElements').value = board.keyElements || '';
+  el('mbNotes').value = board.internalNotes || '';
   el('mbShared').checked = !!board.sharedWithClient;
   draftEmbedLinks = (board.embedLinks || []).map(l => ({ ...l }));
   renderEmbedLinksList();
@@ -627,18 +751,20 @@ const BOARD_CARD_THUMB_LIMIT = 5;
 function renderBoardCardThumbs(board) {
   const links = board.embedLinks || [];
   const images = links.filter(isImageEntry);
-  const nonImageCount = links.length - images.length;
-  if (images.length === 0) {
-    return nonImageCount
-      ? `<p style="margin:8px 0 0; font-size:12px; color:var(--color-text-secondary);">${nonImageCount} reference link${nonImageCount === 1 ? '' : 's'}</p>`
-      : '';
-  }
-  const shown = images.slice(0, BOARD_CARD_THUMB_LIMIT);
-  const overflow = images.length - shown.length;
-  const thumbs = shown.map((l, idx) => `<img class="board-card-thumb" src="${l.url}" alt="${escapeHtml(l.label)}" title="View &amp; annotate: ${escapeHtml(l.label)}" style="cursor:pointer;" data-board-id="${board.id}" data-idx="${idx}">`).join('');
+  const videos = links.filter(isVideoEntry);
+  const plainLinks = links.filter(l => !isImageEntry(l) && !isVideoEntry(l));
+
+  const shownImages = images.slice(0, BOARD_CARD_THUMB_LIMIT);
+  const overflow = images.length - shownImages.length;
+  const imageThumbs = shownImages.map((l, idx) => `<img class="board-card-thumb" src="${l.url}" alt="${escapeHtml(l.label)}" title="View &amp; annotate: ${escapeHtml(l.label)}" style="cursor:pointer;" data-board-id="${board.id}" data-idx="${idx}">`).join('');
   const overflowBadge = overflow > 0 ? `<span class="board-card-thumb-overflow">+${overflow}</span>` : '';
-  const linkNote = nonImageCount ? `<span style="font-size:11px; color:var(--color-text-secondary); margin-left:6px;">+ ${nonImageCount} link${nonImageCount === 1 ? '' : 's'}</span>` : '';
-  return `<div style="display:flex; align-items:center; gap:6px; margin-top:10px; flex-wrap:wrap;">${thumbs}${overflowBadge}${linkNote}</div>`;
+
+  const videoThumbs = videos.map((l, idx) => `<div class="board-card-video-thumb" title="Play: ${escapeHtml(l.label)}" data-board-id="${board.id}" data-video-idx="${idx}">▶</div>`).join('');
+
+  if (!imageThumbs && !videoThumbs && !plainLinks.length) return '';
+
+  const linkNote = plainLinks.length ? `<span style="font-size:11px; color:var(--color-text-secondary); margin-left:6px;">+ ${plainLinks.length} link${plainLinks.length === 1 ? '' : 's'}</span>` : '';
+  return `<div style="display:flex; align-items:center; gap:6px; margin-top:10px; flex-wrap:wrap;">${imageThumbs}${overflowBadge}${videoThumbs}${linkNote}</div>`;
 }
 
 function renderBoardsList() {
@@ -666,6 +792,7 @@ function renderBoardsList() {
       </div>
       ${board.ideaSummary ? `<p style="margin:12px 0 0; font-size:13px; color:var(--color-text-secondary);">${escapeHtml(board.ideaSummary)}</p>` : ''}
       ${renderBoardCardThumbs(board)}
+      ${board.internalNotes ? `<div class="board-internal-notes"><span class="mb-internal-only-badge">Internal notes</span><p>${escapeHtml(board.internalNotes)}</p></div>` : ''}
       ${renderStyleScaleMini(board, client)}
     </div>
   `).join('');
@@ -676,6 +803,45 @@ function renderBoardsList() {
   document.querySelectorAll('.board-card-thumb[data-board-id]').forEach(img => {
     img.addEventListener('click', () => openAdminMoodBoardLightbox(img.getAttribute('data-board-id'), parseInt(img.getAttribute('data-idx'), 10)));
   });
+  document.querySelectorAll('.board-card-video-thumb[data-board-id]').forEach(tile => {
+    tile.addEventListener('click', () => openVideoLightbox(tile.getAttribute('data-board-id'), parseInt(tile.getAttribute('data-video-idx'), 10)));
+  });
+}
+
+// ── Video lightbox (admin side) ──
+// Deliberately simpler than openAdminMoodBoardLightbox above: no
+// annotate toolbar, no prev/next stepping between videos - just plays
+// the one video that was clicked. Reads from the SAVED board (like the
+// image lightbox does), not draftEmbedLinks, for the same reason: this
+// is for reviewing what's actually on a saved board, not the
+// in-progress form.
+function openVideoLightbox(boardId, videoIdx) {
+  const client = currentClient();
+  if (!client) return;
+  const board = (client.moodBoards || []).find(b => b.id === boardId);
+  if (!board) return;
+  const videos = (board.embedLinks || []).filter(isVideoEntry);
+  const v = videos[videoIdx];
+  if (!v) return;
+
+  const overlay = el('mbVideoLightbox');
+  const content = el('mbVideoLightboxContent');
+  const caption = el('mbVideoLightboxCaption');
+  if (!overlay || !content) return;
+
+  content.innerHTML = renderVideoPreviewMarkup(v).replace('<video ', '<video autoplay ');
+  if (caption) caption.textContent = v.label || '';
+  overlay.style.display = 'flex';
+}
+
+function closeVideoLightbox() {
+  const overlay = el('mbVideoLightbox');
+  const content = el('mbVideoLightboxContent');
+  if (overlay) overlay.style.display = 'none';
+  // Clearing the markup (rather than just hiding it) stops an uploaded
+  // <video> or an embedded iframe's audio/video from continuing to play
+  // in the background after the modal closes.
+  if (content) content.innerHTML = '';
 }
 
 function renderState() {
@@ -1014,6 +1180,7 @@ document.addEventListener('DOMContentLoaded', () => {
   el('cancelEditBtn').addEventListener('click', resetForm);
   el('addEmbedBtn').addEventListener('click', addDraftEmbedLink);
   wireDropZone(el('imageDropZone'), el('imageFileInput'), handleDroppedImage);
+  wireDropZone(el('videoDropZone'), el('videoFileInput'), handleDroppedVideo);
 
   // Same iframe-race fix used across the other client-aware modules: the
   // parent Hub's client database loads asynchronously, so poll briefly
@@ -1095,4 +1262,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   el('mbAdminAnnotationCancelBtn')?.addEventListener('click', hideAdminAnnotationPopup);
   el('mbAdminAnnotationSaveBtn')?.addEventListener('click', saveAdminAnnotationDraft);
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  const overlay = el('mbVideoLightbox');
+  if (!overlay) return;
+  el('mbVideoLightboxClose')?.addEventListener('click', closeVideoLightbox);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeVideoLightbox();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (overlay.style.display === 'flex' && e.key === 'Escape') closeVideoLightbox();
+  });
 });

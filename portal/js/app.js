@@ -1572,7 +1572,8 @@ function renderMoodBoards() {
     // proper thumbnail grid; the iframe embed stays for actual external
     // reference links (Pinterest boards, etc).
     const images = allLinks.filter(isMoodBoardImage);
-    const links = allLinks.filter(l => !isMoodBoardImage(l));
+    const videos = allLinks.filter(isMoodBoardVideo);
+    const links = allLinks.filter(l => !isMoodBoardImage(l) && !isMoodBoardVideo(l));
 
     return `
     <div class="moodboard-card">
@@ -1592,6 +1593,17 @@ function renderMoodBoards() {
               <img src="${escapeHtml(l.url)}" alt="${escapeHtml(l.label || '')}" loading="lazy">
               ${l.label ? `<span class="moodboard-image-caption">${escapeHtml(l.label)}</span>` : ""}
             </button>
+          `).join("")}
+        </div>
+      ` : ""}
+      ${videos.length ? `
+        <div class="moodboard-section-label">Reference Videos</div>
+        <div class="moodboard-video-grid">
+          ${videos.map(l => `
+            <div class="moodboard-video-wrapper">
+              ${renderMoodBoardVideoMarkup(l)}
+              ${l.label ? `<span class="moodboard-embed-link" style="cursor:default;">${escapeHtml(l.label)}</span>` : ""}
+            </div>
           `).join("")}
         </div>
       ` : ""}
@@ -1635,6 +1647,44 @@ function renderMoodBoards() {
 
 function isMoodBoardImage(l) {
   return !!(l && (l.isImage || (l.url || "").startsWith("data:image")));
+}
+
+// Same URL-recognition logic as the admin Mood Board Builder
+// (getVideoEmbedInfo in mood-board-builder/js/app.js) - duplicated
+// rather than imported, matching how PORTAL_STYLE_AXES below and every
+// other tool in this codebase keeps its own js/app.js self-contained.
+// Converts a YouTube/Vimeo/Loom watch/share link into its embeddable
+// iframe URL (their normal URLs refuse to render in an <iframe> as-is),
+// or recognizes a direct video file URL for a plain <video> tag instead.
+function getMoodBoardVideoEmbedInfo(url) {
+  if (!url) return null;
+  const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([\w-]{6,})/);
+  if (ytMatch) return { kind: "iframe", src: `https://www.youtube.com/embed/${ytMatch[1]}` };
+
+  const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeoMatch) return { kind: "iframe", src: `https://player.vimeo.com/video/${vimeoMatch[1]}` };
+
+  const loomMatch = url.match(/loom\.com\/share\/([\w-]+)/);
+  if (loomMatch) return { kind: "iframe", src: `https://www.loom.com/embed/${loomMatch[1]}` };
+
+  if (/\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(url)) return { kind: "file", src: url };
+
+  return null;
+}
+
+function isMoodBoardVideo(l) {
+  return !!(l && (l.isVideo || (l.url || "").startsWith("data:video") || getMoodBoardVideoEmbedInfo(l.url || "")));
+}
+
+function renderMoodBoardVideoMarkup(l) {
+  if ((l.url || "").startsWith("data:video")) {
+    return `<video src="${escapeHtml(l.url)}" controls preload="metadata"></video>`;
+  }
+  const embed = getMoodBoardVideoEmbedInfo(l.url);
+  if (embed && embed.kind === "iframe") {
+    return `<iframe src="${escapeHtml(embed.src)}" loading="lazy" allow="fullscreen" allowfullscreen></iframe>`;
+  }
+  return `<video src="${escapeHtml(embed ? embed.src : l.url)}" controls preload="metadata"></video>`;
 }
 
 // Same fixed axes as the admin Mood Board Builder (mood-board-builder/js/app.js) -

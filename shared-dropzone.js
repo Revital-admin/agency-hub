@@ -106,6 +106,68 @@ function processImageFile(file, opts = {}) {
   });
 }
 
+const SHARED_ALLOWED_VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime"];
+
+// MP4 and MOV (QuickTime) are both ISO base media containers - the file
+// type box ("ftyp") sits at byte offset 4 in either one, so one check
+// covers both extensions. WEBM is a different container entirely
+// (Matroska/EBML), identified by its own fixed 4-byte magic number at
+// the very start of the file instead.
+function _sharedDetectVideoType(arrayBuffer) {
+  const bytes = new Uint8Array(arrayBuffer.slice(0, 12));
+  if (bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) return "video/mp4";
+  if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) return "video/webm";
+  return null;
+}
+
+/**
+ * Validate a video file and read it as a data URL.
+ *
+ * Unlike processImageFile(), there's no client-side compression step
+ * here - a canvas can downscale an image in one draw call, but there's
+ * no equivalent cheap way to re-encode video in the browser. That means
+ * the size cap has to be much stricter than images get: this is only
+ * meant for a short, low-res clip living inline in a Firestore document
+ * field (see the client-size warnings in mood-board-builder/js/app.js).
+ * Anything longer belongs as a URL reference instead - a YouTube/Vimeo/
+ * Loom link, or a link to a file hosted elsewhere.
+ *
+ * opts: { maxSizeBytes (default 3MB) }
+ * Returns a Promise<string dataUrl>, rejecting with a user-facing error
+ * message string on failure.
+ */
+function processVideoFile(file, opts = {}) {
+  const maxSizeBytes = opts.maxSizeBytes || 3 * 1024 * 1024;
+
+  return new Promise((resolve, reject) => {
+    if (!file) { reject("No file given."); return; }
+
+    if (file.size > maxSizeBytes) {
+      reject(`Video too large (max ${Math.round(maxSizeBytes / (1024 * 1024))}MB) - videos can't be compressed the way images are, so only short/low-res clips fit inline. For anything longer, paste a YouTube/Vimeo/Loom link instead.`);
+      return;
+    }
+    if (!SHARED_ALLOWED_VIDEO_TYPES.includes(file.type)) {
+      reject("Unsupported file type. Please use an MP4, WEBM, or MOV video.");
+      return;
+    }
+
+    const sigReader = new FileReader();
+    sigReader.onload = (sigEvent) => {
+      const detectedType = _sharedDetectVideoType(sigEvent.target.result);
+      if (!detectedType) {
+        reject("That file isn't a valid video.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = () => reject("Couldn't read that file.");
+      reader.readAsDataURL(file);
+    };
+    sigReader.onerror = () => reject("Couldn't read that file.");
+    sigReader.readAsArrayBuffer(file.slice(0, 12));
+  });
+}
+
 /**
  * Wire up drag-and-drop + click-to-browse on a drop zone element.
  * Calls onFile(file) once per valid file the user drops or selects —

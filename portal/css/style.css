@@ -1793,6 +1793,32 @@ body {
   .moodboard-annotate-toolbar { flex-wrap: wrap; row-gap: 6px; }
   .annotate-hint { width: 100%; }
 }
+.moodboard-video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+.moodboard-video-wrapper {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.2);
+}
+.moodboard-video-wrapper video,
+.moodboard-video-wrapper iframe {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: none;
+  display: block;
+}
+.moodboard-video-wrapper .moodboard-embed-link {
+  display: block;
+  padding: 6px 10px;
+  margin: 0;
+  font-size: 0.8rem;
+}
+
 .moodboard-embed-wrapper {
   margin-top: 8px;
   border: 1px solid var(--color-border);
