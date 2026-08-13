@@ -181,7 +181,7 @@ function initAdminAuthGate() {
 // expired, different account, etc.) we force a full reload so Cloudflare
 // Access's own login flow takes over, rather than trying to fake a
 // re-auth client-side.
-const IDLE_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 const IDLE_ACTIVITY_EVENTS = ["mousemove", "mousedown", "keydown", "scroll", "touchstart", "wheel"];
 let idleTimer = null;
 let idleLocked = false;
@@ -4508,6 +4508,30 @@ function initParentEventListeners() {
           // older exported backups still import exactly as before.
           const isFullBackupFormat = imported && typeof imported.clientsDb === 'object' && !Array.isArray(imported.clientsDb);
           const importedClients = isFullBackupFormat ? imported.clientsDb : imported;
+
+          // SAFEGUARD (Aug 2026, added after a real incident): this merge
+          // is `{...clientsDb, ...importedClients}` - any client key already
+          // present in importedClients silently OVERWRITES the live client
+          // with whatever this file has for them, even if the file is an
+          // old backup and the live version has since gained days of real
+          // edits (that's exactly how "Evry Intention LLC" briefly vanished
+          // - an older backup was imported and its narrower client list won
+          // the merge for every key it happened to include). Brand-new
+          // clients that don't exist live yet are always safe to add - only
+          // OVERLAPPING keys need a heads-up, so warn specifically about
+          // those instead of blocking every import.
+          const overlapping = Object.keys(importedClients).filter(name => clientsDb[name]);
+          if (overlapping.length > 0) {
+            const proceed = confirm(
+              `This backup (from ${imported.exportedAt || "an unknown date"}) will OVERWRITE ${overlapping.length} client workspace(s) that already exist here with this file's older version, discarding any edits made since:\n\n` +
+              overlapping.map(name => `- ${name}`).join("\n") +
+              `\n\nAny other clients in this file that don't already exist will be added either way. Continue with the overwrite?`
+            );
+            if (!proceed) {
+              showBanner("error", "Import cancelled - no changes were made.");
+              return;
+            }
+          }
 
           clientsDb = { ...clientsDb, ...importedClients };
           saveDatabase();

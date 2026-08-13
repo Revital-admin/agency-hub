@@ -2659,7 +2659,7 @@ async function stripeApiRequest(env, path, formParams, billingMode) {
 //     bills both together on the first invoice, then just the recurring
 //     amount every month after.
 // ── Idle Lock PIN (Aug 2026, per-person as of the second pass) ──
-// The 20-minute idle-lock overlay (see initIdleSessionLock in app.js)
+// The 30-minute idle-lock overlay (see initIdleSessionLock in app.js)
 // used to unlock with a single click, which only re-confirmed the
 // browser's existing Cloudflare Access cookie was still valid - it
 // didn't actually challenge the person standing at the keyboard. Anyone
@@ -2880,7 +2880,7 @@ async function handleIdleLockGeneratePin(request, env) {
     const emailResult = await sendResendEmailDirect(env, {
       to: targetEmail,
       subject: "Your Revital Hub idle-lock PIN",
-      body: `Hi,\n\nA Hub Admin generated a new idle-lock PIN for your account on the Client Onboarding & Audit Hub (hub.revitalproductions.com).\n\nYour PIN: ${pin}\n\nYou'll be asked for this after being idle for 20 minutes, to confirm it's really you before the Hub shows client data again. Keep it private - don't share it with anyone else, including coworkers.\n\nIf you didn't expect this, let ${accessEmail} know.\n\n- Revital Productions Hub`
+      body: `Hi,\n\nA Hub Admin generated a new idle-lock PIN for your account on the Client Onboarding & Audit Hub (hub.revitalproductions.com).\n\nYour PIN: ${pin}\n\nYou'll be asked for this after being idle for 30 minutes, to confirm it's really you before the Hub shows client data again. Keep it private - don't share it with anyone else, including coworkers.\n\nIf you didn't expect this, let ${accessEmail} know.\n\n- Revital Productions Hub`
     });
 
     return jsonResponse({ ok: true, pin, emailSent: emailResult.ok, emailError: emailResult.ok ? null : emailResult.error });
