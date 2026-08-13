@@ -1464,6 +1464,10 @@ function renameActiveClient() {
   clientState.name = newName;
   clientsDb[newName] = clientState;
   delete clientsDb[oldName];
+  // See intentionallyRemovedClientNames above commitDatabaseToCloud's
+  // stale-tab content check - this key genuinely leaving clientsDb here is
+  // a deliberate, in-this-tab rename, not a sign of stale data.
+  intentionallyRemovedClientNames.add(oldName);
 
   activeClientName = newName;
   localStorage.setItem("REVITAL_HUB_ACTIVE_CLIENT", activeClientName);
@@ -1492,6 +1496,10 @@ function deleteActiveClient() {
 
   const deletedName = activeClientName;
   delete clientsDb[activeClientName];
+  // See intentionallyRemovedClientNames above commitDatabaseToCloud's
+  // stale-tab content check - this key genuinely leaving clientsDb here is
+  // a deliberate, in-this-tab delete, not a sign of stale data.
+  intentionallyRemovedClientNames.add(deletedName);
   saveDatabase();
 
   // Switch to first remaining client
@@ -4970,6 +4978,14 @@ let clientsDbAllShardsLoaded = false;
 // just never closed here specifically.
 let clientsDbDocVersion = 0;
 
+// Names this tab has itself, deliberately, removed from clientsDb this
+// session (via deleteActiveClient or the delete-half of renameActiveClient)
+// - see the stale-tab content check in commitDatabaseToCloud below. Only
+// ADDED to by those two call sites, never cleared, so a key this tab
+// genuinely deleted stays "explained" for the rest of the session even if
+// several saves happen afterward.
+let intentionallyRemovedClientNames = new Set();
+
 // Which sections a Team-Access-restricted teammate is granted, per the
 // last /api/restricted-client-data response (see startRestrictedClientsDbSync
 // and commitRestrictedClientEdits below). null for unrestricted admins -
@@ -5389,74 +5405,123 @@ function commitDatabaseToCloud() {
       return;
     }
 
-    // Safety-net backup: a "last known good" full snapshot, written
-    // alongside the real shards now that the version check above has
-    // confirmed this tab's data is fresh and about to be accepted (moved
-    // here, after that check, so a rejected save never overwrites the
-    // backup with stale data - see the comment where this used to live).
-    // If the live shards ever get corrupted again for any reason, this is
-    // always a recent, complete copy to recover from - see
-    // agency/clientsDbBackup-shard-0, -1, etc. and
-    // agency/clientsDbBackupShardMeta. Sharded the exact same way as the
-    // live data (reusing the `shards` array above) so it can't hit
-    // Firestore's ~1MB per-document limit as the client roster grows.
-    // Fire-and-forget: a backup failure shouldn't block or alarm the user
-    // about the actual save below. (agency/clientsDbBackup, the old
-    // single-document location, is no longer written to.)
-    const backupMetaRef = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackupShardMeta");
-    window.firebaseGetDoc(backupMetaRef).then((backupMetaSnap) => {
-      const prevBackupShardCount = (backupMetaSnap.exists && typeof backupMetaSnap.data().count === 'number')
-        ? backupMetaSnap.data().count : 0;
-
-      const backupWrites = shards.map((shardObj, i) => {
-        const ref = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackup-shard-" + i);
-        return window.firebaseSetDoc(ref, shardObj);
+    // SECOND SAFETY NET (Aug 2026, after Evry Intention LLC vanished a
+    // second time with a matching version number): the check above only
+    // catches a STALE VERSION NUMBER, which assumes clientsDbDocVersion
+    // and clientsDb's actual CONTENT always move together. They don't
+    // always - clientsDbDocVersion is kept fresh by a separate listener on
+    // the tiny meta doc (see startUnrestrictedClientsDbSync), while
+    // clientsDb's real content comes from the per-shard listeners
+    // (listenToClientsDbShard). A backgrounded/throttled tab can keep the
+    // cheap meta listener alive (so its version number looks current)
+    // while a shard listener silently stalls (so its actual client list is
+    // stale) - version match, content mismatch, and the check above waves
+    // it through. Catch that here with an actual content comparison: fetch
+    // the real shard documents fresh (not just their tiny meta counter)
+    // and refuse to save if the cloud currently has ANY client this tab
+    // doesn't - that's the fingerprint of a stale tab about to blank out a
+    // client it never knew existed, same failure mode that lost Evry
+    // Intention LLC. A deliberate deletion never trips this, since
+    // deleteActiveClient() runs in a tab that just loaded that client and
+    // is removing a key IT knows about, not one it's silently unaware of.
+    const freshShardCount = (freshMetaSnap.exists && typeof freshMetaSnap.data().count === "number")
+      ? freshMetaSnap.data().count : lastKnownClientsDbShardCount;
+    const cloudKeyCheck = Promise.all(
+      Array.from({ length: freshShardCount }, (_, i) => window.firebaseGetDoc(getClientsDbShardDocRef(i)))
+    ).then((freshShardSnaps) => {
+      const cloudKeys = new Set();
+      freshShardSnaps.forEach(snap => {
+        if (snap.exists) Object.keys(snap.data() || {}).forEach(k => cloudKeys.add(k));
       });
-      // Blank out any trailing backup shards left over from a larger
-      // previous backup, same reasoning as the live-shard cleanup below.
-      for (let i = shards.length; i < prevBackupShardCount; i++) {
-        const ref = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackup-shard-" + i);
-        backupWrites.push(window.firebaseSetDoc(ref, {}));
-      }
-      backupWrites.push(window.firebaseSetDoc(backupMetaRef, { count: shards.length, savedAt: new Date().toISOString() }));
-
-      return Promise.all(backupWrites);
-    }).catch(err => console.error("clientsDb backup write failed:", err));
-
-    const writes = shards.map((shardObj, i) => {
-      const docRef = getClientsDbShardDocRef(i);
-      return window.firebaseSetDoc(docRef, shardObj);
+      const localKeys = new Set(Object.keys(cleanDb));
+      // Exclude anything this tab itself deliberately deleted/renamed away
+      // this session (see intentionallyRemovedClientNames above) - those
+      // are legitimate, not a sign of stale data.
+      return Array.from(cloudKeys).filter(k => !localKeys.has(k) && !intentionallyRemovedClientNames.has(k));
     });
 
-    // If the client list just got shorter (client deleted) and now needs
-    // fewer shards than last time, blank out the now-unused trailing shard
-    // documents instead of leaving stale client data sitting in them.
-    for (let i = shards.length; i < lastKnownClientsDbShardCount; i++) {
-      const docRef = getClientsDbShardDocRef(i);
-      writes.push(window.firebaseSetDoc(docRef, {}));
-    }
-
-    const nextVersion = freshVersion + 1;
-    writes.push(window.firebaseSetDoc(metaRef, { count: shards.length, version: nextVersion }));
-
-    return Promise.all(writes).then(() => {
-      resolved = true;
-      clientsDbDocVersion = nextVersion;
-      namesPendingAsOfThisWrite.forEach(name => pendingLocalClientEdits.delete(name));
-      if (indicator) {
-        indicator.innerHTML = "Saved to Cloud ✅";
-        setTimeout(() => { indicator.style.opacity = "0"; }, 2000);
+    return cloudKeyCheck.then((missingLocally) => {
+      if (missingLocally.length > 0) {
+        resolved = true;
+        console.warn("commitDatabaseToCloud: skipped - cloud has client(s) this tab doesn't know about (stale tab guard):", missingLocally);
+        if (indicator) {
+          indicator.innerHTML = "Save Skipped ⚠️";
+        }
+        showSaveConflictBanner(
+          `This tab's client list is out of date - the cloud currently has a client ("${missingLocally.join('", "')}") this tab never loaded, likely because this tab has been open a while. Saving now would have erased ${missingLocally.length > 1 ? "them" : "it"}, so nothing was saved. Click Reload Now to pick up the current data, then redo your last edit.`
+        );
+        return;
       }
 
-      // Mirror only the portal-facing subset of each client into its own
-      // public document (see syncPublicPortalDocs). The full clientsDb
-      // data above is admin-only under Firestore rules; this is what the
-      // unauthenticated client portal is allowed to read. Only runs after
-      // a confirmed successful save - cleanDb shouldn't be pushed out to
-      // the public portal on a skipped/failed save, since it may not
-      // reflect the true current state.
-      syncPublicPortalDocs(cleanDb).catch(err => {
-        console.error("Public portal sync failed:", err);
+      // Safety-net backup: a "last known good" full snapshot, written
+      // alongside the real shards now that both checks above have
+      // confirmed this tab's data is fresh and about to be accepted (moved
+      // here, after those checks, so a rejected save never overwrites the
+      // backup with stale data - see the comment where this used to live).
+      // If the live shards ever get corrupted again for any reason, this is
+      // always a recent, complete copy to recover from - see
+      // agency/clientsDbBackup-shard-0, -1, etc. and
+      // agency/clientsDbBackupShardMeta. Sharded the exact same way as the
+      // live data (reusing the `shards` array above) so it can't hit
+      // Firestore's ~1MB per-document limit as the client roster grows.
+      // Fire-and-forget: a backup failure shouldn't block or alarm the user
+      // about the actual save below. (agency/clientsDbBackup, the old
+      // single-document location, is no longer written to.)
+      const backupMetaRef = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackupShardMeta");
+      window.firebaseGetDoc(backupMetaRef).then((backupMetaSnap) => {
+        const prevBackupShardCount = (backupMetaSnap.exists && typeof backupMetaSnap.data().count === 'number')
+          ? backupMetaSnap.data().count : 0;
+
+        const backupWrites = shards.map((shardObj, i) => {
+          const ref = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackup-shard-" + i);
+          return window.firebaseSetDoc(ref, shardObj);
+        });
+        // Blank out any trailing backup shards left over from a larger
+        // previous backup, same reasoning as the live-shard cleanup below.
+        for (let i = shards.length; i < prevBackupShardCount; i++) {
+          const ref = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackup-shard-" + i);
+          backupWrites.push(window.firebaseSetDoc(ref, {}));
+        }
+        backupWrites.push(window.firebaseSetDoc(backupMetaRef, { count: shards.length, savedAt: new Date().toISOString() }));
+
+        return Promise.all(backupWrites);
+      }).catch(err => console.error("clientsDb backup write failed:", err));
+
+      const writes = shards.map((shardObj, i) => {
+        const docRef = getClientsDbShardDocRef(i);
+        return window.firebaseSetDoc(docRef, shardObj);
+      });
+
+      // If the client list just got shorter (client deleted) and now needs
+      // fewer shards than last time, blank out the now-unused trailing shard
+      // documents instead of leaving stale client data sitting in them.
+      for (let i = shards.length; i < lastKnownClientsDbShardCount; i++) {
+        const docRef = getClientsDbShardDocRef(i);
+        writes.push(window.firebaseSetDoc(docRef, {}));
+      }
+
+      const nextVersion = freshVersion + 1;
+      writes.push(window.firebaseSetDoc(metaRef, { count: shards.length, version: nextVersion }));
+
+      return Promise.all(writes).then(() => {
+        resolved = true;
+        clientsDbDocVersion = nextVersion;
+        namesPendingAsOfThisWrite.forEach(name => pendingLocalClientEdits.delete(name));
+        if (indicator) {
+          indicator.innerHTML = "Saved to Cloud ✅";
+          setTimeout(() => { indicator.style.opacity = "0"; }, 2000);
+        }
+
+        // Mirror only the portal-facing subset of each client into its own
+        // public document (see syncPublicPortalDocs). The full clientsDb
+        // data above is admin-only under Firestore rules; this is what the
+        // unauthenticated client portal is allowed to read. Only runs after
+        // a confirmed successful save - cleanDb shouldn't be pushed out to
+        // the public portal on a skipped/failed save, since it may not
+        // reflect the true current state.
+        syncPublicPortalDocs(cleanDb).catch(err => {
+          console.error("Public portal sync failed:", err);
+        });
       });
     });
   }).catch(err => {
