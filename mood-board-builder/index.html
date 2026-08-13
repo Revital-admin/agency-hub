@@ -38,6 +38,11 @@
       <div class="step-card">
         <h3 id="formTitle">New Mood Board</h3>
         <p id="clientSizeWarning" class="mb-client-size-warning" style="display:none;"></p>
+        <!-- Only shown when this client has existing mood board images still stored as
+             inline base64 (from before images were moved to R2/api/media - see
+             migrateClientImagesToStorage() in app.js). Moves them to storage in place
+             so the client's Firestore record actually shrinks, not just new uploads. -->
+        <button type="button" id="migrateImagesBtn" class="btn-secondary" style="display:none; margin-bottom: 12px;">Move this client's existing inline images to storage</button>
         <div class="form-row mt-3">
           <div class="form-group" style="flex:2">
             <label>Title</label>

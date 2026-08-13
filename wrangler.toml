@@ -40,6 +40,24 @@ bucket_name = "revital-contracts"
 binding = "CONTRACTS_BACKUP_BUCKET"
 bucket_name = "revital-contracts-backup"
 
+# General-purpose image storage (POST/GET/DELETE /api/media/* in
+# _worker.js) - written for Mood Board Builder, whose reference images
+# were being embedded as base64 directly inside the client's clientsDb
+# Firestore document. That's fine for a couple images, but the whole
+# clientsDb document gets rewritten on every save and Firestore caps a
+# single document around ~1MB, so a client with several image-heavy
+# mood boards could push their own record close to that ceiling and
+# start failing saves outright. Only a small JSON reference (the R2 key)
+# lives in Firestore now instead of the image bytes.
+#
+# One-time manual step required before this binding will resolve: create
+# the bucket with `wrangler r2 bucket create revital-media` (or via the
+# Cloudflare dashboard -> R2 -> Create bucket, same name) - deploy will
+# fail with a "bucket does not exist" error until that's done once.
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "revital-media"
+
 # Weekly Agency Health Digest - runs runWeeklyHealthDigest() in _worker.js
 # on a schedule with no request/user involved, emailing the same
 # needs-attention list Agency Health Dashboard shows live in the Hub.

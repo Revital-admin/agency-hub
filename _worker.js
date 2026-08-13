@@ -47,6 +47,21 @@ export default {
       return jsonResponse({ error: "Method not allowed" }, 405);
     }
 
+    // R2-backed image storage for tools that were previously embedding
+    // images as base64 directly in Firestore (see the big comment above
+    // handleMediaUpload below for why). Mood Board Builder is the first
+    // caller; deliberately generic (not "mood-board-*") so Case Study
+    // Builder and Brand Guidelines Builder can move onto the same route
+    // later instead of each growing their own copy of this.
+    if (url.pathname === "/api/media" && request.method === "POST") {
+      return handleMediaUpload(request, env);
+    }
+    if (url.pathname.startsWith("/api/media/")) {
+      if (request.method === "GET") return handleMediaGet(request, env);
+      if (request.method === "DELETE") return handleMediaDelete(request, env);
+      return jsonResponse({ error: "Method not allowed" }, 405);
+    }
+
     // Restore UI for the copy-on-delete backup (see CONTRACTS_BACKUP_BUCKET
     // in wrangler.toml and handleContractDelete below) - lets the Contract
     // Template Library show what's been deleted and bring a file back.
@@ -718,6 +733,163 @@ async function handleContractDelete(request, env) {
   }
 
   await env.CONTRACTS_BUCKET.delete(key);
+  return jsonResponse({ success: true }, 200, { "Cache-Control": "no-store" });
+}
+
+// ── /api/media (upload) + /api/media/:key (fetch/delete) ──
+// General-purpose R2-backed image storage. Written for Mood Board
+// Builder, whose reference images were being stored as base64 data URLs
+// directly inline in the client's clientsDb Firestore document (see
+// shared-dropzone.js's processImageFile) - fine for one or two images,
+// but the whole clientsDb document gets rewritten on every save, and
+// Firestore caps a single document around ~1MB. A client with several
+// mood boards' worth of images could push their own record close to
+// that ceiling and start failing saves outright, not just look bloated
+// (see the client-size warnings in mood-board-builder/js/app.js).
+//
+// Deliberately named /api/media rather than /api/mood-board-images -
+// Case Study Builder and Brand Guidelines Builder both call the exact
+// same processImageFile() helper and have the exact same inline-base64
+// problem waiting to happen; this route is written so either can switch
+// to it later without a new endpoint.
+//
+// Stored in an R2 bucket (binding: MEDIA_BUCKET, see wrangler.toml) -
+// only a small JSON reference (the R2 key/URL) needs to live in
+// Firestore now instead of the image bytes themselves.
+//
+// Auth is asymmetric, unlike the contracts routes: upload/delete are
+// gated the same way (Cloudflare-Access-authenticated
+// @revitalproductions.com requests only), but GET is deliberately
+// public. Mood boards can be marked "shared with client" and rendered
+// in the public Client Portal (portal/js/app.js), which is unauthenticated
+// magic-link access, not Cloudflare Access - the same reason
+// firestore.rules' clients/{clientId} collection is "allow get: if
+// true" (see the Public Client Portal boundary section of
+// ARCHITECTURE.md: holding the link *is* the access control). Requiring
+// staff auth on GET here would have broken every shared mood board image
+// for the client viewing their own portal. Keys are server-generated
+// crypto.randomUUID() values, unguessable and never reused, so an
+// unauthenticated-but-unguessable URL is the same security model the
+// portal itself already runs on, not a weaker one.
+const MEDIA_MAX_BYTES = 8 * 1024 * 1024; // generous - images are already client-compressed by processImageFile before upload
+
+const MEDIA_IMAGE_SIGNATURES = [
+  { type: "image/png", ext: "png", bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] },
+  { type: "image/jpeg", ext: "jpg", bytes: [0xff, 0xd8, 0xff] },
+  // WEBP: "RIFF" .... "WEBP" - two separate byte runs, not one contiguous
+  // signature (bytes 4-7 are a file-length field that varies per file).
+  { type: "image/webp", ext: "webp", bytes: [0x52, 0x49, 0x46, 0x46], extra: { bytes: [0x57, 0x45, 0x42, 0x50], offset: 8 } }
+];
+
+function detectMediaImageType(bytes) {
+  for (const sig of MEDIA_IMAGE_SIGNATURES) {
+    let matches = true;
+    for (let i = 0; i < sig.bytes.length; i++) {
+      if (bytes[i] !== sig.bytes[i]) { matches = false; break; }
+    }
+    if (matches && sig.extra) {
+      for (let i = 0; i < sig.extra.bytes.length; i++) {
+        if (bytes[sig.extra.offset + i] !== sig.extra.bytes[i]) { matches = false; break; }
+      }
+    }
+    if (matches) return sig;
+  }
+  return null;
+}
+
+async function handleMediaUpload(request, env) {
+  if (!isContractRequestAuthorized(request)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  if (!env.MEDIA_BUCKET) {
+    return jsonResponse({ error: "Server missing MEDIA_BUCKET R2 binding - create the bucket (wrangler r2 bucket create revital-media) and redeploy" }, 500);
+  }
+
+  let form;
+  try {
+    form = await request.formData();
+  } catch (e) {
+    return jsonResponse({ error: "Expected multipart/form-data body with a 'file' field" }, 400);
+  }
+
+  const file = form.get("file");
+  if (!file || typeof file.arrayBuffer !== "function") {
+    return jsonResponse({ error: "Missing file" }, 400);
+  }
+  if (file.size > MEDIA_MAX_BYTES) {
+    return jsonResponse({ error: `File too large (${MEDIA_MAX_BYTES / (1024 * 1024)}MB limit)` }, 400);
+  }
+
+  const buffer = await file.arrayBuffer();
+  // Verify the actual file content is an image (magic bytes), rather than
+  // trusting the client-supplied MIME type, which is trivially spoofable.
+  const sig = detectMediaImageType(new Uint8Array(buffer.slice(0, 16)));
+  if (!sig) {
+    return jsonResponse({ error: "File does not look like a valid PNG, JPEG, or WEBP image" }, 400);
+  }
+
+  // Keys are always generated server-side (never client-supplied) so an
+  // upload can never target/overwrite an arbitrary existing key. Prefixed
+  // by caller-provided context (e.g. "mood-board") purely for readability
+  // when browsing the bucket - not used for access control.
+  const rawContext = (form.get("context") || "misc").toString();
+  const context = rawContext.replace(/[^a-z0-9-]/gi, "-").slice(0, 40) || "misc";
+  const key = `${context}/${Date.now()}-${crypto.randomUUID()}.${sig.ext}`;
+
+  await env.MEDIA_BUCKET.put(key, buffer, {
+    httpMetadata: { contentType: sig.type }
+  });
+
+  return jsonResponse({ success: true, key, url: `/api/media/${encodeURIComponent(key)}` }, 200, { "Cache-Control": "no-store" });
+}
+
+function getMediaKeyFromPath(request) {
+  const key = decodeURIComponent(new URL(request.url).pathname.slice("/api/media/".length));
+  if (!key || key.includes("..")) return null;
+  return key;
+}
+
+async function handleMediaGet(request, env) {
+  // Deliberately no isContractRequestAuthorized() check here - see the
+  // big comment above MEDIA_MAX_BYTES for why GET is public while
+  // upload/delete are not (mood board images render in the unauthenticated
+  // Client Portal). Keys are unguessable crypto.randomUUID() values, which
+  // is the access control.
+  if (!env.MEDIA_BUCKET) {
+    return jsonResponse({ error: "Server missing MEDIA_BUCKET R2 binding" }, 500);
+  }
+  const key = getMediaKeyFromPath(request);
+  if (!key) return jsonResponse({ error: "Invalid key" }, 400);
+
+  const obj = await env.MEDIA_BUCKET.get(key);
+  if (!obj) return jsonResponse({ error: "Not found" }, 404);
+
+  return new Response(obj.body, {
+    headers: {
+      "Content-Type": (obj.httpMetadata && obj.httpMetadata.contentType) || "application/octet-stream",
+      // Long-lived and public (not "private" like the old copy of this
+      // header on handleContractGet) - portal visitors need to load these
+      // directly, and there's no per-user variation to worry about since
+      // the content behind a given key never changes.
+      "Cache-Control": "public, max-age=86400"
+    }
+  });
+}
+
+async function handleMediaDelete(request, env) {
+  if (!isContractRequestAuthorized(request)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  if (!env.MEDIA_BUCKET) {
+    return jsonResponse({ error: "Server missing MEDIA_BUCKET R2 binding" }, 500);
+  }
+  const key = getMediaKeyFromPath(request);
+  if (!key) return jsonResponse({ error: "Invalid key" }, 400);
+
+  // No copy-on-delete backup here unlike contracts - these are reference
+  // images someone dragged in for inspiration, not signed legal
+  // documents, so the recoverability bar is intentionally lower.
+  await env.MEDIA_BUCKET.delete(key);
   return jsonResponse({ success: true }, 200, { "Cache-Control": "no-store" });
 }
 

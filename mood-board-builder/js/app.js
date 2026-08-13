@@ -133,23 +133,90 @@ function addDraftEmbedLink() {
 
 let imageDropCounter = 0;
 
+// Converts a data URL (what processImageFile/canvas.toDataURL produces)
+// back into a Blob so it can be POSTed as multipart/form-data to
+// /api/media. Kept local to this file rather than added to
+// shared-dropzone.js - Case Study Builder and Brand Guidelines Builder
+// still expect processImageFile to return a data URL directly (used for
+// preview + saved inline), and changing that return type would be a
+// breaking change for both. If/when either of them moves onto /api/media
+// too, this is the one function worth promoting up to the shared file.
+function dataUrlToBlob(dataUrl) {
+  const commaIdx = dataUrl.indexOf(',');
+  const meta = dataUrl.slice(5, commaIdx); // strips leading "data:"
+  const mime = meta.split(';')[0] || 'application/octet-stream';
+  const binary = atob(dataUrl.slice(commaIdx + 1));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+// How many image uploads are currently in flight - saveBoard() checks
+// this so a fast "drop image, immediately click Save" doesn't write a
+// board whose image is still the (large) local data URL rather than the
+// real R2 reference. See handleDroppedImage below.
+let pendingImageUploads = 0;
+
+function uploadImageToMedia(blob, filename) {
+  const form = new FormData();
+  form.append('file', blob, filename || 'image.jpg');
+  form.append('context', 'mood-board');
+  return fetch('/api/media', { method: 'POST', body: form }).then(res => {
+    if (!res.ok) {
+      return res.json().catch(() => ({})).then(data => {
+        throw new Error(data.error || `Upload failed (HTTP ${res.status})`);
+      });
+    }
+    return res.json();
+  }).then(data => data.url);
+}
+
 // Dropping/uploading an image adds it straight to the reference list as
 // a thumbnail - no need to also fill in the label/URL fields and click
-// "+ Add Link" separately. Stored as a compressed data URL (see
-// shared-dropzone.js) so it lives inline in the client doc, same as
-// Client Portal Manager's logo.
+// "+ Add Link" separately.
+//
+// The image is shown immediately from the local compressed data URL (see
+// shared-dropzone.js) for instant feedback, then uploaded to R2 via
+// /api/media in the background and swapped for the short URL reference
+// once that lands - so what actually gets written to the client's
+// Firestore doc on Save is a small reference, not the image bytes
+// themselves. This replaced storing the data URL inline permanently,
+// which was pushing image-heavy clients toward Firestore's ~1MB
+// per-document ceiling (see the client-size warnings below). If the
+// upload fails for some reason, this falls back to keeping the inline
+// data URL rather than losing the image - worse for record size, but
+// never worse for the user than what this tool used to do unconditionally.
 function handleDroppedImage(file) {
   // 1400px (bumped from 800px): the Client Portal now opens these in a
   // near-full-screen lightbox rather than only ever showing a 36px chip,
   // so the old cap looked visibly soft once zoomed. Still compressed/
-  // capped, not the original file - the size warning below accounts for
-  // the larger resulting size on its own, no extra wiring needed.
+  // capped, not the original file.
   processImageFile(file, { maxWidth: 1400 }).then(dataUrl => {
     imageDropCounter++;
     const label = (file.name || `Image ${imageDropCounter}`).replace(/\.[^.]+$/, '');
-    draftEmbedLinks.push({ id: uid(), label, url: dataUrl, isImage: true });
+    const localId = uid();
+    draftEmbedLinks.push({ id: localId, label, url: dataUrl, isImage: true, uploading: true });
     renderEmbedLinksList();
     if (isEmbedded && window.parent.showBanner) window.parent.showBanner('success', `Added "${label}" as a reference image.`);
+
+    pendingImageUploads++;
+    uploadImageToMedia(dataUrlToBlob(dataUrl), label).then(url => {
+      const entry = draftEmbedLinks.find(l => l.id === localId);
+      if (entry) {
+        entry.url = url;
+        entry.uploading = false;
+      }
+    }).catch(err => {
+      console.error('Mood board image upload to /api/media failed, keeping inline data URL:', err);
+      const entry = draftEmbedLinks.find(l => l.id === localId);
+      if (entry) entry.uploading = false;
+      if (isEmbedded && window.parent.showBanner) {
+        window.parent.showBanner('error', `"${label}" is saved, but couldn't move to storage (${err.message || err}) - it's staying inline for now, which still counts against this client's record size.`);
+      }
+    }).finally(() => {
+      pendingImageUploads--;
+      renderEmbedLinksList();
+    });
   }).catch(errMsg => {
     if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', errMsg);
   });
@@ -177,8 +244,17 @@ function handleDroppedVideo(file) {
 }
 
 function removeDraftEmbedLink(id) {
+  const removed = draftEmbedLinks.find(l => l.id === id);
   draftEmbedLinks = draftEmbedLinks.filter(l => l.id !== id);
   renderEmbedLinksList();
+
+  // Best-effort cleanup of the R2 object so removing an image from a
+  // board doesn't leave it orphaned in the bucket forever. Fire-and-
+  // forget - if this fails (offline, race, etc.) it's a harmless orphan
+  // file, not a broken board, so it's not worth blocking the UI over.
+  if (removed && typeof removed.url === 'string' && removed.url.startsWith('/api/media/')) {
+    fetch(removed.url, { method: 'DELETE' }).catch(() => {});
+  }
 }
 
 function isImageEntry(l) {
@@ -293,10 +369,26 @@ function estimateClientTotalBytes() {
   }
 }
 
+// True if this client has any mood board image still stored the old way
+// (inline base64, from before images moved to R2 via /api/media - see
+// handleDroppedImage). New uploads no longer create these, but boards
+// saved before that change still have them, and the code fix alone
+// doesn't shrink data that's already written - only migrateClientImagesToStorage
+// below actually does that.
+function clientHasLegacyInlineImages(client) {
+  if (!client || !Array.isArray(client.moodBoards)) return false;
+  return client.moodBoards.some(board =>
+    (board.embedLinks || []).some(l => isImageEntry(l) && (l.url || '').startsWith('data:image'))
+  );
+}
+
 function renderClientSizeWarning() {
   const el2 = el('clientSizeWarning');
+  const migrateBtn = el('migrateImagesBtn');
   if (!el2) return;
   const totalBytes = estimateClientTotalBytes();
+  const client = currentClient();
+  const hasLegacy = clientHasLegacyInlineImages(client);
 
   if (totalBytes >= CLIENT_SIZE_CRITICAL_BYTES) {
     const mb = (totalBytes / (1024 * 1024)).toFixed(2);
@@ -310,6 +402,80 @@ function renderClientSizeWarning() {
     el2.style.display = 'block';
   } else {
     el2.style.display = 'none';
+  }
+
+  if (migrateBtn) {
+    // Only offer this once the client is at least in "getting large"
+    // territory - not worth surfacing for a client with one old inline
+    // image well under any threshold.
+    migrateBtn.style.display = (hasLegacy && totalBytes >= CLIENT_SIZE_WARNING_BYTES) ? 'inline-block' : 'none';
+  }
+}
+
+// Goes through every saved mood board for the current client (not just
+// the one open in the form) and uploads any inline base64 image to R2
+// via /api/media, replacing it with the short URL reference in place -
+// this is what actually shrinks an already-bloated client record, since
+// the handleDroppedImage fix only prevents new bloat going forward.
+//
+// Runs uploads sequentially rather than in parallel - simpler to reason
+// about and report progress on, and the client counts here are small
+// enough (a handful of boards, not hundreds) that the extra time doesn't
+// matter.
+async function migrateClientImagesToStorage() {
+  const client = currentClient();
+  const clientName = currentClientName();
+  if (!client || !Array.isArray(client.moodBoards)) return;
+
+  if (editingBoardId) {
+    if (isEmbedded && window.parent.showBanner) {
+      window.parent.showBanner('error', 'Finish or cancel the mood board you\'re currently editing first - migrating while a board is open for edit could overwrite the migration when you hit Save.');
+    }
+    return;
+  }
+
+  const btn = el('migrateImagesBtn');
+  const legacyEntries = [];
+  client.moodBoards.forEach(board => {
+    (board.embedLinks || []).forEach(l => {
+      if (isImageEntry(l) && (l.url || '').startsWith('data:image')) legacyEntries.push({ board, entry: l });
+    });
+  });
+
+  if (legacyEntries.length === 0) return;
+
+  if (btn) { btn.disabled = true; }
+  let migrated = 0;
+  let failed = 0;
+
+  for (const { entry } of legacyEntries) {
+    if (btn) btn.textContent = `Migrating image ${migrated + failed + 1} of ${legacyEntries.length}...`;
+    try {
+      const url = await uploadImageToMedia(dataUrlToBlob(entry.url), entry.label);
+      entry.url = url;
+      migrated++;
+    } catch (e) {
+      console.error('Migration upload failed for', entry.label, e);
+      failed++;
+    }
+  }
+
+  if (migrated > 0) {
+    persist();
+  }
+  renderBoardsList();
+  renderClientSizeWarning();
+
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = "Move this client's existing inline images to storage";
+  }
+
+  if (isEmbedded && window.parent.showBanner) {
+    const msg = failed === 0
+      ? `Moved ${migrated} image${migrated === 1 ? '' : 's'} to storage for ${clientName}. Their record should be much smaller now.`
+      : `Moved ${migrated} image${migrated === 1 ? '' : 's'} to storage; ${failed} failed and stayed inline - try again in a moment for those.`;
+    window.parent.showBanner(failed === 0 ? 'success' : 'error', msg);
   }
 }
 
@@ -342,6 +508,7 @@ function renderImageGrid() {
     <div class="mb-image-tile${idx === 0 ? ' mb-image-tile-lead' : ''}" draggable="true" data-id="${l.id}">
       <img src="${l.url}" alt="${escapeHtml(l.label)}">
       ${idx === 0 ? '<span class="mb-image-lead-badge">Lead</span>' : ''}
+      ${l.uploading ? '<span class="mb-image-lead-badge" style="left:auto;right:6px;background:#555;" title="Moving to storage so it doesn\'t bloat this client\'s record">Saving…</span>' : ''}
       <button data-id="${l.id}" class="mb-image-remove-btn" aria-label="Remove image" title="Remove">✕</button>
       <input type="text" class="mb-image-caption-input" data-id="${l.id}" value="${escapeHtml(l.label)}" placeholder="Add a caption..." aria-label="Image caption">
     </div>
@@ -502,6 +669,17 @@ function saveBoard() {
   const title = el('mbTitle').value.trim();
   if (!title) {
     if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', 'Give this mood board a title first.');
+    return;
+  }
+
+  // A drop-then-immediately-Save click can beat the /api/media upload
+  // back - saving now would write the large inline data URL to Firestore
+  // instead of waiting the extra moment for the small R2 reference,
+  // defeating the point of the upload. Uploads are small/compressed
+  // images against a fast route, so this is a brief wait in practice,
+  // not a real interruption.
+  if (pendingImageUploads > 0) {
+    if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', 'Still uploading image(s) - give it a second and click Save again.');
     return;
   }
 
@@ -1178,6 +1356,7 @@ document.addEventListener('DOMContentLoaded', () => {
   el('clientSelect').addEventListener('change', renderState);
   el('saveBoardBtn').addEventListener('click', saveBoard);
   el('cancelEditBtn').addEventListener('click', resetForm);
+  if (el('migrateImagesBtn')) el('migrateImagesBtn').addEventListener('click', migrateClientImagesToStorage);
   el('addEmbedBtn').addEventListener('click', addDraftEmbedLink);
   wireDropZone(el('imageDropZone'), el('imageFileInput'), handleDroppedImage);
   wireDropZone(el('videoDropZone'), el('videoFileInput'), handleDroppedVideo);
