@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kickoff Prep & Deck</title>
+<link rel="stylesheet" href="../style.css?v=2">
+<link rel="stylesheet" href="css/style.css?v=1">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<main class="container container-wide">
+<div class="brand-bar">
+<div class="brand-logo-container"></div>
+</div>
+
+<header class="site-header">
+<div class="header-eyebrow">
+<span class="dot"></span>
+<span>Sales &rarr; Onboarding</span>
+</div>
+<h1 class="site-title">Kickoff <em>Prep &amp; Deck</em></h1>
+<p class="site-subtitle">Everything learned on the Discovery Call, carried forward - so the kickoff call (and everything after it) never starts from scratch. Log what happens on the kickoff call itself, and turn the discovery pain points and goals into a short client-facing slideshow that shows them you were actually listening.</p>
+</header>
+
+<div class="step-card">
+<div id="clientSelectRow" class="tracker-controls-row" style="flex-wrap: wrap; gap: 14px;">
+<label style="font-size:13px; color:var(--color-text-muted); display:flex; align-items:center; gap:8px;">
+Client:
+<select id="clientSelect" style="min-width:240px;"></select>
+</label>
+</div>
+</div>
+
+<div id="noDiscoveryDataNote" class="kp-note" style="display:none;">
+No Discovery Call Script answers found for this client yet - you can still write kickoff notes and build a deck manually below, but nothing will auto-fill until a discovery call has been logged.
+</div>
+
+<!-- ── DISCOVERY RECAP (read-only) ── -->
+<div class="step-card">
+  <h2 class="kp-section-title">What We Learned on the Discovery Call</h2>
+  <div id="discoveryRecapBody" class="kp-recap-body"></div>
+</div>
+
+<!-- ── SALES → DELIVERY HANDOFF ── -->
+<div class="step-card">
+  <h2 class="kp-section-title">Sales &rarr; Delivery Handoff</h2>
+  <p class="kp-section-hint">Assign the account manager who owns this account from here on out. Mirrors the Day 2 handoff step in the documented onboarding process - logs the handoff internally and emails the account manager with the notes below.</p>
+
+  <div id="handoffStatus" class="kp-note" style="display:none;"></div>
+
+  <div class="kp-form-grid">
+    <div class="form-group">
+      <label for="handoffAmSelect">Account Manager</label>
+      <select id="handoffAmSelect" class="form-control">
+        <option value="">Select account manager...</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="handoffAmPhone">Account Manager Phone (optional)</label>
+      <input type="text" id="handoffAmPhone" class="form-control" placeholder="Not tracked in Team Roster - enter if useful">
+    </div>
+  </div>
+  <div class="form-group">
+    <label for="handoffNotes">Handoff Notes</label>
+    <textarea id="handoffNotes" class="form-control" rows="3" placeholder="Anything delivery should know: budget nuance, sensitivities, promises made, timeline expectations..."></textarea>
+  </div>
+  <div class="kp-actions-row">
+    <button class="btn-primary" id="completeHandoffBtn">Complete Handoff &amp; Notify Account Manager</button>
+    <span id="handoffSavedNote" class="kp-saved-note"></span>
+  </div>
+</div>
+
+<!-- ── KICKOFF CALL NOTES ── -->
+<div class="step-card">
+  <h2 class="kp-section-title">Kickoff Call Notes</h2>
+  <p class="kp-section-hint">Log this once the kickoff call actually happens - this is the internal record, separate from the client-facing deck below.</p>
+  <div class="kp-form-grid">
+    <div class="form-group">
+      <label for="kickoffDate">Kickoff Call Date</label>
+      <input type="date" id="kickoffDate" class="form-control">
+    </div>
+    <div class="form-group">
+      <label for="kickoffAttendees">Attendees</label>
+      <input type="text" id="kickoffAttendees" class="form-control" placeholder="Who was on the call, both sides">
+    </div>
+  </div>
+  <div class="form-group">
+    <label for="kickoffKeyStakeholders">Key Stakeholders / Points of Contact</label>
+    <textarea id="kickoffKeyStakeholders" class="form-control" rows="2" placeholder="Who to loop in, and for what (approvals, billing, day-to-day)"></textarea>
+  </div>
+  <div class="form-group">
+    <label for="kickoffGoalsConfirmed">Goals Confirmed on the Call</label>
+    <textarea id="kickoffGoalsConfirmed" class="form-control" rows="2" placeholder="Anything that changed or got sharper since the discovery call"></textarea>
+  </div>
+  <div class="form-group">
+    <label for="kickoffPriorities">First 30 Days - Priorities</label>
+    <textarea id="kickoffPriorities" class="form-control" rows="3" placeholder="What's actually getting worked on first"></textarea>
+  </div>
+  <div class="form-group">
+    <label for="kickoffNotes">Additional Notes</label>
+    <textarea id="kickoffNotes" class="form-control" rows="3" placeholder="Anything else worth remembering"></textarea>
+  </div>
+  <div class="kp-actions-row">
+    <button class="btn-primary" id="saveKickoffNotesBtn">Save Kickoff Notes</button>
+    <span id="kickoffNotesSavedNote" class="kp-saved-note"></span>
+  </div>
+</div>
+
+<!-- ── CLIENT-FACING SLIDESHOW ── -->
+<div class="step-card">
+  <h2 class="kp-section-title">Client-Facing Slideshow</h2>
+  <p class="kp-section-hint">Auto-built from the discovery call's pain points and goals, in the client's own words - edit anything before presenting. Meant to be shown live on the kickoff call (screen share or full-screen) to show them you heard what they said.</p>
+
+  <div class="kp-actions-row">
+    <button class="btn-secondary" id="generateSlidesBtn">Generate Slides from Discovery Call</button>
+    <button class="btn-secondary" id="addSlideBtn">+ Add Blank Slide</button>
+    <button class="btn-primary" id="presentBtn">Present &#9654;</button>
+    <button class="btn-secondary" id="exportPdfBtn">Download as PDF</button>
+  </div>
+
+  <div id="slideListEmptyState" class="kp-note">No slides yet - click "Generate Slides from Discovery Call" to build a starting deck, or add one manually.</div>
+  <div id="slideList" class="kp-slide-list"></div>
+</div>
+
+</main>
+
+<!-- ── PRESENTATION OVERLAY ── -->
+<div id="presentOverlay" class="kp-present-overlay" style="display:none;">
+  <button id="presentCloseBtn" class="kp-present-close" aria-label="Exit presentation">&times;</button>
+  <div class="kp-present-slide">
+    <div id="presentHeading" class="kp-present-heading"></div>
+    <div id="presentBody" class="kp-present-body"></div>
+  </div>
+  <div class="kp-present-nav">
+    <button id="presentPrevBtn" class="kp-present-nav-btn" aria-label="Previous slide">&#8592;</button>
+    <span id="presentCounter" class="kp-present-counter"></span>
+    <button id="presentNextBtn" class="kp-present-nav-btn" aria-label="Next slide">&#8594;</button>
+  </div>
+</div>
+
+<script src="js/app.js?v=1"></script>
+</body>
+</html>

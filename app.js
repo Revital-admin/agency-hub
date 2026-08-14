@@ -1084,6 +1084,7 @@ let iframeNeedsReload = {
   "tab-tasknamegen": true,
   "tab-marketingnews": true,
   "tab-proposal": true,
+  "tab-kickoffprep": true,
   "tab-servicepricing": true,
   "tab-redflag": true,
   "tab-healthdashboard": true,
@@ -1753,6 +1754,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-qbr":
       renderQbrGenerator();
+      break;
+    case "tab-kickoffprep":
+      renderKickoffPrep();
       break;
     case "tab-casestudy":
       renderCaseStudyBuilder();
@@ -3536,6 +3540,11 @@ function renderQbrGenerator() {
   setIframeAbsoluteSrc('#tab-qbr iframe', "qbr-generator/index.html");
 }
 
+// ── Kickoff Prep & Deck Controller ──
+function renderKickoffPrep() {
+  setIframeAbsoluteSrc('#tab-kickoffprep iframe', "kickoff-prep/index.html");
+}
+
 // ── Case Study Builder Controller ──
 function renderCaseStudyBuilder() {
   setIframeAbsoluteSrc('#tab-casestudy iframe', "case-study-builder/index.html");
@@ -3866,6 +3875,72 @@ async function saveVersionedAgencyDoc({ docRef, currentVersion, buildPayload }) 
   } catch (e) {
     return { ok: false, reason: "error", error: e };
   }
+}
+
+// Cross-tool bridge (Aug 2026): Cold Outreach Sequencer's "Booked" button
+// and Referral Tracker's "Convert to Pipeline Lead" button both call this
+// instead of just telling the human to go retype the lead into Sales
+// Pipeline Board themselves (which is what used to happen - see the old
+// showBanner copy in cold-outreach-sequencer/js/app.js's closeLead,
+// "move them into the Sales Pipeline"). Writes straight to
+// agency/salesPipeline through the same saveVersionedAgencyDoc guard
+// Sales Pipeline Board's own persist() uses, so a lead added from
+// either tool can never silently clobber a concurrent edit made directly
+// in Sales Pipeline Board. Source gets set automatically (rather than
+// left for someone to type later) specifically so the win-rate-by-source
+// view in Sales Pipeline Board is accurate from the moment a lead is
+// created, not dependent on someone remembering to fill in a free-text
+// field consistently.
+async function addLeadToSalesPipeline({ name, source, notes, stage }) {
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) {
+    return { ok: false, reason: "not_ready" };
+  }
+  const trimmedName = (name || "").trim();
+  if (!trimmedName) return { ok: false, reason: "no_name" };
+
+  const docRef = window.firebaseDoc(window.firebaseDb, "agency", "salesPipeline");
+  const snap = await window.firebaseGetDoc(docRef);
+  const data = snap && snap.exists ? snap.data() : null;
+  const list = (data && data.list) || [];
+  const version = (data && data.version) || 0;
+
+  // Don't create a second pipeline entry for someone who's already in
+  // there (e.g. this cold-outreach contact was also referred by someone,
+  // or "Booked" got clicked twice) - hand back the existing one instead.
+  const existing = list.find(l => (l.name || "").trim().toLowerCase() === trimmedName.toLowerCase());
+  if (existing) return { ok: true, alreadyExisted: true, lead: existing };
+
+  const newLead = {
+    id: "lead_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
+    name: trimmedName,
+    contactEmail: "",
+    source: source || "",
+    notes: notes || "",
+    stage: stage || "🆕 new lead",
+    clickupTaskId: null,
+    createdDate: new Date().toISOString().slice(0, 10),
+    updatedDate: new Date().toISOString().slice(0, 10)
+  };
+
+  const result = await saveVersionedAgencyDoc({
+    docRef,
+    currentVersion: version,
+    buildPayload: (v) => ({ list: [...list, newLead], version: v })
+  });
+  if (!result.ok) return { ok: false, reason: result.reason, error: result.error };
+
+  // Same fire-and-forget ClickUp sync Sales Pipeline Board's own save
+  // handler kicks off on a new lead - a failure here never blocks the
+  // Hub-side save above (already succeeded); the card just shows
+  // "Syncing..." until the next edit retries it, same as that tool's
+  // own syncToClickUp.
+  fetch("/api/pipeline/sync-clickup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ taskId: null, name: newLead.name, stage: newLead.stage, contactEmail: "", source: newLead.source, notes: newLead.notes })
+  }).catch(err => console.error("ClickUp sync failed for auto-created pipeline lead:", err));
+
+  return { ok: true, lead: newLead };
 }
 
 // ── Account Manager Capacity Snapshot ──
@@ -5957,6 +6032,63 @@ function buildStaleNudgeDraftEmail(client, name, pendingCount) {
 // Builds the testimonial-ask draft email - triggered from
 // weekly-account-checkin/js/app.js the moment a client's health rating
 // flips to Green, since that's the best moment to ask while they're happy.
+// Real auto-send (not a draft-you-click-Send notification like the ones
+// below) - straight to /api/send-email, same route and auth the manual
+// "Send" button in the notification bell already uses (see that click
+// handler further down). This is deliberately different from
+// buildTestimonialAskDraftEmail/buildRenewalNudgeDraftEmail's
+// draft-review pattern: those are CLIENT-facing emails sent under a
+// specific staff member's name, so a human reviews the wording before
+// it goes out. This is an INTERNAL alert to the account manager about
+// their own client - same trust level as the Weekly Health Digest or
+// idle-lock PIN emails, which already send with no click, so there's no
+// draft-review step to skip here. Silently does nothing if there's no
+// account manager email on file (nobody to alert) - the in-Hub bell
+// notification pushed alongside this call still catches it for whoever
+// next opens the Hub.
+function emailAccountManagerLowPulseAlert(client, name, pulseEntry) {
+  const config = client.portalConfig || {};
+  if (!config.accountManagerEmail) return;
+  if (!window.firebaseAuthReady) return; // no authenticated admin session to send under
+
+  const amFirstName = config.accountManagerName ? config.accountManagerName.split(' ')[0] : "there";
+  const subject = `Low satisfaction rating from ${name}`;
+  const body = `Hi ${amFirstName},\n\n${name} just left a ${pulseEntry.rating}/5 satisfaction rating from their client portal.${pulseEntry.comment ? `\n\nTheir comment:\n"${pulseEntry.comment}"` : ' (No comment left.)'}\n\nWorth a check-in before this shows up somewhere more public. See Agency Health Dashboard in the Hub for the full picture on this account.\n\n— Revital Hub`;
+
+  fetch("/api/send-email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to: config.accountManagerEmail, subject, body })
+  }).catch(e => {
+    console.warn("Low-pulse alert email failed to send (in-Hub notification still fired):", e);
+  });
+}
+
+// Sales → Delivery handoff notification - mirrors the documented process's
+// Zap 1 ("Action 1: Email notification to account manager with client
+// details + next steps"), fired from Kickoff Prep & Deck's handoff step
+// instead of a Zapier/Google Forms trigger. Same fire-and-forget pattern as
+// emailAccountManagerLowPulseAlert above (internal staff alert, not a
+// client-facing send, so no draft-review step).
+function emailAccountManagerHandoffNotification(client, notes, clientNameOverride) {
+  const config = client.portalConfig || {};
+  if (!config.accountManagerEmail) return;
+  if (!window.firebaseAuthReady) return; // no authenticated admin session to send under
+
+  const amFirstName = config.accountManagerName ? config.accountManagerName.split(' ')[0] : "there";
+  const clientName = clientNameOverride || client.name || "This client";
+  const subject = `New account handoff: ${clientName}`;
+  const body = `Hi ${amFirstName},\n\n${clientName} just closed and is being handed off to you as account manager.${notes ? `\n\nNotes from sales:\n${notes}` : ''}\n\nNext steps: get the client profile and portal set up in the Hub, work through onboarding, and get the kickoff call on the calendar. Kickoff Prep & Deck in the Hub has the discovery call recap and a client-facing kickoff deck you can build straight from it.\n\n— Revital Hub`;
+
+  fetch("/api/send-email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to: config.accountManagerEmail, subject, body })
+  }).catch(e => {
+    console.warn("Handoff notification email failed to send (handoff still logged):", e);
+  });
+}
+
 // Exposed on window (implicit for a plain top-level function in a
 // non-module script) so that iframe can call
 // window.parent.buildTestimonialAskDraftEmail(client, name) the same way
@@ -7220,6 +7352,7 @@ function ensureClientPortalListeners() {
         (currentClient.clientPulseFeedback || []).forEach(p => {
           if (!priorPulseIds.has(p.id) && p.rating <= 2 && pushAdminNotification) {
             pushAdminNotification("client_pulse_low", `${name} left a low satisfaction rating (${p.rating}/5) from their portal.`, name);
+            emailAccountManagerLowPulseAlert(currentClient, name, p);
           }
         });
       }
