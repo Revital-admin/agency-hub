@@ -229,7 +229,8 @@
       <div class="responsive-2col">
         <div class="form-group">
           <label for="accountManagerName">Name</label>
-          <input type="text" id="accountManagerName" placeholder="e.g. Jane Doe">
+          <input type="text" id="accountManagerName" list="amRosterOptions" placeholder="e.g. Jane Doe">
+          <datalist id="amRosterOptions"></datalist>
         </div>
         <div class="form-group">
           <label for="accountManagerEmail">Email</label>
@@ -247,6 +248,16 @@
           <label for="calendlyLink">Calendly Link</label>
           <input type="text" id="calendlyLink" placeholder="https://calendly.com/jane-doe">
         </div>
+      </div>
+      <!-- Picking a name from the roster (or changing the email on blur)
+           re-syncs ClickUp's native Assignee on both the Sales Pipeline
+           and Onboarding Handoff tasks, plus the Account Manager field on
+           Sales Pipeline - the same sync Kickoff Prep's handoff runs, so a
+           later reassignment doesn't quietly drift out of sync with what
+           ClickUp shows. Manual button re-fires it without editing anything. -->
+      <div style="display:flex; align-items:center; gap:12px; margin-top:12px; flex-wrap:wrap;">
+        <button type="button" id="syncAmClickUpBtn" class="download-pdf-btn" style="padding:8px 16px;">Sync to ClickUp Now</button>
+        <span id="amSyncStatus" style="font-size:0.8rem; color:var(--color-text-secondary);"></span>
       </div>
     </div>
 
@@ -325,6 +336,6 @@
 
   </main>
 
-  <script src="js/app.js?v=62"></script>
+  <script src="js/app.js?v=63"></script>
 </body>
 </html>

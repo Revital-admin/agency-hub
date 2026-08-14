@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Team Onboarding &amp; Offboarding</title>
+<link rel="stylesheet" href="../style.css?v=2">
+<link rel="stylesheet" href="css/style.css?v=1">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<main class="container container-wide">
+<div class="brand-bar">
+<div class="brand-logo-container"></div>
+</div>
+
+<header class="site-header">
+<div class="header-eyebrow">
+<span class="dot"></span>
+<span>Team Ops</span>
+</div>
+<h1 class="site-title">Team Onboarding &amp; <em>Offboarding</em></h1>
+<p class="site-subtitle">Every new hire and departing teammate, tracked step by step — accounts, tools, and client handoffs — so nothing gets missed when it's not you personally walking them through it.</p>
+</header>
+
+<div class="step-card">
+<div class="section-title" style="margin-bottom: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent);">Log a Team Transition</h2>
+</div>
+
+<div class="form-grid">
+<div class="form-group"><label for="type">Type</label><select id="type"><option value="onboarding">Onboarding (new hire)</option><option value="offboarding">Offboarding (departing)</option></select></div>
+<div class="form-group"><label for="employeeName">Employee Name</label><input type="text" id="employeeName" list="teamRosterOptions" placeholder="e.g. Jane Doe"><datalist id="teamRosterOptions"></datalist></div>
+<div class="form-group"><label for="role">Role / Title</label><input type="text" id="role" placeholder="e.g. Account Manager"></div>
+<div class="form-group"><label for="email">Email</label><input type="email" id="email" placeholder="jane@revitalproductions.com"></div>
+<div class="form-group"><label for="employmentType">Employment Type</label><select id="employmentType"><option>Full-time</option><option>Part-time</option><option>Contractor</option></select></div>
+<div class="form-group"><label id="dateValueLabel" for="dateValue">Start Date</label><input type="date" id="dateValue"></div>
+<div class="form-group"><label for="manager">Manager / Reports To</label><input type="text" id="manager"></div>
+</div>
+<div class="form-group"><label for="notes">Notes</label><input type="text" id="notes" placeholder="Anything specific about this transition..."></div>
+
+<button id="saveEntryBtn" class="btn-primary">Add Entry</button>
+</div>
+
+<div class="step-card table-card">
+<div class="tracker-table-wrap">
+<table class="tracker-table">
+<thead>
+<tr>
+<th>Employee</th>
+<th>Type</th>
+<th>Role</th>
+<th>Date</th>
+<th>Progress</th>
+<th>Status</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="logTableBody"></tbody>
+</table>
+<p id="emptyState" class="empty-state" style="display:none;">No team transitions logged yet.</p>
+</div>
+</div>
+
+<div id="detailPanel" class="step-card" style="display:none;">
+<div class="tracker-controls-row" style="justify-content: space-between; margin-bottom: 16px;">
+<div>
+<span class="section-label" style="font-size:12px; text-transform:uppercase; letter-spacing:0.5px; color: var(--color-text-secondary);">Checklist</span>
+<div id="detailNameLabel" style="font-family: var(--font-heading); font-size:20px; color: var(--color-text-primary);"></div>
+</div>
+<button id="closeDetailBtn" class="btn btn-secondary-outline">Close</button>
+</div>
+
+<div class="progress-wrap">
+<div class="progress-track"><div class="progress-fill" id="detailProgressFill"></div></div>
+<div class="progress-meta">
+<span id="detailProgressText">0 of 0 items complete</span>
+<span id="detailProgressPct">0%</span>
+</div>
+</div>
+
+<div id="amClientsWarning" style="display:none; font-size:0.85rem; color:#f68d5f; background: var(--color-surface-2); border: 1px solid var(--color-border-md); border-radius: var(--radius-lg); padding: 10px 14px; margin-bottom: 14px;"></div>
+
+<div id="completedNote" style="display:none; margin-bottom:14px;"></div>
+
+<div id="detailCategoriesList"></div>
+</div>
+
+</main>
+<script src="js/data.js"></script>
+<script src="js/app.js?v=1"></script>
+</body>
+</html>

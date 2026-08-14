@@ -83,6 +83,122 @@ function checkAmCapacityWarning() {
   warningEl.style.display = "block";
 }
 
+// ── Account Manager reassignment → ClickUp sync ──
+// Kickoff Prep's Sales → Delivery Handoff runs this same sync once, at
+// kickoff. If the account manager changes later (someone leaves, a client
+// gets reassigned), this is the only other place that field gets edited -
+// so it needs to fire the same ClickUp sync, or ClickUp's Assignee quietly
+// drifts out of sync with what the Hub says. Reuses the exact parent
+// helpers Kickoff Prep already calls (syncAccountManagerToClickUpAssignee,
+// syncAccountManagerToOnboardingHandoff) rather than duplicating them.
+let teamRosterMembers = [];
+let lastSyncedAmEmail = null; // set on load, compared on blur to detect an actual reassignment
+
+async function loadTeamRoster() {
+  if (!window.parent || typeof window.parent.getTeamRosterMembers !== 'function') {
+    teamRosterMembers = [];
+    return;
+  }
+  try {
+    teamRosterMembers = await window.parent.getTeamRosterMembers() || [];
+  } catch (e) {
+    teamRosterMembers = [];
+  }
+  populateAmDatalist();
+}
+
+function populateAmDatalist() {
+  const list = document.getElementById("amRosterOptions");
+  if (!list) return;
+  list.innerHTML = teamRosterMembers
+    .filter(m => m.memberName)
+    .slice()
+    .sort((a, b) => (a.memberName || '').localeCompare(b.memberName || ''))
+    .map(m => `<option value="${(m.memberName || '').replace(/"/g, '&quot;')}">`)
+    .join('');
+}
+
+function findRosterMemberByName(name) {
+  const n = (name || '').trim().toLowerCase();
+  if (!n) return null;
+  return teamRosterMembers.find(m => (m.memberName || '').trim().toLowerCase() === n) || null;
+}
+
+function findRosterMemberByEmail(email) {
+  const e = (email || '').trim().toLowerCase();
+  if (!e) return null;
+  return teamRosterMembers.find(m => (m.email || '').trim().toLowerCase() === e) || null;
+}
+
+async function syncAmToClickUp() {
+  const client = getActiveClient();
+  const statusEl = document.getElementById("amSyncStatus");
+  const btn = document.getElementById("syncAmClickUpBtn");
+  if (!client) return;
+
+  const config = client.portalConfig || {};
+  const email = (config.accountManagerEmail || '').trim();
+  if (!email) {
+    if (statusEl) statusEl.textContent = 'No account manager email on file - nothing to sync.';
+    return;
+  }
+
+  const clientName = client.name || client.id;
+  if (btn) { btn.disabled = true; btn.textContent = 'Syncing to ClickUp...'; }
+  if (statusEl) statusEl.textContent = '';
+
+  let salesPipelineNote = '';
+  let onboardingHandoffNote = '';
+
+  try {
+    const result = window.parent.syncAccountManagerToClickUpAssignee
+      ? await window.parent.syncAccountManagerToClickUpAssignee(clientName, email)
+      : { ok: false, reason: 'unavailable' };
+    if (result.ok && result.assigneeMatched) {
+      salesPipelineNote = result.accountManagerFieldSet
+        ? 'Sales Pipeline assignee + Account Manager field updated.'
+        : 'Sales Pipeline assignee updated (Account Manager field not found/set).';
+    } else if (result.ok && !result.assigneeMatched) {
+      salesPipelineNote = `Sales Pipeline task found, but no ClickUp member matches ${email}.`;
+    } else if (result.reason === 'no_task') {
+      salesPipelineNote = 'No Sales Pipeline task on file for this client.';
+    } else {
+      salesPipelineNote = 'Could not sync Sales Pipeline assignee - see console.';
+      if (result.error) console.error('Sales Pipeline assignee sync failed:', result.error);
+    }
+  } catch (e) {
+    salesPipelineNote = 'Could not sync Sales Pipeline assignee - see console.';
+    console.error('Sales Pipeline assignee sync failed:', e);
+  }
+
+  try {
+    const result = window.parent.syncAccountManagerToOnboardingHandoff
+      ? await window.parent.syncAccountManagerToOnboardingHandoff(clientName, email)
+      : { ok: false, reason: 'unavailable' };
+    if (result.ok && result.assigneeMatched) {
+      onboardingHandoffNote = 'Onboarding Handoff assignee updated.';
+    } else if (result.ok && result.reason === 'no_task') {
+      onboardingHandoffNote = 'No Onboarding Handoff task found for this client.';
+    } else if (result.ok && result.reason === 'no_am_match') {
+      onboardingHandoffNote = `No ClickUp member matches ${email} - Onboarding Handoff assignee not set.`;
+    } else {
+      onboardingHandoffNote = 'Could not sync Onboarding Handoff assignee - see console.';
+      if (result.error) console.error('Onboarding Handoff assignee sync failed:', result.error);
+    }
+  } catch (e) {
+    onboardingHandoffNote = 'Could not sync Onboarding Handoff assignee - see console.';
+    console.error('Onboarding Handoff assignee sync failed:', e);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Sync to ClickUp Now'; }
+  }
+
+  if (statusEl) statusEl.textContent = `${salesPipelineNote} ${onboardingHandoffNote}`;
+  lastSyncedAmEmail = email;
+
+  if (window.parent.logAdminActivity) window.parent.logAdminActivity('Account manager reassigned', `${clientName} — ${config.accountManagerName || email}`);
+  if (window.parent.pushAdminNotification) window.parent.pushAdminNotification('am_reassigned', `Account manager for ${clientName} synced to ${config.accountManagerName || email}.`, clientName);
+}
+
 // DOM Elements
 const magicLinkInput = document.getElementById("magicLink");
 const copyLinkBtn = document.getElementById("copyLinkBtn");
@@ -303,10 +419,37 @@ function init() {
       inputs[key].addEventListener("input", (e) => {
         updateConfig(key, e.target.value);
         if (key === "accountManagerEmail") checkAmCapacityWarning();
+        if (key === "accountManagerName") {
+          // Picking (or typing exactly) a name that matches Team Roster
+          // auto-fills email/phone from there, same as Kickoff Prep's
+          // dropdown does - reduces the chance of a stale/typo'd email
+          // silently breaking the ClickUp sync below.
+          const member = findRosterMemberByName(e.target.value);
+          if (member) {
+            if (member.email) { inputs.accountManagerEmail.value = member.email; updateConfig("accountManagerEmail", member.email); checkAmCapacityWarning(); }
+            if (member.phone) { inputs.accountManagerPhone.value = member.phone; updateConfig("accountManagerPhone", member.phone); }
+          }
+        }
       });
     }
   });
 
+  // Auto re-sync ClickUp when the account manager email actually changes
+  // (blur, not every keystroke - avoids hammering the ClickUp API while
+  // someone's mid-edit). The manual "Sync to ClickUp Now" button covers
+  // re-firing it without editing anything (e.g. a ClickUp task showed up
+  // later).
+  lastSyncedAmEmail = config.accountManagerEmail || null;
+  if (inputs.accountManagerEmail) {
+    inputs.accountManagerEmail.addEventListener("blur", () => {
+      const current = (inputs.accountManagerEmail.value || '').trim();
+      if (current && current !== lastSyncedAmEmail) syncAmToClickUp();
+    });
+  }
+  const syncAmBtn = document.getElementById("syncAmClickUpBtn");
+  if (syncAmBtn) syncAmBtn.addEventListener("click", () => syncAmToClickUp());
+
+  loadTeamRoster();
   refreshAmCapacitySnapshot().then(checkAmCapacityWarning);
 
   // Event Listeners for autosave

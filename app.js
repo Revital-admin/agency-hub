@@ -720,7 +720,7 @@ const AGENCY_BACKUP_DOC_NAMES = [
   "contractInvoices", "emailTemplates", "proposalFollowUps", "rawFootageLog",
   "referrals", "releaseForms", "revisionFeedbackLog", "runOfShow",
   "servicePricing", "sops", "subscriptionTracker", "teamAccess",
-  "teamActivity", "teamRoster", "vendorRentalTracker", "venueTechSpecs"
+  "teamActivity", "teamRoster", "teamTransitions", "vendorRentalTracker", "venueTechSpecs"
 ];
 
 async function fetchAllAgencyDocsForBackup() {
@@ -1100,6 +1100,7 @@ let iframeNeedsReload = {
   "tab-mytimeoff": true,
   "tab-hourslog": true,
   "tab-resourcebooking": true,
+  "tab-teamtransitions": true,
   "tab-testimonialtracker": true,
   "tab-reviewtracker": true,
   "tab-intakequalifier": true,
@@ -1787,6 +1788,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-resourcebooking":
       renderResourceBooking();
+      break;
+    case "tab-teamtransitions":
+      renderTeamTransitionsTab();
       break;
     case "tab-testimonialtracker":
       renderTestimonialTracker();
@@ -3461,6 +3465,11 @@ function renderAccessLoginLogTab() {
 // ── Client Ad Account Log Controller ──
 function renderAdAccountLogTab() {
   setIframeAbsoluteSrc('#tab-adaccountlog iframe', "ad-account-log/index.html");
+}
+
+// ── Team Onboarding & Offboarding Controller ──
+function renderTeamTransitionsTab() {
+  setIframeAbsoluteSrc('#tab-teamtransitions iframe', "team-transitions/index.html");
 }
 
 // ── Revision & Feedback Tracker Controller ──

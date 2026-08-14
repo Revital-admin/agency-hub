@@ -2635,10 +2635,39 @@ async function findClickUpFieldIdByName(apiToken, listId, fieldName) {
   }
 }
 
+// ── Section gate for ClickUp sync routes (Team Access enforcement) ──
+// Everything routed through the client-side Firestore SDK (Sales Pipeline
+// Board's own saves, Access & Login Log, Ad Account Log, etc.) is already
+// gated per-section by firestore.rules (see docSectionMap there). These two
+// routes are the exception: they run on the Worker's own privileged
+// service-account Firestore access, which bypasses those rules entirely -
+// so without a check here, a teammate restricted out of Sales Pipeline
+// could still reassign a ClickUp task's owner by calling this endpoint
+// directly, even though they can't see agency/salesPipeline itself.
+// Mirrors resolveRestrictionForEmail's effectiveSections logic (same
+// helper handleRestrictedClientData below already uses). Fails OPEN only
+// if the check itself can't run (e.g. a transient Firestore read error) -
+// this is a best-effort sync on top of data that's separately protected,
+// not the sole barrier, so a hiccup here shouldn't lock out an
+// unrestricted admin's normal handoff flow.
+async function requireSection(env, accessEmail, sectionName) {
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const { isRestricted, sections } = await resolveRestrictionForEmail(accessToken, projectId, accessEmail);
+    return !isRestricted || (sections || []).includes(sectionName);
+  } catch (e) {
+    console.warn("requireSection check failed - failing open:", e);
+    return true;
+  }
+}
+
 async function handlePipelineSyncClickUp(request, env) {
   const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
   if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
     return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  if (!(await requireSection(env, accessEmail, "sales-pipeline"))) {
+    return jsonResponse({ error: "Not authorized for Sales Pipeline" }, 403);
   }
 
   const apiToken = env.CLICKUP_API_TOKEN;
@@ -2761,6 +2790,9 @@ async function handleOnboardingHandoffAssigneeSync(request, env) {
   const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
   if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
     return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  if (!(await requireSection(env, accessEmail, "sales-pipeline"))) {
+    return jsonResponse({ error: "Not authorized for Sales Pipeline" }, 403);
   }
 
   const apiToken = env.CLICKUP_API_TOKEN;

@@ -145,6 +145,7 @@ service cloud.firestore {
         'hoursLog': 'account-ops',
         'revisionFeedbackLog': 'account-ops',
         'teamRoster': 'account-ops',
+        'teamTransitions': 'team-ops',
         'timelineTemplates': 'account-ops',
         'coldOutreachSequences': 'sales-pipeline',
         'contractInvoices': 'sales-pipeline',

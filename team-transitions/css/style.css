@@ -1,0 +1,97 @@
+.container-wide { max-width: 1320px; }
+.container { position: relative; z-index: 1; margin: 0 auto; padding: 3rem 1.5rem 4rem; }
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 4px 20px;
+}
+
+.table-card { padding: 0; overflow: hidden; }
+.tracker-table-wrap { overflow-x: auto; }
+.tracker-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tracker-table th {
+  text-align: left;
+  padding: 12px 14px;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+.tracker-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  vertical-align: top;
+}
+.tracker-table tr:last-child td { border-bottom: none; }
+.tracker-table td.client-cell { font-weight: 600; white-space: nowrap; }
+
+.section-tag {
+  display: inline-block;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-md);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+.section-tag.status-active { border-color: #22c55e; color: #22c55e; }
+.section-tag.status-removed { border-color: #ef4444; color: #ef4444; }
+.section-tag.status-flagged { border-color: #f59e0b; color: #f59e0b; }
+
+.row-actions { display: flex; flex-direction: column; gap: 4px; min-width: 90px; }
+.row-actions button {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 100px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.row-actions button:hover { background: var(--color-surface-2); border-color: var(--color-border-md); color: var(--color-accent); }
+.row-actions button.remove-btn:hover { border-color: #ef4444; color: #ef4444; }
+
+.empty-state { text-align: center; padding: 40px 20px; color: var(--color-text-muted); font-size: 14px; }
+
+/* Detail panel checklist - same category/progress pattern as Client
+   Offboarding Checklist. */
+.category-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.category-header h3 {
+  font-family: var(--font-heading);
+  font-size: 16px;
+  color: var(--color-accent);
+  margin: 0;
+}
+.category-progress {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+.section-checkbox-grid.vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+#detailCategoriesList { display: flex; flex-direction: column; gap: 16px; }
+
+.btn.btn-secondary-outline {
+  border-color: var(--border-color);
+}
+.btn.btn-secondary-outline:hover {
+  border-color: var(--text-main);
+}
