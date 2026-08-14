@@ -208,6 +208,72 @@ function attachIdleListeners(doc) {
   }
 }
 
+// Fires whenever this tab goes from hidden back to visible - covers both
+// "switched away and back" and, more importantly, "left this tab
+// backgrounded for a long stretch" (lunch, overnight, a long meeting).
+// Neither Firebase's ID-token auto-refresh nor Firestore's onSnapshot
+// listeners are guaranteed to keep running on their normal schedule while
+// a tab is backgrounded - browsers throttle/suspend timers and can drop
+// the underlying network connection to save resources - and neither one
+// reliably self-heals the instant the tab is visible again. Two symptoms
+// this was causing before this fix, both only after a long idle stretch:
+//   1. The silent background sign-in (ensureCorrectFirebaseIdentity) would
+//      find Firebase's cached auth in a bad state and fall back to the
+//      manual "Sign in with Google" button - the popup someone would see
+//      say "Authorizing" and often stall, since that path was really only
+//      ever meant for a genuinely fresh, first-time visitor, not recovery
+//      from a stale session.
+//   2. clientsDb could keep showing whatever it last had before the tab
+//      went stale - including a client that was added by someone else
+//      while this tab was backgrounded - until a full manual page reload
+//      forced a fresh fetch. This is a read-side version of the same
+//      "shard listener silently stalled" issue documented on
+//      commitDatabaseToCloud's stale-tab guard, just showing up as a
+//      display gap instead of a save that clobbers something.
+// Fix: proactively force a fresh ID token and a fresh read of every
+// clientsDb shard the instant the tab becomes visible again, rather than
+// trusting whatever state things happened to be left in.
+async function handleTabBecameVisible() {
+  if (document.visibilityState !== "visible") return;
+  if (idleLocked) return; // the idle-lock overlay's own flow handles this case
+  if (!firebaseAuthReady) return; // still mid-initial-boot, nothing to refresh yet
+
+  // Force a real token refresh (not just whatever's cached) - if the
+  // cached session is actually no longer valid, this throws, and signing
+  // out lets onAuthStateChanged's own silent re-sign-in (the same path a
+  // normal fresh load uses) recover it quietly instead of falling through
+  // to the manual popup.
+  try {
+    const user = window.firebase && firebase.auth && firebase.auth().currentUser;
+    if (user) await user.getIdToken(true);
+  } catch (e) {
+    console.warn("Tab-visible: forced token refresh failed, signing out to let silent re-auth recover:", e);
+    try { await firebase.auth().signOut(); } catch (e2) {}
+  }
+
+  // Re-fetch every currently-expected shard fresh (not waiting on a live
+  // listener that may have silently stopped delivering updates) and fold
+  // the result straight into clientsDbShardData, same shape the real
+  // listener writes - rebuildClientsDbFromShards below doesn't care which
+  // one populated it.
+  if (window.firebaseGetDoc && lastKnownClientsDbShardCount > 0) {
+    try {
+      const freshSnaps = await Promise.all(
+        Array.from({ length: lastKnownClientsDbShardCount }, (_, i) => window.firebaseGetDoc(getClientsDbShardDocRef(i)))
+      );
+      freshSnaps.forEach((snap, i) => {
+        clientsDbShardData[i] = snap.exists ? snap.data() : {};
+        clientsDbShardsLoadedIndices.add(i);
+      });
+      clientsDbAllShardsLoaded = clientsDbShardsLoadedIndices.size >= lastKnownClientsDbShardCount;
+      rebuildClientsDbFromShards();
+    } catch (e) {
+      console.warn("Tab-visible: forced clientsDb shard refresh failed:", e);
+    }
+  }
+}
+document.addEventListener("visibilitychange", handleTabBecameVisible);
+
 // Shared by the sidebar PIN button (hide it for non-admins) and the
 // idle-lock overlay's self-serve path. Used to go straight to Firestore
 // (agency/teamAccess.hubAdmins) - broken as of the Aug 2026 idle-lock
