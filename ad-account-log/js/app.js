@@ -115,6 +115,7 @@ function addDraftPlatform() {
     accountName,
     accountId: el('platformAccountId').value.trim(),
     accessLevel: el('platformAccessLevel').value.trim(),
+    ownedBy: el('platformOwnedBy').value,
     billingMethod: el('platformBillingMethod').value.trim(),
     spendLimit: el('platformSpendLimit').value.trim(),
     status: el('platformStatusSelect').value,
@@ -140,6 +141,7 @@ function renderDraftPlatforms() {
       <div>
         <strong>${p.platform}</strong> — ${p.accountName} ${p.accountId ? '(' + p.accountId + ')' : ''}
         <span class="section-tag status-${p.status.toLowerCase()}">${p.status}</span>
+        <span class="section-tag ${(p.ownedBy || 'Client') === 'Revital Productions' ? 'status-flagged' : 'status-active'}">${p.ownedBy || 'Client'}</span>
       </div>
       <button class="remove-platform-btn" data-id="${p.id}">Remove</button>
     </div>
@@ -223,12 +225,15 @@ function renderTable() {
     const platforms = entry.platforms || [];
     const platformNames = platforms.length ? platforms.map(p => p.platform).join(', ') : '--';
     const hasFlag = platforms.some(p => p.status === 'Restricted' || p.status === 'Flagged' || p.status === 'Disabled');
+    const ownerSet = new Set(platforms.map(p => p.ownedBy || 'Client'));
+    const ownershipLabel = ownerSet.size === 0 ? '--' : ownerSet.size > 1 ? 'Mixed' : [...ownerSet][0];
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td class="client-cell">${entry.clientName}</td>
       <td>${entry.totalMonthlyBudget ? '$' + entry.totalMonthlyBudget : '--'}</td>
       <td>${platformNames}</td>
       <td>${platforms.length}</td>
+      <td><span class="section-tag ${ownershipLabel === 'Revital Productions' || ownershipLabel === 'Mixed' ? 'status-flagged' : 'status-active'}">${ownershipLabel}</span></td>
       <td>${hasFlag ? '<span class="section-tag status-restricted">Needs attention</span>' : '<span class="section-tag status-active">OK</span>'}</td>
       <td>
         <div class="row-actions">

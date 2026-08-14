@@ -96,7 +96,7 @@ function populateClientDatalist() {
 }
 
 const FORM_FIELDS = [
-  'clientName', 'platformName', 'platformUrl', 'accountType', 'accountId', 'usernameEmail',
+  'clientName', 'platformName', 'platformUrl', 'accountType', 'ownedBy', 'accountId', 'usernameEmail',
   'personType', 'vendorName', 'ndaSigned',
   'passwordLocation', 'twoFAEnabled', 'twoFAMethod', 'twoFADeviceOwner',
   'ourAccessType', 'canPublish', 'canManageBilling', 'accessRestrictions',
@@ -198,6 +198,7 @@ function renderTable() {
       <td>${grantedTo}</td>
       <td>${entry.platformName}</td>
       <td>${entry.accountType || '--'}</td>
+      <td><span class="section-tag ${entry.ownedBy === 'Revital Productions' ? 'status-flagged' : 'status-active'}">${entry.ownedBy || 'Client'}</span></td>
       <td>${entry.ourAccessType || '--'}</td>
       <td>${entry.twoFAEnabled || '--'}</td>
       <td><span class="section-tag ${entry.dateRemoved ? 'status-removed' : 'status-active'}">${status}</span></td>

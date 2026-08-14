@@ -54,6 +54,7 @@
 }
 .section-tag.status-active { border-color: #22c55e; color: #22c55e; }
 .section-tag.status-removed { border-color: #ef4444; color: #ef4444; }
+.section-tag.status-flagged { border-color: #f59e0b; color: #f59e0b; }
 
 .row-actions { display: flex; flex-direction: column; gap: 4px; min-width: 90px; }
 .row-actions button {
