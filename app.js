@@ -1046,6 +1046,7 @@ let iframeNeedsReload = {
   "tab-copywriting": true,
   "tab-meetingnotes": true,
   "tab-reportarchive": true,
+  "tab-seorank": true,
   "tab-brandassetkit": true,
   "tab-budgetpacing": true,
   // These two were never even added to this map, on top of never getting
@@ -1059,6 +1060,7 @@ let iframeNeedsReload = {
   "tab-brandguidelines": true,
   "tab-moodboard": true,
   "tab-contentcalendar": true,
+  "tab-emailcampaign": true,
   "tab-brandroadmap": true,
 
   // These tool tabs previously had a hardcoded iframe src in index.html and
@@ -1855,8 +1857,14 @@ function refreshIframeTab(tabId) {
     case "tab-contentcalendar":
       renderContentCalendar();
       break;
+    case "tab-emailcampaign":
+      renderEmailCampaignTracker();
+      break;
     case "tab-reportarchive":
       renderReportArchive();
+      break;
+    case "tab-seorank":
+      renderSeoRankTracker();
       break;
   }
   iframeNeedsReload[tabId] = false;
@@ -3635,8 +3643,14 @@ function renderBrandRoadmap() {
 function renderContentCalendar() {
   setIframeAbsoluteSrc('#tab-contentcalendar iframe', "content-calendar/index.html");
 }
+function renderEmailCampaignTracker() {
+  setIframeAbsoluteSrc('#tab-emailcampaign iframe', "email-campaign-tracker/index.html");
+}
 function renderReportArchive() {
   setIframeAbsoluteSrc('#tab-reportarchive iframe', "monthly-report-archive/index.html");
+}
+function renderSeoRankTracker() {
+  setIframeAbsoluteSrc('#tab-seorank iframe', "seo-rank-tracker/index.html");
 }
 
 // ── Testimonial & Review Requests Controller ──

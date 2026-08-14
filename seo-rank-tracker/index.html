@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SEO Rank Tracker</title>
+<link rel="stylesheet" href="../style.css?v=2">
+<link rel="stylesheet" href="css/style.css?v=1">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<main class="container container-wide">
+<div class="brand-bar">
+<div class="brand-logo-container"></div>
+</div>
+
+<header class="site-header">
+<div class="header-eyebrow">
+<span class="dot"></span>
+<span>Reporting & Health</span>
+</div>
+<h1 class="site-title">SEO Rank <em>Tracker</em></h1>
+<p class="site-subtitle">Target keywords and their search position over time, across every client. Manual entry, checked against Search Console / Google directly — this doesn't pull rankings automatically, it's just one place to log what you find so nothing drifts unnoticed between SEO Audits.</p>
+</header>
+
+<div class="summary-bar" id="summaryBar">
+<div class="summary-stat"><span class="summary-num" id="summaryKeywords">0</span><span class="summary-label">Keywords Tracked</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryImproved">0</span><span class="summary-label">Improved Last Check</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryDeclined">0</span><span class="summary-label">Declined Last Check</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryStale">0</span><span class="summary-label">Not Checked 30+ Days</span></div>
+</div>
+
+<div class="step-card">
+<div class="section-title" style="margin-bottom: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent);">Track a Keyword</h2>
+</div>
+
+<div class="form-grid">
+<div class="form-group"><label for="rtClient">Client</label><select id="rtClient"><option value="">Select a client...</option></select></div>
+<div class="form-group"><label for="rtKeyword">Keyword / Phrase</label><input type="text" id="rtKeyword" placeholder="e.g. wedding videographer austin"></div>
+<div class="form-group"><label for="rtTargetUrl">Target URL</label><input type="text" id="rtTargetUrl" placeholder="Page this keyword should rank for"></div>
+<div class="form-group"><label for="rtEngine">Search Engine</label>
+<select id="rtEngine">
+<option>Google</option>
+<option>Bing</option>
+<option>Google Maps / Local</option>
+</select>
+</div>
+<div class="form-group"><label for="rtPosition">Current Position</label><input type="number" id="rtPosition" min="1" step="1" placeholder="e.g. 12"></div>
+</div>
+<div class="form-group"><label for="rtNotes">Notes</label><input type="text" id="rtNotes" placeholder="Search intent, competitor holding the spot, anything to remember..."></div>
+
+<button id="addKeywordBtn" class="btn-primary">+ Track Keyword</button>
+</div>
+
+<div class="step-card">
+<div class="tracker-controls-row" style="flex-wrap: wrap; gap: 14px;">
+<input type="text" id="filterClientInput" placeholder="Filter by client name or keyword..." style="flex:1; min-width:220px;">
+</div>
+</div>
+
+<div class="step-card table-card">
+<div class="tracker-table-wrap">
+<table class="tracker-table">
+<thead>
+<tr>
+<th>Client</th>
+<th>Keyword</th>
+<th>Engine</th>
+<th>Target URL</th>
+<th>Position</th>
+<th>Change</th>
+<th>Last Checked</th>
+<th>Notes</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="rankTableBody"></tbody>
+</table>
+<p id="emptyState" class="empty-state" style="display:none;">No keywords tracked yet. Add one above.</p>
+</div>
+</div>
+
+</main>
+<script src="js/app.js?v=1"></script>
+</body>
+</html>
