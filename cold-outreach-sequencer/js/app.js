@@ -287,10 +287,37 @@ async function closeLead(id, outcome) {
   const ok = await persist();
   renderTable();
 
-  if (ok && isEmbedded && window.parent.showBanner) {
-    window.parent.showBanner('success', outcome === 'booked'
-      ? `${lead.leadName} booked a Free Marketing Assessment / discovery call 🎉 — move them into the Sales Pipeline.`
-      : `Marked ${lead.leadName} as declined / no response.`);
+  if (!ok) return;
+
+  // Used to just tell the human to go retype this into Sales Pipeline
+  // Board themselves - now creates the pipeline lead directly (source
+  // pre-filled as "Cold Outreach", stage set to "discovery call
+  // scheduled" since that's literally what just happened) via the
+  // shared cross-tool bridge in the parent app.js. Fire-and-forget: a
+  // failure here shouldn't block or roll back the outcome just recorded
+  // on this side, so it's reported via a banner rather than surfaced as
+  // an error on closeLead itself.
+  if (outcome === 'booked' && isEmbedded && window.parent.addLeadToSalesPipeline) {
+    window.parent.addLeadToSalesPipeline({
+      name: lead.leadName,
+      source: 'Cold Outreach',
+      notes: `Auto-added after booking via Cold Outreach Sequencer (first contact ${lead.firstContactDate || ''}).`,
+      stage: 'discovery call scheduled'
+    }).then(result => {
+      if (result.ok && !result.alreadyExisted && window.parent.showBanner) {
+        window.parent.showBanner('success', `${lead.leadName} booked a call 🎉 — added to Sales Pipeline automatically.`);
+      } else if (result.ok && result.alreadyExisted && window.parent.showBanner) {
+        window.parent.showBanner('success', `${lead.leadName} booked a call 🎉 — already in Sales Pipeline.`);
+      } else if (window.parent.showBanner) {
+        window.parent.showBanner('success', `${lead.leadName} booked a call 🎉 — couldn't auto-add to Sales Pipeline, add them manually.`);
+      }
+    }).catch(() => {
+      if (window.parent.showBanner) {
+        window.parent.showBanner('success', `${lead.leadName} booked a call 🎉 — couldn't auto-add to Sales Pipeline, add them manually.`);
+      }
+    });
+  } else if (isEmbedded && window.parent.showBanner) {
+    window.parent.showBanner('success', `Marked ${lead.leadName} as declined / no response.`);
   }
 }
 

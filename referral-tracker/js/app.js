@@ -314,12 +314,14 @@ async function addReferral() {
   const matchedReferrer = findClientRecordByName(referrerName);
   const referrerEmail = (matchedReferrer && matchedReferrer.portalConfig && matchedReferrer.portalConfig.clientContactEmail) || '';
 
+  const dateReferred = dateInput.value || todayStr();
+
   referrals.push({
     id: uid(),
     referrerName,
     referrerEmail,
     referredName,
-    dateReferred: dateInput.value || todayStr(),
+    dateReferred,
     status: 'Pending',
     rewardStatus: 'Not Owed',
     rewardAmount: '',
@@ -339,7 +341,30 @@ async function addReferral() {
   updateReferrerNameHint();
   renderTable();
 
-  if (isEmbedded && window.parent.showBanner) {
+  // A referral is logged here right when it happens, before the
+  // referred person is a client (status starts 'Pending') - this is the
+  // moment they should also enter the sales funnel, unlike Cold Outreach
+  // Sequencer's hook (which fires later, once a call is actually
+  // booked). Uses the same cross-tool bridge in the parent app.js, with
+  // source pre-filled as "Referral" and a note crediting who sent them,
+  // so the win-rate-by-source view in Sales Pipeline Board reflects
+  // referrals accurately without anyone retyping this by hand.
+  if (isEmbedded && window.parent.addLeadToSalesPipeline) {
+    window.parent.addLeadToSalesPipeline({
+      name: referredName,
+      source: 'Referral',
+      notes: `Referred by ${referrerName} on ${dateReferred}.`,
+      stage: '🆕 new lead'
+    }).then(result => {
+      if (result.ok && !result.alreadyExisted && window.parent.showBanner) {
+        window.parent.showBanner('success', `Logged referral: ${referrerName} → ${referredName}, and added them to Sales Pipeline.`);
+      } else if (window.parent.showBanner) {
+        window.parent.showBanner('success', `Logged referral: ${referrerName} → ${referredName}.`);
+      }
+    }).catch(() => {
+      if (window.parent.showBanner) window.parent.showBanner('success', `Logged referral: ${referrerName} → ${referredName}.`);
+    });
+  } else if (isEmbedded && window.parent.showBanner) {
     window.parent.showBanner('success', `Logged referral: ${referrerName} → ${referredName}.`);
   }
 }

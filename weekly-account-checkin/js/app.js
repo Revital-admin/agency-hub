@@ -25,6 +25,13 @@ const FIELD_IDS = [
 
 function el(id) { return document.getElementById(id); }
 
+// Minimum gap between two auto-sent testimonial asks to the same client
+// - see the Green-flip handler in saveCheckin below. A relationship's
+// "happy enough to ask" moment doesn't repeat weekly just because health
+// flips back and forth; roughly two quarters is long enough that asking
+// again reads as a genuine new moment, not a repeat of the same email.
+const TESTIMONIAL_ASK_COOLDOWN_DAYS = 180;
+
 function getClient() {
   if (isEmbedded) {
     try { return window.parent.getActiveClient(); } catch (e) { return null; }
@@ -99,12 +106,53 @@ function saveCheckin() {
   // Green check-in in a row, and only when this save is the client's
   // current/latest entry) - a good, low-effort moment to ask for a
   // testimonial while the client is happy, rather than relying on memory.
+  //
+  // Auto-sends for real (Aug 2026 - previously this only created a
+  // notification with a one-click Send button, which still depended on
+  // someone noticing the bell). Two guards keep this from ever spamming
+  // a client: skip entirely if they've already left a testimonial
+  // (client.testimonialSubmission), and skip if one was already sent to
+  // them in the last TESTIMONIAL_ASK_COOLDOWN_DAYS - health can flip
+  // Green/Yellow/Green repeatedly without that meaning "ask again."
+  // client.lastTestimonialAskSentAt is the only record of that cooldown
+  // (there's no other durable log of an auto-sent email), so it's
+  // persisted here on the client itself, admin-side only - not a
+  // client-writable field, so no firestore.rules change needed.
   const isLatestEntry = client.weeklyCheckins[0] && client.weeklyCheckins[0].date === entry.date;
-  if (isLatestEntry && entry.healthRating === 'Green' && priorRating !== 'Green' && window.parent.pushAdminNotification) {
-    const draftEmail = window.parent.buildTestimonialAskDraftEmail
-      ? window.parent.buildTestimonialAskDraftEmail(client, client.name)
-      : null;
-    window.parent.pushAdminNotification('testimonial_prompt', `${client.name}'s health just turned Green — good time to ask for a testimonial.`, client.name, draftEmail);
+  if (isLatestEntry && entry.healthRating === 'Green' && priorRating !== 'Green') {
+    const alreadyTestimonial = !!(client.testimonialSubmission && client.testimonialSubmission.quote);
+    const daysSinceLastAsk = client.lastTestimonialAskSentAt
+      ? Math.floor((Date.now() - new Date(client.lastTestimonialAskSentAt).getTime()) / 86400000)
+      : Infinity;
+    const onCooldown = daysSinceLastAsk < TESTIMONIAL_ASK_COOLDOWN_DAYS;
+
+    if (!alreadyTestimonial && !onCooldown && window.parent.buildTestimonialAskDraftEmail) {
+      const draftEmail = window.parent.buildTestimonialAskDraftEmail(client, client.name);
+      if (draftEmail && draftEmail.sendEnabled && draftEmail.to) {
+        fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to: draftEmail.to, subject: draftEmail.subject, body: draftEmail.body, from: draftEmail.from })
+        }).then(res => res.ok ? res.json() : Promise.reject(new Error('Send failed'))).then(data => {
+          if (!data.success) throw new Error(data.error || 'Send failed');
+          client.lastTestimonialAskSentAt = new Date().toISOString();
+          persist();
+          if (window.parent.pushAdminNotification) {
+            window.parent.pushAdminNotification('testimonial_prompt', `${client.name}'s health just turned Green — testimonial ask sent automatically.`, client.name, null);
+          }
+        }).catch(err => {
+          console.warn('Auto-send testimonial ask failed, falling back to a reviewable draft:', err);
+          if (window.parent.pushAdminNotification) {
+            window.parent.pushAdminNotification('testimonial_prompt', `${client.name}'s health just turned Green — auto-send failed, review and send manually.`, client.name, draftEmail);
+          }
+        });
+      } else if (window.parent.pushAdminNotification) {
+        // No account manager configured (no sendEnabled) or no client
+        // contact email on file - same as before, falls back to a
+        // draft someone has to send themselves.
+        window.parent.pushAdminNotification('testimonial_prompt', `${client.name}'s health just turned Green — good time to ask for a testimonial.`, client.name, draftEmail);
+      }
+    }
   }
 
   // Same flip-detection idea as the Green case above, opposite direction:
