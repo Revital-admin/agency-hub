@@ -4046,6 +4046,18 @@ function healthDigestBudgetPaceClass(p) {
   return "pace-good";
 }
 
+// Reads client.budgetPacingList defensively without migrating it - same
+// convention as the identical helper in app.js/agency-health-dashboard/
+// qbr-generator. A client can have more than one tracked project now
+// (Budget Pacing Tracker, Aug 2026), so the digest flags "Overspending"
+// if ANY of them is over pace, matching worstBudgetPaceClass's dashboard
+// behavior.
+function healthDigestBudgetPacingList(client) {
+  if (!client) return [];
+  if (Array.isArray(client.budgetPacingList)) return client.budgetPacingList;
+  return client.budgetPacing ? [client.budgetPacing] : [];
+}
+
 // Faithful port of agency-health-dashboard/js/app.js's buildRows() - see
 // that file for the fuller reasoning behind each threshold/signal. Any
 // change to what counts as "needs attention" there should be mirrored
@@ -4081,7 +4093,10 @@ function buildHealthDigestRows(clients, revisionRecords, contractInvoiceRecords,
       ).length;
       const heavyRevisions = openRevisions >= 3;
 
-      const budgetPace = healthDigestBudgetPaceClass(client.budgetPacing);
+      const budgetPaceClasses = healthDigestBudgetPacingList(client).map(p => healthDigestBudgetPaceClass(p)).filter(Boolean);
+      const budgetPace = budgetPaceClasses.includes("pace-danger") ? "pace-danger"
+        : budgetPaceClasses.includes("pace-warn") ? "pace-warn"
+        : budgetPaceClasses.includes("pace-good") ? "pace-good" : null;
       const overspending = budgetPace === "pace-danger";
       const upsellOpportunity = overspending && healthRating !== "Red";
 

@@ -10,6 +10,7 @@ try {
 const SANDBOX_NAME = "Quick Sandbox (One-Offs)";
 
 function el(id) { return document.getElementById(id); }
+function uid() { return 'bp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8); }
 
 function getClients() {
   if (isEmbedded) {
@@ -20,6 +21,35 @@ function getClients() {
 
 function persist() {
   if (isEmbedded) window.parent.saveDatabase();
+}
+
+// ── Multiple simultaneous projects per client (Aug 2026) ──
+// Was a single client.budgetPacing object - one client could only ever
+// have ONE tracked budget/flight at a time, so a client running a
+// retainer AND a one-off shoot in the same month had no way to tell
+// their cost/margin apart (see the Hub Integration Roadmap doc, "$500K+
+// Revenue" section, for the fuller reasoning - this is the fix for the
+// one real gap identified there vs. buying Productive). Now
+// client.budgetPacingList is an array of named projects, each with the
+// same shape the old single object had plus id/name.
+//
+// This is the ONLY place that migrates the legacy field - every other
+// reader of this data (Agency Health Dashboard, QBR Generator, the root
+// Hub's upsell nudge, the Worker's health digest) reads defensively
+// instead (falls back to treating a lone client.budgetPacing as a
+// single-item list) rather than each trying to migrate/write it
+// themselves, so there's no race between tools over who converts a given
+// client first.
+function ensureBudgetPacingList(client) {
+  if (Array.isArray(client.budgetPacingList)) return client.budgetPacingList;
+  if (client.budgetPacing) {
+    client.budgetPacingList = [{ id: uid(), name: 'General', ...client.budgetPacing }];
+    delete client.budgetPacing;
+    persist();
+    return client.budgetPacingList;
+  }
+  client.budgetPacingList = [];
+  return client.budgetPacingList;
 }
 
 // ── Live labor cost / retainer utilization ──
@@ -52,11 +82,19 @@ async function loadAuxData() {
   }
 }
 
-function getClientHoursInRange(clientName, startDate, endDate) {
+// projectName/requireProjectMatch: only used when a client has more than
+// one project tracked at once - see ensureBudgetPacingList above. With a
+// single project (the common case, unchanged from before this feature),
+// every hour logged for the client counts toward it regardless of
+// whether that hour entry has a project name set, so nothing changes for
+// anyone who never adopts per-project logging.
+function getClientHoursInRange(clientName, startDate, endDate, projectName, requireProjectMatch) {
   const start = startDate ? new Date(startDate + 'T00:00:00') : null;
   const end = endDate ? new Date(endDate + 'T23:59:59') : null;
+  const wantProject = requireProjectMatch ? (projectName || '').trim().toLowerCase() : null;
   return hoursLogEntries.filter(e => {
     if ((e.clientName || '') !== clientName) return false;
+    if (wantProject !== null && (e.projectName || '').trim().toLowerCase() !== wantProject) return false;
     const d = new Date((e.date || '') + 'T00:00:00');
     if (isNaN(d.getTime())) return false;
     if (start && d < start) return false;
@@ -78,8 +116,8 @@ function getMemberRate(memberName) {
 // someone with no hourlyRate set on their roster entry yet - excluded
 // from cost rather than silently treated as $0/hr, and surfaced in the
 // UI so the number's known incompleteness is visible instead of hidden.
-function getLaborCost(clientName, startDate, endDate) {
-  const entries = getClientHoursInRange(clientName, startDate, endDate);
+function getLaborCost(clientName, startDate, endDate, projectName, requireProjectMatch) {
+  const entries = getClientHoursInRange(clientName, startDate, endDate, projectName, requireProjectMatch);
   let cost = 0;
   let totalHours = 0;
   let missingRateHours = 0;
@@ -105,13 +143,16 @@ function getActiveMonthlyBilling(clientName) {
   return isNaN(amount) ? null : amount;
 }
 
+// No longer skips already-tracked clients - a client can have more than
+// one project tracked at once now (see ensureBudgetPacingList above), so
+// "+ Track New Client" doubles as "+ Add Another Project" for someone
+// already tracked.
 function populateClientSelect() {
   const clients = getClients();
   const select = el('newClientSelect');
-  select.innerHTML = '<option value="">Select a client to track...</option>';
+  select.innerHTML = '<option value="">Select a client...</option>';
   Object.keys(clients).sort().forEach(name => {
     if (name === SANDBOX_NAME) return;
-    if (clients[name].budgetPacing) return; // already tracked
     const opt = document.createElement('option');
     opt.value = name;
     opt.textContent = name;
@@ -150,114 +191,166 @@ function formatValue(type, val) {
   return Number(val || 0).toString() + ' hrs';
 }
 
+// Hours logged for this client, within the union of all its tracked
+// projects' date ranges, with no project name set - i.e. hours that
+// aren't counted toward ANY of the client's projects once they have more
+// than one. Surfaced rather than silently dropped, same reasoning as
+// missingRateHours above.
+function getUnassignedHoursNote(clientName, projects) {
+  if (projects.length < 2) return '';
+  const starts = projects.map(p => p.startDate).filter(Boolean).sort();
+  const ends = projects.map(p => p.endDate).filter(Boolean).sort();
+  if (!starts.length || !ends.length) return '';
+  const rangeStart = starts[0];
+  const rangeEnd = ends[ends.length - 1];
+  const unassigned = getClientHoursInRange(clientName, rangeStart, rangeEnd, '', true);
+  const hrs = unassigned.reduce((sum, e) => sum + (parseFloat(e.hours) || 0), 0);
+  if (hrs <= 0) return '';
+  return `<p class="unassigned-hours-note" style="font-size:11px; color:var(--color-text-muted, #8a887f); margin:6px 0 0;">⚠ ${hrs.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs logged for ${escapeHtmlBp(clientName)} with no Project set - not counted toward any project below. Set a Project on those Hours &amp; Time Log entries to include them.</p>`;
+}
+
+function escapeHtmlBp(str) {
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+
 function renderTable() {
   const clients = getClients();
   const listEl = el('trackerList');
   listEl.innerHTML = '';
 
-  const tracked = Object.keys(clients).filter(name => clients[name].budgetPacing);
+  const trackedNames = Object.keys(clients).filter(name => {
+    const list = ensureBudgetPacingList(clients[name]);
+    return list.length > 0;
+  });
 
-  if (tracked.length === 0) {
-    el('emptyState').style.display = 'flex';
-  } else {
-    el('emptyState').style.display = 'none';
-  }
+  el('emptyState').style.display = trackedNames.length === 0 ? 'flex' : 'none';
 
-  tracked.forEach(name => {
-    const p = clients[name].budgetPacing;
-    const isRetainerHours = p.budgetType === 'Retainer Hours';
+  trackedNames.sort().forEach(name => {
+    const projects = clients[name].budgetPacingList;
+    const hasMultiple = projects.length > 1;
 
-    // Retainer Hours clients get a live spentToDate computed from Hours
-    // & Time Log instead of the manual figure - see getClientHoursInRange
-    // above. Ad Spend has no equivalent live source (ad platform spend
-    // isn't logged in the Hub anywhere), so it stays fully manual.
-    const liveHours = isRetainerHours ? getClientHoursInRange(name, p.startDate, p.endDate) : null;
-    const liveHoursTotal = liveHours ? liveHours.reduce((sum, e) => sum + (parseFloat(e.hours) || 0), 0) : null;
-    const effectiveSpent = isRetainerHours ? (liveHoursTotal || 0) : p.spentToDate;
+    // Cards stay direct children of #trackerList (not wrapped in a group
+    // div) so the existing 2-column grid CSS keeps working unmodified -
+    // the heading/note below are just full-width items in that same grid
+    // (see .pacing-client-heading/.unassigned-hours-note in css/style.css).
+    if (hasMultiple) {
+      const heading = document.createElement('h3');
+      heading.className = 'pacing-client-heading';
+      heading.textContent = name;
+      listEl.appendChild(heading);
+    }
 
-    const pct = p.totalBudget ? Math.min(100, Math.round((effectiveSpent / p.totalBudget) * 100)) : 0;
-    const paceClass = getPacingClass(effectiveSpent, p.totalBudget, p.startDate, p.endDate);
+    projects.forEach(p => {
+      const isRetainerHours = p.budgetType === 'Retainer Hours';
 
-    const labor = getLaborCost(name, p.startDate, p.endDate);
-    const monthlyBilling = getActiveMonthlyBilling(name);
-    const margin = monthlyBilling !== null ? monthlyBilling - labor.cost : null;
+      // Retainer Hours clients get a live spentToDate computed from Hours
+      // & Time Log instead of the manual figure - see getClientHoursInRange
+      // above. Ad Spend has no equivalent live source (ad platform spend
+      // isn't logged in the Hub anywhere), so it stays fully manual.
+      const liveHours = isRetainerHours ? getClientHoursInRange(name, p.startDate, p.endDate, p.name, hasMultiple) : null;
+      const liveHoursTotal = liveHours ? liveHours.reduce((sum, e) => sum + (parseFloat(e.hours) || 0), 0) : null;
+      const effectiveSpent = isRetainerHours ? (liveHoursTotal || 0) : p.spentToDate;
 
-    const spentFieldHtml = isRetainerHours ? `
-        <div class="form-group" style="margin:0">
-          <label style="font-size:10px">Spent to Date (live, from Hours &amp; Time Log)</label>
-          <input type="text" class="form-control" value="${formatValue('Retainer Hours', effectiveSpent)}" disabled>
+      const pct = p.totalBudget ? Math.min(100, Math.round((effectiveSpent / p.totalBudget) * 100)) : 0;
+      const paceClass = getPacingClass(effectiveSpent, p.totalBudget, p.startDate, p.endDate);
+
+      const labor = getLaborCost(name, p.startDate, p.endDate, p.name, hasMultiple);
+      const monthlyBilling = getActiveMonthlyBilling(name);
+      const margin = monthlyBilling !== null ? monthlyBilling - labor.cost : null;
+
+      const spentFieldHtml = isRetainerHours ? `
+          <div class="form-group" style="margin:0">
+            <label style="font-size:10px">Spent to Date (live, from Hours &amp; Time Log)</label>
+            <input type="text" class="form-control" value="${formatValue('Retainer Hours', effectiveSpent)}" disabled>
+          </div>
+        ` : `
+          <div class="form-group" style="margin:0">
+            <label style="font-size:10px">Spent to Date</label>
+            <input type="text" inputmode="decimal" class="form-control spent-input" data-client="${name}" data-project-id="${p.id}" value="${formatNumberWithCommas(p.spentToDate)}">
+          </div>
+        `;
+
+      const costMarginHtml = `
+        <div class="pacing-stats" style="margin-top:8px; padding-top:8px; border-top:1px solid var(--color-border, rgba(255,255,255,0.08));">
+          <span class="spent">Labor Cost (period): $${labor.cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+          ${margin !== null ? `<span class="total" style="color:${margin >= 0 ? '#4ade80' : '#ef4444'};">Margin vs. billing: ${margin >= 0 ? '' : '-'}$${Math.abs(margin).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>` : `<span class="total" style="opacity:0.6;">No active billing on file</span>`}
         </div>
-      ` : `
-        <div class="form-group" style="margin:0">
-          <label style="font-size:10px">Spent to Date</label>
-          <input type="text" inputmode="decimal" class="form-control spent-input" data-client="${name}" value="${formatNumberWithCommas(p.spentToDate)}">
-        </div>
+        ${labor.missingRateHours > 0 ? `<p style="font-size:10px; color:var(--color-text-muted, #8a887f); margin:4px 0 0;">${labor.missingRateHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs excluded - no billable rate set for that team member yet.</p>` : ''}
       `;
 
-    const costMarginHtml = `
-      <div class="pacing-stats" style="margin-top:8px; padding-top:8px; border-top:1px solid var(--color-border, rgba(255,255,255,0.08));">
-        <span class="spent">Labor Cost (period): $${labor.cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-        ${margin !== null ? `<span class="total" style="color:${margin >= 0 ? '#4ade80' : '#ef4444'};">Margin vs. billing: ${margin >= 0 ? '' : '-'}$${Math.abs(margin).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>` : `<span class="total" style="opacity:0.6;">No active billing on file</span>`}
-      </div>
-      ${labor.missingRateHours > 0 ? `<p style="font-size:10px; color:var(--color-text-muted, #8a887f); margin:4px 0 0;">${labor.missingRateHours.toLocaleString(undefined, { maximumFractionDigits: 1 })} hrs excluded - no billable rate set for that team member yet.</p>` : ''}
-    `;
+      const card = document.createElement('div');
+      card.className = 'pacing-card';
 
-    const card = document.createElement('div');
-    card.className = 'pacing-card';
-
-    card.innerHTML = `
-      <div class="card-header">
-        <div>
-          <h3 class="card-title">${name}</h3>
-          <span class="card-type">${p.budgetType || 'Retainer'}</span>
+      card.innerHTML = `
+        <div class="card-header">
+          <div>
+            <h3 class="card-title">${hasMultiple ? escapeHtmlBp(p.name || 'General') : escapeHtmlBp(name)}</h3>
+            <span class="card-type">${p.budgetType || 'Retainer'}</span>
+          </div>
+          <button class="btn-remove-action delete-btn" data-client="${name}" data-project-id="${p.id}">✕</button>
         </div>
-        <button class="btn-remove-action delete-btn" data-client="${name}">✕</button>
-      </div>
 
-      <div class="progress-container">
-        <div class="progress-bar ${paceClass}" style="width: ${pct}%"></div>
-      </div>
-
-      <div class="pacing-stats">
-        <span class="spent">${formatValue(p.budgetType, effectiveSpent)} Spent</span>
-        <span class="total">${formatValue(p.budgetType, p.totalBudget)} Total</span>
-      </div>
-
-      ${costMarginHtml}
-
-      <div class="card-actions">
-        ${spentFieldHtml}
-        <div class="form-group" style="margin:0">
-          <label style="font-size:10px">Total Budget</label>
-          <input type="text" inputmode="decimal" class="form-control total-input" data-client="${name}" value="${formatNumberWithCommas(p.totalBudget)}">
+        <div class="progress-container">
+          <div class="progress-bar ${paceClass}" style="width: ${pct}%"></div>
         </div>
-      </div>
-      <div class="form-row mt-2">
-        <div class="form-group" style="flex:1; margin:0">
-          <label style="font-size:10px">Start Date</label>
-          <input type="date" class="form-control start-input" data-client="${name}" value="${p.startDate}">
+
+        <div class="pacing-stats">
+          <span class="spent">${formatValue(p.budgetType, effectiveSpent)} Spent</span>
+          <span class="total">${formatValue(p.budgetType, p.totalBudget)} Total</span>
         </div>
-        <div class="form-group" style="flex:1; margin:0">
-          <label style="font-size:10px">End Date</label>
-          <input type="date" class="form-control end-input" data-client="${name}" value="${p.endDate}">
+
+        ${costMarginHtml}
+
+        <div class="card-actions">
+          ${spentFieldHtml}
+          <div class="form-group" style="margin:0">
+            <label style="font-size:10px">Total Budget</label>
+            <input type="text" inputmode="decimal" class="form-control total-input" data-client="${name}" data-project-id="${p.id}" value="${formatNumberWithCommas(p.totalBudget)}">
+          </div>
         </div>
-      </div>
-    `;
-    listEl.appendChild(card);
+        <div class="form-row mt-2">
+          <div class="form-group" style="flex:1; margin:0">
+            <label style="font-size:10px">Start Date</label>
+            <input type="date" class="form-control start-input" data-client="${name}" data-project-id="${p.id}" value="${p.startDate}">
+          </div>
+          <div class="form-group" style="flex:1; margin:0">
+            <label style="font-size:10px">End Date</label>
+            <input type="date" class="form-control end-input" data-client="${name}" data-project-id="${p.id}" value="${p.endDate}">
+          </div>
+        </div>
+      `;
+      listEl.appendChild(card);
+    });
+
+    if (hasMultiple) {
+      const note = getUnassignedHoursNote(name, projects);
+      if (note) {
+        const noteEl = document.createElement('div');
+        noteEl.innerHTML = note;
+        listEl.appendChild(noteEl.firstChild);
+      }
+    }
   });
 
   wireListeners();
 }
 
-function wireListeners() {
+function findProject(clientName, projectId) {
   const clients = getClients();
+  const list = clients[clientName] && clients[clientName].budgetPacingList;
+  return list ? list.find(p => p.id === projectId) : null;
+}
 
+function wireListeners() {
   document.querySelectorAll('.spent-input').forEach(inp => {
     if (typeof attachCommaFormatting === 'function') attachCommaFormatting(inp);
     if (typeof attachSpinnerButtons === 'function') attachSpinnerButtons(inp, { step: 1 });
     inp.addEventListener('change', (e) => {
-      const c = e.target.getAttribute('data-client');
-      clients[c].budgetPacing.spentToDate = parseFormattedNumber(e.target.value);
+      const p = findProject(e.target.getAttribute('data-client'), e.target.getAttribute('data-project-id'));
+      if (!p) return;
+      p.spentToDate = parseFormattedNumber(e.target.value);
       persist();
       renderTable();
     });
@@ -267,8 +360,9 @@ function wireListeners() {
     if (typeof attachCommaFormatting === 'function') attachCommaFormatting(inp);
     if (typeof attachSpinnerButtons === 'function') attachSpinnerButtons(inp, { step: 1 });
     inp.addEventListener('change', (e) => {
-      const c = e.target.getAttribute('data-client');
-      clients[c].budgetPacing.totalBudget = parseFormattedNumber(e.target.value);
+      const p = findProject(e.target.getAttribute('data-client'), e.target.getAttribute('data-project-id'));
+      if (!p) return;
+      p.totalBudget = parseFormattedNumber(e.target.value);
       persist();
       renderTable();
     });
@@ -276,8 +370,9 @@ function wireListeners() {
 
   document.querySelectorAll('.start-input').forEach(inp => {
     inp.addEventListener('change', (e) => {
-      const c = e.target.getAttribute('data-client');
-      clients[c].budgetPacing.startDate = e.target.value;
+      const p = findProject(e.target.getAttribute('data-client'), e.target.getAttribute('data-project-id'));
+      if (!p) return;
+      p.startDate = e.target.value;
       persist();
       renderTable();
     });
@@ -285,8 +380,9 @@ function wireListeners() {
 
   document.querySelectorAll('.end-input').forEach(inp => {
     inp.addEventListener('change', (e) => {
-      const c = e.target.getAttribute('data-client');
-      clients[c].budgetPacing.endDate = e.target.value;
+      const p = findProject(e.target.getAttribute('data-client'), e.target.getAttribute('data-project-id'));
+      if (!p) return;
+      p.endDate = e.target.value;
       persist();
       renderTable();
     });
@@ -294,9 +390,12 @@ function wireListeners() {
 
   document.querySelectorAll('.delete-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
-      if (!confirm("Stop tracking this budget?")) return;
-      const c = e.target.getAttribute('data-client');
-      delete clients[c].budgetPacing;
+      const clientName = e.target.getAttribute('data-client');
+      const projectId = e.target.getAttribute('data-project-id');
+      const p = findProject(clientName, projectId);
+      if (!confirm(`Stop tracking ${p && p.name ? '"' + p.name + '"' : 'this budget'} for ${clientName}?`)) return;
+      const clients = getClients();
+      clients[clientName].budgetPacingList = clients[clientName].budgetPacingList.filter(x => x.id !== projectId);
       persist();
       populateClientSelect();
       renderTable();
@@ -325,15 +424,27 @@ el('addTrackerBtn').addEventListener('click', () => {
   }
 
   const clients = getClients();
+  const list = ensureBudgetPacingList(clients[clientName]);
   const type = confirm("Track Ad Spend? (Cancel for Retainer Hours)") ? 'Ad Spend' : 'Retainer Hours';
 
-  clients[clientName].budgetPacing = {
+  // Only prompted when the client already has a project tracked - keeps
+  // the common single-project case exactly as quick as it always was
+  // (two clicks, no typing) and only asks for a name once it's actually
+  // needed to tell projects apart.
+  let name = 'General';
+  if (list.length > 0) {
+    name = (prompt('Name this project (e.g. "Q3 Event Shoot") so it stays separate from the existing tracked budget below:', '') || '').trim() || `Project ${list.length + 1}`;
+  }
+
+  list.push({
+    id: uid(),
+    name,
     budgetType: type,
     totalBudget: type === 'Ad Spend' ? 5000 : 20,
     spentToDate: 0,
     startDate: getMonthStart(),
     endDate: getNextMonthEnd()
-  };
+  });
 
   persist();
   el('newClientSelect').value = '';

@@ -11,10 +11,12 @@
        second independent field that isn't guaranteed to agree with it).
      - agency/revisionFeedbackLog for open (unresolved) revision counts
        per client.
-     - client.budgetPacing (clientsDb) for over/underspend status - same
-       field Budget Pacing Tracker owns; getBudgetPaceClass below mirrors
-       that tool's own getPacingClass() (including its divide-by-zero
-       fix for same-day flights) so the two never disagree.
+     - client.budgetPacingList (clientsDb) for over/underspend status -
+       same field Budget Pacing Tracker owns (a client can have more than
+       one tracked project now, Aug 2026 - see worstBudgetPaceClass);
+       getBudgetPaceClass below mirrors that tool's own getPacingClass()
+       (including its divide-by-zero fix for same-day flights) so the two
+       never disagree.
      - client.pendingApprovals (clientsDb) for how long the oldest
        still-open approval has been waiting on the client - same array
        Client Portal Manager owns; each entry's createdAt timestamp was
@@ -201,6 +203,24 @@ function getBudgetPaceClass(p) {
   return 'pace-good';
 }
 
+// Reads client.budgetPacingList defensively without migrating it - see
+// the identical helper + comment in the root Hub's app.js. A client can
+// now have more than one tracked project at once (Budget Pacing Tracker,
+// Aug 2026), so this dashboard shows the single worst pace across all of
+// them rather than just one.
+function getBudgetPacingList(client) {
+  if (!client) return [];
+  if (Array.isArray(client.budgetPacingList)) return client.budgetPacingList;
+  return client.budgetPacing ? [client.budgetPacing] : [];
+}
+function worstBudgetPaceClass(client) {
+  const classes = getBudgetPacingList(client).map(p => getBudgetPaceClass(p)).filter(Boolean);
+  if (classes.includes('pace-danger')) return 'pace-danger';
+  if (classes.includes('pace-warn')) return 'pace-warn';
+  if (classes.includes('pace-good')) return 'pace-good';
+  return null;
+}
+
 // "Awaiting response" threshold for a still-pending client approval - long
 // enough that it's a genuine follow-up candidate, not just "sent this
 // morning." Matches the spirit of Revision & Feedback Tracker's 3-day
@@ -296,7 +316,7 @@ function buildRows() {
     // Budget Pacing Tracker only tracks clients someone has opted in there
     // (client.budgetPacing is undefined for everyone else), so budgetPace
     // is null - not "on track" - for any client not being tracked at all.
-    const budgetPace = getBudgetPaceClass(client.budgetPacing);
+    const budgetPace = worstBudgetPaceClass(client);
     const overspending = budgetPace === 'pace-danger';
     // Same underlying fact as "overspending" (spending faster than the
     // retainer/budget covers), reframed as an opportunity rather than a

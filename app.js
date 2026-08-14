@@ -2416,7 +2416,7 @@ async function renderNeedsAttention() {
     // upsellOpportunity / runUpsellNudgeCheck - not a risk to flag urgently,
     // just a heads-up worth a bigger-retainer conversation, so a flat
     // mid-range urgency rather than a days-based one.
-    if (isOverBudgetPace(client.budgetPacing) && healthRating !== 'Red') {
+    if (getBudgetPacingList(client).some(p => isOverBudgetPace(p)) && healthRating !== 'Red') {
       items.push({ name, urgency: 40, message: "pacing over budget - possible upsell opportunity" });
     }
 
@@ -6475,6 +6475,20 @@ function runReengagementNudgeCheck() {
   });
 }
 
+// Reads client.budgetPacingList defensively without migrating it - the
+// migration itself (converting a legacy single client.budgetPacing object
+// into this array, see ensureBudgetPacingList) only ever happens inside
+// Budget Pacing Tracker, the one tool that owns/edits this data. Every
+// other reader (this file, Agency Health Dashboard, QBR Generator, the
+// Worker's health digest) just falls back to treating a lone
+// client.budgetPacing as a single-item list, so nothing here needs to
+// write anything or race with that tool over who converts a client first.
+function getBudgetPacingList(client) {
+  if (!client) return [];
+  if (Array.isArray(client.budgetPacingList)) return client.budgetPacingList;
+  return client.budgetPacing ? [client.budgetPacing] : [];
+}
+
 // Mirrors agency-health-dashboard/js/app.js's getBudgetPaceClass
 // (pace-danger branch) - duplicated here rather than reached across the
 // iframe boundary, same convention as parsePhaseAmountToNumber above.
@@ -6507,7 +6521,7 @@ async function runUpsellNudgeCheck() {
 
   Object.entries(clientsDb).forEach(([name, client]) => {
     if (!client || !client.portalConfig || !client.portalConfig.magicToken) return;
-    if (!isOverBudgetPace(client.budgetPacing)) return;
+    if (!getBudgetPacingList(client).some(p => isOverBudgetPace(p))) return;
 
     const checkins = Array.isArray(client.weeklyCheckins) ? client.weeklyCheckins : [];
     const healthRating = checkins.length ? checkins[0].healthRating : null;

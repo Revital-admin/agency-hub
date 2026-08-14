@@ -7,8 +7,9 @@
    same pattern fetchReferralSummaries in the parent Hub's app.js uses),
    billing (agency/contractInvoices, name-matched), open revisions
    (agency/revisionFeedbackLog, name-matched - same source the Agency
-   Health Dashboard uses), and budget pacing (client.budgetPacing, same
-   object the Budget Pacing Tracker reads/writes). Nothing here writes
+   Health Dashboard uses), and budget pacing (client.budgetPacingList,
+   same array the Budget Pacing Tracker reads/writes - a client can have
+   more than one tracked project, Aug 2026). Nothing here writes
    anywhere.
    ============================================================ */
 
@@ -159,22 +160,36 @@ function getPacingStatus(spent, total, startDate, endDate) {
   return { label: 'On pace', cls: 'qbr-health-green' };
 }
 
+// A client can have more than one tracked project now (Budget Pacing
+// Tracker, Aug 2026) - renders one block per project instead of one.
+// Reads client.budgetPacingList defensively (falls back to a lone legacy
+// client.budgetPacing) without migrating it, same convention as the root
+// Hub's and Agency Health Dashboard's own copy of this helper.
+function getBudgetPacingList(client) {
+  if (!client) return [];
+  if (Array.isArray(client.budgetPacingList)) return client.budgetPacingList;
+  return client.budgetPacing ? [client.budgetPacing] : [];
+}
+
 function renderBudgetPacing(client) {
   const listEl = el('budgetPacingBlock');
-  const p = client.budgetPacing;
-  if (!p) {
+  const projects = getBudgetPacingList(client);
+  if (!projects.length) {
     listEl.innerHTML = '<div class="qbr-empty-note">No budget pacing tracked for this client.</div>';
     return;
   }
-  const status = getPacingStatus(p.spentToDate, p.totalBudget, p.startDate, p.endDate);
-  const isSpend = p.budgetType === 'Ad Spend';
-  const fmt = (v) => isSpend ? '$' + Number(v || 0).toLocaleString() : Number(v || 0) + ' hrs';
+  const hasMultiple = projects.length > 1;
+  const fmt = (p, v) => p.budgetType === 'Ad Spend' ? '$' + Number(v || 0).toLocaleString() : Number(v || 0) + ' hrs';
 
-  listEl.innerHTML = `
-    <div class="qbr-list-row"><span class="qbr-list-row-label"><span class="qbr-health-dot ${status.cls}"></span>${escapeHtml(p.budgetType || 'Retainer')}</span><span class="qbr-list-row-meta">${status.label}</span></div>
-    <div class="qbr-list-row"><span class="qbr-list-row-label">Spent to date</span><span class="qbr-list-row-meta">${fmt(p.spentToDate)} of ${fmt(p.totalBudget)}</span></div>
-    <div class="qbr-list-row"><span class="qbr-list-row-label">Period</span><span class="qbr-list-row-meta">${escapeHtml(p.startDate || '--')} to ${escapeHtml(p.endDate || '--')}</span></div>
-  `;
+  listEl.innerHTML = projects.map(p => {
+    const status = getPacingStatus(p.spentToDate, p.totalBudget, p.startDate, p.endDate);
+    const label = hasMultiple ? `${escapeHtml(p.name || 'General')} — ${escapeHtml(p.budgetType || 'Retainer')}` : escapeHtml(p.budgetType || 'Retainer');
+    return `
+      <div class="qbr-list-row"><span class="qbr-list-row-label"><span class="qbr-health-dot ${status.cls}"></span>${label}</span><span class="qbr-list-row-meta">${status.label}</span></div>
+      <div class="qbr-list-row"><span class="qbr-list-row-label">Spent to date</span><span class="qbr-list-row-meta">${fmt(p, p.spentToDate)} of ${fmt(p, p.totalBudget)}</span></div>
+      <div class="qbr-list-row"><span class="qbr-list-row-label">Period</span><span class="qbr-list-row-meta">${escapeHtml(p.startDate || '--')} to ${escapeHtml(p.endDate || '--')}</span></div>
+    `;
+  }).join(hasMultiple ? '<div style="height:8px;"></div>' : '');
 }
 
 function escapeHtml(str) {

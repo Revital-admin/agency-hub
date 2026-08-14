@@ -182,6 +182,28 @@
   padding-top: 16px;
 }
 
+/* Full-width items inside the same #trackerList grid as .pacing-card -
+   shown only for a client with more than one project tracked at once
+   (see hasMultiple in js/app.js). */
+.pacing-client-heading {
+  grid-column: 1 / -1;
+  margin: 8px 0 -8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.unassigned-hours-note {
+  grid-column: 1 / -1;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: -8px 0 0 !important;
+}
+
 .empty-state {
   text-align: center;
   padding: 64px 24px;

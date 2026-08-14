@@ -160,6 +160,30 @@ function populateClientDatalist() {
   });
 }
 
+// Only matters once a client has more than one project tracked in Budget
+// Pacing (see that tool's client.budgetPacingList) - suggests exact
+// project names so hours actually count toward the right one instead of
+// silently landing in neither (see getUnassignedHoursNote there). A
+// client with zero or one tracked project needs nothing typed here at
+// all; every hour still counts toward them either way.
+function populateProjectDatalist() {
+  const list = el('projectOptions');
+  if (!list) return;
+  list.innerHTML = '';
+  const clientName = el('newEntryClient') ? el('newEntryClient').value.trim() : '';
+  if (!clientName || !isEmbedded || typeof window.parent.getAllClients !== 'function') return;
+  let clients = {};
+  try { clients = window.parent.getAllClients() || {}; } catch (e) { clients = {}; }
+  const client = clients[clientName];
+  const projects = client && Array.isArray(client.budgetPacingList) ? client.budgetPacingList : [];
+  projects.forEach(p => {
+    if (!p.name) return;
+    const opt = document.createElement('option');
+    opt.value = p.name;
+    list.appendChild(opt);
+  });
+}
+
 // ── Summary bar ──
 function isThisWeek(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
@@ -256,6 +280,7 @@ function renderTable() {
       <td class="date-cell">${escapeHtml(e.date || '--')}</td>
       <td class="name-cell">${escapeHtml(e.memberName)}</td>
       <td>${escapeHtml(e.clientName)}</td>
+      <td>${escapeHtml(e.projectName || '--')}</td>
       <td class="hours-cell">${(parseFloat(e.hours) || 0).toFixed(2).replace(/\.?0+$/, '')}</td>
       <td>${e.billable ? 'Yes' : 'No'}</td>
       <td><input type="text" class="notes-input" data-id="${e.id}" value="${(e.notes || '').replace(/"/g, '&quot;')}" placeholder="Notes..."></td>
@@ -305,12 +330,14 @@ async function addEntry() {
   const dateInput = el('newEntryDate');
   const memberInput = el('newEntryMember');
   const clientInput = el('newEntryClient');
+  const projectInput = el('newEntryProject');
   const hoursInput = el('newEntryHours');
   const billableInput = el('newEntryBillable');
   const notesInput = el('newEntryNotes');
 
   const memberName = memberInput.value.trim();
   const clientName = clientInput.value.trim();
+  const projectName = projectInput.value.trim();
   const hours = parseFloat(hoursInput.value);
 
   if (!memberName || !clientName) {
@@ -327,6 +354,7 @@ async function addEntry() {
     date: dateInput.value || todayStr(),
     memberName,
     clientName,
+    projectName,
     hours,
     billable: clientName === INTERNAL_CLIENT_NAME ? false : !!billableInput.checked,
     notes: notesInput.value.trim()
@@ -342,6 +370,7 @@ async function addEntry() {
 
   memberInput.value = '';
   clientInput.value = '';
+  projectInput.value = '';
   hoursInput.value = '';
   notesInput.value = '';
   billableInput.checked = true;
@@ -361,6 +390,7 @@ function initListeners() {
     if (el('newEntryClient').value.trim() === INTERNAL_CLIENT_NAME) {
       el('newEntryBillable').checked = false;
     }
+    populateProjectDatalist();
   });
 }
 
