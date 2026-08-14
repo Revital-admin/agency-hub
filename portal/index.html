@@ -213,6 +213,27 @@ window.addEventListener('error', function(e) {
 
         <div id="dashRenewalBanner" class="renewal-banner" style="display:none;"></div>
 
+        <div id="dashPulseWidget" class="pulse-widget" style="display:none;">
+          <div id="pulseFormContainer">
+            <p class="pulse-question">How's it going with us lately?</p>
+            <div class="pulse-scale" id="pulseScaleButtons">
+              <button type="button" class="pulse-btn" data-rating="1" aria-label="Not good">😞</button>
+              <button type="button" class="pulse-btn" data-rating="2" aria-label="Could be better">🙁</button>
+              <button type="button" class="pulse-btn" data-rating="3" aria-label="Fine">😐</button>
+              <button type="button" class="pulse-btn" data-rating="4" aria-label="Good">🙂</button>
+              <button type="button" class="pulse-btn" data-rating="5" aria-label="Great">😄</button>
+            </div>
+            <div id="pulseCommentRow" style="display:none;">
+              <textarea id="pulseComment" placeholder="Anything you want us to know? (optional)"></textarea>
+              <button type="button" class="btn-primary" id="pulseSubmitBtn">Send</button>
+            </div>
+            <button type="button" id="pulseDismissBtn" class="pulse-dismiss">Not right now</button>
+          </div>
+          <div id="pulseThanksContainer" style="display:none;">
+            <p>Thanks for letting us know!</p>
+          </div>
+        </div>
+
         <div id="dashEngagementStageWidget" class="engagement-stage-widget" style="display:none;">
           <div id="dashEngagementStageTrack" class="engagement-stage-track"></div>
         </div>
@@ -733,6 +754,6 @@ window.addEventListener('error', function(e) {
     </div>
   </div>
 
-  <script src="js/app.js?v=81"></script>
+  <script src="js/app.js?v=82"></script>
 </body>
 </html>

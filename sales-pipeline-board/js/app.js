@@ -130,6 +130,79 @@ function renderBoard() {
     stageLeads.forEach(lead => body.appendChild(buildLeadCard(lead)));
     board.appendChild(col);
   });
+
+  renderSourceStats();
+}
+
+// ── Win rate by source ──
+// `source` is free text (see the "Referral, cold outreach, website..."
+// placeholder on the field itself) rather than a fixed dropdown, so
+// there's no clean enum to group by - this buckets the common phrasings
+// into a handful of channels via keyword matching, same "best effort,
+// not exact" spirit as Contract & Invoice Tracker's own free-text
+// invoiceAmount parsing (parseAmountToNumber there). Anything that
+// doesn't match a known keyword falls into "Other / Unspecified" rather
+// than being silently dropped, so the totals below always add up to
+// every lead in the board.
+const SOURCE_BUCKETS = [
+  { label: 'Referral', keywords: ['referral', 'referred', 'word of mouth'] },
+  { label: 'Cold Outreach', keywords: ['cold', 'outreach', 'linkedin', 'cold email'] },
+  { label: 'Inbound / Content', keywords: ['website', 'inbound', 'content', 'seo', 'organic', 'blog'] },
+  { label: 'Partnership', keywords: ['partner', 'partnership'] },
+  { label: 'Paid Ads', keywords: ['ad', 'ads', 'ppc', 'paid'] },
+];
+
+function bucketSource(source) {
+  const s = (source || '').trim().toLowerCase();
+  if (!s) return 'Other / Unspecified';
+  for (const bucket of SOURCE_BUCKETS) {
+    if (bucket.keywords.some(k => s.includes(k))) return bucket.label;
+  }
+  return 'Other / Unspecified';
+}
+
+const WON_STAGE = STAGES.find(s => s.key.includes('closed won')).key;
+const LOST_STAGE = STAGES.find(s => s.key.includes('closed lost')).key;
+
+// Win rate is won / (won + lost) - leads still active in the pipeline
+// haven't resolved yet, so they're excluded from the rate itself but
+// still counted in "Total" for context (a bucket that's all-open just
+// hasn't had anything close either way yet, not a 0% or 100% win rate).
+function computeSourceStats() {
+  const byBucket = {};
+  leads.forEach(lead => {
+    const bucket = bucketSource(lead.source);
+    if (!byBucket[bucket]) byBucket[bucket] = { total: 0, won: 0, lost: 0 };
+    byBucket[bucket].total++;
+    if (lead.stage === WON_STAGE) byBucket[bucket].won++;
+    else if (lead.stage === LOST_STAGE) byBucket[bucket].lost++;
+  });
+  return Object.entries(byBucket)
+    .map(([bucket, stats]) => {
+      const resolved = stats.won + stats.lost;
+      const winRate = resolved > 0 ? Math.round((stats.won / resolved) * 100) : null;
+      return { bucket, ...stats, resolved, winRate };
+    })
+    .sort((a, b) => b.total - a.total);
+}
+
+function renderSourceStats() {
+  const wrap = el('sourceStatsBody');
+  if (!wrap) return;
+  const stats = computeSourceStats();
+  if (!stats.length) {
+    wrap.innerHTML = '';
+    return;
+  }
+  wrap.innerHTML = stats.map(s => `
+    <tr>
+      <td class="source-cell">${escapeHtml(s.bucket)}</td>
+      <td>${s.total}</td>
+      <td>${s.won}</td>
+      <td>${s.lost}</td>
+      <td>${s.winRate === null ? '<span class="source-stat-pending">No closed deals yet</span>' : `${s.winRate}%`}</td>
+    </tr>
+  `).join('');
 }
 
 function buildLeadCard(lead) {

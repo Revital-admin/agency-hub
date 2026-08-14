@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Agency Health Dashboard</title>
 <link rel="stylesheet" href="../style.css?v=2">
-<link rel="stylesheet" href="css/style.css?v=3">
+<link rel="stylesheet" href="css/style.css?v=4">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
 </head>
 <body>
@@ -22,7 +22,7 @@
 <span>Account Management</span>
 </div>
 <h1 class="site-title">Agency Health <em>Dashboard</em></h1>
-<p class="site-subtitle">One glance across every client: health rating, last check-in, renewal timing (from Renewal Tracker), open revisions, budget pacing, approval response time, and contact recency — pulled from the Weekly Check-In, Renewal Tracker, Revision &amp; Feedback Tracker, Budget Pacing Tracker, Client Portal Manager, and Meeting Notes Logger so you don't have to open six different tools to see who needs attention (or who's worth an upsell conversation).</p>
+<p class="site-subtitle">One glance across every client: health rating, last check-in, renewal timing (from Renewal Tracker), open revisions, budget pacing, approval response time, payment status, and contact recency — pulled from the Weekly Check-In, Renewal Tracker, Revision &amp; Feedback Tracker, Budget Pacing Tracker, Client Portal Manager, Meeting Notes Logger, Contract &amp; Invoice Tracker, and QBR Generator so you don't have to open seven different tools to see who needs attention (or who's worth an upsell conversation). A month-to-date profitability view (labor cost vs. active billing, from Team Roster + Hours &amp; Time Log + Contract &amp; Invoice Tracker) sits below.</p>
 </header>
 
 <div class="summary-bar" id="summaryBar">
@@ -34,6 +34,9 @@
 <div class="summary-stat"><span class="summary-num" id="summaryOverspending">0</span><span class="summary-label">Overspending Budgets</span></div>
 <div class="summary-stat"><span class="summary-num" id="summaryStaleApprovals">0</span><span class="summary-label">Approvals Awaiting Response 5d+</span></div>
 <div class="summary-stat"><span class="summary-num" id="summaryNoContact">0</span><span class="summary-label">No Contact Logged 30d+</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryOverdueInvoices">0</span><span class="summary-label">Overdue Invoices</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryRenewalsNeedQbr">0</span><span class="summary-label">Renewals w/o Recent QBR</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryLowPulse">0</span><span class="summary-label">Low Satisfaction Ratings</span></div>
 </div>
 
 <div class="step-card table-card">
@@ -67,7 +70,40 @@
 </div>
 </div>
 
+<header class="site-header" style="margin-top: 40px;">
+<div class="header-eyebrow">
+<span class="dot"></span>
+<span>Profitability</span>
+</div>
+<h1 class="site-title" style="font-size: 1.8rem;">Month-to-Date <em>Profitability</em></h1>
+<p class="site-subtitle">Active monthly retainer billing (Contract &amp; Invoice Tracker's Stripe subscriptions) against labor cost so far this month (Team Roster hourly rates &times; Hours &amp; Time Log entries). Only clients with an active recurring subscription show up here — project/one-time clients aren't tracked this way; use Budget Pacing Tracker's per-flight margin card for those.</p>
+</header>
+
+<div class="summary-bar">
+<div class="summary-stat"><span class="summary-num" id="summaryMtdMargin">$0</span><span class="summary-label">Total MTD Margin</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryNegativeMargin">0</span><span class="summary-label">Clients Running Negative</span></div>
+</div>
+
+<div class="step-card table-card">
+<p class="table-scroll-hint">Sorted lowest margin first, so the clients most worth a closer look surface at the top &rarr;</p>
+<div class="tracker-table-wrap">
+<table class="tracker-table">
+<thead>
+<tr>
+<th>Client</th>
+<th>Hours (MTD)</th>
+<th>Labor Cost (MTD)</th>
+<th>Active Monthly Billing</th>
+<th>Margin</th>
+</tr>
+</thead>
+<tbody id="profitabilityTableBody"></tbody>
+</table>
+<p id="profitabilityEmptyState" class="empty-state" style="display:none;">No clients with active recurring billing on file yet.</p>
+</div>
+</div>
+
 </main>
-<script src="js/app.js?v=1"></script>
+<script src="js/app.js?v=4"></script>
 </body>
 </html>

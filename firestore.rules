@@ -302,9 +302,15 @@ service cloud.firestore {
       // notification read-flags above: nothing stops a malicious client
       // from writing garbage keys into their own doc, but the worst case is
       // bogus feedback/annotations on their own account, not a real
-      // security issue.
+      // security issue. clientPulseFeedback (Aug 2026) is the same idea
+      // again - a lightweight, repeatable "how's it going?" rating the
+      // client can leave from their portal home view (submitPulseFeedback
+      // in portal/js/app.js), append-only from their side (each submission
+      // gets its own id; see foldInClientPulseFeedback in app.js for the
+      // merge-by-id logic that keeps a non-merge admin .set() from wiping
+      // one out).
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
-                        .hasOnly(['clientChecklist', 'pendingApprovals', 'approvalHistory', 'testimonialSubmission', 'notifications', 'lastVisitedAt', 'moodBoardViews', 'moodBoardStyleFeedback', 'moodBoardAnnotations']);
+                        .hasOnly(['clientChecklist', 'pendingApprovals', 'approvalHistory', 'testimonialSubmission', 'notifications', 'lastVisitedAt', 'moodBoardViews', 'moodBoardStyleFeedback', 'moodBoardAnnotations', 'clientPulseFeedback']);
     }
 
     // Contractor Portal - same magic-token-as-document-ID model as

@@ -5762,6 +5762,29 @@ function foldInMoodBoardAnnotations(target, publicData) {
   return changed;
 }
 
+// Client-submitted satisfaction pulse (see submitPulseFeedback in
+// portal/js/app.js - a lightweight "how's it going" rating the client
+// can leave from their portal, distinct from the AM's own internal read
+// on the account in Weekly Check-In's healthRating/seeingValue fields).
+// Same flat "only ever grows, merge by id" shape and reasoning as
+// foldInMoodBoardAnnotations just above - required for the exact same
+// reason: syncPublicPortalDocs' non-merge .set() would otherwise wipe
+// out a client's pulse submission the next time an admin saved anything
+// elsewhere in the Hub, if it wasn't folded into clientsDb first.
+function foldInClientPulseFeedback(target, publicData) {
+  if (!target || !publicData || !Array.isArray(publicData.clientPulseFeedback)) return false;
+  if (!Array.isArray(target.clientPulseFeedback)) target.clientPulseFeedback = [];
+  const existingIds = new Set(target.clientPulseFeedback.map(p => p.id));
+  let changed = false;
+  publicData.clientPulseFeedback.forEach(p => {
+    if (!existingIds.has(p.id)) {
+      target.clientPulseFeedback.push(p);
+      changed = true;
+    }
+  });
+  return changed;
+}
+
 // Appends one entry to a client's notification feed (the bell icon on
 // their portal). Admin-only to create - called from wherever the hub
 // pushes something the client needs to know about (a new approval request,
@@ -6953,6 +6976,7 @@ async function syncPublicPortalDocs(dbSnapshot) {
         // - this is the fix for notes appearing to save and then vanishing
         // the next time anything else gets saved in the Hub.
         foldInMoodBoardAnnotations(client, existingData);
+        foldInClientPulseFeedback(client, existingData);
         foldInNotificationReadState(localNotifications, existingData.notifications);
         // lastVisitedAt is written directly by the portal on load (see
         // portal/js/app.js) and read back into clientsDb by
@@ -7180,6 +7204,23 @@ function ensureClientPortalListeners() {
               pushAdminNotification("moodboard_annotation", `${name} left a note on "${board ? board.title : "a mood board"}".`, name);
             }
           }));
+        });
+      }
+
+      // Client-submitted satisfaction pulse - see foldInClientPulseFeedback
+      // above. A low rating (bottom third of the 1-5 scale) surfaces
+      // immediately as an admin notification, the same "don't wait for
+      // someone to notice" treatment a Red health check-in already gets in
+      // Weekly Check-In - a self-reported low rating is exactly the kind of
+      // signal that shouldn't sit unread until the next time someone
+      // happens to open the Agency Health Dashboard.
+      const priorPulseIds = new Set((currentClient.clientPulseFeedback || []).map(p => p.id));
+      const changedPulseFeedback = foldInClientPulseFeedback(currentClient, data);
+      if (changedPulseFeedback) {
+        (currentClient.clientPulseFeedback || []).forEach(p => {
+          if (!priorPulseIds.has(p.id) && p.rating <= 2 && pushAdminNotification) {
+            pushAdminNotification("client_pulse_low", `${name} left a low satisfaction rating (${p.rating}/5) from their portal.`, name);
+          }
         });
       }
 

@@ -162,6 +162,9 @@ main.container { min-width: 0; }
 }
 .signal-none { color: var(--color-text-muted); font-size: 12px; }
 
+.margin-positive { color: #22c55e; font-weight: 600; white-space: nowrap; }
+.margin-negative { color: #ef4444; font-weight: 600; white-space: nowrap; }
+
 .empty-state { text-align: center; padding: 40px 20px; color: var(--color-text-muted); font-size: 14px; }
 
 .table-scroll-hint {

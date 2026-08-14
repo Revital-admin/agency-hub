@@ -70,6 +70,41 @@
 }
 .module-container { padding: 24px; box-sizing: border-box; }
 
+/* ── Win rate by source ── */
+.source-stats-card {
+  background: var(--color-surface-2, #222220);
+  border: 1px solid var(--color-border, rgba(255,255,255,0.07));
+  border-radius: var(--radius-lg, 14px);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  overflow-x: auto;
+}
+.source-stats-header {
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-bright);
+  margin-bottom: 10px;
+}
+.source-stats-table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
+.source-stats-table th {
+  text-align: left;
+  padding: 6px 14px 6px 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--color-border, rgba(255,255,255,0.07));
+}
+.source-stats-table td {
+  padding: 8px 14px 8px 0;
+  border-bottom: 1px solid var(--color-border, rgba(255,255,255,0.07));
+  color: var(--color-text-primary, #e8e6df);
+}
+.source-stats-table tr:last-child td { border-bottom: none; }
+.source-cell { font-weight: 600; }
+.source-stat-pending { color: var(--text-muted); font-style: italic; }
+
 /* ── Kanban board ── */
 .pipeline-board {
   display: flex;

@@ -333,6 +333,9 @@ function renderPortal() {
 
   // Testimonial request
   renderTestimonialView();
+
+  // Satisfaction pulse (dashboard view)
+  renderPulseWidget();
 }
 
 function setupIframe(navId, iframeId, url) {
@@ -2179,4 +2182,102 @@ function submitTestimonial() {
 document.addEventListener("DOMContentLoaded", () => {
   const submitBtn = document.getElementById("submitTestimonialBtn");
   if (submitBtn) submitBtn.addEventListener("click", submitTestimonial);
+});
+
+// ── Satisfaction pulse (Aug 2026) ──
+// A lightweight, repeatable "how's it going?" rating on the dashboard
+// view - distinct from Testimonial's write-once public quote, this is a
+// private, internal-only signal (never shown back to the client, never
+// published) meant to catch quiet dissatisfaction early, the same way
+// Weekly Check-In's healthRating does from the account manager's side.
+// Writes straight to this client's own public clients/{token} doc, same
+// merge-write pattern as submitTestimonial above - see
+// foldInClientPulseFeedback in the root app.js for how this gets pulled
+// into clientsDb without an admin save wiping it out, and
+// firestore.rules for the write-allowlist entry.
+const PULSE_REASK_DAYS = 30; // don't ask again for a while after a real submission
+const PULSE_DISMISS_SNOOZE_DAYS = 14; // shorter snooze for "not right now" than a real answer
+
+let selectedPulseRating = null;
+
+function pulseLocalStorageKey() {
+  return "revitalPortalPulseDismissedAt_" + clientToken;
+}
+
+function daysSincePulse(dateStr) {
+  if (!dateStr) return Infinity;
+  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+}
+
+function renderPulseWidget() {
+  const widget = document.getElementById("dashPulseWidget");
+  if (!widget) return;
+
+  const history = Array.isArray(clientData.clientPulseFeedback) ? clientData.clientPulseFeedback : [];
+  const latest = history.length ? history.slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0] : null;
+
+  const dismissedAt = (() => {
+    try { return localStorage.getItem(pulseLocalStorageKey()); } catch (e) { return null; }
+  })();
+
+  const recentlyAnswered = latest && daysSincePulse(latest.date) < PULSE_REASK_DAYS;
+  const recentlyDismissed = dismissedAt && daysSincePulse(dismissedAt) < PULSE_DISMISS_SNOOZE_DAYS;
+
+  if (recentlyAnswered || recentlyDismissed) {
+    widget.style.display = "none";
+    return;
+  }
+
+  widget.style.display = "block";
+  document.getElementById("pulseFormContainer").style.display = "block";
+  document.getElementById("pulseThanksContainer").style.display = "none";
+  document.getElementById("pulseCommentRow").style.display = "none";
+  selectedPulseRating = null;
+  document.querySelectorAll(".pulse-btn").forEach(btn => btn.classList.remove("pulse-btn-selected"));
+}
+
+function submitPulseFeedback() {
+  if (!selectedPulseRating) return;
+  const comment = (document.getElementById("pulseComment").value || "").trim();
+
+  const entry = {
+    id: "pulse-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+    date: new Date().toISOString().slice(0, 10),
+    rating: selectedPulseRating,
+    comment
+  };
+
+  if (!Array.isArray(clientData.clientPulseFeedback)) clientData.clientPulseFeedback = [];
+  clientData.clientPulseFeedback.push(entry);
+
+  document.getElementById("pulseFormContainer").style.display = "none";
+  document.getElementById("pulseThanksContainer").style.display = "block";
+
+  const docRef = db.collection("clients").doc(clientToken);
+  docRef.set({
+    clientPulseFeedback: JSON.parse(JSON.stringify(clientData.clientPulseFeedback))
+  }, { merge: true }).catch(err => {
+    console.error("Error submitting pulse feedback:", err);
+  });
+}
+
+function dismissPulseWidget() {
+  try { localStorage.setItem(pulseLocalStorageKey(), new Date().toISOString()); } catch (e) {}
+  const widget = document.getElementById("dashPulseWidget");
+  if (widget) widget.style.display = "none";
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".pulse-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      selectedPulseRating = parseInt(btn.getAttribute("data-rating"), 10);
+      document.querySelectorAll(".pulse-btn").forEach(b => b.classList.remove("pulse-btn-selected"));
+      btn.classList.add("pulse-btn-selected");
+      document.getElementById("pulseCommentRow").style.display = "flex";
+    });
+  });
+  const pulseSubmitBtn = document.getElementById("pulseSubmitBtn");
+  if (pulseSubmitBtn) pulseSubmitBtn.addEventListener("click", submitPulseFeedback);
+  const pulseDismissBtn = document.getElementById("pulseDismissBtn");
+  if (pulseDismissBtn) pulseDismissBtn.addEventListener("click", dismissPulseWidget);
 });
