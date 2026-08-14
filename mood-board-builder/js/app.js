@@ -151,11 +151,12 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([bytes], { type: mime });
 }
 
-// How many image uploads are currently in flight - saveBoard() checks
-// this so a fast "drop image, immediately click Save" doesn't write a
-// board whose image is still the (large) local data URL rather than the
-// real R2 reference. See handleDroppedImage below.
-let pendingImageUploads = 0;
+// How many image/video uploads are currently in flight - saveBoard()
+// checks this so a fast "drop image/video, immediately click Save"
+// doesn't write a board whose media is still the (large) local data URL
+// rather than the real R2 reference. See handleDroppedImage/
+// handleDroppedVideo below.
+let pendingMediaUploads = 0;
 
 function uploadImageToMedia(blob, filename) {
   const form = new FormData();
@@ -199,7 +200,7 @@ function handleDroppedImage(file) {
     renderEmbedLinksList();
     if (isEmbedded && window.parent.showBanner) window.parent.showBanner('success', `Added "${label}" as a reference image.`);
 
-    pendingImageUploads++;
+    pendingMediaUploads++;
     uploadImageToMedia(dataUrlToBlob(dataUrl), label).then(url => {
       const entry = draftEmbedLinks.find(l => l.id === localId);
       if (entry) {
@@ -214,7 +215,7 @@ function handleDroppedImage(file) {
         window.parent.showBanner('error', `"${label}" is saved, but couldn't move to storage (${err.message || err}) - it's staying inline for now, which still counts against this client's record size.`);
       }
     }).finally(() => {
-      pendingImageUploads--;
+      pendingMediaUploads--;
       renderEmbedLinksList();
     });
   }).catch(errMsg => {
@@ -225,19 +226,52 @@ function handleDroppedImage(file) {
 let videoDropCounter = 0;
 
 // Same "drop it straight into the list" pattern as handleDroppedImage
-// above, but there's no compression step for video the way there is for
-// images (processVideoFile just validates the file and reads its raw
-// bytes as a data URL) - so this only realistically works for a short,
-// low-res clip. See the size-cap comment on processVideoFile in
-// shared-dropzone.js. Anything bigger belongs as a URL reference
-// instead (YouTube/Vimeo/Loom link), which addDraftEmbedLink handles.
+// above - shown immediately from the local data URL for instant
+// feedback, then uploaded to R2 via /api/media in the background and
+// swapped for the short URL reference once that lands, exactly like
+// images (see uploadImageToMedia/handleDroppedImage above; /api/media
+// accepts video signatures too as of Aug 2026).
+//
+// Unlike images, video CANNOT safely fall back to staying inline if the
+// upload fails: processImageFile compresses images down to a small JPEG
+// first, so an inline fallback is merely wasteful, not broken. Video has
+// no equivalent compression step (processVideoFile just validates and
+// reads raw bytes), and its 3MB raw-file cap becomes a ~4MB base64
+// string once inline - well past Firestore's ~1MB per-field limit. A
+// video that stayed inline was guaranteed to break the next save
+// (Firestore reports this as "Property X contains an invalid nested
+// entity" rather than a clear size error, since the oversized string
+// sits nested inside embedLinks/moodBoards) - this is exactly what
+// happened to Evry Intention LLC. So on upload failure this removes the
+// video from the draft instead of leaving it inline, and tells the user
+// to retry rather than silently handing them a board that can't save.
 function handleDroppedVideo(file) {
   processVideoFile(file).then(dataUrl => {
     videoDropCounter++;
     const label = (file.name || `Video ${videoDropCounter}`).replace(/\.[^.]+$/, '');
-    draftEmbedLinks.push({ id: uid(), label, url: dataUrl, isVideo: true });
+    const localId = uid();
+    draftEmbedLinks.push({ id: localId, label, url: dataUrl, isVideo: true, uploading: true });
     renderEmbedLinksList();
-    if (isEmbedded && window.parent.showBanner) window.parent.showBanner('success', `Added "${label}" as a reference video.`);
+    if (isEmbedded && window.parent.showBanner) window.parent.showBanner('success', `Added "${label}" as a reference video - uploading...`);
+
+    pendingMediaUploads++;
+    uploadImageToMedia(dataUrlToBlob(dataUrl), (label || 'video') + '.mp4').then(url => {
+      const entry = draftEmbedLinks.find(l => l.id === localId);
+      if (entry) {
+        entry.url = url;
+        entry.uploading = false;
+      }
+      if (isEmbedded && window.parent.showBanner) window.parent.showBanner('success', `"${label}" finished uploading.`);
+    }).catch(err => {
+      console.error('Mood board video upload to /api/media failed, removing (cannot safely stay inline):', err);
+      draftEmbedLinks = draftEmbedLinks.filter(l => l.id !== localId);
+      if (isEmbedded && window.parent.showBanner) {
+        window.parent.showBanner('error', `"${label}" couldn't be uploaded (${err.message || err}) and was removed - videos can't be stored inline like images can. Please try adding it again.`);
+      }
+    }).finally(() => {
+      pendingMediaUploads--;
+      renderEmbedLinksList();
+    });
   }).catch(errMsg => {
     if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', errMsg);
   });
@@ -675,11 +709,12 @@ function saveBoard() {
   // A drop-then-immediately-Save click can beat the /api/media upload
   // back - saving now would write the large inline data URL to Firestore
   // instead of waiting the extra moment for the small R2 reference,
-  // defeating the point of the upload. Uploads are small/compressed
-  // images against a fast route, so this is a brief wait in practice,
-  // not a real interruption.
-  if (pendingImageUploads > 0) {
-    if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', 'Still uploading image(s) - give it a second and click Save again.');
+  // defeating the point of the upload. Images are small/compressed
+  // against a fast route, so this is a brief wait in practice; video
+  // uploads take a little longer since they aren't compressed first, but
+  // still shouldn't be more than a few seconds for the 3MB cap.
+  if (pendingMediaUploads > 0) {
+    if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', 'Still uploading image(s)/video(s) - give it a second and click Save again.');
     return;
   }
 

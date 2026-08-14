@@ -771,7 +771,7 @@ async function handleContractDelete(request, env) {
 // crypto.randomUUID() values, unguessable and never reused, so an
 // unauthenticated-but-unguessable URL is the same security model the
 // portal itself already runs on, not a weaker one.
-const MEDIA_MAX_BYTES = 8 * 1024 * 1024; // generous - images are already client-compressed by processImageFile before upload
+const MEDIA_MAX_BYTES = 8 * 1024 * 1024; // generous for client-compressed images; also comfortably covers the 3MB raw-file cap processVideoFile enforces client-side for videos
 
 const MEDIA_IMAGE_SIGNATURES = [
   { type: "image/png", ext: "png", bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] },
@@ -793,6 +793,34 @@ function detectMediaImageType(bytes) {
       }
     }
     if (matches) return sig;
+  }
+  return null;
+}
+
+// Video support (Aug 2026): mood-board-builder's video drop path
+// (handleDroppedVideo) used to have no upload step at all - unlike
+// images, it just kept the full raw video as a base64 data URL inline
+// in the client's Firestore doc forever. Firestore caps any single
+// string field at ~1,048,487 bytes; a 3MB raw video (the client-side
+// cap in processVideoFile) becomes a ~4MB base64 string once encoded,
+// so any video attached this way was guaranteed to blow that per-field
+// limit - Firestore reports this failure as "Property X contains an
+// invalid nested entity" rather than a clearer size error once the
+// oversized string is nested inside embedLinks/moodBoards, which is
+// what actually surfaced for Evry Intention LLC. Detecting real video
+// signatures here (mirroring shared-dropzone.js's
+// _sharedDetectVideoType) lets /api/media accept video the same way it
+// already accepts images, so only a short R2 reference needs to live
+// in Firestore.
+function detectMediaVideoType(bytes) {
+  // MP4 and MOV (QuickTime) are both ISO base media containers - the
+  // file type box ("ftyp") sits at byte offset 4 in either one.
+  if (bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) {
+    return { type: "video/mp4", ext: "mp4" };
+  }
+  // WEBM (Matroska/EBML) - fixed 4-byte magic number at the very start.
+  if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) {
+    return { type: "video/webm", ext: "webm" };
   }
   return null;
 }
@@ -821,11 +849,13 @@ async function handleMediaUpload(request, env) {
   }
 
   const buffer = await file.arrayBuffer();
-  // Verify the actual file content is an image (magic bytes), rather than
-  // trusting the client-supplied MIME type, which is trivially spoofable.
-  const sig = detectMediaImageType(new Uint8Array(buffer.slice(0, 16)));
+  // Verify the actual file content (magic bytes), rather than trusting
+  // the client-supplied MIME type, which is trivially spoofable. Tries
+  // image signatures first (the common case), then video.
+  const bytes = new Uint8Array(buffer.slice(0, 16));
+  const sig = detectMediaImageType(bytes) || detectMediaVideoType(bytes);
   if (!sig) {
-    return jsonResponse({ error: "File does not look like a valid PNG, JPEG, or WEBP image" }, 400);
+    return jsonResponse({ error: "File does not look like a valid PNG, JPEG, WEBP image, or MP4/WEBM/MOV video" }, 400);
   }
 
   // Keys are always generated server-side (never client-supplied) so an
