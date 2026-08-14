@@ -300,11 +300,14 @@ el('saveLeadBtn').addEventListener('click', async () => {
 
   let lead;
   let needsSync;
+  let justWon = false;
   if (editingLeadId) {
     lead = leads.find(l => l.id === editingLeadId);
+    justWon = stage === WON_STAGE && lead.stage !== WON_STAGE;
     needsSync = lead.stage !== stage || lead.name !== name; // resync on stage or name change
     Object.assign(lead, { name, contactEmail, source, notes, stage, updatedDate: todayStr() });
   } else {
+    justWon = stage === WON_STAGE;
     lead = {
       id: 'lead_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
       name, contactEmail, source, notes, stage,
@@ -320,7 +323,26 @@ el('saveLeadBtn').addEventListener('click', async () => {
   closeLeadModal();
   renderBoard();
   if (ok && needsSync) syncToClickUp(lead);
+  if (ok && justWon) notifyDealWon(lead);
 });
+
+// Marking a lead Won here is what actually flips the matching ClickUp task's
+// status (see syncToClickUp above), so this is the real "Deal marked Closed
+// Won" moment - not a separate ClickUp-side event to watch for. Nudges
+// whoever's watching notifications to run the Sales -> Delivery Handoff in
+// Kickoff Prep & Deck rather than auto-assigning an account manager (no rule
+// exists for who that should be, so a human still makes that call).
+function notifyDealWon(lead) {
+  if (!isEmbedded) return;
+  if (window.parent.logAdminActivity) window.parent.logAdminActivity('Deal marked Closed Won', lead.name);
+  if (window.parent.pushAdminNotification) {
+    window.parent.pushAdminNotification(
+      'deal_won',
+      `${lead.name} marked Closed Won. Create their Hub client profile if it doesn't exist yet, then complete the Sales → Delivery Handoff in Kickoff Prep & Deck.`,
+      lead.name
+    );
+  }
+}
 
 el('deleteLeadBtn').addEventListener('click', async () => {
   if (!editingLeadId) return;
