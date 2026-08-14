@@ -22,7 +22,7 @@
 <span>Sales Pipeline</span>
 </div>
 <h1 class="site-title">Revital <em>Marketing</em></h1>
-<p class="site-subtitle">Content calendar and SEO/social health checklist for Revital's own brand — separate from anything tracked for a client. Plans and tracks what to post; doesn't publish anything itself, so pair it with an actual scheduler for auto-posting.</p>
+<p class="site-subtitle">Content calendar, paid ads log, email/newsletter log, and SEO/social health checklist for Revital's own brand — separate from anything tracked for a client. Plans and tracks; doesn't run anything itself, so pair it with the actual ad platform, ESP, or scheduler for execution.</p>
 </header>
 
 <div class="summary-bar" id="summaryBar">
@@ -73,6 +73,104 @@
 <tbody id="calendarTableBody"></tbody>
 </table>
 <p id="emptyState" class="empty-state" style="display:none;">Nothing scheduled yet.</p>
+</div>
+</div>
+
+<div class="summary-bar" id="adsSummaryBar" style="margin-top: 8px;">
+<div class="summary-stat"><span class="summary-num" id="summaryAdsActive">0</span><span class="summary-label">Active Campaigns</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryAdsBudget">$0</span><span class="summary-label">Monthly Budget (Active)</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryAdsLeads">0</span><span class="summary-label">Leads (All Campaigns)</span></div>
+</div>
+
+<div class="step-card">
+<div class="section-title" style="margin-bottom: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent);">Paid Ads</h2>
+</div>
+<p style="font-size:13px; color: var(--color-text-secondary); margin: -12px 0 16px;">Runs alongside whatever's live in Google/Meta Ads Manager — this just keeps one list of what's active, what it costs, and roughly what it's producing. Update leads as you check the actual platform; this doesn't pull data automatically.</p>
+
+<div class="form-grid">
+<div class="form-group"><label for="adCampaignName">Campaign Name</label><input type="text" id="adCampaignName" placeholder="e.g. Q3 Local Lead Gen"></div>
+<div class="form-group"><label for="adPlatform">Platform</label><select id="adPlatform"></select></div>
+<div class="form-group"><label for="adMonthlyBudget">Monthly Budget ($)</label><input type="number" id="adMonthlyBudget" min="0" step="1" placeholder="0"></div>
+<div class="form-group"><label for="adLink">Link (to campaign in ads manager)</label><input type="text" id="adLink" placeholder="https://..."></div>
+</div>
+<div class="form-group"><label for="adNotes">Notes</label><input type="text" id="adNotes" placeholder="Targeting, offer, anything to remember..."></div>
+
+<button id="addAdBtn" class="btn-primary">+ Add Campaign</button>
+</div>
+
+<div class="step-card table-card">
+<div class="tracker-table-wrap">
+<table class="tracker-table">
+<thead>
+<tr>
+<th>Campaign</th>
+<th>Platform</th>
+<th>Status</th>
+<th>Monthly Budget</th>
+<th>Leads</th>
+<th>Est. Cost/Lead</th>
+<th>Link</th>
+<th>Notes</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="adsTableBody"></tbody>
+</table>
+<p id="adsEmptyState" class="empty-state" style="display:none;">No campaigns logged yet.</p>
+</div>
+</div>
+
+<div class="summary-bar" id="emailSummaryBar" style="margin-top: 8px;">
+<div class="summary-stat"><span class="summary-num" id="summaryEmailSent">0</span><span class="summary-label">Sent This Month</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryEmailOpenRate">--</span><span class="summary-label">Avg. Open Rate</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryEmailListSize">--</span><span class="summary-label">Latest List Size</span></div>
+</div>
+
+<div class="step-card">
+<div class="section-title" style="margin-bottom: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent);">Email / Newsletter</h2>
+</div>
+<p style="font-size:13px; color: var(--color-text-secondary); margin: -12px 0 16px;">Plan and log sends to Revital's own list — doesn't send anything itself, pair it with the actual ESP (Mailchimp, etc.) for delivery. Fill in open/click rate after it goes out.</p>
+
+<div class="form-grid">
+<div class="form-group"><label for="emailSubject">Subject</label><input type="text" id="emailSubject" placeholder="e.g. August client spotlight + 2 open slots"></div>
+<div class="form-group"><label for="emailSendDate">Send Date</label><input type="date" id="emailSendDate"></div>
+<div class="form-group"><label for="emailListSize">List Size (at send)</label><input type="number" id="emailListSize" min="0" step="1" placeholder="0"></div>
+<div class="form-group"><label for="emailLink">Link (to campaign report/archive)</label><input type="text" id="emailLink" placeholder="https://..."></div>
+</div>
+<div class="form-group"><label for="emailNotes">Notes</label><input type="text" id="emailNotes" placeholder="Segment, offer, anything to remember..."></div>
+
+<button id="addEmailBtn" class="btn-primary">+ Schedule Send</button>
+</div>
+
+<div class="step-card">
+<div class="tracker-controls-row" style="flex-wrap: wrap; gap: 14px;">
+<label class="show-closed-toggle">
+<input type="checkbox" id="showSentToggle"> Show sent
+</label>
+</div>
+</div>
+
+<div class="step-card table-card">
+<div class="tracker-table-wrap">
+<table class="tracker-table">
+<thead>
+<tr>
+<th>Subject</th>
+<th>Send Date</th>
+<th>Status</th>
+<th>List Size</th>
+<th>Open Rate</th>
+<th>Click Rate</th>
+<th>Link</th>
+<th>Notes</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="emailTableBody"></tbody>
+</table>
+<p id="emailEmptyState" class="empty-state" style="display:none;">Nothing scheduled yet.</p>
 </div>
 </div>
 

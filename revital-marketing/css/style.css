@@ -163,6 +163,22 @@
 
 .empty-state { text-align: center; padding: 40px 20px; color: var(--color-text-muted); font-size: 14px; }
 
+/* ── Paid Ads status pills ── */
+.section-tag {
+  display: inline-block;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-md);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+.section-tag.status-active { border-color: #22c55e; color: #22c55e; }
+.section-tag.status-paused { border-color: #eab308; color: #eab308; }
+.section-tag.status-ended { border-color: var(--color-border-md); color: var(--color-text-muted); }
+
 /* ── SEO / Social Health Checklist (category/progress pattern shared
    with Client Offboarding Checklist and Team Onboarding & Offboarding) ── */
 .category-header {
