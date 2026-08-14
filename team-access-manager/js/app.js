@@ -59,25 +59,31 @@ const SECTION_KEYS = new Set(SECTION_DEFS.map(s => s.key));
 // time this doc is read and has no roleTiers yet (fresh install). After
 // that first save, Firestore is the live source of truth and this
 // constant is never consulted again; edit roles from the UI, not here.
+// "team-ops" (Team Roster, My Time Off, Hours & Time Log, Booking
+// Calendar, Team Onboarding & Offboarding) is included on every role below,
+// not just Leadership - a role that omits it means that hire literally
+// can't request time off or log hours through the Hub, which breaks day
+// one for anyone assigned it. Found during an Aug 2026 hands-off-hiring
+// audit: the previous defaults left it off every role except Leadership.
 const DEFAULT_ROLE_TIERS = {
   "Full Access — Leadership": {
     sections: ["core", "ad-accounts-access", "reporting-health", "production", "content-creation", "account-ops", "team-ops", "audits", "strategy-competition", "sales-pipeline", "retention-social-proof", "agency-globals"],
     note: "Founder / CEO, Creative Director, Executive Producer, Chief Operating Officer (COO), Head of Strategy"
   },
   "Sales & Business Development": {
-    sections: ["sales-pipeline", "retention-social-proof", "strategy-competition"],
+    sections: ["sales-pipeline", "retention-social-proof", "strategy-competition", "team-ops"],
     note: "Business Development Manager, New Business Representative, Sales Coordinator, Partnerships Manager, Proposal & Bids Specialist"
   },
   "Account Management / Client Services": {
-    sections: ["core", "ad-accounts-access", "reporting-health", "production", "content-creation", "account-ops", "retention-social-proof"],
+    sections: ["core", "ad-accounts-access", "reporting-health", "production", "content-creation", "account-ops", "retention-social-proof", "team-ops"],
     note: "Producer, Senior Producer, Account Manager, Account Coordinator, Client Success Manager"
   },
   "Digital Marketing": {
-    sections: ["ad-accounts-access", "reporting-health", "content-creation", "account-ops", "audits", "strategy-competition"],
+    sections: ["ad-accounts-access", "reporting-health", "content-creation", "account-ops", "audits", "strategy-competition", "team-ops"],
     note: "Digital Marketing Strategist, Social Media Manager, Content Manager, SEO Specialist, Paid Ads Specialist, Email Marketing Specialist, Analytics / Reporting Specialist"
   },
   "Operations & Admin": {
-    sections: ["core", "ad-accounts-access", "account-ops", "agency-globals"],
+    sections: ["core", "ad-accounts-access", "account-ops", "agency-globals", "team-ops"],
     note: "Studio Manager, Operations Manager, Executive Assistant, Bookkeeper / Finance Manager, HR Coordinator"
   }
 };
