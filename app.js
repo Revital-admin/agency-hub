@@ -717,7 +717,7 @@ const AGENCY_BACKUP_DOC_NAMES = [
   // "contractInvoiceLog" removed - it was never a real doc anything writes
   // to (see agency-health-dashboard/js/app.js fix, same date); the actual
   // one every tool reads/writes is "contractInvoices" below.
-  "contractInvoices", "emailTemplates", "proposalFollowUps", "rawFootageLog",
+  "contractInvoices", "emailTemplates", "ownMarketing", "proposalFollowUps", "rawFootageLog",
   "referrals", "releaseForms", "revisionFeedbackLog", "runOfShow",
   "servicePricing", "sops", "subscriptionTracker", "teamAccess",
   "teamActivity", "teamRoster", "teamTransitions", "vendorRentalTracker", "venueTechSpecs"
@@ -1085,6 +1085,7 @@ let iframeNeedsReload = {
   "tab-marketingnews": true,
   "tab-proposal": true,
   "tab-kickoffprep": true,
+  "tab-revitalmarketing": true,
   "tab-servicepricing": true,
   "tab-redflag": true,
   "tab-healthdashboard": true,
@@ -1758,6 +1759,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-kickoffprep":
       renderKickoffPrep();
+      break;
+    case "tab-revitalmarketing":
+      renderRevitalMarketingTab();
       break;
     case "tab-casestudy":
       renderCaseStudyBuilder();
@@ -3554,6 +3558,11 @@ function renderQbrGenerator() {
 // ── Kickoff Prep & Deck Controller ──
 function renderKickoffPrep() {
   setIframeAbsoluteSrc('#tab-kickoffprep iframe', "kickoff-prep/index.html");
+}
+
+// ── Revital Marketing Controller ──
+function renderRevitalMarketingTab() {
+  setIframeAbsoluteSrc('#tab-revitalmarketing iframe', "revital-marketing/index.html");
 }
 
 // ── Case Study Builder Controller ──

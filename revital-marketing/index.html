@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Revital Marketing</title>
+<link rel="stylesheet" href="../style.css?v=2">
+<link rel="stylesheet" href="css/style.css?v=1">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<main class="container container-wide">
+<div class="brand-bar">
+<div class="brand-logo-container"></div>
+</div>
+
+<header class="site-header">
+<div class="header-eyebrow">
+<span class="dot"></span>
+<span>Sales Pipeline</span>
+</div>
+<h1 class="site-title">Revital <em>Marketing</em></h1>
+<p class="site-subtitle">Content calendar and SEO/social health checklist for Revital's own brand — separate from anything tracked for a client. Plans and tracks what to post; doesn't publish anything itself, so pair it with an actual scheduler for auto-posting.</p>
+</header>
+
+<div class="summary-bar" id="summaryBar">
+<div class="summary-stat"><span class="summary-num" id="summaryOverdue">0</span><span class="summary-label">Overdue</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryThisWeek">0</span><span class="summary-label">Due This Week</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryScheduled">0</span><span class="summary-label">Scheduled</span></div>
+</div>
+
+<div class="step-card">
+<div class="section-title" style="margin-bottom: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent);">Schedule Content</h2>
+</div>
+
+<div class="form-grid">
+<div class="form-group"><label for="mkTitle">Title</label><input type="text" id="mkTitle" placeholder="e.g. Behind-the-scenes reel from the Acme shoot"></div>
+<div class="form-group"><label for="mkPlatform">Platform</label><select id="mkPlatform"></select></div>
+<div class="form-group"><label for="mkPostDate">Post Date</label><input type="date" id="mkPostDate"></div>
+<div class="form-group"><label for="mkLink">Link (once posted)</label><input type="text" id="mkLink" placeholder="https://..."></div>
+</div>
+<div class="form-group"><label for="mkNotes">Notes</label><input type="text" id="mkNotes" placeholder="Caption ideas, tags, anything to remember..."></div>
+
+<button id="addContentBtn" class="btn-primary">+ Schedule Item</button>
+</div>
+
+<div class="step-card">
+<div class="tracker-controls-row" style="flex-wrap: wrap; gap: 14px;">
+<input type="text" id="filterTextInput" placeholder="Filter by title or platform..." style="flex:1; min-width:220px;">
+<label class="show-closed-toggle">
+<input type="checkbox" id="showPostedToggle"> Show posted
+</label>
+</div>
+</div>
+
+<div class="step-card table-card">
+<div class="tracker-table-wrap">
+<table class="tracker-table">
+<thead>
+<tr>
+<th>Title</th>
+<th>Platform</th>
+<th>Post Date</th>
+<th>Status</th>
+<th>Link</th>
+<th>Notes</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="calendarTableBody"></tbody>
+</table>
+<p id="emptyState" class="empty-state" style="display:none;">Nothing scheduled yet.</p>
+</div>
+</div>
+
+<div class="step-card">
+<div class="tracker-controls-row" style="justify-content: space-between; margin-bottom: 16px;">
+<div class="section-title" style="margin:0;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent);">SEO / Social Health Checklist</h2>
+</div>
+<span id="lastResetLabel" style="font-size:12px; color: var(--color-text-secondary);"></span>
+</div>
+
+<div class="progress-wrap">
+<div class="progress-track"><div class="progress-fill" id="checklistProgressFill"></div></div>
+<div class="progress-meta">
+<span id="checklistProgressText">0 of 0 items complete</span>
+<span id="checklistProgressPct">0%</span>
+</div>
+</div>
+
+<div id="checklistCategoriesList" style="margin-top:16px;"></div>
+
+<div class="form-group" style="margin-top:16px;"><label for="checklistNotes">Notes</label><textarea id="checklistNotes" rows="3" placeholder="Anything to flag or follow up on this cycle..."></textarea></div>
+
+<button id="resetChecklistBtn" class="btn btn-secondary-outline" style="margin-top:12px;">Reset for New Cycle</button>
+</div>
+
+</main>
+<script src="js/data.js"></script>
+<script src="js/app.js?v=1"></script>
+</body>
+</html>
