@@ -7,6 +7,15 @@
    keeps one running log per keyword so movement is visible between
    full SEO Audits instead of only showing up when someone remembers
    to check.
+
+   Deliberately not wired to SEMrush's API (see the on-page note in
+   index.html for the full reasoning): it requires their Business/
+   Advanced plan (~$549/mo, on top of API unit purchases), and even
+   with that plan you still have to set up a Position Tracking
+   project per client in SEMrush's own dashboard first - the API only
+   reads from an existing project, it doesn't check arbitrary
+   keywords on demand. Worth revisiting if the agency ends up on that
+   tier.
    ============================================================ */
 
 let isEmbedded = false;
