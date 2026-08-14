@@ -771,7 +771,7 @@ async function handleContractDelete(request, env) {
 // crypto.randomUUID() values, unguessable and never reused, so an
 // unauthenticated-but-unguessable URL is the same security model the
 // portal itself already runs on, not a weaker one.
-const MEDIA_MAX_BYTES = 8 * 1024 * 1024; // generous for client-compressed images; also comfortably covers the 3MB raw-file cap processVideoFile enforces client-side for videos
+const MEDIA_MAX_BYTES = 30 * 1024 * 1024; // generous for client-compressed images; covers the 25MB raw-file cap mood-board-builder's handleDroppedVideo passes to processVideoFile, plus headroom for multipart overhead
 
 const MEDIA_IMAGE_SIGNATURES = [
   { type: "image/png", ext: "png", bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] },

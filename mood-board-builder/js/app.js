@@ -246,7 +246,12 @@ let videoDropCounter = 0;
 // video from the draft instead of leaving it inline, and tells the user
 // to retry rather than silently handing them a board that can't save.
 function handleDroppedVideo(file) {
-  processVideoFile(file).then(dataUrl => {
+  // 25MB (up from the shared 3MB default): that default was sized for
+  // videos living inline in a Firestore field, which no longer applies
+  // now that videos upload to R2 (see handleDroppedVideo's comment
+  // above) - plenty of room for a short reference clip without inviting
+  // multi-minute uploads on a bad connection.
+  processVideoFile(file, { maxSizeBytes: 25 * 1024 * 1024 }).then(dataUrl => {
     videoDropCounter++;
     const label = (file.name || `Video ${videoDropCounter}`).replace(/\.[^.]+$/, '');
     const localId = uid();
