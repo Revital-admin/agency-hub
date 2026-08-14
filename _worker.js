@@ -140,6 +140,10 @@ export default {
       return handlePipelineSyncClickUp(request, env);
     }
 
+    if (url.pathname === "/api/pipeline/sync-onboarding-handoff-assignee" && request.method === "POST") {
+      return handleOnboardingHandoffAssigneeSync(request, env);
+    }
+
     if (url.pathname === "/api/idle-lock/status" && request.method === "GET") {
       return handleIdleLockStatus(request, env);
     }
@@ -2568,6 +2572,16 @@ async function handleContractorPortalHours(request, env) {
 // prefix, unlike most other APIs this Hub talks to.)
 const CLICKUP_SALES_PIPELINE_LIST_ID = "901327581862";
 
+// ClickUp "Growth > Closing & Onboarding Handoff > Onboarding Handoff"
+// list (id confirmed via the list's own hierarchy/v1/subcategory network
+// call while inspecting it, not guessed from a view URL - view URLs on a
+// list with multiple custom views encode a view id there, not the list
+// id). One task per client, columns include Assignee and "Client /
+// Company Name" - no clickupTaskId is tracked anywhere in the Hub for
+// this list (unlike Sales Pipeline), so handleOnboardingHandoffAssigneeSync
+// below has to search for the matching task by client name each time.
+const CLICKUP_ONBOARDING_HANDOFF_LIST_ID = "1000460000002186";
+
 // Resolves an @revitalproductions.com email to the ClickUp numeric user id
 // the assignees field actually needs (ClickUp has no "assign by email"
 // option - the task update/create endpoints only take ids). Looks across
@@ -2705,6 +2719,77 @@ async function handlePipelineSyncClickUp(request, env) {
       if (!res.ok) throw new Error(data.err || `ClickUp create failed (${res.status})`);
       return jsonResponse({ ok: true, taskId: data.id, assigneeMatched: assigneeEmail ? !!assigneeUserId : undefined });
     }
+  } catch (e) {
+    return jsonResponse({ error: `ClickUp sync failed: ${e.message}` }, 500);
+  }
+}
+
+// Finds the Onboarding Handoff task for a client - no clickupTaskId is
+// tracked anywhere in the Hub for this list (it's populated by a ClickUp
+// Form, not by any Hub-side create call), so this searches by name each
+// time rather than looking one up by id. Matches on either the task's own
+// name or its "Client / Company Name" custom field, case-insensitively -
+// whichever convention ends up being used, this catches it. include_closed
+// so a handoff that's already been marked done still gets found.
+async function findOnboardingHandoffTaskByClientName(apiToken, clientName) {
+  const target = (clientName || "").trim().toLowerCase();
+  if (!target) return null;
+  try {
+    const res = await fetch(`https://api.clickup.com/api/v2/list/${CLICKUP_ONBOARDING_HANDOFF_LIST_ID}/task?include_closed=true`, {
+      headers: { Authorization: apiToken }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !Array.isArray(data.tasks)) return null;
+    for (const task of data.tasks) {
+      if ((task.name || "").toLowerCase().includes(target)) return task.id;
+      const fields = Array.isArray(task.custom_fields) ? task.custom_fields : [];
+      const match = fields.find(f =>
+        /client|company/i.test(f.name || "") &&
+        typeof f.value === "string" &&
+        f.value.trim().toLowerCase() === target
+      );
+      if (match) return task.id;
+    }
+    return null;
+  } catch (e) {
+    console.warn("Onboarding Handoff task lookup failed:", e);
+    return null;
+  }
+}
+
+async function handleOnboardingHandoffAssigneeSync(request, env) {
+  const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+
+  const apiToken = env.CLICKUP_API_TOKEN;
+  if (!apiToken) return jsonResponse({ error: "Server missing CLICKUP_API_TOKEN secret" }, 500);
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+  const { clientName, assigneeEmail } = payload || {};
+  if (!clientName || !assigneeEmail) return jsonResponse({ error: "clientName and assigneeEmail are required" }, 400);
+
+  const assigneeUserId = await findClickUpUserIdByEmail(apiToken, assigneeEmail);
+  if (!assigneeUserId) return jsonResponse({ ok: true, reason: "no_am_match" });
+
+  const taskId = await findOnboardingHandoffTaskByClientName(apiToken, clientName);
+  if (!taskId) return jsonResponse({ ok: true, reason: "no_task" });
+
+  try {
+    const res = await fetch(`https://api.clickup.com/api/v2/task/${encodeURIComponent(taskId)}`, {
+      method: "PUT",
+      headers: { Authorization: apiToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ assignees: { add: [assigneeUserId] } })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.err || `ClickUp update failed (${res.status})`);
+    return jsonResponse({ ok: true, taskId: data.id || taskId, assigneeMatched: true });
   } catch (e) {
     return jsonResponse({ error: `ClickUp sync failed: ${e.message}` }, 500);
   }

@@ -3996,6 +3996,33 @@ async function syncAccountManagerToClickUpAssignee(clientName, amEmail) {
   }
 }
 
+// Companion to the function above, for the "Growth > Closing & Onboarding
+// Handoff > Onboarding Handoff" list - a separate list with no tracked
+// task id anywhere in the Hub, so the Worker searches for the matching
+// task by client name each time rather than looking one up by id (see
+// findOnboardingHandoffTaskByClientName in _worker.js). Sets Assignee
+// only, no custom field - that list was deliberately kept to just
+// Assignee (the "Account Manager" Person field was removed from it,
+// staying only on the CRM > Deals list where it sits next to other
+// account-level context).
+async function syncAccountManagerToOnboardingHandoff(clientName, amEmail) {
+  const trimmedName = (clientName || "").trim();
+  if (!trimmedName || !amEmail) return { ok: false, reason: "missing_input" };
+  try {
+    const res = await fetch("/api/pipeline/sync-onboarding-handoff-assignee", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientName: trimmedName, assigneeEmail: amEmail })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, reason: "error", error: new Error(data.error || `Request failed (${res.status})`) };
+    if (data.reason) return { ok: true, reason: data.reason };
+    return { ok: true, assigneeMatched: !!data.assigneeMatched };
+  } catch (e) {
+    return { ok: false, reason: "error", error: e };
+  }
+}
+
 // ── Account Manager Capacity Snapshot ──
 // Team Roster & Capacity used to rely entirely on a manually-typed
 // "current client count" per person, which drifts stale the moment
