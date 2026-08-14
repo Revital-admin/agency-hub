@@ -86,6 +86,22 @@ function init() {
   docRef.onSnapshot((doc) => {
     if (doc.exists) {
       clientData = doc.data();
+
+      // Set by client-offboarding-checklist/js/app.js's completeOffboarding
+      // when the offboarding checklist hits 100% (or manually toggled back
+      // off via its Reactivate Portal button) - the documented Offboarding
+      // Flow's "Hub portal deactivated — client can no longer log in" step,
+      // which had no code behind it before. This is a UI-level gate only
+      // (the doc itself is still readable with the token per
+      // firestore.rules) - it stops the portal from rendering, it doesn't
+      // revoke the underlying data access.
+      if (clientData.portalConfig && clientData.portalConfig.disabled) {
+        loader.innerHTML = "<h2>Portal No Longer Active</h2><p>This client portal has been deactivated. If you believe this is a mistake, please reach out to Revital Productions directly.</p>";
+        loader.style.display = "flex";
+        appLayout.style.display = "none";
+        return;
+      }
+
       renderPortal();
 
       // Hide loader on first success

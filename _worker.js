@@ -3256,6 +3256,40 @@ async function applyStripeEventToContractInvoices(env, event, billingMode) {
       console.error("Failed-payment alert email failed (billing status update itself still succeeded):", notifyErr);
     }
   }
+
+  // Subscription canceled (all Stripe retries exhausted, or manually
+  // canceled in the Stripe dashboard) - the doc's Payment Flow calls for
+  // "services suspended | Account manager notified" at this point, but
+  // until now nothing fired here at all beyond the status flip above. This
+  // goes to the specific client's account manager (not the shared
+  // invoices@ alias the first-failure alert above uses), since by this
+  // point it's an account-specific call on whether/how to pause work -
+  // same "notify the AM directly" pattern as the low-pulse and deal-won
+  // alerts. Best-effort: a failed send here shouldn't undo the status
+  // update above, same reasoning as the block it follows.
+  if (event.type === "customer.subscription.deleted") {
+    try {
+      const clients = await fetchAllClientsFromFirestore(accessToken, projectId);
+      const clientObj = clients[record.clientName] || null;
+      const config = (clientObj && clientObj.portalConfig) || {};
+      const amEmail = config.accountManagerEmail || "invoices@revitalproductions.com";
+      const amFirstName = config.accountManagerName ? String(config.accountManagerName).split(' ')[0] : "there";
+      const modeTag = billingMode === "live" ? "" : "[TEST] ";
+      const subject = `${modeTag}Subscription canceled: ${record.clientName}`;
+      const html = `
+        <div style="font-family: sans-serif; max-width: 560px;">
+          <h2 style="margin:0 0 12px; color:#dc2626;">Recurring Billing Canceled</h2>
+          <p>Hi ${escapeHtmlServer(amFirstName)},</p>
+          <p><strong>${escapeHtmlServer(record.clientName)}</strong>'s recurring subscription in Stripe was just canceled${config.accountManagerEmail ? "" : " (no account manager on file for this client - defaulting to this alias)"}.</p>
+          <p style="font-size:14px; color:#64748b;">This usually means all automatic retries on a failed card were exhausted. Per the documented process, services should be paused until this is resolved with the client. Status is now "Canceled" in Contract & Invoice Tracker's Recurring Billing column.</p>
+        </div>
+      `;
+      const text = `Subscription canceled: ${record.clientName}\nMode: ${billingMode === "live" ? "Live" : "Test"}\n\nAll Stripe retries were likely exhausted. Per the documented process, pause services until resolved. Status is now "Canceled" in Contract & Invoice Tracker.`;
+      await sendHealthDigestEmail(env, [amEmail], subject, html, text);
+    } catch (notifyErr) {
+      console.error("Subscription-canceled alert email failed (billing status update itself still succeeded):", notifyErr);
+    }
+  }
 }
 
 async function handleStripeWebhook(request, env) {
@@ -3749,6 +3783,24 @@ async function fetchRevisionRecords(accessToken, projectId) {
   return doc && Array.isArray(doc.list) ? doc.list : [];
 }
 
+// Most recent "QBR PDF generated" entry per client, from the same
+// agency/adminActivityLog every admin action writes to (see
+// logAdminActivity in the root app.js and generateQbrPdf in
+// qbr-generator/js/app.js). Mirrors agency-health-dashboard/js/app.js's
+// listenToAdminActivityLog exactly - same 300-entry-cap caveat applies
+// (a genuinely old QBR can fall off the log; treated as "no QBR on
+// record", not "never had one" - see healthDigestReasons below).
+async function fetchLastQbrDatesByClient(accessToken, projectId) {
+  const doc = await firestoreGetDoc(accessToken, projectId, "agency/adminActivityLog");
+  const list = doc && Array.isArray(doc.list) ? doc.list : [];
+  const byClient = {};
+  list.forEach(entry => {
+    if (entry.action !== "QBR PDF generated" || !entry.details) return;
+    if (!byClient[entry.details]) byClient[entry.details] = entry.createdAt;
+  });
+  return byClient;
+}
+
 function healthDigestTodayStr() {
   const dt = new Date();
   dt.setUTCHours(0, 0, 0, 0);
@@ -3789,7 +3841,7 @@ function healthDigestBudgetPaceClass(p) {
 // that file for the fuller reasoning behind each threshold/signal. Any
 // change to what counts as "needs attention" there should be mirrored
 // here (and vice versa) so the two never quietly disagree.
-function buildHealthDigestRows(clients, revisionRecords) {
+function buildHealthDigestRows(clients, revisionRecords, contractInvoiceRecords, lastQbrDatesByClient) {
   const today = healthDigestTodayStr();
   return Object.keys(clients || {})
     .filter(name => name !== HEALTH_DIGEST_SANDBOX_NAME)
@@ -3806,6 +3858,14 @@ function buildHealthDigestRows(clients, revisionRecords) {
       const renewalDate = renewalIsOpen ? renewalRec.renewalDate : null;
       const renewalDays = renewalDate ? healthDigestDaysBetween(today, renewalDate) : null;
       const renewalDueSoon = renewalDays !== null && renewalDays <= 30;
+
+      // Renewal-without-a-recent-QBR - see agency-health-dashboard/js/app.js's
+      // identical renewalNeedsQbr for the full reasoning (60-day lookahead,
+      // 90-day QBR-staleness threshold).
+      const lastQbrDate = (lastQbrDatesByClient && lastQbrDatesByClient[name]) ? lastQbrDatesByClient[name].slice(0, 10) : null;
+      const daysSinceQbr = lastQbrDate ? healthDigestDaysBetween(lastQbrDate, today) : null;
+      const renewalNeedsQbr = renewalIsOpen && renewalDays !== null && renewalDays <= 60
+        && (lastQbrDate === null || daysSinceQbr > 90);
 
       const openRevisions = (revisionRecords || []).filter(r =>
         (r.clientName || "").toLowerCase() === name.toLowerCase() && !r.dateResolved
@@ -3833,8 +3893,39 @@ function buildHealthDigestRows(clients, revisionRecords) {
         sum + (Array.isArray(m.actionItems) ? m.actionItems.filter(ai => !ai.completed).length : 0), 0);
       const heavyOpenActionItems = openActionItems >= HEALTH_DIGEST_HEAVY_OPEN_ACTION_ITEMS;
 
+      // Overdue invoices - see agency-health-dashboard/js/app.js's
+      // identical getOverdueInvoiceInfo.
+      const overdueRecords = (contractInvoiceRecords || []).filter(r =>
+        (r.clientName || "") === name && r.invoiceStatus === "Overdue"
+      );
+      const overdueInvoice = overdueRecords.length ? {
+        count: overdueRecords.length,
+        amount: overdueRecords.reduce((sum, r) => sum + (parseFloat((r.invoiceAmount || "").toString().replace(/[^0-9.-]/g, "")) || 0), 0),
+        days: overdueRecords.map(r => r.invoiceDueDate ? healthDigestDaysBetween(r.invoiceDueDate, today) : 0).reduce((max, d) => Math.max(max, d), 0)
+      } : null;
+
+      // Client-submitted satisfaction pulse - see agency-health-dashboard/
+      // js/app.js's identical lowPulse.
+      const pulseHistory = Array.isArray(client.clientPulseFeedback) ? client.clientPulseFeedback : [];
+      const latestPulse = pulseHistory.length
+        ? pulseHistory.slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0]
+        : null;
+      const lowPulse = latestPulse && latestPulse.rating <= 2 && healthDigestDaysBetween(latestPulse.date, today) <= 30;
+
+      // Monthly report staleness - see app.js's identical
+      // runReportOverdueNudgeCheck for the full reasoning (only flags
+      // clients with at least one prior report on file, to avoid false
+      // positives on brand-new clients who haven't hit their first cycle).
+      const reportArchive = Array.isArray(client.reportArchive) ? client.reportArchive : [];
+      const lastReportDate = reportArchive.length
+        ? reportArchive.map(r => r.dateAdded).filter(Boolean).sort().slice(-1)[0]
+        : null;
+      const daysSinceReport = lastReportDate ? healthDigestDaysBetween(lastReportDate.slice(0, 10), today) : null;
+      const reportOverdue = reportArchive.length > 0 && daysSinceReport !== null && daysSinceReport >= 35;
+
       const needsAttention = healthRating === "Red" || renewalDueSoon || heavyRevisions
-        || overspending || staleApproval || heavyOpenActionItems || staleContact;
+        || overspending || staleApproval || heavyOpenActionItems || staleContact
+        || !!overdueInvoice || renewalNeedsQbr || !!lowPulse || reportOverdue;
 
       return {
         name, healthRating, lastCheckinDate, daysSinceCheckin,
@@ -3842,7 +3933,9 @@ function buildHealthDigestRows(clients, revisionRecords) {
         overspending, upsellOpportunity,
         oldestPendingApprovalDays, staleApproval,
         lastMeetingDate, daysSinceMeeting, staleContact,
-        openActionItems, heavyOpenActionItems, needsAttention
+        openActionItems, heavyOpenActionItems, needsAttention,
+        overdueInvoice, lastQbrDate, daysSinceQbr, renewalNeedsQbr,
+        latestPulse, lowPulse, daysSinceReport, reportOverdue
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -3857,6 +3950,10 @@ function healthDigestReasons(row) {
   if (row.staleApproval) reasons.push(`Approval awaiting response ${row.oldestPendingApprovalDays}d`);
   if (row.heavyOpenActionItems) reasons.push(`${row.openActionItems} open meeting action items`);
   if (row.staleContact) reasons.push(`No contact logged in ${row.daysSinceMeeting}d`);
+  if (row.overdueInvoice) reasons.push(`Invoice ${row.overdueInvoice.days}d overdue ($${Math.round(row.overdueInvoice.amount).toLocaleString()})`);
+  if (row.renewalNeedsQbr) reasons.push(`Renewal in ${row.renewalDays}d with ${row.lastQbrDate ? `last QBR ${row.daysSinceQbr}d ago` : "no QBR on record"}`);
+  if (row.lowPulse) reasons.push(`Low satisfaction rating (${row.latestPulse.rating}/5)`);
+  if (row.reportOverdue) reasons.push(`No monthly report added in ${row.daysSinceReport}d`);
   return reasons;
 }
 
@@ -3938,11 +4035,19 @@ async function runWeeklyHealthDigest(env) {
 
   try {
     const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
-    const [clients, revisionRecords] = await Promise.all([
+    const [clients, revisionRecords, contractInvoiceRecords, lastQbrDatesByClient] = await Promise.all([
       fetchAllClientsFromFirestore(accessToken, projectId),
-      fetchRevisionRecords(accessToken, projectId)
+      fetchRevisionRecords(accessToken, projectId),
+      firestoreListCollection(accessToken, projectId, "contractInvoiceRecords").catch(e => {
+        console.warn("Digest: couldn't load contractInvoiceRecords, skipping overdue-invoice signal:", e);
+        return [];
+      }),
+      fetchLastQbrDatesByClient(accessToken, projectId).catch(e => {
+        console.warn("Digest: couldn't load adminActivityLog, skipping QBR-due signal:", e);
+        return {};
+      })
     ]);
-    const rows = buildHealthDigestRows(clients, revisionRecords);
+    const rows = buildHealthDigestRows(clients, revisionRecords, contractInvoiceRecords, lastQbrDatesByClient);
     const { subject, html, text } = buildHealthDigestEmail(rows);
     await sendHealthDigestEmail(env, recipients, subject, html, text);
   } catch (e) {

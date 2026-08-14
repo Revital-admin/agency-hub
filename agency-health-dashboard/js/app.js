@@ -346,8 +346,19 @@ function buildRows() {
       : null;
     const lowPulse = latestPulse && latestPulse.rating <= 2 && daysBetween(latestPulse.date, todayStr()) <= 30;
 
+    // Monthly report staleness - only flags clients who HAVE at least one
+    // prior report on file but it's gone stale (35d+), not brand-new
+    // clients who haven't reached their first report cycle yet. See root
+    // app.js's identical runReportOverdueNudgeCheck for the full reasoning.
+    const reportArchive = Array.isArray(client.reportArchive) ? client.reportArchive : [];
+    const lastReportDate = reportArchive.length
+      ? reportArchive.map(r => r.dateAdded).filter(Boolean).sort().slice(-1)[0]
+      : null;
+    const daysSinceReport = lastReportDate ? daysBetween(lastReportDate.slice(0, 10), todayStr()) : null;
+    const reportOverdue = reportArchive.length > 0 && daysSinceReport !== null && daysSinceReport >= 35;
+
     const needsAttention = healthRating === 'Red' || renewalDueSoon || heavyRevisions
-      || overspending || staleApproval || heavyOpenActionItems || staleContact || !!overdueInvoice || renewalNeedsQbr || lowPulse;
+      || overspending || staleApproval || heavyOpenActionItems || staleContact || !!overdueInvoice || renewalNeedsQbr || lowPulse || reportOverdue;
 
     // Written by the portal itself on page load (portal/js/app.js's
     // recordPortalVisit), pulled into clientsDb by the Hub's
@@ -376,6 +387,7 @@ function buildRows() {
       overdueInvoice,
       lastQbrDate, daysSinceQbr, renewalNeedsQbr,
       latestPulse, lowPulse,
+      daysSinceReport, reportOverdue,
       mtdHours: laborMTD.totalHours, mtdLaborCost: laborMTD.cost, missingRateHours: laborMTD.missingRateHours,
       monthlyBilling, margin
     };
@@ -416,6 +428,7 @@ function signalBadgesHtml(row) {
   if (row.overdueInvoice) badges.push(`<span class="signal-badge">💳 Invoice ${row.overdueInvoice.days}d overdue ($${Math.round(row.overdueInvoice.amount).toLocaleString()})</span>`);
   if (row.renewalNeedsQbr) badges.push(`<span class="signal-badge">📊 Renewal in ${row.renewalDays}d, ${row.lastQbrDate ? `last QBR ${row.daysSinceQbr}d ago` : 'no QBR on record'}</span>`);
   if (row.lowPulse) badges.push(`<span class="signal-badge">📉 Low satisfaction rating (${row.latestPulse.rating}/5)${row.latestPulse.comment ? ' w/ comment' : ''}</span>`);
+  if (row.reportOverdue) badges.push(`<span class="signal-badge">📄 No monthly report in ${row.daysSinceReport}d</span>`);
   if (row.overspending) badges.push(`<span class="signal-badge">⚠ Overspending</span>`);
   if (row.staleApproval) badges.push(`<span class="signal-badge">⏳ Approval waiting ${row.oldestPendingApprovalDays}d</span>`);
   if (row.heavyOpenActionItems) badges.push(`<span class="signal-badge">☑ ${row.openActionItems} open action items</span>`);
@@ -449,6 +462,7 @@ function renderTable() {
   el('summaryOverdueInvoices').textContent = rows.filter(r => r.overdueInvoice).length;
   if (el('summaryRenewalsNeedQbr')) el('summaryRenewalsNeedQbr').textContent = rows.filter(r => r.renewalNeedsQbr).length;
   if (el('summaryLowPulse')) el('summaryLowPulse').textContent = rows.filter(r => r.lowPulse).length;
+  if (el('summaryReportOverdue')) el('summaryReportOverdue').textContent = rows.filter(r => r.reportOverdue).length;
 
   const tbody = el('dashboardTableBody');
   tbody.innerHTML = '';

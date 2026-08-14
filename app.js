@@ -2059,6 +2059,8 @@ function refreshAllViews() {
   // side effect of the admin happening to save something.
   try { ensureClientPortalListeners(); } catch (e) {}
   try { runStaleClientNudgeCheck(); } catch (e) {}
+  try { runReportOverdueNudgeCheck(); } catch (e) { console.error("Error in runReportOverdueNudgeCheck:", e); }
+  try { runReengagementNudgeCheck(); } catch (e) { console.error("Error in runReengagementNudgeCheck:", e); }
   runRenewalNudgeCheck().catch(e => console.error("Error in runRenewalNudgeCheck:", e));
   runUpsellNudgeCheck().catch(e => console.error("Error in runUpsellNudgeCheck:", e));
   runProposalFollowupNudgeCheck().catch(e => console.error("Error in runProposalFollowupNudgeCheck:", e));
@@ -6301,6 +6303,88 @@ function runStaleClientNudgeCheck() {
     const approvalPhrase = pendingCount === 1 ? "1 pending approval" : `${pendingCount} pending approvals`;
     const draftEmail = buildStaleNudgeDraftEmail(client, name, pendingCount);
     pushAdminNotification('stale_client', `${name} ${visitPhrase} and has ${approvalPhrase} waiting.`, name, draftEmail);
+  });
+}
+
+// Monthly Reporting Flow (documented process: report delivered by the 5th
+// of each month) has never had a safety net in the Hub - Monthly Report
+// Archive just stores whatever gets uploaded, nothing flags a client who
+// hasn't gotten one lately. Deliberately conservative: only flags clients
+// who HAVE at least one prior report on file but it's gone stale, not
+// brand-new clients who haven't reached their first report cycle yet -
+// there's no "client since" date tracked anywhere to safely tell those two
+// cases apart, so a false "overdue" nudge on a two-week-old client would be
+// worse than staying silent until their first report actually exists.
+// reportArchive entries only have a free-text monthYear (not a structured
+// date), so dateAdded (ISO, set at upload time) is what this keys off.
+let lastReportOverdueCheckAt = 0;
+const REPORT_OVERDUE_CHECK_INTERVAL_MS = 60 * 60 * 1000; // re-scan at most hourly
+const REPORT_OVERDUE_DAYS_THRESHOLD = 35; // a few days' grace past the 5th-of-month deadline
+const REPORT_OVERDUE_COOLDOWN_MS = 5 * 24 * 60 * 60 * 1000; // don't re-nudge same client within 5 days
+
+function runReportOverdueNudgeCheck() {
+  const now = Date.now();
+  if (now - lastReportOverdueCheckAt < REPORT_OVERDUE_CHECK_INTERVAL_MS) return;
+  lastReportOverdueCheckAt = now;
+
+  Object.entries(clientsDb).forEach(([name, client]) => {
+    if (!client) return;
+    const archive = Array.isArray(client.reportArchive) ? client.reportArchive : [];
+    if (archive.length === 0) return; // no baseline yet - see comment above
+
+    const latest = archive.reduce((mostRecent, entry) => {
+      const t = entry && entry.dateAdded ? new Date(entry.dateAdded).getTime() : 0;
+      return t > mostRecent ? t : mostRecent;
+    }, 0);
+    if (!latest) return;
+
+    const daysSinceReport = Math.floor((now - latest) / 86400000);
+    if (daysSinceReport < REPORT_OVERDUE_DAYS_THRESHOLD) return;
+
+    const alreadyNudged = adminNotifications.some(n =>
+      n.type === 'report_overdue' &&
+      n.clientName === name &&
+      (now - new Date(n.createdAt).getTime()) < REPORT_OVERDUE_COOLDOWN_MS
+    );
+    if (alreadyNudged) return;
+
+    pushAdminNotification('report_overdue', `${name} hasn't had a monthly report added to their archive in ${daysSinceReport}d.`, name);
+  });
+}
+
+// 90-day re-engagement reminder, per the documented Offboarding Flow's
+// "90-day re-engagement reminder set in CRM" step - completedAt is set by
+// client-offboarding-checklist/js/app.js's completeOffboarding, the same
+// moment the portal gets deactivated, so it doubles as the "offboarded on"
+// date this reminder needs (there's no separate field for that anywhere
+// else in the client object). Longer cooldown than the other nudges since
+// this is a much lower-urgency, periodic "still worth a touch" reminder,
+// not something needing daily attention.
+let lastReengagementCheckAt = 0;
+const REENGAGEMENT_CHECK_INTERVAL_MS = 60 * 60 * 1000; // re-scan at most hourly
+const REENGAGEMENT_DAYS_THRESHOLD = 90;
+const REENGAGEMENT_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000; // don't re-nudge same client within 30 days
+
+function runReengagementNudgeCheck() {
+  const now = Date.now();
+  if (now - lastReengagementCheckAt < REENGAGEMENT_CHECK_INTERVAL_MS) return;
+  lastReengagementCheckAt = now;
+
+  Object.entries(clientsDb).forEach(([name, client]) => {
+    const completedAt = client && client.offboarding && client.offboarding.completedAt;
+    if (!completedAt) return;
+
+    const daysSinceOffboarded = Math.floor((now - new Date(completedAt).getTime()) / 86400000);
+    if (daysSinceOffboarded < REENGAGEMENT_DAYS_THRESHOLD) return;
+
+    const alreadyNudged = adminNotifications.some(n =>
+      n.type === 'reengagement_reminder' &&
+      n.clientName === name &&
+      (now - new Date(n.createdAt).getTime()) < REENGAGEMENT_COOLDOWN_MS
+    );
+    if (alreadyNudged) return;
+
+    pushAdminNotification('reengagement_reminder', `${name} was offboarded ${daysSinceOffboarded}d ago - worth a re-engagement outreach?`, name);
   });
 }
 
