@@ -3945,6 +3945,57 @@ async function addLeadToSalesPipeline({ name, source, notes, stage }) {
   return { ok: true, lead: newLead };
 }
 
+// Sets the ClickUp assignee on a client's deal task to match whoever just
+// got assigned as account manager in the Sales -> Delivery Handoff
+// (Kickoff Prep & Deck) - Ronald's team uses ClickUp's native Assignee
+// field as the real record of who owns a task, so the handoff needs to
+// reach that, not just the Hub's own portalConfig.accountManagerEmail.
+// Looks up the existing lead in agency/salesPipeline purely to find its
+// clickupTaskId - re-sends its current name/stage/etc unchanged so this
+// call doesn't clobber anything, same reasoning addLeadToSalesPipeline's
+// own sync call follows. If the client was never logged in Sales Pipeline
+// Board (or hasn't synced to ClickUp yet), there's no task to attach an
+// assignee to - reason: 'no_task' surfaces that distinctly from an actual
+// ClickUp API failure so Kickoff Prep can explain it instead of just
+// saying "failed".
+async function syncAccountManagerToClickUpAssignee(clientName, amEmail) {
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) {
+    return { ok: false, reason: "not_ready" };
+  }
+  const trimmedName = (clientName || "").trim();
+  if (!trimmedName || !amEmail) return { ok: false, reason: "missing_input" };
+
+  let lead;
+  try {
+    const docRef = window.firebaseDoc(window.firebaseDb, "agency", "salesPipeline");
+    const snap = await window.firebaseGetDoc(docRef);
+    const data = snap && snap.exists ? snap.data() : null;
+    const list = (data && data.list) || [];
+    lead = list.find(l => (l.name || "").trim().toLowerCase() === trimmedName.toLowerCase());
+  } catch (e) {
+    return { ok: false, reason: "error", error: e };
+  }
+
+  if (!lead || !lead.clickupTaskId) return { ok: false, reason: "no_task" };
+
+  try {
+    const res = await fetch("/api/pipeline/sync-clickup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        taskId: lead.clickupTaskId, name: lead.name, stage: lead.stage,
+        contactEmail: lead.contactEmail, source: lead.source, notes: lead.notes,
+        assigneeEmail: amEmail
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, reason: "error", error: new Error(data.error || `Request failed (${res.status})`) };
+    return { ok: true, assigneeMatched: !!data.assigneeMatched, accountManagerFieldSet: !!data.accountManagerFieldSet };
+  } catch (e) {
+    return { ok: false, reason: "error", error: e };
+  }
+}
+
 // ── Account Manager Capacity Snapshot ──
 // Team Roster & Capacity used to rely entirely on a manually-typed
 // "current client count" per person, which drifts stale the moment

@@ -260,7 +260,7 @@ function loadHandoffForm() {
   renderHandoffStatus();
 }
 
-function completeHandoff() {
+async function completeHandoff() {
   const client = currentClient();
   if (!client) { if (window.parent.showBanner) window.parent.showBanner('error', 'Select a client first.'); return; }
 
@@ -295,11 +295,48 @@ function completeHandoff() {
   if (hasEmail && window.parent.emailAccountManagerHandoffNotification) {
     window.parent.emailAccountManagerHandoffNotification(client, notes, clientName);
   }
-  if (window.parent.showBanner) {
-    window.parent.showBanner('success', hasEmail
-      ? `Handoff complete - ${amName} notified.`
-      : `Handoff logged, but ${amName} has no email on file in Team Roster, so no notification was sent. Add one there to enable auto-notify.`);
+
+  const btn = el('completeHandoffBtn');
+  const originalText = btn.textContent;
+
+  if (!hasEmail) {
+    if (window.parent.showBanner) window.parent.showBanner('success', `Handoff logged, but ${amName} has no email on file in Team Roster, so no notification was sent and nothing could be synced to ClickUp. Add one there to enable both.`);
+    return;
   }
+
+  // Sets the ClickUp task's native Assignee field to match - that's what
+  // Ronald's team actually treats as "who owns this," not the Hub's own
+  // account-manager field, so the handoff needs to reach it too. Best
+  // effort: the Hub-side handoff above already fully succeeded regardless
+  // of how this turns out.
+  btn.disabled = true;
+  btn.textContent = 'Syncing to ClickUp...';
+  let clickupNote = '';
+  try {
+    const result = window.parent.syncAccountManagerToClickUpAssignee
+      ? await window.parent.syncAccountManagerToClickUpAssignee(clientName, member.email)
+      : { ok: false, reason: 'unavailable' };
+    if (result.ok && result.assigneeMatched) {
+      clickupNote = result.accountManagerFieldSet
+        ? ' ClickUp task assignee and Account Manager field updated.'
+        : ' ClickUp task assignee updated (Account Manager field not found/set on that list).';
+    } else if (result.ok && !result.assigneeMatched) {
+      clickupNote = ` ClickUp task found, but no ClickUp workspace member matches ${member.email} - assignee not set there.`;
+    } else if (result.reason === 'no_task') {
+      clickupNote = " No ClickUp task on file for this client yet (nothing synced there) - assignee wasn't set.";
+    } else {
+      clickupNote = ' Could not sync the assignee to ClickUp - see console for details.';
+      if (result.error) console.error('ClickUp assignee sync failed:', result.error);
+    }
+  } catch (e) {
+    clickupNote = ' Could not sync the assignee to ClickUp - see console for details.';
+    console.error('ClickUp assignee sync failed:', e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+
+  if (window.parent.showBanner) window.parent.showBanner('success', `Handoff complete - ${amName} notified.${clickupNote}`);
 }
 
 // ── Kickoff Call Notes ──

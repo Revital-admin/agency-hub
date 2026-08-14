@@ -2568,6 +2568,59 @@ async function handleContractorPortalHours(request, env) {
 // prefix, unlike most other APIs this Hub talks to.)
 const CLICKUP_SALES_PIPELINE_LIST_ID = "901327581862";
 
+// Resolves an @revitalproductions.com email to the ClickUp numeric user id
+// the assignees field actually needs (ClickUp has no "assign by email"
+// option - the task update/create endpoints only take ids). Looks across
+// every workspace ("team" in ClickUp's still-v2-era naming) the API token
+// can see, since a token isn't scoped to just one. No caching - this only
+// ever fires on a Sales -> Delivery Handoff completion (Kickoff Prep &
+// Deck), which is rare enough that a live lookup each time is fine.
+async function findClickUpUserIdByEmail(apiToken, email) {
+  const target = (email || "").trim().toLowerCase();
+  if (!target) return null;
+  try {
+    const res = await fetch("https://api.clickup.com/api/v2/team", {
+      headers: { Authorization: apiToken }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !Array.isArray(data.teams)) return null;
+    for (const team of data.teams) {
+      const members = Array.isArray(team.members) ? team.members : [];
+      for (const m of members) {
+        const u = (m && m.user) || m;
+        if (u && u.email && String(u.email).trim().toLowerCase() === target) return u.id;
+      }
+    }
+    return null;
+  } catch (e) {
+    console.warn("ClickUp member lookup by email failed:", e);
+    return null;
+  }
+}
+
+// Looks up a custom field's id by name on a given List (the API has no
+// "set by name" option, only by id - see developer.clickup.com/docs/
+// customfields). "Account Manager" already exists as a workspace-level
+// Person field; confirmed via the ClickUp UI that it needed to be
+// explicitly added to the Sales Pipeline list before it'd show up there,
+// which it now is. No caching, same reasoning as findClickUpUserIdByEmail.
+async function findClickUpFieldIdByName(apiToken, listId, fieldName) {
+  const target = (fieldName || "").trim().toLowerCase();
+  if (!target) return null;
+  try {
+    const res = await fetch(`https://api.clickup.com/api/v2/list/${encodeURIComponent(listId)}/field`, {
+      headers: { Authorization: apiToken }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !Array.isArray(data.fields)) return null;
+    const match = data.fields.find(f => (f.name || "").trim().toLowerCase() === target);
+    return match ? { id: match.id, type: match.type } : null;
+  } catch (e) {
+    console.warn("ClickUp custom field lookup failed:", e);
+    return null;
+  }
+}
+
 async function handlePipelineSyncClickUp(request, env) {
   const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
   if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
@@ -2583,7 +2636,7 @@ async function handlePipelineSyncClickUp(request, env) {
   } catch (e) {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
-  const { taskId, name, stage, contactEmail, source, notes } = payload || {};
+  const { taskId, name, stage, contactEmail, source, notes, assigneeEmail } = payload || {};
   if (!name || !stage) return jsonResponse({ error: "name and stage are required" }, 400);
 
   const descriptionParts = [];
@@ -2593,25 +2646,64 @@ async function handlePipelineSyncClickUp(request, env) {
   descriptionParts.push(`_Synced from the Hub's Sales Pipeline Board - edits here won't flow back._`);
   const markdown_description = descriptionParts.join("\n\n");
 
+  // Only looked up when the caller actually asked to set an assignee
+  // (Kickoff Prep & Deck's handoff completion is the one caller that
+  // passes this today) - every other sync-clickup call (Sales Pipeline
+  // Board's own saves, the referral/cold-outreach auto-create hooks)
+  // passes no assigneeEmail and this stays a no-op, unchanged from before.
+  let assigneeUserId = null;
+  if (assigneeEmail) {
+    assigneeUserId = await findClickUpUserIdByEmail(apiToken, assigneeEmail);
+  }
+
   try {
     if (taskId) {
+      const body = { name, status: stage, markdown_description };
+      if (assigneeUserId) body.assignees = { add: [assigneeUserId] };
       const res = await fetch(`https://api.clickup.com/api/v2/task/${encodeURIComponent(taskId)}`, {
         method: "PUT",
         headers: { Authorization: apiToken, "Content-Type": "application/json" },
-        body: JSON.stringify({ name, status: stage, markdown_description })
+        body: JSON.stringify(body)
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.err || `ClickUp update failed (${res.status})`);
-      return jsonResponse({ ok: true, taskId: data.id || taskId });
+
+      // Also stamp the "Account Manager" Person custom field to match, on
+      // top of setting the native Assignee above - Ronald's team uses
+      // Assignee as the working-ownership signal, but wants this labeled
+      // custom field kept in sync too, visible wherever assignee isn't
+      // shown. Best-effort: doesn't affect the assignee/status update
+      // above, which already succeeded by this point.
+      let accountManagerFieldSet;
+      if (assigneeUserId) {
+        accountManagerFieldSet = false;
+        try {
+          const field = await findClickUpFieldIdByName(apiToken, CLICKUP_SALES_PIPELINE_LIST_ID, "Account Manager");
+          if (field && field.type === "users") {
+            const fieldRes = await fetch(`https://api.clickup.com/api/v2/task/${encodeURIComponent(taskId)}/field/${field.id}`, {
+              method: "POST",
+              headers: { Authorization: apiToken, "Content-Type": "application/json" },
+              body: JSON.stringify({ value: { add: [assigneeUserId], rem: [] } })
+            });
+            accountManagerFieldSet = fieldRes.ok;
+          }
+        } catch (e) {
+          console.warn("Setting Account Manager custom field failed:", e);
+        }
+      }
+
+      return jsonResponse({ ok: true, taskId: data.id || taskId, assigneeMatched: assigneeEmail ? !!assigneeUserId : undefined, accountManagerFieldSet });
     } else {
+      const body = { name, status: stage, markdown_description };
+      if (assigneeUserId) body.assignees = [assigneeUserId];
       const res = await fetch(`https://api.clickup.com/api/v2/list/${CLICKUP_SALES_PIPELINE_LIST_ID}/task`, {
         method: "POST",
         headers: { Authorization: apiToken, "Content-Type": "application/json" },
-        body: JSON.stringify({ name, status: stage, markdown_description })
+        body: JSON.stringify(body)
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.err || `ClickUp create failed (${res.status})`);
-      return jsonResponse({ ok: true, taskId: data.id });
+      return jsonResponse({ ok: true, taskId: data.id, assigneeMatched: assigneeEmail ? !!assigneeUserId : undefined });
     }
   } catch (e) {
     return jsonResponse({ error: `ClickUp sync failed: ${e.message}` }, 500);
