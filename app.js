@@ -27,6 +27,36 @@ function generateSecureToken(length = 32) {
 const ADMIN_EMAIL_DOMAIN = "revitalproductions.com";
 let firebaseAuthReady = false;
 
+// Real root cause of the Aug 2026 idle-lock "not authorized" bug: every
+// teammate's silent sign-in (both the normal page-load exchange and the
+// idle-lock PIN unlock) redeems a custom token minted server-side for a
+// single SHARED Firebase Auth account (see createFirebaseCustomToken in
+// _worker.js) - the account's real, registered email field was never set
+// (a GCP IAM permission gap, confirmed via a live INSUFFICIENT_PERMISSION
+// error trying to patch it server-side), so user.email came back null for
+// anyone who couldn't fall back on an old cached "Sign in with Google"
+// popup session. Normal page loads usually had that cached session to
+// paper over it; idle-lock's forced signOut() before every unlock never
+// did, so it failed every single time.
+// firestore.rules never had this problem - it reads
+// request.auth.token.email, the ID token's CUSTOM CLAIM (set correctly by
+// _worker.js's claims: {email} on every mint), which is a completely
+// different data path from user.email (the account PROFILE field,
+// populated by GetAccountInfo, which is what was actually broken). This
+// mirrors that already-working approach instead of trying to fix the
+// account profile field itself.
+async function getReliableEmail(user) {
+  if (!user) return null;
+  try {
+    const idTokenResult = await user.getIdTokenResult();
+    const claimEmail = idTokenResult && idTokenResult.claims && idTokenResult.claims.email;
+    return claimEmail || user.email || null;
+  } catch (e) {
+    console.warn("getReliableEmail: falling back to user.email", e);
+    return user.email || null;
+  }
+}
+
 function initAdminAuthGate() {
   if (!window.firebase || !firebase.auth) {
     console.warn("Firebase Auth SDK not loaded; skipping auth gate.");
@@ -121,8 +151,9 @@ function initAdminAuthGate() {
         return currentUser;
       }
 
-      const alreadyCorrect = !!(currentUser && currentUser.email &&
-        currentUser.email.toLowerCase() === (data.email || "").toLowerCase());
+      const currentEmail = await getReliableEmail(currentUser);
+      const alreadyCorrect = !!(currentEmail &&
+        currentEmail.toLowerCase() === (data.email || "").toLowerCase());
       if (alreadyCorrect) return currentUser;
 
       // Either no cached Firebase session yet (first visit / just cleared),
@@ -151,7 +182,8 @@ function initAdminAuthGate() {
   if (gate) gate.style.display = "flex";
 
   firebase.auth().onAuthStateChanged(async (user) => {
-    const isAuthorizedAdmin = !!(user && user.email && user.email.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN));
+    const userEmail = await getReliableEmail(user);
+    const isAuthorizedAdmin = !!(userEmail && userEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN));
 
     if (!isAuthorizedAdmin && user) {
       // Signed into Firebase with the wrong account - sign back out.
@@ -165,7 +197,8 @@ function initAdminAuthGate() {
 
     if (gate) gate.style.display = "none";
     firebaseAuthReady = true;
-    window.currentAdminEmail = verifiedUser.email.toLowerCase();
+    const verifiedEmail = (await getReliableEmail(verifiedUser)) || verifiedUser.email;
+    window.currentAdminEmail = verifiedEmail.toLowerCase();
     recordLastSeen(window.currentAdminEmail);
     boot();
   });
