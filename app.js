@@ -2110,7 +2110,19 @@ function initSidebarFooterToggle() {
 }
 
 // ── View Refresh Controllers ──
-function refreshAllViews() {
+// options.skipActiveIframeReload: set by rebuildClientsDbFromShards() when
+// a remote change came in for a client OTHER than the one currently open
+// on this device. Shards bin-pack multiple clients together (see
+// packClientsDbIntoShards), so without this, one teammate editing Client A
+// would force-reload (blank-then-reload flash, wiping any unsaved
+// in-progress typing) every other teammate's currently-open tool tab, even
+// if they were looking at a completely unrelated Client B - the "hub
+// glitch refreshes on a different person's device" bug. Every other
+// refreshAllViews() call site is a local action (switching clients, saving,
+// booting) where a fresh iframe read is actually wanted, so this only ever
+// gets passed from the remote-listener path.
+function refreshAllViews(options) {
+  const skipActiveIframeReload = !!(options && options.skipActiveIframeReload);
   // Keep one live listener per client with a magic link so client-driven
   // checklist changes reach the agency side immediately, not just as a
   // side effect of the admin happening to save something.
@@ -2166,8 +2178,11 @@ function refreshAllViews() {
   const activeTabBtn = document.querySelector(".nav-item-btn.active");
   const activeTab = activeTabBtn ? activeTabBtn.getAttribute("data-tab") : "tab-dashboard";
 
-  // Reload only if the active tab is an iframe-based tab
-  if (iframeNeedsReload[activeTab] !== undefined) {
+  // Reload only if the active tab is an iframe-based tab - and only if this
+  // wasn't a remote change for an unrelated client (see skipActiveIframeReload
+  // above). It's still left flagged in iframeNeedsReload so the next real
+  // tab switch or client switch picks up fresh data as normal.
+  if (!skipActiveIframeReload && iframeNeedsReload[activeTab] !== undefined) {
     refreshIframeTab(activeTab);
   }
 }
@@ -5393,6 +5408,13 @@ function rebuildClientsDbFromShards() {
   const localStr = JSON.stringify(clientsDb);
   if (cloudStr === localStr) return;
 
+  // Snapshot the active client's own data before swapping clientsDb over,
+  // so we can tell below whether THIS device's currently-open client
+  // actually changed, or whether this shard update was just some other
+  // client (packed into the same shard) that a teammate happens to be
+  // editing elsewhere - see refreshAllViews' skipActiveIframeReload.
+  const prevActiveClientStr = JSON.stringify(clientsDb[activeClientName]);
+
   clientsDb = merged;
   localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
 
@@ -5400,8 +5422,10 @@ function rebuildClientsDbFromShards() {
     activeClientName = Object.keys(clientsDb)[0] || "";
   }
 
+  const activeClientDataChanged = prevActiveClientStr !== JSON.stringify(clientsDb[activeClientName]);
+
   buildClientDropdown();
-  refreshAllViews();
+  refreshAllViews({ skipActiveIframeReload: !activeClientDataChanged });
   renderDashboard();
 }
 
