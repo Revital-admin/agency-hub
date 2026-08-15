@@ -264,6 +264,45 @@ async function handleMintFirebaseToken(request, env) {
     return jsonResponse({ error: "FIREBASE_SERVICE_ACCOUNT_KEY is not valid JSON" }, 500);
   }
 
+  // Keep the shared "admin" Firebase Auth account's registered email in
+  // sync with whoever's actually signing in right now (Aug 2026 fix).
+  // createFirebaseCustomToken below embeds `email` inside the token's
+  // `claims`, but that's a custom claim, not the account's real email
+  // field - GetAccountInfo (what populates firebase.auth().currentUser
+  // .email client-side) only reflects the latter, and nothing was ever
+  // setting it. Every teammate signs in as the same uid: "admin" (see
+  // createFirebaseCustomToken), so that account's email needs refreshing
+  // on every mint, not just once - whoever mints last "owns" it until the
+  // next mint. Bug this fixes: user.email came back null after any sign-in
+  // that couldn't reuse an already-cached, correctly-emailed session (e.g.
+  // a real "Sign in with Google" popup from earlier) - normal page loads
+  // usually had that cached session to fall back on, but the idle-lock
+  // unlock flow forces a real signOut() first, so it always hit this raw
+  // and always got null - initAdminAuthGate's isAuthorizedAdmin check
+  // reads user.email directly, so null failed the @revitalproductions.com
+  // check and bounced the correct person to "not authorized for this hub."
+  // Fail-open on purpose: if this call has a transient failure, still
+  // return the token rather than blocking sign-in entirely over a
+  // profile-field sync that isn't the actual security boundary
+  // (firestore.rules keys off the token's email claim, not this field).
+  try {
+    const identityToken = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/identitytoolkit");
+    const res = await fetch("https://identitytoolkit.googleapis.com/v1/accounts:update", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${identityToken.accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ localId: "admin", email: accessEmail, emailVerified: true })
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      console.error("accounts:update failed to sync admin account email:", errData);
+    }
+  } catch (e) {
+    console.error("Couldn't sync admin account email before minting token (proceeding anyway):", e);
+  }
+
   try {
     const token = await createFirebaseCustomToken(serviceAccount, accessEmail);
     // email is included alongside the token (not just implied by it) so the
