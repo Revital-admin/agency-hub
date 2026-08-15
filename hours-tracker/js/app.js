@@ -35,6 +35,68 @@ const INTERNAL_CLIENT_NAME = "Internal / Non-Billable";
 
 let entries = [];
 
+// ── Delete permission ──
+// Aug 2026: any teammate with Team Ops access (now everyone, since Team
+// Ops was made universal) could delete ANY entry here, including hours
+// someone else logged - a Hub Admin or team lead deleting a stray test
+// entry is fine, but a regular teammate clearing out a coworker's real
+// logged time is not. Gate the Delete button to: Hub Admins (same
+// agency/teamAccess.hubAdmins list Team Roster's Contractor Documents
+// card already uses), or whoever's own entry it is. memberName is free
+// text matched via a <datalist>, not a strict foreign key (see
+// getTeamHoursCapacitySnapshot in the parent Hub's app.js for the same
+// caveat), so "own entry" is resolved by matching the signed-in
+// account's email to a Team Roster member, then comparing that member's
+// name against the entry's memberName - the best identity signal
+// available without restructuring how entries are logged. This is a
+// client-side-only gate (Firestore's own hoursLogEntries rule stays
+// broadly admin-domain-wide, matching every other "Hub Admin" gate in
+// this codebase - e.g. Team Roster's Contractor Documents card - none of
+// which are enforced at the rules layer either), so it's a workflow
+// guardrail against accidental deletes through the normal UI, not a
+// defense against someone deliberately reaching in via devtools.
+let isHubAdmin = false;
+let currentUserEmail = '';
+let currentMemberName = '';
+
+async function applyDeletePermission() {
+  if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb || !window.parent.firebaseOnSnapshot || !window.parent.firebaseGetDoc) return;
+  currentUserEmail = (window.parent.currentAdminEmail || '').toLowerCase();
+
+  // Resolve the signed-in account to its own Team Roster memberName
+  // (one-time read - roster membership/name doesn't change mid-session
+  // often enough to justify a live listener here).
+  try {
+    const rosterRef = window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "teamRoster");
+    const rosterSnap = await window.parent.firebaseGetDoc(rosterRef);
+    const rosterData = rosterSnap && rosterSnap.exists ? rosterSnap.data() : null;
+    const members = (rosterData && rosterData.list) || [];
+    const mine = currentUserEmail ? members.find(m => (m.email || '').trim().toLowerCase() === currentUserEmail) : null;
+    currentMemberName = mine ? (mine.memberName || '').trim().toLowerCase() : '';
+  } catch (e) {
+    console.warn("Couldn't resolve the signed-in account to a roster member:", e);
+  }
+
+  // Hub Admins list stays live (same pattern as Team Roster's own
+  // applyEditPermission) so a mid-session Team Access change takes effect
+  // without a reload.
+  const teamAccessRef = window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "teamAccess");
+  window.parent.firebaseOnSnapshot(teamAccessRef, (docSnap) => {
+    const data = docSnap && docSnap.exists ? docSnap.data() : null;
+    const hubAdmins = Array.isArray(data && data.hubAdmins) ? data.hubAdmins : ["admin@revitalproductions.com"];
+    isHubAdmin = !!(currentUserEmail && hubAdmins.includes(currentUserEmail));
+    renderTable();
+  }, (err) => {
+    console.error("Hours & Time Log: hub-admin listener error:", err);
+  });
+}
+
+function canDeleteEntry(entry) {
+  if (isHubAdmin) return true;
+  if (!currentMemberName) return false;
+  return (entry.memberName || '').trim().toLowerCase() === currentMemberName;
+}
+
 function el(id) { return document.getElementById(id); }
 
 /* ── Data load/save (per-document collection - see header comment) ──
@@ -286,7 +348,7 @@ function renderTable() {
       <td><input type="text" class="notes-input" data-id="${e.id}" value="${(e.notes || '').replace(/"/g, '&quot;')}" placeholder="Notes..."></td>
       <td>
         <div class="row-actions">
-          <button class="delete-btn" data-id="${e.id}">Delete</button>
+          ${canDeleteEntry(e) ? `<button class="delete-btn" data-id="${e.id}">Delete</button>` : ''}
         </div>
       </td>
     `;
@@ -318,6 +380,11 @@ function wireRowListeners() {
 }
 
 async function deleteEntry(id) {
+  const entry = findEntry(id);
+  // Defense-in-depth re-check, not just trusting that the Delete button
+  // was hidden correctly - guards against a stale render (e.g. the hub-
+  // admin listener above hasn't fired yet).
+  if (!entry || !canDeleteEntry(entry)) return;
   if (!confirm("Delete this time entry? This can't be undone.")) return;
   const previous = entries;
   entries = entries.filter(e => e.id !== id);
@@ -401,6 +468,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadEntries();
   renderTable();
   initListeners();
+  applyDeletePermission().catch(e => console.error("Couldn't apply delete permission:", e));
 
   // Same class of fix as the other trackers: if this iframe finishes
   // loading before the parent Hub's clientsDb has synced, the client

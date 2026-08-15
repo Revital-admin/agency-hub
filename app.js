@@ -4248,25 +4248,39 @@ async function getTeamRosterMembers() {
 // resource-booking-calendar/js/app.js's header comment for the full
 // reasoning, and _worker.js's migrateHoursLogIfNeeded for the
 // server-side twin of this exact function, used by the Contractor
-// Portal's own hours read/write path). Safe to call from anywhere,
-// anytime: it only ever does real work the first time (new collection
-// still empty + old doc has data), and re-running it writes the same
-// documents at the same ids again, which Firestore treats as a no-op
-// overwrite rather than a duplicate.
+// Portal's own hours read/write path).
+//
+// Gated on a dedicated agency/hoursLogMigrationDone marker doc, NOT on
+// "is hoursLogEntries currently empty" (the original Aug 2026 version) -
+// that check re-passed, and this whole backfill silently re-ran, the
+// moment every entry in the new collection was deleted (a small/fresh
+// roster can easily hit zero entries this way), and the old
+// agency/hoursLog doc is deliberately left untouched as a passive
+// backup, so every previously-deleted entry - test data included -
+// resurrected right along with it. Confirmed Aug 2026: a "Jake Smith"
+// test entry kept reappearing after being deleted for exactly this
+// reason. The marker makes this a true one-time migration: once it's
+// set, this never touches hoursLogEntries again no matter how empty that
+// collection later becomes. Also cheaper day to day than the old
+// approach, which had to list the entire collection on every single call
+// just to check its size.
 async function migrateHoursLogIfNeeded() {
-  if (!window.firebaseDb || !window.firebaseCollection || !window.firebaseGetDocs || !window.firebaseDoc || !window.firebaseGetDoc || !window.firebaseSetDoc) return;
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc || !window.firebaseSetDoc) return;
   try {
-    const existing = await window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb, "hoursLogEntries"));
-    if (existing.length > 0) return;
+    const markerRef = window.firebaseDoc(window.firebaseDb, "agency", "hoursLogMigrationDone");
+    const markerSnap = await window.firebaseGetDoc(markerRef);
+    if (markerSnap && markerSnap.exists) return;
     const oldRef = window.firebaseDoc(window.firebaseDb, "agency", "hoursLog");
     const oldSnap = await window.firebaseGetDoc(oldRef);
     const oldData = oldSnap && oldSnap.exists ? oldSnap.data() : null;
     const oldEntries = (oldData && Array.isArray(oldData.list)) ? oldData.list : [];
-    if (!oldEntries.length) return;
-    await Promise.all(oldEntries.filter(e => e.id).map(entry => {
-      const { id, ...rest } = entry;
-      return window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb, "hoursLogEntries", id), rest);
-    }));
+    if (oldEntries.length) {
+      await Promise.all(oldEntries.filter(e => e.id).map(entry => {
+        const { id, ...rest } = entry;
+        return window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb, "hoursLogEntries", id), rest);
+      }));
+    }
+    await window.firebaseSetDoc(markerRef, { done: true, migratedAt: new Date().toISOString() });
   } catch (e) {
     console.error("Hours log migration to per-document storage failed:", e);
   }
@@ -4287,22 +4301,31 @@ async function getHoursLogEntries() {
 // {list: [...]} document into the new one-document-per-record
 // contractInvoiceRecords collection (Aug 2026 storage-scaling work -
 // same pattern as migrateHoursLogIfNeeded above, and _worker.js's own
-// twin of this function, used by the Stripe webhook handler). Safe to
-// call from anywhere, anytime - only does real work the first time.
+// twin of this function, used by the Stripe webhook handler).
+//
+// Gated on a marker doc (agency/contractInvoicesMigrationDone), not on
+// "is the collection currently empty" - see migrateHoursLogIfNeeded's
+// comment above for why that check let deleted records (test data
+// included) silently resurrect themselves the moment the collection
+// emptied out. Same fix applied here pre-emptively rather than waiting
+// for the identical bug report on this collection too.
 async function migrateContractInvoicesIfNeeded() {
-  if (!window.firebaseDb || !window.firebaseCollection || !window.firebaseGetDocs || !window.firebaseDoc || !window.firebaseGetDoc || !window.firebaseSetDoc) return;
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc || !window.firebaseSetDoc) return;
   try {
-    const existing = await window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb, "contractInvoiceRecords"));
-    if (existing.length > 0) return;
+    const markerRef = window.firebaseDoc(window.firebaseDb, "agency", "contractInvoicesMigrationDone");
+    const markerSnap = await window.firebaseGetDoc(markerRef);
+    if (markerSnap && markerSnap.exists) return;
     const oldRef = window.firebaseDoc(window.firebaseDb, "agency", "contractInvoices");
     const oldSnap = await window.firebaseGetDoc(oldRef);
     const oldData = oldSnap && oldSnap.exists ? oldSnap.data() : null;
     const oldRecords = (oldData && Array.isArray(oldData.list)) ? oldData.list : [];
-    if (!oldRecords.length) return;
-    await Promise.all(oldRecords.filter(r => r.id).map(record => {
-      const { id, ...rest } = record;
-      return window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb, "contractInvoiceRecords", id), rest);
-    }));
+    if (oldRecords.length) {
+      await Promise.all(oldRecords.filter(r => r.id).map(record => {
+        const { id, ...rest } = record;
+        return window.firebaseSetDoc(window.firebaseDoc(window.firebaseDb, "contractInvoiceRecords", id), rest);
+      }));
+    }
+    await window.firebaseSetDoc(markerRef, { done: true, migratedAt: new Date().toISOString() });
   } catch (e) {
     console.error("Contract/invoice migration to per-document storage failed:", e);
   }

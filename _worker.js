@@ -3652,24 +3652,38 @@ async function firestoreDeleteDoc(accessToken, projectId, relativePath) {
 // document-per-entry collection (hoursLogEntries/{entryId}) - see the
 // Aug 2026 storage-scaling work (same reasoning as Resource Bookings'
 // migration, documented in resource-booking-calendar/js/app.js's header
-// comment). Safe to call on every request: it only ever does work the
-// first time (new collection empty + old doc has data), and re-running
-// it writes the exact same documents with the exact same ids, which is
-// a no-op, not a duplication - so both this Worker path and the
-// browser-side hours-tracker tool can each independently call this
-// (or its client-side twin) without coordinating who goes first.
+// comment).
+//
+// Gated on an agency/hoursLogMigrationDone marker doc, not on "is
+// hoursLogEntries currently empty" (the original version of this
+// function) - that check re-passed, and this whole backfill silently
+// re-ran, the moment every entry in the new collection got deleted, and
+// the old agency/hoursLog doc is deliberately left untouched as a
+// passive backup, so previously-deleted entries (test data included)
+// resurrected right along with it. Confirmed Aug 2026 via a "Jake Smith"
+// test entry that kept reappearing after being deleted. Must match the
+// client-side twin in root app.js exactly (same marker doc) since either
+// side can be the one that actually runs the migration - see that
+// function's comment for the full story. The marker means this never
+// touches hoursLogEntries again once set, no matter how empty that
+// collection later becomes, and both this Worker path and the browser-
+// side tool can still independently call this without coordinating who
+// goes first (whichever gets there first sets the marker; Firestore
+// document writes are atomic, so no risk of a double-migration race).
 async function migrateHoursLogIfNeeded(accessToken, projectId) {
   try {
-    const existing = await firestoreListCollection(accessToken, projectId, "hoursLogEntries");
-    if (existing.length > 0) return; // already migrated (or genuinely empty either way)
+    const marker = await firestoreGetDoc(accessToken, projectId, "agency/hoursLogMigrationDone");
+    if (marker) return; // already migrated
     const oldDoc = await firestoreGetDoc(accessToken, projectId, "agency/hoursLog");
     const oldEntries = (oldDoc && Array.isArray(oldDoc.list)) ? oldDoc.list : [];
-    if (!oldEntries.length) return; // nothing to migrate
-    for (const entry of oldEntries) {
-      if (!entry.id) continue; // shouldn't happen, but skip anything unkeyable rather than throw
-      const { id, ...rest } = entry;
-      await firestoreSetDoc(accessToken, projectId, `hoursLogEntries/${id}`, rest);
+    if (oldEntries.length) {
+      for (const entry of oldEntries) {
+        if (!entry.id) continue; // shouldn't happen, but skip anything unkeyable rather than throw
+        const { id, ...rest } = entry;
+        await firestoreSetDoc(accessToken, projectId, `hoursLogEntries/${id}`, rest);
+      }
     }
+    await firestoreSetDoc(accessToken, projectId, "agency/hoursLogMigrationDone", { done: true, migratedAt: new Date().toISOString() });
   } catch (e) {
     // Best-effort - if this fails, the caller's own subsequent read of
     // hoursLogEntries just comes back empty/incomplete rather than
@@ -3687,18 +3701,26 @@ async function migrateHoursLogIfNeeded(accessToken, projectId) {
 // underlying risk). Called from applyStripeEventToContractInvoices
 // below (the only Worker-side touchpoint) and from the client-side twin
 // in root app.js's getContractInvoiceRecords/migrateContractInvoicesIfNeeded.
+//
+// Gated on an agency/contractInvoicesMigrationDone marker doc, not on
+// "is the collection currently empty" - see migrateHoursLogIfNeeded's
+// comment above for why that check let deleted records silently
+// resurrect themselves. Must match the client-side twin's marker doc
+// name exactly.
 async function migrateContractInvoicesIfNeeded(accessToken, projectId) {
   try {
-    const existing = await firestoreListCollection(accessToken, projectId, "contractInvoiceRecords");
-    if (existing.length > 0) return;
+    const marker = await firestoreGetDoc(accessToken, projectId, "agency/contractInvoicesMigrationDone");
+    if (marker) return;
     const oldDoc = await firestoreGetDoc(accessToken, projectId, "agency/contractInvoices");
     const oldRecords = (oldDoc && Array.isArray(oldDoc.list)) ? oldDoc.list : [];
-    if (!oldRecords.length) return;
-    for (const record of oldRecords) {
-      if (!record.id) continue;
-      const { id, ...rest } = record;
-      await firestoreSetDoc(accessToken, projectId, `contractInvoiceRecords/${id}`, rest);
+    if (oldRecords.length) {
+      for (const record of oldRecords) {
+        if (!record.id) continue;
+        const { id, ...rest } = record;
+        await firestoreSetDoc(accessToken, projectId, `contractInvoiceRecords/${id}`, rest);
+      }
     }
+    await firestoreSetDoc(accessToken, projectId, "agency/contractInvoicesMigrationDone", { done: true, migratedAt: new Date().toISOString() });
   } catch (e) {
     console.error("Contract/invoice migration to per-document storage failed:", e);
   }
