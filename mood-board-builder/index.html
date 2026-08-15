@@ -193,6 +193,29 @@
     </div>
   </div>
 
-  <script src="js/app.js?v=5"></script>
+  <!-- Read-only "View Mood Board" modal - opened by the View button on a
+       SAVED board's card (renderBoardsList/viewBoard in js/app.js).
+       Aug 2026: before this, the only way to see a board's full write-up
+       (specifically Visual Direction and Key Elements, neither of which
+       show on the card summary) was to click Edit, which drops the form
+       into edit-state just to look. This never touches the in-progress
+       form/draft - purely a read view of the saved board, reusing the
+       same .moodboard-lightbox chrome as the image/video lightboxes
+       above for a consistent look. Clicking an image or video in its
+       gallery hands off to the existing mbAdminLightbox/mbVideoLightbox
+       instead of duplicating that viewer here. -->
+  <div id="mbViewBoardModal" class="moodboard-lightbox" style="display:none;">
+    <button type="button" id="mbViewBoardClose" class="moodboard-lightbox-close" aria-label="Close">✕</button>
+    <div class="moodboard-lightbox-body mb-view-board-body">
+      <div class="mb-view-board-header">
+        <h2 id="mbViewBoardTitle"></h2>
+        <div id="mbViewBoardBadges" class="mb-view-board-badges"></div>
+      </div>
+      <div id="mbViewBoardFields"></div>
+      <div id="mbViewBoardGallery" class="mb-view-board-gallery"></div>
+    </div>
+  </div>
+
+  <script src="js/app.js?v=6"></script>
 </body>
 </html>

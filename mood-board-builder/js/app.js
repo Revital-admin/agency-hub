@@ -1004,6 +1004,7 @@ function renderBoardsList() {
         </div>
         <div class="board-actions">
           <button class="share-board-btn" data-id="${board.id}">${board.sharedWithClient ? 'Unshare' : 'Share with Client'}</button>
+          <button class="view-board-btn" data-id="${board.id}">View</button>
           <button class="edit-board-btn" data-id="${board.id}">Edit</button>
           <button class="remove-board-btn" data-id="${board.id}">Delete</button>
         </div>
@@ -1015,6 +1016,7 @@ function renderBoardsList() {
     </div>
   `).join('');
 
+  document.querySelectorAll('.view-board-btn').forEach(btn => btn.addEventListener('click', () => viewBoard(btn.getAttribute('data-id'))));
   document.querySelectorAll('.edit-board-btn').forEach(btn => btn.addEventListener('click', () => startEditBoard(btn.getAttribute('data-id'))));
   document.querySelectorAll('.remove-board-btn').forEach(btn => btn.addEventListener('click', () => removeBoard(btn.getAttribute('data-id'))));
   document.querySelectorAll('.share-board-btn').forEach(btn => btn.addEventListener('click', () => toggleShare(btn.getAttribute('data-id'))));
@@ -1024,6 +1026,87 @@ function renderBoardsList() {
   document.querySelectorAll('.board-card-video-thumb[data-board-id]').forEach(tile => {
     tile.addEventListener('click', () => openVideoLightbox(tile.getAttribute('data-board-id'), parseInt(tile.getAttribute('data-video-idx'), 10)));
   });
+}
+
+// ── View Mood Board (read-only, admin side) ──
+// Opens mbViewBoardModal with everything about a SAVED board - including
+// Visual Direction and Key Elements, neither of which the card summary
+// above shows - without touching the in-progress edit form/draft state
+// the way clicking Edit does. See the HTML comment on mbViewBoardModal
+// for the full reasoning.
+function viewBoard(id) {
+  const client = currentClient();
+  if (!client) return;
+  const board = (client.moodBoards || []).find(b => b.id === id);
+  if (!board) return;
+
+  const modal = el('mbViewBoardModal');
+  if (!modal) return;
+
+  const titleEl = el('mbViewBoardTitle');
+  if (titleEl) titleEl.textContent = board.title || 'Untitled';
+
+  const badges = [`<span class="board-category-badge">${escapeHtml(board.category || 'Other')}</span>`];
+  if (board.sharedWithClient) badges.push('<span class="board-shared-badge">Shared with client</span>');
+  const badgesEl = el('mbViewBoardBadges');
+  if (badgesEl) badgesEl.innerHTML = badges.join('');
+
+  const fieldRows = [
+    ['Idea Summary', board.ideaSummary],
+    ['Visual Direction / Mood', board.visualDirection],
+    ['Key Elements to Include', board.keyElements]
+  ].filter(([, val]) => (val || '').trim());
+
+  const fieldsHtml = fieldRows.map(([label, val]) => `
+    <div class="mb-view-board-field">
+      <div class="mb-view-board-field-label">${escapeHtml(label)}</div>
+      <div class="mb-view-board-field-value">${escapeHtml(val)}</div>
+    </div>`).join('');
+
+  const notesHtml = (board.internalNotes || '').trim()
+    ? `<div class="board-internal-notes" style="margin-top:16px;"><span class="mb-internal-only-badge">Internal notes</span><p>${escapeHtml(board.internalNotes)}</p></div>`
+    : '';
+
+  const fieldsContainer = el('mbViewBoardFields');
+  if (fieldsContainer) fieldsContainer.innerHTML = fieldsHtml + notesHtml || '<p style="color:var(--color-text-secondary); font-size:13px; margin-top:16px;">No write-up added yet.</p>';
+
+  const links = board.embedLinks || [];
+  const images = links.filter(isImageEntry);
+  const videos = links.filter(isVideoEntry);
+  const plainLinks = links.filter(l => !isImageEntry(l) && !isVideoEntry(l));
+
+  const imageTiles = images.map((l, idx) => `<img class="mb-view-board-gallery-img" src="${l.url}" alt="${escapeHtml(l.label)}" title="${escapeHtml(l.label)}" data-idx="${idx}">`).join('');
+  const videoTiles = videos.map((l, idx) => `<div class="mb-view-board-gallery-video" data-video-idx="${idx}">▶<br>${escapeHtml(l.label || 'Video')}</div>`).join('');
+  const linkTiles = plainLinks.map(l => `<a href="${escapeHtml(l.url)}" target="_blank" rel="noopener" class="mb-view-board-gallery-link">🔗 ${escapeHtml(l.label || l.url)}</a>`).join('');
+
+  const galleryEl = el('mbViewBoardGallery');
+  if (galleryEl) {
+    galleryEl.innerHTML = (imageTiles + videoTiles + linkTiles) ||
+      '<p style="color:var(--color-text-secondary); font-size:13px;">No images, videos, or links on this board yet.</p>';
+
+    // Full-size viewing/annotating is already handled by the existing
+    // image/video lightboxes - hand off to those rather than building a
+    // second viewer here.
+    galleryEl.querySelectorAll('.mb-view-board-gallery-img').forEach(img => {
+      img.addEventListener('click', () => {
+        closeViewBoardModal();
+        openAdminMoodBoardLightbox(id, parseInt(img.getAttribute('data-idx'), 10));
+      });
+    });
+    galleryEl.querySelectorAll('.mb-view-board-gallery-video').forEach(tile => {
+      tile.addEventListener('click', () => {
+        closeViewBoardModal();
+        openVideoLightbox(id, parseInt(tile.getAttribute('data-video-idx'), 10));
+      });
+    });
+  }
+
+  modal.style.display = 'flex';
+}
+
+function closeViewBoardModal() {
+  const modal = el('mbViewBoardModal');
+  if (modal) modal.style.display = 'none';
 }
 
 // ── Video lightbox (admin side) ──
@@ -1492,5 +1575,17 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.addEventListener('keydown', (e) => {
     if (overlay.style.display === 'flex' && e.key === 'Escape') closeVideoLightbox();
+  });
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  const overlay = el('mbViewBoardModal');
+  if (!overlay) return;
+  el('mbViewBoardClose')?.addEventListener('click', closeViewBoardModal);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeViewBoardModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (overlay.style.display === 'flex' && e.key === 'Escape') closeViewBoardModal();
   });
 });
