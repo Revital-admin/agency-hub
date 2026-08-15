@@ -285,6 +285,11 @@ async function handleMintFirebaseToken(request, env) {
   // return the token rather than blocking sign-in entirely over a
   // profile-field sync that isn't the actual security boundary
   // (firestore.rules keys off the token's email claim, not this field).
+  // TEMP DEBUG (Aug 2026): surfaced in the JSON response as
+  // _emailSyncDebug so it's visible in the browser's Network tab without
+  // needing Cloudflare Worker log access - remove once the idle-lock
+  // "not authorized" bug is confirmed fixed for real.
+  let _emailSyncDebug = null;
   try {
     const identityToken = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/identitytoolkit");
     const res = await fetch("https://identitytoolkit.googleapis.com/v1/accounts:update", {
@@ -298,9 +303,13 @@ async function handleMintFirebaseToken(request, env) {
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       console.error("accounts:update failed to sync admin account email:", errData);
+      _emailSyncDebug = { ok: false, status: res.status, error: errData };
+    } else {
+      _emailSyncDebug = { ok: true };
     }
   } catch (e) {
     console.error("Couldn't sync admin account email before minting token (proceeding anyway):", e);
+    _emailSyncDebug = { ok: false, threw: e.message };
   }
 
   try {
@@ -310,7 +319,7 @@ async function handleMintFirebaseToken(request, env) {
     // against whatever Firebase identity it already has cached, without
     // needing to decode the JWT itself - see the identity-recheck logic in
     // initAdminAuthGate in app.js.
-    return jsonResponse({ token, email: accessEmail }, 200, { "Cache-Control": "no-store" });
+    return jsonResponse({ token, email: accessEmail, _emailSyncDebug }, 200, { "Cache-Control": "no-store" });
   } catch (e) {
     console.error("Custom token mint failed:", e);
     return jsonResponse({ error: "Token mint failed: " + e.message }, 500);
