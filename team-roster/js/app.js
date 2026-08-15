@@ -1677,7 +1677,7 @@ async function performSendAgreement() {
   }
 }
 
-const FORM_FIELDS = ['memberName', 'role', 'employmentType', 'email', 'startDate', 'currentClientCount', 'maxClientCount', 'weeklyCapacityHours', 'notes', 'insuranceExpirationDate', 'hourlyRate', 'bookingTitle', 'specialtyKeywords'];
+const FORM_FIELDS = ['memberName', 'role', 'employmentType', 'email', 'startDate', 'currentClientCount', 'maxClientCount', 'weeklyCapacityHours', 'notes', 'certifications', 'insuranceExpirationDate', 'hourlyRate', 'bookingTitle', 'specialtyKeywords'];
 
 // Shows/hides the Booking Page Title + Specialty Keywords fields alongside
 // the Bookable checkbox - same show/hide pattern as
@@ -1750,6 +1750,7 @@ function resetForm() {
   el('maxClientCount').value = '';
   el('weeklyCapacityHours').value = '';
   el('notes').value = '';
+  el('certifications').value = '';
   el('w9OnFile').checked = false;
   el('insuranceExpirationDate').value = '';
   el('bookableForCalls').checked = false;
@@ -1965,8 +1966,11 @@ function renderTable() {
     const bookableBadge = m.bookableForCalls
       ? `<div style="font-size:0.68rem; color:#f68d5f; margin-top:2px;">📅 Bookable for calls</div>`
       : '';
+    const certBadge = m.certifications
+      ? `<div style="font-size:0.68rem; color:var(--text-muted); margin-top:2px;" title="${escapeHtml(m.certifications)}">🎓 ${escapeHtml(m.certifications)}</div>`
+      : '';
     let rowHtml = `<tr>
-      <td class="client-cell">${escapeHtml(m.memberName)}${timeOffBadge}${onboardingBadge}${complianceBadge}${bookableBadge}</td>
+      <td class="client-cell">${escapeHtml(m.memberName)}${timeOffBadge}${onboardingBadge}${complianceBadge}${bookableBadge}${certBadge}</td>
       <td>${escapeHtml(m.role)}${isContractor ? ' <span class="section-tag" style="margin-left:4px;">Contractor</span>' : ''}</td>
       <td>${escapeHtml(m.employmentType)}</td>
       <td>${hubAccessBadge(m)}</td>

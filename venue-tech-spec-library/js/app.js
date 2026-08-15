@@ -90,7 +90,7 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-const FORM_FIELDS = ['venueName', 'address', 'contactName', 'contactPhone', 'networkAvailability', 'lastUsedDate', 'power', 'rigging', 'loadIn', 'notes'];
+const FORM_FIELDS = ['venueName', 'address', 'contactName', 'contactPhone', 'networkAvailability', 'lastUsedDate', 'power', 'rigging', 'loadIn', 'permits', 'notes'];
 
 function resetForm() {
   editingId = null;
@@ -207,8 +207,9 @@ function renderTable() {
               ${entry.loadIn ? `<pre>${escapeHtml(entry.loadIn)}</pre>` : `<p class="empty-hint">Not logged yet.</p>`}
             </div>
           </div>
-          ${entry.networkAvailability || entry.notes ? `<div class="detail-row-inner" style="padding-top:0;">
+          ${entry.networkAvailability || entry.permits || entry.notes ? `<div class="detail-row-inner" style="padding-top:0;">
             ${entry.networkAvailability ? `<div class="detail-panel"><h4>Network / Wi-Fi</h4><pre>${escapeHtml(entry.networkAvailability)}</pre></div>` : ''}
+            ${entry.permits ? `<div class="detail-panel"><h4>Permits Required</h4><pre>${escapeHtml(entry.permits)}</pre></div>` : ''}
             ${entry.notes ? `<div class="detail-panel"><h4>Notes</h4><pre>${escapeHtml(entry.notes)}</pre></div>` : ''}
           </div>` : ''}
         </td>
