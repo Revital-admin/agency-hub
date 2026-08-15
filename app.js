@@ -7707,19 +7707,26 @@ function ensureClientPortalListeners() {
         } catch (e) {}
         // A client rating/viewing a board is the one piece of this listener
         // that's specific to the Mood Board Builder tool itself (the admin's
-        // read-only feedback summary lives there, see renderStyleScaleMini) -
-        // reload it the same way tab-portal gets reloaded above, so a
-        // rating that comes in while that tab happens to be open shows up
-        // without needing a manual client-switch to force a re-render.
+        // read-only feedback summary lives there, see renderStyleScaleMini).
+        // This used to force an immediate refreshIframeTab("tab-moodboard")
+        // here, same as tab-portal above - but unlike Client Portal Manager
+        // (mostly a static reference view), Mood Board Builder is where an
+        // admin/designer is often actively dragging images, writing notes,
+        // or drawing annotations. A client merely OPENING their mood board
+        // to look at it - the single most common and least actionable of
+        // these three signals - was enough to yank a hard iframe reload out
+        // from under whoever was mid-edit, wiping any in-progress drag/typed
+        // state and flashing the tab blank. Confirmed Aug 2026 as "the mood
+        // board reload glitch." The admin notification bell above already
+        // surfaces every one of these events (pushAdminNotification calls
+        // earlier in this function) whether or not this tab happens to be
+        // open, so still flag it as needing fresh data next time it's
+        // actually (re)opened, but don't force that reload onto someone
+        // using it right now.
         if (changedMoodBoardViews || changedMoodBoardStyleFeedback || changedMoodBoardAnnotations) {
           try {
             if (typeof iframeNeedsReload !== "undefined" && iframeNeedsReload["tab-moodboard"] !== undefined) {
               iframeNeedsReload["tab-moodboard"] = true;
-              const activeTabBtn = document.querySelector(".nav-item-btn.active");
-              const activeTab = activeTabBtn ? activeTabBtn.getAttribute("data-tab") : "";
-              if (activeTab === "tab-moodboard" && activeClientName === name) {
-                refreshIframeTab("tab-moodboard");
-              }
             }
           } catch (e) {}
         }
