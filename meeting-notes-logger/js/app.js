@@ -45,6 +45,23 @@ function populateClientSelect() {
   });
 }
 
+// Pre-selects whichever client is active in the main Hub sidebar, same
+// pattern every other client-scoped tool uses (Brand Guidelines, ROI
+// Projector, Weekly Account Check-In, etc.) - without this, Meeting Notes
+// always opened on the blank "Select a client..." picker regardless of
+// which client workspace was already active, forcing a redundant reselect.
+function autoSelectActiveClient() {
+  if (!isEmbedded) return;
+  try {
+    const active = window.parent.getActiveClient && window.parent.getActiveClient();
+    const activeName = active && active.name;
+    const select = el('clientSelect');
+    if (activeName && Array.from(select.options).some(o => o.value === activeName)) {
+      select.value = activeName;
+    }
+  } catch (e) { /* CORS or not embedded - leave picker on "Select a client..." */ }
+}
+
 function renderState() {
   const clientName = el('clientSelect').value;
 
@@ -372,6 +389,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (window.initDismissibleCards) initDismissibleCards();
 
   populateClientSelect();
+  autoSelectActiveClient();
   el('clientSelect').addEventListener('change', renderState);
   el('addActionItemBtn').addEventListener('click', () => addActionItemRow());
   el('saveMeetingBtn').addEventListener('click', saveMeeting);
@@ -391,7 +409,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const hasClients = Object.keys(getClients()).length > 0;
     if (hasClients || clientPollAttempts > 30) {
       clearInterval(clientPoll);
-      if (hasClients) populateClientSelect();
+      if (hasClients) {
+        populateClientSelect();
+        autoSelectActiveClient();
+        renderState();
+      }
     }
   }, 250);
 });
