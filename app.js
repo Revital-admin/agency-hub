@@ -4116,14 +4116,19 @@ async function syncAccountManagerToOnboardingHandoff(clientName, amEmail) {
 // "current client count" per person, which drifts stale the moment
 // someone's caseload actually changes. Every client already carries a
 // real assignment though - portalConfig.accountManagerEmail (set in
-// Client Portal Manager, used to sign welcome/portal emails) - so for
-// anyone whose role is literally "Account Manager" we can compute their
-// real live caseload instead of trusting a stale number. Non-AM roles
-// (Video Editor, Designer, etc.) have no equivalent per-client
-// assignment field in this data model, so they still fall back to the
-// manual count in Team Roster's own render logic.
+// Client Portal Manager, used to sign welcome/portal emails) - so we
+// compute anyone's real live caseload from that field directly: whoever's
+// actually entered as the Account Manager on a client is what should
+// count, not whatever their Team Roster role field happens to say
+// (confirmed Aug 2026 - Ronald is genuinely the assigned AM on a client
+// despite his Team Roster role being "Leadership", and the roster's
+// expandable client list should reflect the real assignment either way).
+// Keyed by email for every roster member with one; Team Roster's own
+// render logic (getEffectiveLoad) only treats a member as "live" once
+// they actually turn up here with a match, so someone never entered as
+// any client's AM just falls back to their manual count same as before.
 //
-// Returns a map keyed by lowercased AM email -> { member, clientNames }.
+// Returns a map keyed by lowercased email -> { member, clientNames }.
 // Used by both Team Roster (to render live load + the expandable client
 // list) and Client Portal Manager (to warn if the AM you just typed in
 // is already stretched thin) - built once, shared, rather than
@@ -4139,7 +4144,6 @@ async function getAccountManagerCapacitySnapshot() {
 
     const byEmail = {};
     members.forEach(m => {
-      if (m.role !== "Account Manager") return;
       const email = (m.email || "").trim().toLowerCase();
       if (!email) return;
       byEmail[email] = { member: m, clientNames: [] };

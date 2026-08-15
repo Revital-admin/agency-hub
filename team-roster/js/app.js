@@ -280,21 +280,29 @@ async function refreshCapacitySnapshot() {
 }
 
 // Returns the number that should actually drive the capacity bar/bucket
-// for this member: live-computed for Account Managers (real assigned
-// clients), live-computed from actual logged hours for any other role
-// that's opted in with a weeklyCapacityHours value, or falling back to
-// the manually-typed client count otherwise. { clientNames: null } means
-// "not live" - Team Roster's stale-data caption only applies to that
-// manual branch. `unit` tells renderTable whether to label the bar in
-// clients or hours.
+// for this member: live-computed from real assigned clients (see
+// getAccountManagerCapacitySnapshot in the parent Hub's app.js -
+// portalConfig.accountManagerEmail matched by email, whatever this
+// member's Team Roster role field says - whoever's actually entered as
+// the AM on a client is what counts), live-computed from actual logged
+// hours for anyone else who's opted in with a weeklyCapacityHours value,
+// or falling back to the manually-typed client count otherwise.
+// { clientNames: null } means "not live" - Team Roster's stale-data
+// caption only applies to that manual branch. `unit` tells renderTable
+// whether to label the bar in clients or hours.
 function getEffectiveLoad(entry) {
   const max = parseInt(entry.maxClientCount) || 0;
-  if (entry.role === "Account Manager") {
-    const email = (entry.email || "").trim().toLowerCase();
-    if (email) {
-      const rec = amCapacitySnapshot[email];
-      const clientNames = rec ? rec.clientNames : [];
-      return { current: clientNames.length, max, isLive: true, clientNames, unit: 'clients' };
+  const email = (entry.email || "").trim().toLowerCase();
+  if (email) {
+    const rec = amCapacitySnapshot[email];
+    // Only treat this as the live AM branch if they're actually assigned
+    // at least one client, OR their role is explicitly "Account Manager"
+    // (so a dedicated AM with a genuinely empty caseload still shows
+    // "0 / max" live instead of silently falling through to the stale
+    // manual count below). Anyone else with zero assigned clients here
+    // just falls through, same as before this change.
+    if (rec && (rec.clientNames.length > 0 || entry.role === "Account Manager")) {
+      return { current: rec.clientNames.length, max, isLive: true, clientNames: rec.clientNames, unit: 'clients' };
     }
   }
 
