@@ -837,6 +837,14 @@ function applyTeamAccessRestrictions(allowedSections) {
   // this may re-fire later if teamAccess changes) - re-filter now either way.
   try { renderAdminNotifications(); } catch (e) {}
 
+  // Sidebar footer label - "Admin Tools" for full-access accounts (who
+  // see all 9 buttons in it, 6 of them genuinely admin-only), plain
+  // "Tools" for restricted accounts (who only ever see the 3 universal
+  // Export/Import/Delete buttons there, never the admin-only ones - see
+  // the individual footer-button gating a few lines below).
+  const footerLabelEl = document.querySelector('.sidebar-footer-label');
+  if (footerLabelEl) footerLabelEl.textContent = allowedSections ? 'Tools' : 'Admin Tools';
+
   const navSections = document.querySelectorAll('.nav-section[data-section]');
   let activeItemHidden = false;
 
