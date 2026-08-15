@@ -27,6 +27,20 @@ function generateSecureToken(length = 32) {
 const ADMIN_EMAIL_DOMAIN = "revitalproductions.com";
 let firebaseAuthReady = false;
 
+// Hoisted out of initAdminAuthGate (was a closure-local `let` there) so
+// finishIdleUnlockAfterPin, below, can reset it. Without that reset, this
+// flag latched true on the FIRST onAuthStateChanged fire of the page's
+// life and stayed true forever after - including through every future
+// idle-lock unlock. That meant ensureCorrectFirebaseIdentity's real
+// Access-vs-Firebase reconciliation (the whole point of this flag - see
+// the comment above ensureCorrectFirebaseIdentity) only ever ran once per
+// page load, then silently no-op'd on every later auth-state change. A
+// PIN unlock's own signInWithCustomToken call (finishIdleUnlockAfterPin,
+// below) fires onAuthStateChanged again, and that re-fire was exactly the
+// moment this reconciliation should have been re-checking whether Access
+// still agrees on identity - instead it was skipped every time.
+let identityCheckDone = false;
+
 function initAdminAuthGate() {
   if (!window.firebase || !firebase.auth) {
     console.warn("Firebase Auth SDK not loaded; skipping auth gate.");
@@ -84,7 +98,6 @@ function initAdminAuthGate() {
   // Access permissions, not the new visitor's. Now this check (and the
   // re-sign-in it triggers when the two disagree) runs on every load,
   // returning visit or not.
-  let identityCheckDone = false;
   async function ensureCorrectFirebaseIdentity(currentUser) {
     if (identityCheckDone) {
       // Second time through in this same page load - this is the
@@ -466,6 +479,11 @@ async function finishIdleUnlockAfterPin() {
     if (!res.ok || !data.token) {
       throw new Error((data && data.error) || "Could not sign you back in");
     }
+    // Reset before redeeming the token so the onAuthStateChanged fire this
+    // triggers runs a real ensureCorrectFirebaseIdentity check again,
+    // instead of the stale-true flag silently skipping it (see comment at
+    // the top of the file where identityCheckDone is declared).
+    identityCheckDone = false;
     await firebase.auth().signInWithCustomToken(data.token);
 
     idleLocked = false;
