@@ -149,7 +149,7 @@ service cloud.firestore {
         'timelineTemplates': 'account-ops',
         'coldOutreachSequences': 'sales-pipeline',
         'contractInvoices': 'sales-pipeline',
-        'ownMarketing': 'sales-pipeline',
+        'ownMarketing': 'content-creation',
         'packagePresets': 'sales-pipeline',
         'proposalFollowUps': 'sales-pipeline',
         'salesPipeline': 'sales-pipeline',
