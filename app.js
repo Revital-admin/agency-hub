@@ -4915,11 +4915,6 @@ function fetchCloudflareProfile() {
           const username = data.email.split('@')[0];
           // Capitalize first letter
           displayName = username.charAt(0).toUpperCase() + username.slice(1);
-
-          // Force 'Ronald' to show as 'Admin'
-          if (displayName.toLowerCase() === 'ronald') {
-            displayName = 'Admin';
-          }
         }
 
         if (userEmailEl) userEmailEl.textContent = displayName;
