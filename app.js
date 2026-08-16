@@ -7956,7 +7956,19 @@ function applyRestrictedClientsDbSnapshot(data) {
     activeClientName = Object.keys(clientsDb)[0] || "";
   }
   buildClientDropdown();
-  refreshAllViews();
+  // Same reasoning as rebuildClientsDbFromShards' identical fix on the
+  // unrestricted path (see refreshAllViews' comment) - this is the
+  // restricted-teammate sync path (polled every 60s via
+  // fetchRestrictedClientsDbSnapshot, plus right after this device's own
+  // save - see the call site above commitRestrictedClientEdits), and it
+  // was missed the first time around: only rebuildClientsDbFromShards got
+  // fixed, not this. Confirmed Aug 2026 - Ronald still saw Mood Board
+  // Builder force-reload while just watching Juan work, because Ronald
+  // has a Team Access role assignment (making him "restricted" in the
+  // data-sync sense, even though that role now grants him nearly every
+  // section) and so runs through THIS function, not
+  // rebuildClientsDbFromShards.
+  refreshAllViews({ skipActiveIframeReload: true });
   renderDashboard();
 }
 
