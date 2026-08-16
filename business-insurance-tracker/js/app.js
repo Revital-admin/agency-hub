@@ -8,9 +8,10 @@
    are financial info nobody else should be able to see.
 
    This tracks REVITAL PRODUCTIONS' OWN business insurance policies -
-   General Liability, Errors & Omissions (E&O), Equipment/Inland Marine,
-   Cyber Liability. It is NOT contractor/vendor insurance - that's the
-   insuranceExpirationDate field on Team Roster, which tracks whether a
+   General Liability, Workers' Compensation, Errors & Omissions (E&O),
+   Equipment/Inland Marine, Cyber Liability. It is NOT contractor/vendor
+   insurance - that's the insuranceExpirationDate field on Team Roster,
+   which tracks whether a
    contractor has their own liability coverage on file with us. Confirmed
    gap before building this: nothing in the Hub or QuickBooks tracked
    carrier/policy number/coverage/premium/renewal for Revital's own
