@@ -116,6 +116,17 @@ export default {
       return handleResourceBookingCalendarSync(request, env);
     }
 
+    // Auto-builds a new client's Google Drive folder tree, matching the
+    // "_CLIENT TEMPLATE (duplicate for new clients)" folder's layout in the
+    // "Clients Assets" Shared Drive - fired from createNewClient() in app.js
+    // the same way generateNewClientOnboardingEmails already is (fire-and-
+    // forget, non-fatal if it fails). See handleCreateClientDriveFolder
+    // below for the required Workspace Admin prerequisite (Drive scope
+    // domain-wide delegation) this depends on.
+    if (url.pathname === "/api/create-client-drive-folder" && request.method === "POST") {
+      return handleCreateClientDriveFolder(request, env);
+    }
+
     // Contractor Portal - deliberately no Cf-Access check, since this has
     // to work for someone with no revitalproductions.com account at all,
     // holding only their own magic-link token. Unlike /api/booking/* above,
@@ -2210,6 +2221,102 @@ async function deleteBookingCalendarEvent(env, { calendarEventId }) {
   if (!res.ok && res.status !== 404 && res.status !== 410) {
     const data = await res.json().catch(() => ({}));
     throw new Error((data.error && data.error.message) || `Booking calendar delete failed (${res.status})`);
+  }
+}
+
+// ── POST /api/create-client-drive-folder ──
+// Auto-builds a new client's Google Drive folder structure inside the
+// "Clients Assets" Shared Drive, matching the layout of the
+// "_CLIENT TEMPLATE (duplicate for new clients)" folder (mapped by hand
+// Aug 2026 - there's no API way to "duplicate" a Shared Drive folder
+// tree, so the structure is just hardcoded below).
+//
+// PREREQUISITE (not yet done as of Aug 2026): the GOOGLE_SERVICE_ACCOUNT_KEY
+// service account (same one used for calendar impersonation - see
+// getGoogleAccessTokenForUser) needs the Drive scope added to its
+// domain-wide delegation in Google Workspace Admin Console -> Security ->
+// API Controls -> Domain-wide Delegation. Add this scope to the existing
+// client ID entry (alongside the datastore/calendar scopes already there):
+//   https://www.googleapis.com/auth/drive
+// Only a Workspace Super Admin can do this - it can't be done from code.
+// Until then, this route will fail with an insufficient-scope error from
+// Google, which is caught below and returned as a normal error response
+// (non-fatal to client creation either way - see createClientDriveFolder
+// in app.js).
+const CLIENTS_ASSETS_SHARED_DRIVE_ID = "0AJh-IlwVqRlzUk9PVA";
+
+// Mirrors "_CLIENT TEMPLATE (duplicate for new clients)" exactly, as
+// mapped out folder-by-folder in the live Shared Drive.
+const CLIENT_DRIVE_FOLDER_TEMPLATE = [
+  { name: "Contracts & Onboarding", children: ["Signed Contracts", "Proposals", "Intake Form", "Renewals & Amendments"] },
+  { name: "Client-Submitted Files", children: [] },
+  { name: "Client Brand Assets", children: ["Logos", "Brand Guidelines", "Fonts", "Reference & Past Campaigns"] },
+  { name: "Final Deliverables", children: ["Ad Creative", "Videos", "Graphics", "Edited Photos"] },
+  { name: "Monthly Reports", children: [] }
+];
+
+async function createDriveFolder(accessToken, name, parentId) {
+  const res = await fetch("https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id,webViewLink", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      name,
+      mimeType: "application/vnd.google-apps.folder",
+      parents: [parentId]
+    })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data.error && data.error.message) || `Drive folder create failed (${res.status}) for "${name}"`);
+  }
+  return data; // { id, webViewLink }
+}
+
+async function handleCreateClientDriveFolder(request, env) {
+  const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+
+  const clientName = (payload && payload.clientName || "").trim();
+  if (!clientName) {
+    return jsonResponse({ error: "clientName is required" }, 400);
+  }
+
+  try {
+    // Impersonates the same Workspace account already used for calendar
+    // booking (TEAM_CALENDAR_OWNER_EMAIL) - that account has access to
+    // the Clients Assets Shared Drive, so its identity is what the
+    // created folders' Drive activity log will show as the creator.
+    const accessToken = await getGoogleAccessTokenForUser(env, "https://www.googleapis.com/auth/drive", TEAM_CALENDAR_OWNER_EMAIL);
+
+    const clientFolder = await createDriveFolder(accessToken, clientName, CLIENTS_ASSETS_SHARED_DRIVE_ID);
+
+    for (const section of CLIENT_DRIVE_FOLDER_TEMPLATE) {
+      const sectionFolder = await createDriveFolder(accessToken, section.name, clientFolder.id);
+      for (const childName of section.children) {
+        await createDriveFolder(accessToken, childName, sectionFolder.id);
+      }
+    }
+
+    return jsonResponse({
+      ok: true,
+      folderId: clientFolder.id,
+      folderUrl: clientFolder.webViewLink || `https://drive.google.com/drive/folders/${clientFolder.id}`
+    }, 200, { "Cache-Control": "no-store" });
+  } catch (e) {
+    console.error("Create client Drive folder failed:", e);
+    return jsonResponse({ error: e.message }, 500);
   }
 }
 

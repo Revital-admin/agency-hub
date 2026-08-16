@@ -1543,6 +1543,7 @@ function createNewClient() {
   showBanner("success", `Client workspace "${name}" initialized successfully!`);
   logAdminActivity("Client created", name);
   generateNewClientOnboardingEmails(clientsDb[name], name).catch(e => console.warn("Could not draft onboarding emails:", e));
+  createClientDriveFolder(name).catch(e => console.warn("Could not auto-create Drive folder:", e));
 }
 
 function renameActiveClient() {
@@ -6398,6 +6399,37 @@ async function generateNewClientOnboardingEmails(client, name) {
       { to: contactEmail, subject: intakeTpl.subjectLine, body: body }
     );
   }
+}
+
+// ── Auto-Provision Client Drive Folder ──
+// Fired right after a new client workspace is created, same fire-and-
+// forget/non-fatal pattern as generateNewClientOnboardingEmails just
+// above (if this fails, the client still exists fine - the Drive Folder
+// field in Client Portal Manager just stays blank for the old manual-
+// paste workflow). Calls the Worker route that builds the folder tree
+// inside the "Clients Assets" Shared Drive to match the "_CLIENT
+// TEMPLATE (duplicate for new clients)" layout - see
+// handleCreateClientDriveFolder in _worker.js for the folder structure
+// and the Workspace Admin prerequisite (Drive scope domain-wide
+// delegation) it depends on.
+async function createClientDriveFolder(name) {
+  const res = await fetch("/api/create-client-drive-folder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ clientName: name })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.folderUrl) {
+    throw new Error(data.error || `Request failed (${res.status})`);
+  }
+
+  const client = clientsDb[name];
+  if (!client) return; // renamed/deleted before this resolved
+  if (!client.portalConfig) client.portalConfig = {};
+  client.portalConfig.driveFolderUrl = data.folderUrl;
+  saveDatabase();
+  refreshAllViews({ skipActiveIframeReload: true });
+  pushAdminNotification('client_drive_folder', `Google Drive folder created for ${name}.`, name, null);
 }
 
 // Slow-moving signal, so this only needs to run occasionally rather than on
