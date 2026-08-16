@@ -7872,7 +7872,14 @@ function startUnrestrictedClientsDbSync() {
           activeClientName = Object.keys(clientsDb)[0] || "";
         }
         buildClientDropdown();
-        refreshAllViews();
+        // This branch only runs once per install (old-format migration or
+        // brand-new setup) - see comment below. Matches the
+        // skipActiveIframeReload fix applied everywhere else a remote
+        // snapshot can repaint clientsDb, for consistency even though this
+        // path can't realistically hit the "someone else editing while I
+        // watch" scenario (there's no shard data yet for anyone to be
+        // watching).
+        refreshAllViews({ skipActiveIframeReload: true });
         renderDashboard();
       }
       // Writes the migrated (or first-ever, brand-new-install) state
