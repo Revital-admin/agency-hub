@@ -812,7 +812,9 @@ function moveToProductionBoard(id) {
     productionNotes: "",
     assignee: "",
     priority: "Medium",
-    movedAt: new Date().toISOString()
+    targetDate: "",
+    movedAt: new Date().toISOString(),
+    lastActivityAt: new Date().toISOString()
   });
 
   client.moodBoards = client.moodBoards.filter(b => b.id !== id);

@@ -74,7 +74,7 @@
 
   <!-- Central references and Application State Controller -->
   <script src="data-store.js?v=3"></script>
-  <script src="app.js?v=116"></script>
+  <script src="app.js?v=118"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
 </head>
@@ -1054,6 +1054,28 @@
             </div>
             <div class="tool-card-actions">
               <button class="btn-card-go" data-go="tab-moodboard">Go to Mood Board Builder &rarr;</button>
+            </div>
+          </div>
+
+          <!-- Production Board: agency-wide, same shape as Mood Boards
+               Awaiting Feedback above - counts every item across every
+               client's productionBoard that's overdue (past its
+               targetDate) or stuck (no activity in
+               PRODUCTION_BOARD_STUCK_DAYS_THRESHOLD+ days). See
+               renderProductionBoardAttention in app.js. -->
+          <div class="tool-progress-card">
+            <div class="tool-card-header">
+              <span class="tool-card-title">Production Board</span>
+              <div class="tool-card-icon-wrap icon-purple">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="10" x2="21" y2="10"></line><line x1="8" y1="14" x2="14" y2="14"></line></svg>
+              </div>
+            </div>
+            <div class="tool-card-stat">
+              <div id="dashProductionBoardVal" class="tool-stat-value">0</div>
+              <div id="dashProductionBoardDesc" class="tool-stat-desc">nothing overdue or stuck</div>
+            </div>
+            <div class="tool-card-actions">
+              <button class="btn-card-go" data-go="tab-productionboard">Go to Production Board &rarr;</button>
             </div>
           </div>
 

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Production Board</title>
 <link rel="stylesheet" href="../style.css?v=2">
-<link rel="stylesheet" href="css/style.css?v=5">
+<link rel="stylesheet" href="css/style.css?v=7">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
 </head>
 <body>
@@ -26,7 +26,11 @@
 </header>
 
 <div class="step-card">
-<div class="form-group" style="margin:0; max-width:320px;">
+<div class="pb-view-toggle">
+<button type="button" class="pb-view-btn active" id="viewModeSingleBtn">By Client</button>
+<button type="button" class="pb-view-btn" id="viewModeAllBtn">All Clients</button>
+</div>
+<div class="form-group" id="clientSelectGroup" style="margin:0; max-width:320px;">
 <label for="clientSelect">Client</label>
 <select id="clientSelect"><option value="">Select a client...</option></select>
 </div>
@@ -38,12 +42,42 @@ Choose a client above to see what's on the production board.
 
 <div id="productionInterface" style="display:none;">
 <div class="step-card">
+<div class="tracker-controls-row">
+<input type="text" id="filterSearchInput" placeholder="Search by title...">
+<select id="filterAssignee"><option value="">All assignees</option></select>
+<select id="filterPriority">
+<option value="">All priorities</option>
+<option>High</option>
+<option>Medium</option>
+<option>Low</option>
+</select>
+<select id="sortBy">
+<option value="newest">Sort: Newest first</option>
+<option value="priority">Sort: Priority (High first)</option>
+<option value="dueDate">Sort: Due date (soonest first)</option>
+<option value="assignee">Sort: Assignee (A-Z)</option>
+</select>
+<label class="show-closed-toggle">
+<input type="checkbox" id="showCompletedToggle"> Show completed
+</label>
+</div>
+</div>
+
+<div class="step-card">
 <div class="section-title" style="margin-bottom: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
 <h2 style="font-family: var(--font-heading); color: var(--color-accent);">Production Board</h2>
 </div>
 <p style="font-size:13px; color:var(--color-text-secondary); margin: 0 0 16px;">Move an idea here from Mood Board Builder's "Move to Production Board" button - it disappears from Mood Boards and shows up here instead.</p>
 <div id="itemsList" class="prod-board-grid"></div>
-<p id="itemsEmptyState" class="empty-state" style="display:none;">Nothing on the production board right now.</p>
+<p id="itemsEmptyState" class="empty-state" style="display:none;">Nothing matches right now.</p>
+</div>
+
+<div id="completedSection" class="step-card" style="display:none;">
+<div class="section-title" style="margin-bottom: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent);">Completed</h2>
+</div>
+<div id="completedList" class="prod-board-grid"></div>
+<p id="completedEmptyState" class="empty-state" style="display:none;">Nothing marked complete yet.</p>
 </div>
 </div>
 
@@ -51,6 +85,6 @@ Choose a client above to see what's on the production board.
 
 </main>
 <script src="js/logo.js"></script>
-<script src="js/app.js?v=6"></script>
+<script src="js/app.js?v=8"></script>
 </body>
 </html>

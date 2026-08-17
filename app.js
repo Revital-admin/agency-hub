@@ -980,6 +980,7 @@ function boot() {
   renderSalesPipelineValue().catch(e => console.error("SalesPipelineValue Error:", e));
   renderWhosOutToday().catch(e => console.error("WhosOutToday Error:", e));
   try { renderMoodBoardsAwaitingFeedback(); } catch (e) { console.error("MoodBoardsAwaitingFeedback Error:", e); }
+  try { renderProductionBoardAttention(); } catch (e) { console.error("ProductionBoardAttention Error:", e); }
   renderNeedsAttention().catch(e => console.error("NeedsAttention Error:", e));
   renderLeadSourceRoi().catch(e => console.error("LeadSourceRoi Error:", e));
   // renderPhaseProgress() no longer needs a boot-time call here - it
@@ -1987,6 +1988,7 @@ function initTabNavigation() {
         renderSalesPipelineValue().catch(e => console.error("Error in renderSalesPipelineValue:", e));
         renderWhosOutToday().catch(e => console.error("Error in renderWhosOutToday:", e));
         try { renderMoodBoardsAwaitingFeedback(); } catch (e) { console.error("Error in renderMoodBoardsAwaitingFeedback:", e); }
+        try { renderProductionBoardAttention(); } catch (e) { console.error("Error in renderProductionBoardAttention:", e); }
         renderNeedsAttention().catch(e => console.error("Error in renderNeedsAttention:", e));
         renderLeadSourceRoi().catch(e => console.error("Error in renderLeadSourceRoi:", e));
       }
@@ -2310,6 +2312,55 @@ function renderMoodBoardsAwaitingFeedback() {
       descEl.textContent = `${staleCount} waiting ${MOODBOARD_AWAITING_DAYS_THRESHOLD}+ days`;
     } else {
       descEl.textContent = awaitingCount === 1 ? "board shared, no rating yet" : "boards shared, no rating yet";
+    }
+  }
+}
+
+// Same 7-day threshold production-board/js/app.js's own stuckBadge uses -
+// kept as a separate literal here for the same "each caller stays
+// self-contained" reason as MOODBOARD_AWAITING_DAYS_THRESHOLD above.
+const PRODUCTION_BOARD_STUCK_DAYS_THRESHOLD = 7;
+
+// Agency-wide, same shape as Sales Pipeline Value / Mood Boards Awaiting
+// Feedback above - scans every client's productionBoard for items that are
+// either overdue (targetDate has passed) or stuck (no lastActivityAt/
+// movedAt update in PRODUCTION_BOARD_STUCK_DAYS_THRESHOLD+ days), so
+// something falling behind shows up here without needing to open every
+// client one at a time in Production Board's own "By Client" view.
+function renderProductionBoardAttention() {
+  const valueEl = document.getElementById("dashProductionBoardVal");
+  const descEl = document.getElementById("dashProductionBoardDesc");
+  if (!valueEl) return;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  let overdueCount = 0;
+  let stuckCount = 0;
+  Object.values(clientsDb).forEach(client => {
+    if (!client || !Array.isArray(client.productionBoard)) return;
+    client.productionBoard.forEach(item => {
+      if (item.targetDate) {
+        const due = new Date(item.targetDate);
+        due.setHours(0, 0, 0, 0);
+        if (due < today) overdueCount++;
+      }
+      const lastActive = item.lastActivityAt || item.movedAt;
+      const days = lastActive ? Math.floor((Date.now() - new Date(lastActive).getTime()) / 86400000) : null;
+      if (days !== null && days >= PRODUCTION_BOARD_STUCK_DAYS_THRESHOLD) stuckCount++;
+    });
+  });
+
+  const total = overdueCount + stuckCount;
+  valueEl.textContent = String(total);
+  if (descEl) {
+    if (total === 0) {
+      descEl.textContent = "nothing overdue or stuck";
+    } else {
+      const parts = [];
+      if (overdueCount > 0) parts.push(`${overdueCount} overdue`);
+      if (stuckCount > 0) parts.push(`${stuckCount} stuck`);
+      descEl.textContent = parts.join(", ");
     }
   }
 }
@@ -5526,6 +5577,7 @@ const CLIENT_FIELD_SECTIONS_MIRROR = {
 
   brandKit: "content-creation", moodBoards: "content-creation",
   productionBoard: "content-creation",
+  productionBoardCompleted: "content-creation",
   moodBoardViews: "content-creation", moodBoardStyleFeedback: "content-creation",
   moodBoardAnnotations: "content-creation", brandRoadmap: "content-creation",
   copywriting: "content-creation", creativeBrief: "content-creation",
