@@ -810,11 +810,20 @@ function moveToProductionBoard(id) {
     internalNotes: board.internalNotes,
     embedLinks: board.embedLinks || [],
     productionNotes: "",
+    assignee: "",
+    priority: "Medium",
     movedAt: new Date().toISOString()
   });
 
   client.moodBoards = client.moodBoards.filter(b => b.id !== id);
   persist();
+  // Production Board's iframe may already be loaded from earlier in this
+  // session and won't re-fetch data on its own - flag it so the next time
+  // someone clicks into that tab it does a fresh reload instead of showing
+  // stale content until a full app reload.
+  if (isEmbedded && window.parent.iframeNeedsReload) {
+    window.parent.iframeNeedsReload["tab-productionboard"] = true;
+  }
   if (editingBoardId === id) resetForm();
   renderBoardsList();
   if (isEmbedded && window.parent.showBanner) {

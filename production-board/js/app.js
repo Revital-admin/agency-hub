@@ -103,9 +103,35 @@ function formatDate(iso) {
 // category means the same thing on both boards.
 const CATEGORY_OPTIONS = ['Website Design', 'Social Post', 'Ad Campaign', 'Video/Reel', 'Print', 'Email', 'Other'];
 
+const PRIORITY_OPTIONS = ['Low', 'Medium', 'High'];
+
 // Tracks which item (if any) is currently showing its edit form instead of
 // the read-only card. Only one item can be in edit mode at a time.
 let editingItemId = null;
+
+// Team Roster names for the "who's working on this" assignee field - same
+// shared-parent-helper pattern Resource Booking Calendar and Hours Tracker
+// use, rather than a hardcoded name list, so it stays in sync with whoever
+// is actually on Team Roster.
+let teamMembers = [];
+
+async function loadTeamMembers() {
+  teamMembers = (isEmbedded && typeof window.parent.getTeamRosterMembers === 'function')
+    ? await window.parent.getTeamRosterMembers()
+    : [];
+  populateAssigneeDatalist();
+}
+
+function populateAssigneeDatalist() {
+  const list = el('assigneeOptions');
+  if (!list) return;
+  list.innerHTML = '';
+  teamMembers.map(m => m.memberName).filter(Boolean).sort().forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    list.appendChild(opt);
+  });
+}
 
 function renderState() {
   const clientName = currentClientName();
@@ -154,6 +180,12 @@ function renderItemsList() {
   });
 }
 
+function priorityBadge(priority) {
+  const p = priority || 'Medium';
+  const cls = p === 'High' ? 'prod-priority-high' : p === 'Low' ? 'prod-priority-low' : 'prod-priority-medium';
+  return `<span class="prod-priority-badge ${cls}">${escapeHtml(p)} priority</span>`;
+}
+
 function viewCardTemplate(item) {
   return `
     <div class="prod-card">
@@ -162,6 +194,8 @@ function viewCardTemplate(item) {
           <strong>${escapeHtml(item.title)}</strong>
           <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
             <span class="prod-category-badge">${escapeHtml(item.category || 'Other')}</span>
+            ${priorityBadge(item.priority)}
+            <span class="prod-meta">${item.assignee ? `Assigned to ${escapeHtml(item.assignee)}` : 'Unassigned'}</span>
             <span class="prod-meta">Moved to the board ${formatDate(item.movedAt)}</span>
           </div>
         </div>
@@ -177,7 +211,7 @@ function viewCardTemplate(item) {
       ${item.internalNotes ? `<p class="prod-body-text"><strong>Internal notes:</strong> ${escapeHtml(item.internalNotes)}</p>` : ''}
       <div class="prod-notes-wrap">
         <label for="prodNotes-${item.id}">Production notes</label>
-        <textarea id="prodNotes-${item.id}" rows="2" data-id="${item.id}" placeholder="Status, blockers, who's on it...">${escapeHtml(item.productionNotes || '')}</textarea>
+        <textarea id="prodNotes-${item.id}" rows="4" data-id="${item.id}" placeholder="Status, blockers, who's on it...">${escapeHtml(item.productionNotes || '')}</textarea>
       </div>
     </div>
   `;
@@ -190,27 +224,39 @@ function editCardTemplate(item) {
         <label for="edit-title-${item.id}">Title</label>
         <input type="text" id="edit-title-${item.id}" value="${escapeHtml(item.title)}">
       </div>
-      <div class="form-group">
-        <label for="edit-category-${item.id}">Category</label>
-        <select id="edit-category-${item.id}">
-          ${CATEGORY_OPTIONS.map(opt => `<option${opt === item.category ? ' selected' : ''}>${opt}</option>`).join('')}
-        </select>
+      <div class="prod-edit-row">
+        <div class="form-group">
+          <label for="edit-category-${item.id}">Category</label>
+          <select id="edit-category-${item.id}">
+            ${CATEGORY_OPTIONS.map(opt => `<option${opt === item.category ? ' selected' : ''}>${opt}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="edit-priority-${item.id}">Priority</label>
+          <select id="edit-priority-${item.id}">
+            ${PRIORITY_OPTIONS.map(opt => `<option${opt === (item.priority || 'Medium') ? ' selected' : ''}>${opt}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="edit-assignee-${item.id}">Assigned to</label>
+          <input type="text" id="edit-assignee-${item.id}" list="assigneeOptions" value="${escapeHtml(item.assignee || '')}" placeholder="Who's working on this?">
+        </div>
       </div>
       <div class="form-group">
         <label for="edit-summary-${item.id}">Idea summary</label>
-        <textarea id="edit-summary-${item.id}" rows="2">${escapeHtml(item.ideaSummary || '')}</textarea>
+        <textarea id="edit-summary-${item.id}" rows="3">${escapeHtml(item.ideaSummary || '')}</textarea>
       </div>
       <div class="form-group">
         <label for="edit-visual-${item.id}">Visual direction</label>
-        <textarea id="edit-visual-${item.id}" rows="2">${escapeHtml(item.visualDirection || '')}</textarea>
+        <textarea id="edit-visual-${item.id}" rows="3">${escapeHtml(item.visualDirection || '')}</textarea>
       </div>
       <div class="form-group">
         <label for="edit-elements-${item.id}">Key elements</label>
-        <textarea id="edit-elements-${item.id}" rows="2">${escapeHtml(item.keyElements || '')}</textarea>
+        <textarea id="edit-elements-${item.id}" rows="3">${escapeHtml(item.keyElements || '')}</textarea>
       </div>
       <div class="form-group">
         <label for="edit-internal-${item.id}">Internal notes</label>
-        <textarea id="edit-internal-${item.id}" rows="2">${escapeHtml(item.internalNotes || '')}</textarea>
+        <textarea id="edit-internal-${item.id}" rows="3">${escapeHtml(item.internalNotes || '')}</textarea>
       </div>
       <div class="prod-actions">
         <button class="save-edit-btn" data-id="${item.id}">Save Changes</button>
@@ -243,6 +289,8 @@ function saveEditItem(id) {
   }
   item.title = title;
   item.category = el(`edit-category-${id}`).value;
+  item.priority = el(`edit-priority-${id}`).value;
+  item.assignee = el(`edit-assignee-${id}`).value.trim();
   item.ideaSummary = el(`edit-summary-${id}`).value;
   item.visualDirection = el(`edit-visual-${id}`).value;
   item.keyElements = el(`edit-elements-${id}`).value;
@@ -300,6 +348,12 @@ function sendBackToMoodBoard(id) {
   });
   client.productionBoard = client.productionBoard.filter(i => i.id !== id);
   persist();
+  // Same stale-iframe issue as the forward move - flag Mood Board Builder's
+  // iframe so it re-fetches next time someone switches to that tab, instead
+  // of silently missing the item until a full app reload.
+  if (isEmbedded && window.parent.iframeNeedsReload) {
+    window.parent.iframeNeedsReload["tab-moodboard"] = true;
+  }
   renderItemsList();
   if (isEmbedded && window.parent.showBanner) {
     window.parent.showBanner('success', `"${item.title}" sent back to Mood Boards.`);
@@ -308,6 +362,7 @@ function sendBackToMoodBoard(id) {
 
 document.addEventListener('DOMContentLoaded', () => {
   populateClientSelect();
+  loadTeamMembers();
   el('clientSelect').addEventListener('change', renderState);
 
   // Same iframe-race fix used across the other client-aware modules: the
