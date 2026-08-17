@@ -784,6 +784,44 @@ function startEditBoard(id) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+// Hands a board off to the Production Board tool - carries over
+// everything the idea itself needs (title/category/summary/direction/
+// elements/internal notes/reference links), stamps a movedAt so
+// Production Board can show when it left here, and removes it from this
+// list entirely so it doesn't sit around looking like it's still just an
+// idea once someone's actually building it. See
+// production-board/js/app.js's sendBackToMoodBoard for the reverse move
+// if this was a mistake or the piece stalls.
+function moveToProductionBoard(id) {
+  const client = currentClient();
+  if (!client) return;
+  const board = (client.moodBoards || []).find(b => b.id === id);
+  if (!board) return;
+  if (!confirm(`Move "${board.title}" to the Production Board? It'll disappear from Mood Boards and show up there instead.`)) return;
+
+  if (!Array.isArray(client.productionBoard)) client.productionBoard = [];
+  client.productionBoard.unshift({
+    id: uid(),
+    title: board.title,
+    category: board.category,
+    ideaSummary: board.ideaSummary,
+    visualDirection: board.visualDirection,
+    keyElements: board.keyElements,
+    internalNotes: board.internalNotes,
+    embedLinks: board.embedLinks || [],
+    productionNotes: "",
+    movedAt: new Date().toISOString()
+  });
+
+  client.moodBoards = client.moodBoards.filter(b => b.id !== id);
+  persist();
+  if (editingBoardId === id) resetForm();
+  renderBoardsList();
+  if (isEmbedded && window.parent.showBanner) {
+    window.parent.showBanner('success', `"${board.title}" moved to the Production Board.`);
+  }
+}
+
 function removeBoard(id) {
   const client = currentClient();
   if (!client) return;
@@ -1004,6 +1042,7 @@ function renderBoardsList() {
         </div>
         <div class="board-actions">
           <button class="share-board-btn" data-id="${board.id}">${board.sharedWithClient ? 'Unshare' : 'Share with Client'}</button>
+          <button class="moveto-production-btn" data-id="${board.id}">Move to Production Board</button>
           <button class="view-board-btn" data-id="${board.id}">View</button>
           <button class="edit-board-btn" data-id="${board.id}">Edit</button>
           <button class="remove-board-btn" data-id="${board.id}">Delete</button>
@@ -1020,6 +1059,7 @@ function renderBoardsList() {
   document.querySelectorAll('.edit-board-btn').forEach(btn => btn.addEventListener('click', () => startEditBoard(btn.getAttribute('data-id'))));
   document.querySelectorAll('.remove-board-btn').forEach(btn => btn.addEventListener('click', () => removeBoard(btn.getAttribute('data-id'))));
   document.querySelectorAll('.share-board-btn').forEach(btn => btn.addEventListener('click', () => toggleShare(btn.getAttribute('data-id'))));
+  document.querySelectorAll('.moveto-production-btn').forEach(btn => btn.addEventListener('click', () => moveToProductionBoard(btn.getAttribute('data-id'))));
   document.querySelectorAll('.board-card-thumb[data-board-id]').forEach(img => {
     img.addEventListener('click', () => openAdminMoodBoardLightbox(img.getAttribute('data-board-id'), parseInt(img.getAttribute('data-idx'), 10)));
   });

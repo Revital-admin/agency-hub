@@ -3903,6 +3903,7 @@ const CLIENT_FIELD_SECTIONS = {
 
   brandKit: "content-creation",
   moodBoards: "content-creation",
+  productionBoard: "content-creation",
   moodBoardViews: "content-creation",
   moodBoardStyleFeedback: "content-creation",
   moodBoardAnnotations: "content-creation",

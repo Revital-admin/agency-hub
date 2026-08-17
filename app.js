@@ -1100,6 +1100,7 @@ let iframeNeedsReload = {
   // tabs fixed alongside these two.
   "tab-brandguidelines": true,
   "tab-moodboard": true,
+  "tab-productionboard": true,
   "tab-contentcalendar": true,
   "tab-emailcampaign": true,
   "tab-brandroadmap": true,
@@ -1892,6 +1893,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-moodboard":
       renderMoodBoard();
+      break;
+    case "tab-productionboard":
+      renderProductionBoard();
       break;
     case "tab-brandroadmap":
       renderBrandRoadmap();
@@ -3695,6 +3699,9 @@ function renderMeetingNotes() {
 }
 function renderMoodBoard() {
   setIframeAbsoluteSrc('#tab-moodboard iframe', "mood-board-builder/index.html");
+}
+function renderProductionBoard() {
+  setIframeAbsoluteSrc('#tab-productionboard iframe', "production-board/index.html");
 }
 function renderBrandRoadmap() {
   setIframeAbsoluteSrc('#tab-brandroadmap iframe', "brand-roadmap/index.html");
@@ -5518,6 +5525,7 @@ const CLIENT_FIELD_SECTIONS_MIRROR = {
   reportArchive: "reporting-health", report: "reporting-health",
 
   brandKit: "content-creation", moodBoards: "content-creation",
+  productionBoard: "content-creation",
   moodBoardViews: "content-creation", moodBoardStyleFeedback: "content-creation",
   moodBoardAnnotations: "content-creation", brandRoadmap: "content-creation",
   copywriting: "content-creation", creativeBrief: "content-creation",
