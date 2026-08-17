@@ -173,17 +173,39 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentTemplate = null;
   let currentPlainText = '';
 
-  function formatMonthValue(v) {
-    if (!v) return null;
-    const [y, m] = v.split('-').map(Number);
-    if (!y || !m) return null;
-    return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  // Month/Year and Month/Day fields are built from plain <select> dropdowns
+  // instead of native <input type="month"> / <input type="date"> pickers.
+  // Reason: Safari (desktop) and Firefox do not support type="month" at all
+  // - it silently falls back to a plain text box with no picker and no
+  // format enforcement. A user typing a month there in any format other
+  // than the exact "YYYY-MM" the browser expects internally produces an
+  // input.value the old parser couldn't read, so the segment silently
+  // stayed as "[Month Year]" and that's what got copied into ClickUp. This
+  // is what Juan hit. Dropdowns sidestep browser support entirely - same
+  // behavior in every browser, and it's not possible to enter a malformed
+  // value.
+  const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  function monthOptionsHtml() {
+    return '<option value="">Month</option>' + MONTH_NAMES.map((name, i) => `<option value="${i + 1}">${name}</option>`).join('');
   }
-  function formatDateValue(v) {
-    if (!v) return null;
-    const [y, m, d] = v.split('-').map(Number);
-    if (!y || !m || !d) return null;
-    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+  function yearOptionsHtml() {
+    const current = new Date().getFullYear();
+    const years = [current - 1, current, current + 1, current + 2];
+    return '<option value="">Year</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+  }
+  function dayOptionsHtml() {
+    let opts = '<option value="">Day</option>';
+    for (let d = 1; d <= 31; d++) opts += `<option value="${d}">${d}</option>`;
+    return opts;
+  }
+  function formatMonthYear(m, y) {
+    if (!m || !y) return null;
+    return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }
+  function formatMonthDay(m, d) {
+    if (!m || !d) return null;
+    return new Date(2000, Number(m) - 1, Number(d)).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
   }
 
   function populateListSelect() {
@@ -206,7 +228,25 @@ document.addEventListener('DOMContentLoaded', () => {
     dynamicFields.innerHTML = currentTemplate.segments
       .map((seg, i) => {
         if (seg.type === 'fixed') return '';
-        const inputType = seg.type === 'month' ? 'month' : seg.type === 'date' ? 'date' : seg.type === 'roundnum' ? 'number' : 'text';
+        if (seg.type === 'month') {
+          return `<div class="form-group">
+            <label for="seg-${i}-month">${seg.label}</label>
+            <div class="month-year-row">
+              <select id="seg-${i}-month" data-seg-index="${i}" data-part="month">${monthOptionsHtml()}</select>
+              <select id="seg-${i}-year" data-seg-index="${i}" data-part="year">${yearOptionsHtml()}</select>
+            </div>
+          </div>`;
+        }
+        if (seg.type === 'date') {
+          return `<div class="form-group">
+            <label for="seg-${i}-month">${seg.label}</label>
+            <div class="month-year-row">
+              <select id="seg-${i}-month" data-seg-index="${i}" data-part="month">${monthOptionsHtml()}</select>
+              <select id="seg-${i}-day" data-seg-index="${i}" data-part="day">${dayOptionsHtml()}</select>
+            </div>
+          </div>`;
+        }
+        const inputType = seg.type === 'roundnum' ? 'number' : 'text';
         const placeholder = seg.placeholder ? ` placeholder="${seg.placeholder}"` : '';
         return `<div class="form-group">
           <label for="seg-${i}">${seg.label}</label>
@@ -214,8 +254,9 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>`;
       }).join('');
 
-    dynamicFields.querySelectorAll('input').forEach(input => {
-      input.addEventListener('input', generateName);
+    dynamicFields.querySelectorAll('input, select').forEach(field => {
+      field.addEventListener('input', generateName);
+      field.addEventListener('change', generateName);
     });
 
     generateName();
@@ -225,16 +266,20 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!currentTemplate) return;
     const parts = currentTemplate.segments.map((seg, i) => {
       if (seg.type === 'fixed') return { text: seg.value, filled: true };
-      const input = dynamicFields.querySelector(`[data-seg-index="${i}"]`);
-      const raw = input ? input.value : '';
       if (seg.type === 'month') {
-        const formatted = formatMonthValue(raw);
+        const monthSel = dynamicFields.querySelector(`[data-seg-index="${i}"][data-part="month"]`);
+        const yearSel = dynamicFields.querySelector(`[data-seg-index="${i}"][data-part="year"]`);
+        const formatted = formatMonthYear(monthSel ? monthSel.value : '', yearSel ? yearSel.value : '');
         return formatted ? { text: formatted, filled: true } : { text: `[${seg.label}]`, filled: false };
       }
       if (seg.type === 'date') {
-        const formatted = formatDateValue(raw);
+        const monthSel = dynamicFields.querySelector(`[data-seg-index="${i}"][data-part="month"]`);
+        const daySel = dynamicFields.querySelector(`[data-seg-index="${i}"][data-part="day"]`);
+        const formatted = formatMonthDay(monthSel ? monthSel.value : '', daySel ? daySel.value : '');
         return formatted ? { text: formatted, filled: true } : { text: `[${seg.label}]`, filled: false };
       }
+      const input = dynamicFields.querySelector(`[data-seg-index="${i}"]`);
+      const raw = input ? input.value : '';
       if (seg.type === 'roundnum') {
         return raw ? { text: `Round ${raw}`, filled: true } : { text: `[${seg.label}]`, filled: false };
       }
@@ -257,6 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
   listSelect.addEventListener('change', () => loadTemplate(parseInt(listSelect.value, 10)));
   el('clearFieldsBtn').addEventListener('click', () => {
     dynamicFields.querySelectorAll('input').forEach(input => { input.value = ''; });
+    dynamicFields.querySelectorAll('select').forEach(select => { select.value = ''; });
     generateName();
   });
 
