@@ -5578,6 +5578,7 @@ const CLIENT_FIELD_SECTIONS_MIRROR = {
   brandKit: "content-creation", moodBoards: "content-creation",
   productionBoard: "content-creation",
   productionBoardCompleted: "content-creation",
+  qcQueue: "content-creation",
   moodBoardViews: "content-creation", moodBoardStyleFeedback: "content-creation",
   moodBoardAnnotations: "content-creation", brandRoadmap: "content-creation",
   copywriting: "content-creation", creativeBrief: "content-creation",

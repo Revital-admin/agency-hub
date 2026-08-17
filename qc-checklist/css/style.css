@@ -79,3 +79,37 @@
 .section-tag.result-fail { border-color: #ef4444; color: #ef4444; }
 
 .empty-state { text-align: center; padding: 40px 20px; color: var(--color-text-muted); font-size: 14px; }
+
+.qc-queue-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface-2);
+}
+.qc-queue-item + .qc-queue-item { margin-top: 8px; }
+.qc-queue-meta {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+.qc-queue-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.qc-queue-actions button {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: 100px;
+  cursor: pointer;
+}
+.qc-queue-actions button:hover { background: var(--color-surface); border-color: var(--color-accent); color: var(--color-accent); }
+.qc-queue-actions button.qc-queue-start-btn { background: var(--color-accent); border-color: var(--color-accent); color: #1a1a17; }
+.qc-queue-actions button.qc-queue-start-btn:hover { opacity: 0.9; }
+.qc-queue-actions button.qc-queue-dismiss-btn:hover { border-color: #f59e0b; color: #f59e0b; }

@@ -11,11 +11,14 @@
    and removes the source board from clients[name].moodBoards.
 
    Sits between Mood Board Builder (the idea) and QC Checklist/Client
-   Portal Manager Content Approvals (the finished piece going out) -
-   nothing here auto-syncs to those; this is just a place for an idea
-   to live while it's actively being built instead of disappearing
-   into a ClickUp task with no trace back to the mood board it came
-   from.
+   Portal Manager Content Approvals (the finished piece going out) - this
+   is just a place for an idea to live while it's actively being built
+   instead of disappearing into a ClickUp task with no trace back to the
+   mood board it came from. Marking an item complete (individually or in
+   bulk) queues a lightweight pointer into client.qcQueue, which QC
+   Checklist's own "Awaiting QC" section reads (see renderQcQueue in
+   qc-checklist/js/app.js) - that's the only auto-sync that exists; Client
+   Portal Manager's Content Approvals still isn't touched by this tool.
    ============================================================ */
 
 let isEmbedded = false;
@@ -217,6 +220,13 @@ function populateFilterAssignee() {
   if (prevValue) select.value = prevValue;
 }
 
+// Bulk-selection state: item id -> clientName. Keyed by id rather than a
+// composite "client::id" string since ids are already globally unique
+// (uid()/timestamp-based) - avoids any delimiter-parsing edge case with
+// client names. Cleared on view-mode switch or client change so a
+// selection never silently carries into a different filtered context.
+let selectedItems = new Map();
+
 // Flattens every client's own productionBoard (or productionBoardCompleted)
 // array into one list of { clientName, item } pairs - same shape Content
 // Calendar's collectAllItems uses for its own cross-client list.
@@ -272,6 +282,7 @@ function sortRows(rows) {
 
 function setViewMode(mode) {
   viewMode = mode;
+  selectedItems.clear();
   el('viewModeSingleBtn').classList.toggle('active', mode === 'single');
   el('viewModeAllBtn').classList.toggle('active', mode === 'all');
   el('clientSelectGroup').style.display = mode === 'single' ? 'block' : 'none';
@@ -342,8 +353,25 @@ function renderItemsList() {
       persist();
     });
   });
+  container.querySelectorAll('.prod-select-checkbox').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const id = cb.getAttribute('data-id');
+      const clientName = cb.getAttribute('data-client');
+      if (cb.checked) selectedItems.set(id, clientName);
+      else selectedItems.delete(id);
+      renderBulkBar();
+    });
+  });
 
+  renderBulkBar();
   renderCompletedList();
+}
+
+function renderBulkBar() {
+  const bar = el('bulkActionBar');
+  const count = selectedItems.size;
+  bar.style.display = count > 0 ? 'flex' : 'none';
+  el('bulkSelectedCount').textContent = count + (count === 1 ? ' item selected' : ' items selected');
 }
 
 function renderCompletedList() {
@@ -391,7 +419,11 @@ function viewCardTemplate(item, clientName) {
   return `
     <div class="prod-card">
       <div class="prod-card-header">
-        <div>
+        <div style="display:flex; align-items:flex-start; gap:8px;">
+          <span class="prod-select-wrap">
+            <input type="checkbox" class="prod-select-checkbox" data-client="${escapeHtml(clientName)}" data-id="${item.id}" ${selectedItems.has(item.id) ? 'checked' : ''}>
+          </span>
+          <div>
           <strong>${escapeHtml(item.title)}</strong>
           <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
             ${viewMode === 'all' ? `<span class="prod-client-badge">${escapeHtml(clientName)}</span>` : ''}
@@ -401,6 +433,7 @@ function viewCardTemplate(item, clientName) {
             ${stuckBadge(item)}
             <span class="prod-meta">${item.assignee ? `Assigned to ${escapeHtml(item.assignee)}` : 'Unassigned'}</span>
             <span class="prod-meta">Moved to the board ${formatDate(item.movedAt)}</span>
+          </div>
           </div>
         </div>
         <div class="prod-actions">
@@ -519,30 +552,61 @@ function saveEditItem(clientName, id) {
   }
 }
 
-// Marking complete archives the item into client.productionBoardCompleted
-// (viewable via the "Show completed" toggle) rather than deleting it
-// outright, so there's a record of what shipped and when instead of it
-// just vanishing.
+// Same stale-iframe issue solved for Mood Board Builder - QC Checklist's
+// tab id (see root app.js's dispatch switch, case "tab-qc") needs flagging
+// whenever a queue push might leave its already-loaded iframe stale.
+function flagQcReload() {
+  if (isEmbedded && window.parent.iframeNeedsReload) {
+    window.parent.iframeNeedsReload["tab-qc"] = true;
+  }
+}
+
+// Shared by markComplete and bulkMarkComplete: archives the item into
+// client.productionBoardCompleted (viewable via "Show completed") rather
+// than deleting it outright, and queues a lightweight pointer into
+// client.qcQueue so QC Checklist's own "Awaiting QC" section (see
+// renderQcQueue in qc-checklist/js/app.js) can pick it up - the queue
+// entry is a nudge, not a hard link, so this stays decoupled from
+// whatever QC does with it afterward.
+function archiveItemAsComplete(client, item) {
+  const completedAt = new Date().toISOString();
+
+  if (!Array.isArray(client.productionBoardCompleted)) client.productionBoardCompleted = [];
+  client.productionBoardCompleted.unshift({ ...item, completedAt });
+
+  if (!Array.isArray(client.qcQueue)) client.qcQueue = [];
+  client.qcQueue.unshift({
+    id: 'qcq-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+    title: item.title,
+    category: item.category,
+    assignee: item.assignee,
+    completedAt,
+    productionBoardItemId: item.id
+  });
+
+  client.productionBoard = client.productionBoard.filter(i => i.id !== item.id);
+}
+
 function markComplete(clientName, id) {
   const client = getClientByName(clientName);
   if (!client || !Array.isArray(client.productionBoard)) return;
   const item = client.productionBoard.find(i => i.id === id);
   if (!item) return;
-  if (!confirm(`Mark "${item.title}" complete? It'll come off the Production Board and move to Completed.`)) return;
+  if (!confirm(`Mark "${item.title}" complete? It'll come off the Production Board, move to Completed, and get queued for QC.`)) return;
 
-  if (!Array.isArray(client.productionBoardCompleted)) client.productionBoardCompleted = [];
-  client.productionBoardCompleted.unshift({ ...item, completedAt: new Date().toISOString() });
-
-  client.productionBoard = client.productionBoard.filter(i => i.id !== id);
+  archiveItemAsComplete(client, item);
   persist();
+  flagQcReload();
   renderItemsList();
   if (isEmbedded && window.parent.showBanner) {
-    window.parent.showBanner('success', `"${item.title}" marked complete.`);
+    window.parent.showBanner('success', `"${item.title}" marked complete and queued for QC.`);
   }
 }
 
 // Safety valve for a complete that was a mistake - puts the item back on
-// the active board exactly as it was, minus the completedAt stamp.
+// the active board exactly as it was, minus the completedAt stamp, and
+// pulls any matching QC-queue pointer back out since it'd otherwise point
+// at a "completed" item that no longer is.
 function restoreCompletedItem(clientName, id) {
   const client = getClientByName(clientName);
   if (!client || !Array.isArray(client.productionBoardCompleted)) return;
@@ -555,7 +619,11 @@ function restoreCompletedItem(clientName, id) {
   if (!Array.isArray(client.productionBoard)) client.productionBoard = [];
   client.productionBoard.unshift(restored);
   client.productionBoardCompleted = client.productionBoardCompleted.filter(i => i.id !== id);
+  if (Array.isArray(client.qcQueue)) {
+    client.qcQueue = client.qcQueue.filter(q => q.productionBoardItemId !== id);
+  }
   persist();
+  flagQcReload();
   renderItemsList();
   if (isEmbedded && window.parent.showBanner) {
     window.parent.showBanner('success', `"${item.title}" restored to the board.`);
@@ -604,10 +672,67 @@ function sendBackToMoodBoard(clientName, id) {
   }
 }
 
+function bulkMarkComplete() {
+  if (selectedItems.size === 0) return;
+  const count = selectedItems.size;
+  if (!confirm(`Mark ${count} item${count === 1 ? '' : 's'} complete? They'll come off the Production Board, move to Completed, and get queued for QC.`)) return;
+
+  selectedItems.forEach((clientName, id) => {
+    const client = getClientByName(clientName);
+    if (!client || !Array.isArray(client.productionBoard)) return;
+    const item = client.productionBoard.find(i => i.id === id);
+    if (!item) return;
+    archiveItemAsComplete(client, item);
+  });
+
+  persist();
+  flagQcReload();
+  selectedItems.clear();
+  renderItemsList();
+  if (isEmbedded && window.parent.showBanner) {
+    window.parent.showBanner('success', `${count} item${count === 1 ? '' : 's'} marked complete.`);
+  }
+}
+
+function bulkReassign() {
+  if (selectedItems.size === 0) return;
+  const assignee = el('bulkAssigneeInput').value.trim();
+  if (!assignee) {
+    alert("Enter a name to reassign to first.");
+    return;
+  }
+  const count = selectedItems.size;
+
+  selectedItems.forEach((clientName, id) => {
+    const client = getClientByName(clientName);
+    if (!client || !Array.isArray(client.productionBoard)) return;
+    const item = client.productionBoard.find(i => i.id === id);
+    if (!item) return;
+    item.assignee = assignee;
+    item.lastActivityAt = new Date().toISOString();
+  });
+
+  persist();
+  selectedItems.clear();
+  el('bulkAssigneeInput').value = '';
+  renderItemsList();
+  if (isEmbedded && window.parent.showBanner) {
+    window.parent.showBanner('success', `Reassigned ${count} item${count === 1 ? '' : 's'} to ${assignee}.`);
+  }
+}
+
+function bulkClearSelection() {
+  selectedItems.clear();
+  renderItemsList();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   populateClientSelect();
   loadTeamMembers();
-  el('clientSelect').addEventListener('change', renderState);
+  el('clientSelect').addEventListener('change', () => {
+    selectedItems.clear();
+    renderState();
+  });
   el('viewModeSingleBtn').addEventListener('click', () => setViewMode('single'));
   el('viewModeAllBtn').addEventListener('click', () => setViewMode('all'));
   el('filterSearchInput').addEventListener('input', renderItemsList);
@@ -615,6 +740,18 @@ document.addEventListener('DOMContentLoaded', () => {
   el('filterPriority').addEventListener('change', renderItemsList);
   el('sortBy').addEventListener('change', renderItemsList);
   el('showCompletedToggle').addEventListener('change', renderCompletedList);
+  el('selectAllVisible').addEventListener('change', () => {
+    const rows = sortRows(getActiveRows().filter(r => matchesFilters(r.item)));
+    if (el('selectAllVisible').checked) {
+      rows.forEach(r => selectedItems.set(r.item.id, r.clientName));
+    } else {
+      rows.forEach(r => selectedItems.delete(r.item.id));
+    }
+    renderItemsList();
+  });
+  el('bulkCompleteBtn').addEventListener('click', bulkMarkComplete);
+  el('bulkReassignBtn').addEventListener('click', bulkReassign);
+  el('bulkClearBtn').addEventListener('click', bulkClearSelection);
 
   // Same iframe-race fix used across the other client-aware modules: the
   // parent Hub's client database loads asynchronously, so poll briefly

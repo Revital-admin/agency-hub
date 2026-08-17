@@ -3905,6 +3905,7 @@ const CLIENT_FIELD_SECTIONS = {
   moodBoards: "content-creation",
   productionBoard: "content-creation",
   productionBoardCompleted: "content-creation",
+  qcQueue: "content-creation",
   moodBoardViews: "content-creation",
   moodBoardStyleFeedback: "content-creation",
   moodBoardAnnotations: "content-creation",

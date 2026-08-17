@@ -29,6 +29,101 @@ function persist() {
   }
 }
 
+function qcEscapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
+}
+
+function formatQcDate(iso) {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  } catch (e) {
+    return '';
+  }
+}
+
+// Maps Production Board's CATEGORY_OPTIONS (production-board/js/app.js) to
+// this tool's own QC_SERVICE_TYPES keys (js/data.js) - "Print" and "Other"
+// have no clean match, so those are left unmapped and the reviewer just
+// picks the type by hand.
+const CATEGORY_TO_QC_TYPE = {
+  'Website Design': 'website',
+  'Social Post': 'social',
+  'Ad Campaign': 'paidads',
+  'Video/Reel': 'video',
+  'Email': 'email'
+};
+
+// Items land here from Production Board's "Mark Complete" action (see
+// moveToProductionBoard/markComplete in production-board/js/app.js, which
+// pushes to client.qcQueue). This is a queue of pointers, not a hard
+// dependency - dismissing or starting a review just clears the entry,
+// nothing downstream depends on it still being there.
+function renderQcQueue() {
+  const client = getClient();
+  const section = el('qcQueueSection');
+  const list = el('qcQueueList');
+  const queue = (client && Array.isArray(client.qcQueue)) ? client.qcQueue : [];
+
+  section.style.display = queue.length === 0 ? 'none' : 'block';
+  if (queue.length === 0) return;
+
+  list.innerHTML = queue.map(q => `
+    <div class="qc-queue-item">
+      <div>
+        <strong>${qcEscapeHtml(q.title)}</strong>
+        <span class="qc-queue-meta">${qcEscapeHtml(q.category || 'Other')}${q.assignee ? ' &middot; built by ' + qcEscapeHtml(q.assignee) : ''} &middot; completed ${formatQcDate(q.completedAt)}</span>
+      </div>
+      <div class="qc-queue-actions">
+        <button class="qc-queue-start-btn" data-id="${q.id}">Start QC</button>
+        <button class="qc-queue-dismiss-btn" data-id="${q.id}">Dismiss</button>
+      </div>
+    </div>
+  `).join('');
+
+  document.querySelectorAll('.qc-queue-start-btn').forEach(btn => {
+    btn.addEventListener('click', () => startQcFromQueue(btn.getAttribute('data-id')));
+  });
+  document.querySelectorAll('.qc-queue-dismiss-btn').forEach(btn => {
+    btn.addEventListener('click', () => dismissQcQueueItem(btn.getAttribute('data-id')));
+  });
+}
+
+function startQcFromQueue(id) {
+  const client = getClient();
+  if (!client || !Array.isArray(client.qcQueue)) return;
+  const queued = client.qcQueue.find(q => q.id === id);
+  if (!queued) return;
+
+  el('deliverableInput').value = queued.title;
+  const mappedType = CATEGORY_TO_QC_TYPE[queued.category];
+  if (mappedType) {
+    el('checklistTypeSelect').value = mappedType;
+    currentChecked = {};
+    renderChecklist();
+  }
+  // Reviewer is deliberately left blank - this tool's own rule (see the
+  // site-subtitle) is that the reviewer should never be the person who
+  // produced the work, so pre-filling it with queued.assignee would
+  // actively encourage the thing this tool exists to prevent.
+
+  client.qcQueue = client.qcQueue.filter(q => q.id !== id);
+  persist();
+  renderQcQueue();
+  el('reviewerInput').focus();
+  if (window.parent.showBanner) window.parent.showBanner('success', `Loaded "${queued.title}" for QC review.`);
+}
+
+function dismissQcQueueItem(id) {
+  const client = getClient();
+  if (!client || !Array.isArray(client.qcQueue)) return;
+  client.qcQueue = client.qcQueue.filter(q => q.id !== id);
+  persist();
+  renderQcQueue();
+}
+
 // Current in-progress review (not persisted until logged)
 let currentChecked = {}; // { itemKey: boolean }
 
@@ -195,5 +290,6 @@ document.addEventListener('DOMContentLoaded', () => {
   populateTypeSelect();
   renderChecklist();
   renderLog();
+  renderQcQueue();
   initListeners();
 });
