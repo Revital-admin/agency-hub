@@ -1,3 +1,5 @@
+.empty-state { text-align: center; padding: 40px 20px; color: var(--color-text-muted, var(--color-text-secondary)); font-size: 14px; }
+
 .prod-card {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -39,6 +41,22 @@
 .prod-actions button:hover { background: var(--color-surface); border-color: var(--color-accent); color: var(--color-accent); }
 .prod-actions button.complete-item-btn:hover { border-color: #22c55e; color: #22c55e; }
 .prod-actions button.sendback-item-btn:hover { border-color: #f59e0b; color: #f59e0b; }
+.prod-actions button.edit-item-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.prod-actions button.save-edit-btn { background: var(--color-accent); border-color: var(--color-accent); color: #1a1a17; }
+.prod-actions button.save-edit-btn:hover { opacity: 0.9; }
+.prod-actions button.cancel-edit-btn:hover { border-color: #f59e0b; color: #f59e0b; }
+
+.prod-card-editing { display: flex; flex-direction: column; gap: 12px; }
+.prod-card-editing .form-group { margin: 0; }
+.prod-card-editing .form-group label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  display: block;
+  margin-bottom: 6px;
+}
 
 .prod-body-text {
   margin: 10px 0 0;

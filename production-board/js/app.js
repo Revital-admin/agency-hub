@@ -98,6 +98,15 @@ function formatDate(iso) {
   }
 }
 
+// Same 7-option list Mood Board Builder's own edit form uses (mbCategory
+// select in mood-board-builder/index.html) - kept identical so an item's
+// category means the same thing on both boards.
+const CATEGORY_OPTIONS = ['Website Design', 'Social Post', 'Ad Campaign', 'Video/Reel', 'Print', 'Email', 'Other'];
+
+// Tracks which item (if any) is currently showing its edit form instead of
+// the read-only card. Only one item can be in edit mode at a time.
+let editingItemId = null;
+
 function renderState() {
   const clientName = currentClientName();
   if (!clientName) {
@@ -116,36 +125,22 @@ function renderItemsList() {
   const items = client && Array.isArray(client.productionBoard) ? client.productionBoard : [];
 
   el('itemsEmptyState').style.display = items.length === 0 ? 'block' : 'none';
-  container.innerHTML = items.map(item => `
-    <div class="prod-card">
-      <div class="prod-card-header">
-        <div>
-          <strong>${escapeHtml(item.title)}</strong>
-          <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-            <span class="prod-category-badge">${escapeHtml(item.category || 'Other')}</span>
-            <span class="prod-meta">Moved to the board ${formatDate(item.movedAt)}</span>
-          </div>
-        </div>
-        <div class="prod-actions">
-          <button class="complete-item-btn" data-id="${item.id}">Mark Complete</button>
-          <button class="sendback-item-btn" data-id="${item.id}">Send Back to Mood Boards</button>
-        </div>
-      </div>
-      ${item.ideaSummary ? `<p class="prod-body-text">${escapeHtml(item.ideaSummary)}</p>` : ''}
-      ${item.visualDirection ? `<p class="prod-body-text"><strong>Visual direction:</strong> ${escapeHtml(item.visualDirection)}</p>` : ''}
-      ${item.keyElements ? `<p class="prod-body-text"><strong>Key elements:</strong> ${escapeHtml(item.keyElements)}</p>` : ''}
-      <div class="prod-notes-wrap">
-        <label for="prodNotes-${item.id}">Production notes</label>
-        <textarea id="prodNotes-${item.id}" class="form-control" rows="2" data-id="${item.id}" placeholder="Status, blockers, who's on it...">${escapeHtml(item.productionNotes || '')}</textarea>
-      </div>
-    </div>
-  `).join('');
+  container.innerHTML = items.map(item => item.id === editingItemId ? editCardTemplate(item) : viewCardTemplate(item)).join('');
 
   document.querySelectorAll('.complete-item-btn').forEach(btn => {
     btn.addEventListener('click', () => markComplete(btn.getAttribute('data-id')));
   });
   document.querySelectorAll('.sendback-item-btn').forEach(btn => {
     btn.addEventListener('click', () => sendBackToMoodBoard(btn.getAttribute('data-id')));
+  });
+  document.querySelectorAll('.edit-item-btn').forEach(btn => {
+    btn.addEventListener('click', () => startEditItem(btn.getAttribute('data-id')));
+  });
+  document.querySelectorAll('.save-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => saveEditItem(btn.getAttribute('data-id')));
+  });
+  document.querySelectorAll('.cancel-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => cancelEditItem());
   });
   container.querySelectorAll('textarea[data-id]').forEach(ta => {
     ta.addEventListener('input', () => {
@@ -157,6 +152,108 @@ function renderItemsList() {
       persist();
     });
   });
+}
+
+function viewCardTemplate(item) {
+  return `
+    <div class="prod-card">
+      <div class="prod-card-header">
+        <div>
+          <strong>${escapeHtml(item.title)}</strong>
+          <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <span class="prod-category-badge">${escapeHtml(item.category || 'Other')}</span>
+            <span class="prod-meta">Moved to the board ${formatDate(item.movedAt)}</span>
+          </div>
+        </div>
+        <div class="prod-actions">
+          <button class="edit-item-btn" data-id="${item.id}">Edit</button>
+          <button class="complete-item-btn" data-id="${item.id}">Mark Complete</button>
+          <button class="sendback-item-btn" data-id="${item.id}">Send Back to Mood Boards</button>
+        </div>
+      </div>
+      ${item.ideaSummary ? `<p class="prod-body-text">${escapeHtml(item.ideaSummary)}</p>` : ''}
+      ${item.visualDirection ? `<p class="prod-body-text"><strong>Visual direction:</strong> ${escapeHtml(item.visualDirection)}</p>` : ''}
+      ${item.keyElements ? `<p class="prod-body-text"><strong>Key elements:</strong> ${escapeHtml(item.keyElements)}</p>` : ''}
+      ${item.internalNotes ? `<p class="prod-body-text"><strong>Internal notes:</strong> ${escapeHtml(item.internalNotes)}</p>` : ''}
+      <div class="prod-notes-wrap">
+        <label for="prodNotes-${item.id}">Production notes</label>
+        <textarea id="prodNotes-${item.id}" rows="2" data-id="${item.id}" placeholder="Status, blockers, who's on it...">${escapeHtml(item.productionNotes || '')}</textarea>
+      </div>
+    </div>
+  `;
+}
+
+function editCardTemplate(item) {
+  return `
+    <div class="prod-card prod-card-editing">
+      <div class="form-group">
+        <label for="edit-title-${item.id}">Title</label>
+        <input type="text" id="edit-title-${item.id}" value="${escapeHtml(item.title)}">
+      </div>
+      <div class="form-group">
+        <label for="edit-category-${item.id}">Category</label>
+        <select id="edit-category-${item.id}">
+          ${CATEGORY_OPTIONS.map(opt => `<option${opt === item.category ? ' selected' : ''}>${opt}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="edit-summary-${item.id}">Idea summary</label>
+        <textarea id="edit-summary-${item.id}" rows="2">${escapeHtml(item.ideaSummary || '')}</textarea>
+      </div>
+      <div class="form-group">
+        <label for="edit-visual-${item.id}">Visual direction</label>
+        <textarea id="edit-visual-${item.id}" rows="2">${escapeHtml(item.visualDirection || '')}</textarea>
+      </div>
+      <div class="form-group">
+        <label for="edit-elements-${item.id}">Key elements</label>
+        <textarea id="edit-elements-${item.id}" rows="2">${escapeHtml(item.keyElements || '')}</textarea>
+      </div>
+      <div class="form-group">
+        <label for="edit-internal-${item.id}">Internal notes</label>
+        <textarea id="edit-internal-${item.id}" rows="2">${escapeHtml(item.internalNotes || '')}</textarea>
+      </div>
+      <div class="prod-actions">
+        <button class="save-edit-btn" data-id="${item.id}">Save Changes</button>
+        <button class="cancel-edit-btn" data-id="${item.id}">Cancel</button>
+      </div>
+    </div>
+  `;
+}
+
+function startEditItem(id) {
+  editingItemId = id;
+  renderItemsList();
+}
+
+function cancelEditItem() {
+  editingItemId = null;
+  renderItemsList();
+}
+
+function saveEditItem(id) {
+  const client = currentClient();
+  if (!client || !Array.isArray(client.productionBoard)) return;
+  const item = client.productionBoard.find(i => i.id === id);
+  if (!item) return;
+
+  const title = el(`edit-title-${id}`).value.trim();
+  if (!title) {
+    alert('Title can\'t be empty.');
+    return;
+  }
+  item.title = title;
+  item.category = el(`edit-category-${id}`).value;
+  item.ideaSummary = el(`edit-summary-${id}`).value;
+  item.visualDirection = el(`edit-visual-${id}`).value;
+  item.keyElements = el(`edit-elements-${id}`).value;
+  item.internalNotes = el(`edit-internal-${id}`).value;
+
+  persist();
+  editingItemId = null;
+  renderItemsList();
+  if (isEmbedded && window.parent.showBanner) {
+    window.parent.showBanner('success', `"${item.title}" updated.`);
+  }
 }
 
 function markComplete(id) {
