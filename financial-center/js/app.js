@@ -344,4 +344,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   el('saveManualBtn').addEventListener('click', saveManualValues);
   el('qbConnectBtn').addEventListener('click', () => window.open('/api/quickbooks/oauth-start', '_blank'));
   el('qbSyncBtn').addEventListener('click', syncFromQuickBooks);
+
+  // The OAuth callback tab (see quickBooksHtmlResponse in _worker.js)
+  // posts this back to window.opener right after a successful connect,
+  // specifically so this tab doesn't sit showing "Not connected" until
+  // someone manually reloads it - re-runs the same status check the page
+  // does on load. Origin-checked since postMessage has no built-in sender
+  // restriction; the callback page is same-origin (hub.revitalproductions.com)
+  // so a matching origin is both expected and required here.
+  window.addEventListener('message', (event) => {
+    if (event.origin === window.location.origin && event.data === 'quickbooks-connected') {
+      checkQbStatus();
+    }
+  });
 });
