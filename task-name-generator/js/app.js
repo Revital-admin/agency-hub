@@ -173,17 +173,25 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentTemplate = null;
   let currentPlainText = '';
 
-  // Month/Year and Month/Day fields are built from plain <select> dropdowns
-  // instead of native <input type="month"> / <input type="date"> pickers.
-  // Reason: Safari (desktop) and Firefox do not support type="month" at all
-  // - it silently falls back to a plain text box with no picker and no
-  // format enforcement. A user typing a month there in any format other
-  // than the exact "YYYY-MM" the browser expects internally produces an
-  // input.value the old parser couldn't read, so the segment silently
-  // stayed as "[Month Year]" and that's what got copied into ClickUp. This
-  // is what Juan hit. Dropdowns sidestep browser support entirely - same
-  // behavior in every browser, and it's not possible to enter a malformed
-  // value.
+  // Month/Year and Month/Day fields render two different ways depending on
+  // whether the browser actually supports native <input type="month"> /
+  // <input type="date"> pickers. Chrome/Edge support type="month" fine, so
+  // they keep the original native picker. Safari (desktop) and Firefox do
+  // not support type="month" at all - it silently falls back to a plain
+  // text box with no picker and no format enforcement, so typing a month
+  // there produced a value the old parser couldn't read and the segment
+  // silently stayed as "[Month Year]" - that's what got copied into
+  // ClickUp, and what Juan hit. For browsers that fail the feature check,
+  // we swap in plain <select> dropdowns instead, which behave identically
+  // everywhere and can't hold a malformed value.
+  function supportsInputType(type) {
+    const test = document.createElement('input');
+    test.setAttribute('type', type);
+    return test.type === type;
+  }
+  const MONTH_INPUT_SUPPORTED = supportsInputType('month');
+  const DATE_INPUT_SUPPORTED = supportsInputType('date');
+
   const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
   function monthOptionsHtml() {
@@ -199,6 +207,20 @@ document.addEventListener('DOMContentLoaded', () => {
     for (let d = 1; d <= 31; d++) opts += `<option value="${d}">${d}</option>`;
     return opts;
   }
+  // Native-input parsers (Chrome/Edge) - value comes as "YYYY-MM" / "YYYY-MM-DD".
+  function formatMonthValue(v) {
+    if (!v) return null;
+    const [y, m] = v.split('-').map(Number);
+    if (!y || !m) return null;
+    return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }
+  function formatDateValue(v) {
+    if (!v) return null;
+    const [y, m, d] = v.split('-').map(Number);
+    if (!y || !m || !d) return null;
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+  }
+  // Dropdown-fallback parsers (Safari/Firefox) - value comes as two separate selects.
   function formatMonthYear(m, y) {
     if (!m || !y) return null;
     return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -229,6 +251,12 @@ document.addEventListener('DOMContentLoaded', () => {
       .map((seg, i) => {
         if (seg.type === 'fixed') return '';
         if (seg.type === 'month') {
+          if (MONTH_INPUT_SUPPORTED) {
+            return `<div class="form-group">
+              <label for="seg-${i}">${seg.label}</label>
+              <input type="month" id="seg-${i}" data-seg-index="${i}" data-native="month">
+            </div>`;
+          }
           return `<div class="form-group">
             <label for="seg-${i}-month">${seg.label}</label>
             <div class="month-year-row">
@@ -238,6 +266,12 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>`;
         }
         if (seg.type === 'date') {
+          if (DATE_INPUT_SUPPORTED) {
+            return `<div class="form-group">
+              <label for="seg-${i}">${seg.label}</label>
+              <input type="date" id="seg-${i}" data-seg-index="${i}" data-native="date">
+            </div>`;
+          }
           return `<div class="form-group">
             <label for="seg-${i}-month">${seg.label}</label>
             <div class="month-year-row">
@@ -267,12 +301,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const parts = currentTemplate.segments.map((seg, i) => {
       if (seg.type === 'fixed') return { text: seg.value, filled: true };
       if (seg.type === 'month') {
+        if (MONTH_INPUT_SUPPORTED) {
+          const input = dynamicFields.querySelector(`[data-seg-index="${i}"][data-native="month"]`);
+          const formatted = formatMonthValue(input ? input.value : '');
+          return formatted ? { text: formatted, filled: true } : { text: `[${seg.label}]`, filled: false };
+        }
         const monthSel = dynamicFields.querySelector(`[data-seg-index="${i}"][data-part="month"]`);
         const yearSel = dynamicFields.querySelector(`[data-seg-index="${i}"][data-part="year"]`);
         const formatted = formatMonthYear(monthSel ? monthSel.value : '', yearSel ? yearSel.value : '');
         return formatted ? { text: formatted, filled: true } : { text: `[${seg.label}]`, filled: false };
       }
       if (seg.type === 'date') {
+        if (DATE_INPUT_SUPPORTED) {
+          const input = dynamicFields.querySelector(`[data-seg-index="${i}"][data-native="date"]`);
+          const formatted = formatDateValue(input ? input.value : '');
+          return formatted ? { text: formatted, filled: true } : { text: `[${seg.label}]`, filled: false };
+        }
         const monthSel = dynamicFields.querySelector(`[data-seg-index="${i}"][data-part="month"]`);
         const daySel = dynamicFields.querySelector(`[data-seg-index="${i}"][data-part="day"]`);
         const formatted = formatMonthDay(monthSel ? monthSel.value : '', daySel ? daySel.value : '');
