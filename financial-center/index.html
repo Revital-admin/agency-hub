@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Financial Center</title>
+<link rel="stylesheet" href="../style.css?v=2">
+<link rel="stylesheet" href="css/style.css?v=1">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<div id="notAuthorizedState" style="display:none; text-align:center; padding-top: 80px; color: var(--color-text-secondary);">
+  You don't have access to the Financial Center.
+</div>
+
+<main class="container container-wide" id="trackerContent">
+<div class="brand-bar">
+<div class="brand-logo-container"></div>
+</div>
+
+<header class="site-header">
+<div class="header-eyebrow">
+<span class="dot"></span>
+<span>Agency Globals</span>
+</div>
+<h1 class="site-title">Financial <em>Center</em></h1>
+<p class="site-subtitle">One place for the numbers leadership actually needs at a glance. Software costs and outstanding invoices pull live from Subscription Tracker and Contract &amp; Invoice Tracker. Everything else is manual for now — connect QuickBooks below and those same fields switch to live data with no redesign needed. Admin/leadership only.</p>
+</header>
+
+<div class="step-card" id="qbConnectCard">
+<div class="section-title" style="margin-bottom: 14px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent); margin:0;">QuickBooks Sync</h2>
+<span id="qbStatusBadge" class="section-tag status-cancelled">Not connected</span>
+</div>
+<p id="qbStatusText" style="font-size:13px; color:var(--color-text-secondary); margin: 0 0 14px;">Not connected yet. Once linked, "Sync Now" pulls cash, revenue, expenses, credit card balance, and outstanding invoices straight from QuickBooks instead of typing them in by hand.</p>
+<div style="display:flex; gap:10px; flex-wrap:wrap;">
+<button id="qbConnectBtn" class="btn-primary">Connect QuickBooks</button>
+<button id="qbSyncBtn" class="btn-secondary-outline" style="display:none;">Sync Now</button>
+</div>
+</div>
+
+<div class="summary-bar" id="summaryBar">
+<div class="summary-stat"><span class="summary-num" id="summaryCash">$0</span><span class="summary-label">Cash Available</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryRevenue">$0</span><span class="summary-label">Revenue This Month</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryExpenses">$0</span><span class="summary-label">Expenses This Month</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryBurn">$0</span><span class="summary-label">Monthly Burn</span></div>
+</div>
+
+<div class="step-card">
+<div class="section-title" style="margin-bottom: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent);">Cash &amp; Accounts</h2>
+</div>
+<div class="form-grid" id="manualFieldsGrid"></div>
+<button id="saveManualBtn" class="btn-primary" style="margin-top:16px;">Save Figures</button>
+</div>
+
+<div class="step-card">
+<div class="section-title" style="margin-bottom: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent);">Software Costs</h2>
+<span style="font-size:12px; color:var(--color-text-secondary); font-weight:500;">Live from Subscription Tracker</span>
+</div>
+<div class="summary-bar" style="margin-bottom:0;">
+<div class="summary-stat"><span class="summary-num" id="summaryRecurringSoftware">$0</span><span class="summary-label">Recurring (Monthly)</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryAnnualSoftware">$0</span><span class="summary-label">Annual</span></div>
+</div>
+</div>
+
+<div class="step-card">
+<div class="section-title" style="margin-bottom: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent);">Outstanding Invoices</h2>
+<span style="font-size:12px; color:var(--color-text-secondary); font-weight:500;">Live from Contract &amp; Invoice Tracker</span>
+</div>
+<div class="summary-bar" style="margin-bottom:0;">
+<div class="summary-stat"><span class="summary-num" id="summaryOutstanding">$0</span><span class="summary-label">Total Outstanding</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryOverdueInvoices">$0</span><span class="summary-label">Overdue</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryOutstandingCount">0</span><span class="summary-label">Open Invoices</span></div>
+</div>
+</div>
+
+</main>
+<script src="../shared-number-format.js"></script>
+<script src="js/logo.js"></script>
+<script src="js/app.js?v=2"></script>
+</body>
+</html>

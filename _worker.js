@@ -202,6 +202,25 @@ export default {
       return handleStripeWebhook(request, env);
     }
 
+    // ── QuickBooks Online (Financial Center) ──
+    // oauth-start/oauth-callback are visited directly by the browser (not
+    // fetch()), so they read/redirect rather than return JSON - see the
+    // handlers below for why. Both still sit behind Cloudflare Access
+    // like every other hub.* path, so only someone already signed into
+    // the Hub can reach them.
+    if (url.pathname === "/api/quickbooks/oauth-start" && request.method === "GET") {
+      return handleQuickBooksOAuthStart(request, env);
+    }
+    if (url.pathname === "/api/quickbooks/oauth-callback" && request.method === "GET") {
+      return handleQuickBooksOAuthCallback(request, env);
+    }
+    if (url.pathname === "/api/quickbooks/status" && request.method === "GET") {
+      return handleQuickBooksStatus(request, env);
+    }
+    if (url.pathname === "/api/quickbooks/snapshot" && request.method === "POST") {
+      return handleQuickBooksSnapshot(request, env);
+    }
+
     // Everything else: serve the static site as before.
     return env.ASSETS.fetch(request);
   }
@@ -2857,6 +2876,336 @@ async function handlePipelineSyncClickUp(request, env) {
     }
   } catch (e) {
     return jsonResponse({ error: `ClickUp sync failed: ${e.message}` }, 500);
+  }
+}
+
+// ── QuickBooks Online (Financial Center) ──
+//
+// Unlike every other integration in this file (ClickUp's static token,
+// Stripe's key pair, Docusign's JWT-bearer grant), QuickBooks requires an
+// interactive OAuth2 Authorization Code flow - a human (Ronald) has to
+// consent once per QuickBooks company via Intuit's own consent screen.
+// That means, unlike a static secret, the resulting refresh token has to
+// be persisted somewhere this Worker can read/write at request time -
+// there's no KV binding in this project, so it's stored the same place
+// every other piece of agency-wide state already lives: Firestore, at
+// agency/quickbooksAuth, via the same firestoreGetDoc/firestoreSetDoc
+// REST helpers the health digest and Stripe webhook already use.
+//
+// Setup (one-time, done by Ronald - see the setup instructions given
+// alongside this code, never done by pasting secrets into chat):
+//   1. Create an app at https://developer.intuit.com (platform:
+//      "QuickBooks Online and Payments", scope: com.intuit.quickbooks.accounting)
+//   2. Register redirect URI: https://hub.revitalproductions.com/api/quickbooks/oauth-callback
+//   3. wrangler secret put QB_CLIENT_ID
+//      wrangler secret put QB_CLIENT_SECRET
+//   4. Open Financial Center in the Hub and click "Connect QuickBooks"
+//
+// QB_API_BASE_URL is optional - defaults to the production API. Only set
+// it (to https://sandbox-quickbooks.api.intuit.com) if the connected app
+// is ever pointed at an Intuit sandbox company instead of the real one.
+const QUICKBOOKS_AUTH_DOC_PATH = "agency/quickbooksAuth";
+const QUICKBOOKS_TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
+const QUICKBOOKS_SCOPE = "com.intuit.quickbooks.accounting";
+
+function quickBooksApiBase(env) {
+  return env.QB_API_BASE_URL || "https://quickbooks.api.intuit.com";
+}
+
+function quickBooksRedirectUri(request) {
+  const url = new URL(request.url);
+  return `${url.protocol}//${url.host}/api/quickbooks/oauth-callback`;
+}
+
+// Full admin access OR the "finance" Team Access section (added Aug 2026
+// alongside the FINANCE sidebar group - see index.html/team-access-manager)
+// may call these endpoints. Just delegates to requireSection - kept as its
+// own named function since it's called from three places below and reads
+// clearer at each call site than a bare requireSection(..., "finance").
+async function requireFinancialCenterAccess(env, accessEmail) {
+  return requireSection(env, accessEmail, "finance");
+}
+
+function quickBooksHtmlResponse(message, ok) {
+  return new Response(
+    `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>QuickBooks</title>
+    <style>body{font-family:-apple-system,sans-serif;background:#0b0d12;color:#e6e8ee;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;}
+    div{max-width:360px;padding:24px;} h1{font-size:18px;color:${ok ? '#22c55e' : '#ef4444'};}</style>
+    </head><body><div><h1>${ok ? 'QuickBooks Connected' : 'QuickBooks Connection Failed'}</h1><p>${message}</p><p>You can close this tab.</p></div>
+    <script>try{ if(window.opener){ window.opener.postMessage('quickbooks-connected', '*'); } }catch(e){} setTimeout(()=>window.close(), 4000);</script>
+    </body></html>`,
+    { status: 200, headers: { "Content-Type": "text/html" } }
+  );
+}
+
+// ── /api/quickbooks/oauth-start ──
+// Visited directly by the browser (Financial Center opens it with
+// window.open, not fetch) - redirects straight to Intuit's consent
+// screen. A random state is stashed in the same Firestore doc and
+// checked back on the way in at oauth-callback, as basic CSRF
+// protection since Workers have no server-side session to hold it in
+// memory between these two requests.
+async function handleQuickBooksOAuthStart(request, env) {
+  const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  if (!(await requireFinancialCenterAccess(env, accessEmail))) {
+    return jsonResponse({ error: "Not authorized for Financial Center" }, 403);
+  }
+  if (!env.QB_CLIENT_ID) {
+    return jsonResponse({ error: "Server missing QB_CLIENT_ID secret - see Financial Center setup instructions" }, 500);
+  }
+
+  const state = crypto.randomUUID();
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const existing = (await firestoreGetDoc(accessToken, projectId, QUICKBOOKS_AUTH_DOC_PATH)) || {};
+    await firestoreSetDoc(accessToken, projectId, QUICKBOOKS_AUTH_DOC_PATH, { ...existing, pendingState: state, pendingStateCreatedAt: new Date().toISOString() });
+  } catch (e) {
+    return jsonResponse({ error: `Couldn't start QuickBooks connection: ${e.message}` }, 500);
+  }
+
+  const authUrl = new URL("https://appcenter.intuit.com/connect/oauth2");
+  authUrl.searchParams.set("client_id", env.QB_CLIENT_ID);
+  authUrl.searchParams.set("scope", QUICKBOOKS_SCOPE);
+  authUrl.searchParams.set("redirect_uri", quickBooksRedirectUri(request));
+  authUrl.searchParams.set("response_type", "code");
+  authUrl.searchParams.set("state", state);
+  return Response.redirect(authUrl.toString(), 302);
+}
+
+// ── /api/quickbooks/oauth-callback ──
+// Where Intuit redirects the browser back to after Ronald consents.
+// Exchanges the one-time code for an access+refresh token pair, looks
+// up the company name for display, and persists everything needed for
+// future syncs to agency/quickbooksAuth.
+async function handleQuickBooksOAuthCallback(request, env) {
+  const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+
+  const url = new URL(request.url);
+  const code = url.searchParams.get("code");
+  const realmId = url.searchParams.get("realmId");
+  const state = url.searchParams.get("state");
+  const error = url.searchParams.get("error");
+
+  if (error) {
+    return quickBooksHtmlResponse(`Intuit reported: ${error}`, false);
+  }
+  if (!code || !realmId || !state) {
+    return quickBooksHtmlResponse("Missing code, realmId, or state in the callback - try connecting again.", false);
+  }
+  if (!env.QB_CLIENT_ID || !env.QB_CLIENT_SECRET) {
+    return quickBooksHtmlResponse("Server missing QB_CLIENT_ID/QB_CLIENT_SECRET secrets - see Financial Center setup instructions.", false);
+  }
+
+  try {
+    const { accessToken: gAccessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const existing = (await firestoreGetDoc(gAccessToken, projectId, QUICKBOOKS_AUTH_DOC_PATH)) || {};
+    if (!existing.pendingState || existing.pendingState !== state) {
+      return quickBooksHtmlResponse("This connection link expired or was already used - click Connect QuickBooks again to get a fresh one.", false);
+    }
+
+    const tokenRes = await fetch(QUICKBOOKS_TOKEN_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${btoa(`${env.QB_CLIENT_ID}:${env.QB_CLIENT_SECRET}`)}`
+      },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: quickBooksRedirectUri(request)
+      })
+    });
+    const tokenData = await tokenRes.json().catch(() => ({}));
+    if (!tokenRes.ok) {
+      throw new Error(tokenData.error_description || tokenData.error || `Token exchange failed (${tokenRes.status})`);
+    }
+
+    let companyName = "";
+    try {
+      const infoRes = await fetch(`${quickBooksApiBase(env)}/v3/company/${realmId}/companyinfo/${realmId}?minorversion=65`, {
+        headers: { Authorization: `Bearer ${tokenData.access_token}`, Accept: "application/json" }
+      });
+      const infoData = await infoRes.json().catch(() => ({}));
+      companyName = (infoData.CompanyInfo && infoData.CompanyInfo.CompanyName) || "";
+    } catch (e) {
+      console.warn("Couldn't fetch QuickBooks company name (non-fatal):", e);
+    }
+
+    const accessTokenExpiresAt = new Date(Date.now() + (Number(tokenData.expires_in) || 3600) * 1000).toISOString();
+    await firestoreSetDoc(gAccessToken, projectId, QUICKBOOKS_AUTH_DOC_PATH, {
+      accessToken: tokenData.access_token,
+      refreshToken: tokenData.refresh_token,
+      accessTokenExpiresAt,
+      realmId,
+      companyName,
+      connectedAt: existing.connectedAt || new Date().toISOString(),
+      connectedBy: accessEmail,
+      pendingState: null,
+      pendingStateCreatedAt: null
+    });
+
+    return quickBooksHtmlResponse(`Connected to ${companyName || 'your QuickBooks company'}.`, true);
+  } catch (e) {
+    return quickBooksHtmlResponse(`Couldn't finish connecting: ${e.message}`, false);
+  }
+}
+
+// ── /api/quickbooks/status ──
+async function handleQuickBooksStatus(request, env) {
+  const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  if (!(await requireFinancialCenterAccess(env, accessEmail))) {
+    return jsonResponse({ error: "Not authorized for Financial Center" }, 403);
+  }
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const doc = await firestoreGetDoc(accessToken, projectId, QUICKBOOKS_AUTH_DOC_PATH);
+    const connected = !!(doc && doc.refreshToken && doc.realmId);
+    return jsonResponse({ connected, companyName: doc && doc.companyName, connectedAt: doc && doc.connectedAt });
+  } catch (e) {
+    return jsonResponse({ connected: false, error: e.message });
+  }
+}
+
+// Returns a live QuickBooks access token, refreshing it first if it's
+// expired or close to it (QBO access tokens last 60 minutes). Refresh
+// tokens rotate on every use per Intuit's own docs, so the new one is
+// always written back - reusing a stale refresh token would eventually
+// break the connection.
+async function getValidQuickBooksAccessToken(env) {
+  const { accessToken: gAccessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+  const doc = await firestoreGetDoc(gAccessToken, projectId, QUICKBOOKS_AUTH_DOC_PATH);
+  if (!doc || !doc.refreshToken || !doc.realmId) {
+    throw new Error("QuickBooks isn't connected yet - click Connect QuickBooks in Financial Center first.");
+  }
+
+  const expiresAt = doc.accessTokenExpiresAt ? new Date(doc.accessTokenExpiresAt).getTime() : 0;
+  const needsRefresh = !doc.accessToken || Date.now() > (expiresAt - 5 * 60 * 1000);
+  if (!needsRefresh) {
+    return { qbAccessToken: doc.accessToken, realmId: doc.realmId };
+  }
+
+  if (!env.QB_CLIENT_ID || !env.QB_CLIENT_SECRET) {
+    throw new Error("Server missing QB_CLIENT_ID/QB_CLIENT_SECRET secrets");
+  }
+  const refreshRes = await fetch(QUICKBOOKS_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Basic ${btoa(`${env.QB_CLIENT_ID}:${env.QB_CLIENT_SECRET}`)}`
+    },
+    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: doc.refreshToken })
+  });
+  const refreshData = await refreshRes.json().catch(() => ({}));
+  if (!refreshRes.ok) {
+    throw new Error(refreshData.error_description || refreshData.error || `QuickBooks token refresh failed (${refreshRes.status}) - may need to reconnect in Financial Center`);
+  }
+
+  const accessTokenExpiresAt = new Date(Date.now() + (Number(refreshData.expires_in) || 3600) * 1000).toISOString();
+  await firestoreSetDoc(gAccessToken, projectId, QUICKBOOKS_AUTH_DOC_PATH, {
+    ...doc,
+    accessToken: refreshData.access_token,
+    refreshToken: refreshData.refresh_token || doc.refreshToken,
+    accessTokenExpiresAt
+  });
+  return { qbAccessToken: refreshData.access_token, realmId: doc.realmId };
+}
+
+// Walks a QuickBooks report's Rows tree (ProfitAndLoss, BalanceSheet,
+// etc.) looking for a summary row whose group matches groupName (e.g.
+// "Income", "Expenses", "TotalCOGS") and returns its total as a number.
+// Reports nest sections arbitrarily deep (Income > sub-categories, for
+// example), so this recurses rather than assuming a fixed depth.
+function findQuickBooksReportGroupTotal(rows, groupName) {
+  if (!Array.isArray(rows)) return null;
+  for (const row of rows) {
+    if (row.group === groupName && row.Summary && Array.isArray(row.Summary.ColData)) {
+      const last = row.Summary.ColData[row.Summary.ColData.length - 1];
+      const n = parseFloat(last && last.value);
+      if (!isNaN(n)) return n;
+    }
+    if (row.Rows && row.Rows.Row) {
+      const found = findQuickBooksReportGroupTotal(row.Rows.Row, groupName);
+      if (found !== null) return found;
+    }
+  }
+  return null;
+}
+
+// ── /api/quickbooks/snapshot ──
+// Pulls the current numbers Financial Center's manual fields can be
+// auto-filled from: cash (sum of Bank accounts), credit card balance
+// (sum of Credit Card accounts), revenue/expenses this month (from the
+// Profit & Loss report), and tax reserve/owner funding (best-effort
+// match on Equity account names containing "tax" / "owner" - QuickBooks
+// has no standardized field for either, so this is a heuristic Ronald
+// may need to adjust chart-of-account names to match, or just keep
+// editing those two manually). "Available Credit" is deliberately never
+// returned here - QuickBooks' API doesn't expose credit limits at all,
+// so that field stays manual regardless of connection state.
+async function handleQuickBooksSnapshot(request, env) {
+  const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  if (!(await requireFinancialCenterAccess(env, accessEmail))) {
+    return jsonResponse({ error: "Not authorized for Financial Center" }, 403);
+  }
+
+  try {
+    const { qbAccessToken, realmId } = await getValidQuickBooksAccessToken(env);
+    const apiBase = quickBooksApiBase(env);
+    const qbHeaders = { Authorization: `Bearer ${qbAccessToken}`, Accept: "application/json" };
+    const result = {};
+
+    // Cash + credit card balances, from the Account entity list.
+    try {
+      const query = encodeURIComponent("SELECT Name, AccountType, CurrentBalance FROM Account WHERE Active = true MAXRESULTS 1000");
+      const acctRes = await fetch(`${apiBase}/v3/company/${realmId}/query?query=${query}&minorversion=65`, { headers: qbHeaders });
+      const acctData = await acctRes.json().catch(() => ({}));
+      const accounts = (acctData.QueryResponse && acctData.QueryResponse.Account) || [];
+
+      const bankTotal = accounts.filter(a => a.AccountType === "Bank").reduce((sum, a) => sum + (Number(a.CurrentBalance) || 0), 0);
+      const ccTotal = accounts.filter(a => a.AccountType === "Credit Card").reduce((sum, a) => sum + Math.abs(Number(a.CurrentBalance) || 0), 0);
+      result.cashAvailable = bankTotal;
+      result.creditCardBalance = ccTotal;
+
+      const equityAccounts = accounts.filter(a => a.AccountType === "Equity");
+      const taxAcct = equityAccounts.find(a => /tax/i.test(a.Name || ""));
+      const ownerAcct = equityAccounts.find(a => /owner/i.test(a.Name || ""));
+      if (taxAcct) result.taxReserve = Math.abs(Number(taxAcct.CurrentBalance) || 0);
+      if (ownerAcct) result.ownerFunding = Math.abs(Number(ownerAcct.CurrentBalance) || 0);
+    } catch (e) {
+      console.warn("QuickBooks account balances fetch failed (non-fatal):", e);
+    }
+
+    // Revenue/expenses this month, from the Profit & Loss report.
+    try {
+      const now = new Date();
+      const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
+      const today = now.toISOString().slice(0, 10);
+      const plRes = await fetch(`${apiBase}/v3/company/${realmId}/reports/ProfitAndLoss?start_date=${startOfMonth}&end_date=${today}&minorversion=65`, { headers: qbHeaders });
+      const plData = await plRes.json().catch(() => ({}));
+      const rows = plData.Rows && plData.Rows.Row;
+      const income = findQuickBooksReportGroupTotal(rows, "Income");
+      const expenses = findQuickBooksReportGroupTotal(rows, "Expenses");
+      if (income !== null) result.revenueThisMonth = income;
+      if (expenses !== null) result.expensesThisMonth = expenses;
+    } catch (e) {
+      console.warn("QuickBooks P&L fetch failed (non-fatal):", e);
+    }
+
+    return jsonResponse(result);
+  } catch (e) {
+    return jsonResponse({ error: `QuickBooks sync failed: ${e.message}` }, 500);
   }
 }
 

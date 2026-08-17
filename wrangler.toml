@@ -78,3 +78,18 @@ bucket_name = "revital-media"
 #   wrangler secret put HEALTH_DIGEST_RECIPIENTS
 [triggers]
 crons = ["0 13 * * 1"]
+
+# Financial Center's QuickBooks Online sync (/api/quickbooks/* in
+# _worker.js). Unlike this file's other integrations, QuickBooks needs an
+# interactive OAuth consent (done once by Ronald from the Financial
+# Center tab, not a step here) - these two secrets are only the app
+# credentials that make that consent screen possible in the first place.
+# Created at https://developer.intuit.com (app platform: "QuickBooks
+# Online and Payments", scope: com.intuit.quickbooks.accounting),
+# redirect URI registered there must be exactly:
+#   https://hub.revitalproductions.com/api/quickbooks/oauth-callback
+#   wrangler secret put QB_CLIENT_ID
+#   wrangler secret put QB_CLIENT_SECRET
+# The resulting refresh token itself is stored in Firestore
+# (agency/quickbooksAuth), not here - see the QuickBooks section of
+# _worker.js for why.

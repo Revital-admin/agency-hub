@@ -262,6 +262,25 @@ function renderTable() {
 // only accounts with no entry in agency/teamAccess (full, unrestricted
 // access) may open this tool at all - not just edit within it, since
 // subscription costs are financial info nobody else should be able to see.
+// Full admin access OR a restricted teammate specifically granted the
+// "finance" Team Access section (the FINANCE sidebar group, added Aug
+// 2026 - see index.html) may open this tool. Mirrors resolveAllowedSections
+// in the root app.js by hand (role-based vs. custom-sections shape) since
+// that helper isn't exposed to iframes - same "keep it in sync manually"
+// convention CLIENT_FIELD_SECTIONS documents in _worker.js.
+function resolveFinanceSectionAccess(data, currentEmail) {
+  const users = (data && data.users) ? data.users : {};
+  const roleTiers = (data && data.roleTiers) ? data.roleTiers : {};
+  if (!currentEmail || !Object.prototype.hasOwnProperty.call(users, currentEmail)) {
+    return { isRestricted: false, sections: [] };
+  }
+  const entry = users[currentEmail] || {};
+  const sections = (entry.role && roleTiers[entry.role])
+    ? (roleTiers[entry.role].sections || [])
+    : (Array.isArray(entry.sections) ? entry.sections : []);
+  return { isRestricted: true, sections };
+}
+
 function initAccessGate() {
   if (!isEmbedded || !window.parent.firebaseDoc || !window.parent.firebaseDb || !window.parent.firebaseOnSnapshot) {
     return; // not embedded - nothing to gate, matches other standalone tools
@@ -269,12 +288,12 @@ function initAccessGate() {
   const ref = window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "teamAccess");
   window.parent.firebaseOnSnapshot(ref, (docSnap) => {
     const data = docSnap && docSnap.exists ? docSnap.data() : null;
-    const users = (data && data.users) ? data.users : {};
     const currentEmail = (window.parent.currentAdminEmail || "").toLowerCase();
-    const isRestricted = currentEmail && Object.prototype.hasOwnProperty.call(users, currentEmail);
+    const { isRestricted, sections } = resolveFinanceSectionAccess(data, currentEmail);
+    const allowed = !isRestricted || sections.indexOf('finance') !== -1;
 
-    el('trackerContent').style.display = isRestricted ? 'none' : '';
-    el('notAuthorizedState').style.display = isRestricted ? '' : 'none';
+    el('trackerContent').style.display = allowed ? '' : 'none';
+    el('notAuthorizedState').style.display = allowed ? 'none' : '';
   }, (err) => {
     console.error("Access gate listener error:", err);
   });

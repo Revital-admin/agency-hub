@@ -73,6 +73,8 @@ const KNOWN_NON_TAB_TOOLS = {
   'billing-success': 'Stripe Checkout success_url redirect target, reached at book.<domain>/billing-success/ (outside Cloudflare Access), not an admin nav tab.',
   'billing-canceled': 'Stripe Checkout cancel_url redirect target, reached at book.<domain>/billing-canceled/ (outside Cloudflare Access), not an admin nav tab.',
   'contractor-portal': 'Contractor-facing magic-link portal (served directly to contractors via /contractor-portal/?t=<token>, outside Cloudflare Access), not an admin nav tab.',
+  'privacy-policy': 'Public Privacy Policy page for the Financial Center QuickBooks integration, reached at book.<domain>/privacy-policy/ (outside Cloudflare Access) so Intuit can verify it, not an admin nav tab.',
+  'eula': 'Public End-User License Agreement page for the Financial Center QuickBooks integration, reached at book.<domain>/eula/ (outside Cloudflare Access) so Intuit can verify it, not an admin nav tab.',
 };
 
 let failures = 0;

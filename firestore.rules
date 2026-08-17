@@ -101,7 +101,7 @@ service cloud.firestore {
     function nonGlobalsSections() {
       return ['core', 'ad-accounts-access', 'reporting-health', 'production',
               'content-creation', 'account-ops', 'audits', 'strategy-competition',
-              'sales-pipeline', 'retention-social-proof'];
+              'sales-pipeline', 'retention-social-proof', 'finance'];
     }
     // True for anyone with at least one reason to be in account/client
     // data at all. This is the fallback for clientsDb and anything not
@@ -154,7 +154,8 @@ service cloud.firestore {
         'proposalFollowUps': 'sales-pipeline',
         'salesPipeline': 'sales-pipeline',
         'portfolioShowcase': 'retention-social-proof',
-        'referrals': 'retention-social-proof'
+        'referrals': 'retention-social-proof',
+        'financialCenter': 'finance'
       };
     }
 

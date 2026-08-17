@@ -43,9 +43,20 @@ const SECTION_DEFS = [
   { key: "strategy-competition", label: "Strategy & Competition" },
   { key: "sales-pipeline", label: "Sales Pipeline" },
   { key: "retention-social-proof", label: "Retention & Social Proof" },
-  { key: "agency-globals", label: "Agency Globals" }
+  { key: "agency-globals", label: "Agency Globals" },
+  { key: "finance", label: "Finance" }
 ];
 const SECTION_KEYS = new Set(SECTION_DEFS.map(s => s.key));
+// "finance" (Aug 2026) grants the FINANCE sidebar group - Financial
+// Center, Contract & Invoice Tracker, Subscription Tracker, and Budget
+// Pacing - without pulling in the other sections those tools normally
+// live under (Sales Pipeline, Ad Accounts & Access). Built for handing a
+// bookkeeper/accountant or a finance-focused teammate a narrow view.
+// Note: Budget Pacing's actual spend numbers still come from each
+// client's paidAdsTracker data, which is gated by "ad-accounts-access"
+// separately - a role with "finance" alone will see Budget Pacing in the
+// nav but with no numbers in it. Pair the two sections if that tool
+// needs to actually show data for a given role.
 // NOTE (July 2026 sidebar reorg): "Account Management" was split into
 // "Ad Accounts & Access" and "Reporting & Health"; "Client Retention" and
 // "Social Proof" were merged into "Retention & Social Proof". Any Custom
@@ -85,6 +96,10 @@ const DEFAULT_ROLE_TIERS = {
   "Operations & Admin": {
     sections: ["core", "ad-accounts-access", "account-ops", "agency-globals", "team-ops"],
     note: "Studio Manager, Operations Manager, Executive Assistant, Bookkeeper / Finance Manager, HR Coordinator"
+  },
+  "Finance": {
+    sections: ["finance", "ad-accounts-access", "team-ops"],
+    note: "Bookkeeper, Accountant, Finance Manager - internal or an outside contractor with a revitalproductions.com account. Grants only the FINANCE sidebar group (Financial Center, Contract & Invoice Tracker, Subscription Tracker, Budget Pacing) plus Ad Accounts & Access so Budget Pacing's numbers actually populate. No client production/creative/sales data."
   }
 };
 

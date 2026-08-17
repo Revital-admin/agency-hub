@@ -1141,6 +1141,7 @@ let iframeNeedsReload = {
   "tab-emailtemplates": true,
   "tab-subscriptiontracker": true,
   "tab-businessinsurance": true,
+  "tab-financialcenter": true,
   "tab-activitylog": true,
   "tab-teamroster": true,
   "tab-mytimeoff": true,
@@ -1823,6 +1824,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-businessinsurance":
       renderBusinessInsuranceTracker();
+      break;
+    case "tab-financialcenter":
+      renderFinancialCenter();
       break;
     case "tab-activitylog":
       renderActivityLogTab();
@@ -3710,6 +3714,11 @@ function renderSubscriptionTracker() {
 // ── Business Insurance Tracker Controller ──
 function renderBusinessInsuranceTracker() {
   setIframeAbsoluteSrc('#tab-businessinsurance iframe', "business-insurance-tracker/index.html");
+}
+
+// ── Financial Center Controller ──
+function renderFinancialCenter() {
+  setIframeAbsoluteSrc('#tab-financialcenter iframe', "financial-center/index.html");
 }
 
 // ── Activity Log Controller ──
@@ -8129,8 +8138,21 @@ document.addEventListener('DOMContentLoaded', () => {
   // sidebar is deliberately hiding from them.
   const GENERIC_TOOL_ICON = 'M12 2L2 7l10 5 10-5-10-5z M2 17l10 5 10-5 M2 12l10 5 10-5';
   function getNavTools() {
+    // dedupe by data-tab - the FINANCE nav-section (Aug 2026) intentionally
+    // duplicates a few buttons that already exist elsewhere (Sales Pipeline,
+    // Ad Accounts & Access, Admin Tools footer) so a restricted Finance
+    // role can reach them without the surrounding unrelated tools; without
+    // this, anyone who can see both copies would get the same tool listed
+    // twice here.
+    const seenTabs = new Set();
     return Array.from(document.querySelectorAll('.nav-item-btn[data-tab]'))
       .filter(btn => btn.offsetParent !== null)
+      .filter(btn => {
+        const tab = btn.getAttribute('data-tab');
+        if (seenTabs.has(tab)) return false;
+        seenTabs.add(tab);
+        return true;
+      })
       .map(btn => {
         const span = btn.querySelector('span:last-child');
         const pathEl = btn.querySelector('svg path');
