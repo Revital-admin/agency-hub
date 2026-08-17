@@ -182,7 +182,16 @@ function render() {
       const s = ensureState(c, t);
       s.checked[cb.getAttribute('data-id')] = cb.checked;
       persist();
-      render();
+      // Defer the full re-render so the native checkbox click finishes
+      // cleanly - same fix as the Client Onboarding checklist's own
+      // renderOnboardingChecklist (root app.js). Rebuilding this whole
+      // list's innerHTML synchronously, from inside the very checkbox's
+      // own change handler, destroys and recreates that checkbox mid-
+      // event-dispatch - the browser hadn't finished its own default
+      // toggle action yet, so the freshly rebuilt box would flash back to
+      // unchecked for a frame before settling on the real value. That's
+      // the check-uncheck-recheck glitch Juan reported.
+      setTimeout(render, 50);
     });
   });
 
