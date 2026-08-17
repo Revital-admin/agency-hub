@@ -2917,6 +2917,21 @@ function quickBooksRedirectUri(request) {
   return `${url.protocol}//${url.host}/api/quickbooks/oauth-callback`;
 }
 
+// Intuit's own support team asks app developers to capture this header
+// (see the "Error Handling" section of their app-review questionnaire) -
+// it lets them look up exactly what happened server-side on a specific
+// failed call, without us having to hand over any request/response
+// bodies. Present on every QuickBooks API response, success or failure;
+// only worth reading (and logging) on failures, since that's the only
+// time anyone would ever need to hand it to Intuit support.
+function quickBooksTid(res) {
+  return (res && res.headers && res.headers.get("intuit_tid")) || null;
+}
+function quickBooksErrorSuffix(res) {
+  const tid = quickBooksTid(res);
+  return tid ? ` (intuit_tid: ${tid})` : "";
+}
+
 // Full admin access OR the "finance" Team Access section (added Aug 2026
 // alongside the FINANCE sidebar group - see index.html/team-access-manager)
 // may call these endpoints. Just delegates to requireSection - kept as its
@@ -3023,7 +3038,7 @@ async function handleQuickBooksOAuthCallback(request, env) {
     });
     const tokenData = await tokenRes.json().catch(() => ({}));
     if (!tokenRes.ok) {
-      throw new Error(tokenData.error_description || tokenData.error || `Token exchange failed (${tokenRes.status})`);
+      throw new Error((tokenData.error_description || tokenData.error || `Token exchange failed (${tokenRes.status})`) + quickBooksErrorSuffix(tokenRes));
     }
 
     let companyName = "";
@@ -3032,6 +3047,9 @@ async function handleQuickBooksOAuthCallback(request, env) {
         headers: { Authorization: `Bearer ${tokenData.access_token}`, Accept: "application/json" }
       });
       const infoData = await infoRes.json().catch(() => ({}));
+      if (!infoRes.ok) {
+        console.warn(`Couldn't fetch QuickBooks company name (non-fatal): ${infoRes.status}${quickBooksErrorSuffix(infoRes)}`);
+      }
       companyName = (infoData.CompanyInfo && infoData.CompanyInfo.CompanyName) || "";
     } catch (e) {
       console.warn("Couldn't fetch QuickBooks company name (non-fatal):", e);
@@ -3106,7 +3124,7 @@ async function getValidQuickBooksAccessToken(env) {
   });
   const refreshData = await refreshRes.json().catch(() => ({}));
   if (!refreshRes.ok) {
-    throw new Error(refreshData.error_description || refreshData.error || `QuickBooks token refresh failed (${refreshRes.status}) - may need to reconnect in Financial Center`);
+    throw new Error((refreshData.error_description || refreshData.error || `QuickBooks token refresh failed (${refreshRes.status})`) + " - may need to reconnect in Financial Center" + quickBooksErrorSuffix(refreshRes));
   }
 
   const accessTokenExpiresAt = new Date(Date.now() + (Number(refreshData.expires_in) || 3600) * 1000).toISOString();
@@ -3171,6 +3189,9 @@ async function handleQuickBooksSnapshot(request, env) {
       const query = encodeURIComponent("SELECT Name, AccountType, CurrentBalance FROM Account WHERE Active = true MAXRESULTS 1000");
       const acctRes = await fetch(`${apiBase}/v3/company/${realmId}/query?query=${query}&minorversion=65`, { headers: qbHeaders });
       const acctData = await acctRes.json().catch(() => ({}));
+      if (!acctRes.ok) {
+        throw new Error(`Account query failed (${acctRes.status})${quickBooksErrorSuffix(acctRes)}`);
+      }
       const accounts = (acctData.QueryResponse && acctData.QueryResponse.Account) || [];
 
       const bankTotal = accounts.filter(a => a.AccountType === "Bank").reduce((sum, a) => sum + (Number(a.CurrentBalance) || 0), 0);
@@ -3194,6 +3215,9 @@ async function handleQuickBooksSnapshot(request, env) {
       const today = now.toISOString().slice(0, 10);
       const plRes = await fetch(`${apiBase}/v3/company/${realmId}/reports/ProfitAndLoss?start_date=${startOfMonth}&end_date=${today}&minorversion=65`, { headers: qbHeaders });
       const plData = await plRes.json().catch(() => ({}));
+      if (!plRes.ok) {
+        throw new Error(`Profit & Loss report fetch failed (${plRes.status})${quickBooksErrorSuffix(plRes)}`);
+      }
       const rows = plData.Rows && plData.Rows.Row;
       const income = findQuickBooksReportGroupTotal(rows, "Income");
       const expenses = findQuickBooksReportGroupTotal(rows, "Expenses");
