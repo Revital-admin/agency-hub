@@ -770,7 +770,7 @@ function setupEventHandlers() {
         ${style}
         <div class="page">
           <img src="assets/logo.png" onerror="this.src='../logo.png'" alt="Revital Hub" class="logo">
-          <h1>Content Strategy Builder</h1>
+          <h1>Content Strategy Blueprint</h1>
           <p><strong>Target URL / Project:</strong> ${formatText(state.targetUrl)}</p>
           
           <div class="grid">

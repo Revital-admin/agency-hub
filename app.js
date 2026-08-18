@@ -1224,7 +1224,7 @@ function createClientBlankState(name) {
     targetUrl: ""
   };
 
-  // Initialize Content Strategy Builder
+  // Initialize Content Strategy Blueprint
   const strategyBuilder = {
     targetUrl: "",
     data: {
@@ -3794,7 +3794,7 @@ function renderContentStrategy() {
   setIframeAbsoluteSrc('#tab-strategy iframe', "content-strategy-guide/index.html");
 }
 
-// ── Content Strategy Builder Controller ──
+// ── Content Strategy Blueprint Controller ──
 function renderStrategyBuilder() {
   setIframeAbsoluteSrc('#tab-strategybuilder iframe', "content-strategy-builder/index.html");
 }
