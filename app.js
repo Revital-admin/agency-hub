@@ -1256,7 +1256,7 @@ function createClientBlankState(name) {
     targetUrl: ""
   };
 
-  // Initialize Content Strategy Blueprint
+  // Initialize Content Planning Blueprint
   const strategyBuilder = {
     targetUrl: "",
     data: {
@@ -3700,7 +3700,7 @@ function renderVendorRentalTab() {
 
 // ── SOP Wiki Controller ──
 function renderSopWiki() {
-  setIframeAbsoluteSrc('#tab-sopwiki iframe', "sop-wiki/index.html?v=1.7");
+  setIframeAbsoluteSrc('#tab-sopwiki iframe', "sop-wiki/index.html?v=1.8");
 }
 
 // ── Task Name Generator Controller ──
@@ -3855,7 +3855,7 @@ function renderContentStrategy() {
   setIframeAbsoluteSrc('#tab-strategy iframe', "content-strategy-guide/index.html");
 }
 
-// ── Content Strategy Blueprint Controller ──
+// ── Content Planning Blueprint Controller ──
 function renderStrategyBuilder() {
   setIframeAbsoluteSrc('#tab-strategybuilder iframe', "content-strategy-builder/index.html");
 }
