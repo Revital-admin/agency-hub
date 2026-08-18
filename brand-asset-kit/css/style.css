@@ -1,87 +1,21 @@
-/* ── Hub-native hero header (matches Client Onboarding / Ad Account Setup
-   and the rest of the Hub's core modules) ── */
-:root {
-  --primary: #f68d5f;
-  --secondary: #d85a30;
-  --text-bright: #f5f1e8;
-  --text-muted: #8a887f;
-  --font-heading: 'Fraunces', Georgia, serif;
-}
-
-.site-header {
-  margin-bottom: 0;
-}
-
-.header-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(246, 141, 95, 0.08);
-  border: 1px solid rgba(246, 141, 95, 0.2);
-  border-radius: 100px;
-  padding: 4px 12px;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--primary);
-  margin-bottom: 12px;
-}
-
-.header-eyebrow .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--primary);
-  box-shadow: 0 0 6px var(--primary);
-}
-
-.site-title {
-  font-family: var(--font-heading);
-  font-size: 2.25rem;
-  font-weight: 700;
-  line-height: 1.15;
-  color: var(--text-bright);
-  letter-spacing: -0.5px;
-  margin-bottom: 8px;
-}
-
-.site-title em {
-  font-style: normal;
-  background: linear-gradient(135deg, var(--primary), var(--secondary));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.site-subtitle {
-  font-size: 1rem;
-  color: var(--text-muted);
-  max-width: 800px;
-  margin: 0;
-}
-
-/* Right-side client picker sits beside a much taller title now - keep
-   it pinned to the top of the row instead of vertically centered. */
-.module-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 20px;
-  flex-wrap: wrap;
-  margin-bottom: 24px;
-}
-
-.module-body {
-  margin: 0;
-  padding: 0;
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  font-family: 'Inter', sans-serif;
-  min-height: 100vh;
-}
-
-.module-container {
-  padding: 24px;
-  box-sizing: border-box;
+/* Migrated off vars.css/shared-components.css/forms.css onto the shared
+   ../style.css shell (Tier 4 design-system standardization, Aug 2026).
+   .step-card, .site-header/.header-eyebrow/.site-title/.site-subtitle,
+   .form-group, .btn-primary/.btn-secondary all now come from the
+   shared stylesheet. The local .card convention was renamed to
+   .step-card throughout (dropping the local .card/.card.empty-state
+   panel-treatment rule, since root's .step-card already provides it),
+   and #clientSelect is now wrapped in .form-group instead of having
+   its own standalone styling block, matching every other migrated
+   tool this round. Only truly tool-specific rules and the
+   .container/.form-row utilities forms.css used to provide stay
+   local. */
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
 }
 
 .empty-state {
@@ -93,30 +27,14 @@
   gap: 16px;
   color: var(--color-text-secondary);
 }
+.step-card.empty-state {
+  padding: 64px 24px;
+}
 
 .brand-kit-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 24px;
-}
-
-/* ── Card outline ──
-   .card was never actually given a background/border anywhere in the
-   shared stylesheet chain, so every section rendered as plain floating
-   text with no visual box around it. Adding a real panel treatment here
-   (and the identical rule in Brand Guidelines Builder's stylesheet) so
-   both tools show matching bordered cards instead of an unboxed look. */
-.card {
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 24px;
-}
-/* .empty-state already carries its own (larger) padding - .card's rule
-   above would otherwise win on source order and shrink it, since both
-   are single-class selectors of equal specificity. */
-.card.empty-state {
-  padding: 64px 24px;
 }
 
 .color-picker {
@@ -140,29 +58,6 @@
 .form-row {
   display: flex;
   gap: 16px;
-}
-
-/* ── Client select styling fix ──
-   This module's client picker isn't wrapped in the shared ".form-group"
-   div the other modules use, so it was falling back to the browser's
-   unstyled native white select instead of the Hub's dark theme. Copied
-   the exact rule from the shared stylesheet's ".form-group select" and
-   targeted #clientSelect directly so it matches every other module. */
-#clientSelect {
-  width: 100%;
-  padding: 12px 14px;
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  font-family: var(--font-body);
-  color: var(--color-text-primary);
-  transition: border-color var(--transition), box-shadow var(--transition);
-}
-#clientSelect:focus {
-  outline: none;
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-dim);
 }
 
 /* ── Read-only kit display (Lite is a view onto Brand Identity Vault,
@@ -189,7 +84,7 @@
   color: var(--color-text-secondary);
 }
 .kit-color-hex {
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   font-size: 0.85rem;
   color: var(--color-text-primary);
   margin-left: auto;

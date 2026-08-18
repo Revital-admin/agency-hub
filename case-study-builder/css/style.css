@@ -1,74 +1,18 @@
-:root {
-  --primary: #f68d5f;
-  --secondary: #d85a30;
-  --text-bright: #f5f1e8;
-  --text-muted: #8a887f;
-  --font-heading: 'Fraunces', Georgia, serif;
+/* Migrated off vars.css/shared-components.css/forms.css onto the shared
+   ../style.css shell (Tier 4 design-system standardization, Aug 2026).
+   .step-card, .site-header/.header-eyebrow/.site-title/.site-subtitle,
+   .form-group, .btn-primary/.btn-secondary all now come from the
+   shared stylesheet, and #clientSelect is now wrapped in .form-group
+   instead of having its own standalone styling block. Only truly
+   tool-specific rules and the .container/.form-row/.mt-2/3/4
+   utilities forms.css used to provide stay local. */
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
 }
-
-.site-header { margin-bottom: 0; }
-
-.header-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(246, 141, 95, 0.08);
-  border: 1px solid rgba(246, 141, 95, 0.2);
-  border-radius: 100px;
-  padding: 4px 12px;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--primary);
-  margin-bottom: 12px;
-}
-.header-eyebrow .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--primary);
-  box-shadow: 0 0 6px var(--primary);
-}
-
-.site-title {
-  font-family: var(--font-heading);
-  font-size: 2.25rem;
-  font-weight: 700;
-  line-height: 1.15;
-  color: var(--text-bright);
-  letter-spacing: -0.5px;
-  margin-bottom: 8px;
-}
-.site-title em {
-  font-style: normal;
-  background: linear-gradient(135deg, var(--primary), var(--secondary));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-.site-subtitle {
-  font-size: 1rem;
-  color: var(--text-muted);
-  max-width: 800px;
-  margin: 0;
-}
-
-.module-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 20px;
-  flex-wrap: wrap;
-  margin-bottom: 24px;
-}
-.module-body {
-  margin: 0;
-  padding: 0;
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  font-family: 'Inter', sans-serif;
-  min-height: 100vh;
-}
-.module-container { padding: 24px; box-sizing: border-box; }
 
 .empty-state {
   text-align: center;
@@ -81,23 +25,9 @@
 }
 
 .form-row { display: flex; gap: 16px; }
-
-#clientSelect {
-  width: 100%;
-  padding: 12px 14px;
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  font-family: var(--font-body);
-  color: var(--color-text-primary);
-  transition: border-color var(--transition), box-shadow var(--transition);
-}
-#clientSelect:focus {
-  outline: none;
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-dim);
-}
+.mt-2 { margin-top: 8px; }
+.mt-3 { margin-top: 16px; }
+.mt-4 { margin-top: 24px; }
 
 .embed-link-chip {
   display: flex;
@@ -138,21 +68,10 @@
   flex-shrink: 0;
 }
 
-/* Drag and Drop Zone (shared pattern, see shared-dropzone.js).
-   box-sizing:border-box is essential here - without it, width:100% plus
-   this element's own padding/border adds on top of the parent's width,
-   overflowing the card by ~28px (confirmed live: content-box pushed the
-   zone 28px past its container's right edge). Padding/min-height are
-   also kept modest so this doesn't tower over the compact input fields
-   around it. */
+/* Drag and Drop Zone (shared pattern, see shared-dropzone.js). */
 .drop-zone {
   width: 100%;
   box-sizing: border-box;
-  /* Not a .form-group, and the "mt-2" utility class on this element in
-     the HTML has no effect here (undefined in this module's CSS chain -
-     a pre-existing gap, not something this fix introduced), so without
-     an explicit margin this sat flush against the row above with zero
-     gap, looking like it overlapped. */
   margin-top: 10px;
   border: 2px dashed var(--color-border);
   border-radius: 8px;
