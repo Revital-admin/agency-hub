@@ -2,7 +2,7 @@
 
 Full audit of every tool folder in the Hub, done the night of Aug 16, 2026, right after finishing Production Board. Nothing below has been built yet — this is the punch list to work from tomorrow. Organized so the easy/safe stuff is first.
 
-## Tier 1 — Quick fixes (bugs / dev hygiene, no design decisions needed)
+## Tier 1 — Quick fixes (bugs / dev hygiene, no design decisions needed) — ✅ DONE (Aug 17, 2026)
 
 These are copy-paste leftovers and small bugs. Safe to knock out fast, in any order.
 
@@ -53,4 +53,11 @@ Not tools, skipped: Legal Documents (Originals), billing-canceled, billing-succe
 
 ---
 
-*Next step: pick a tier to start with tomorrow. Tier 1 is the safest place to begin — pure cleanup, no user-facing behavior change, nothing to decide.*
+## Tier 1 completion notes (Aug 17, 2026)
+
+All seven Tier 1 items done. Two things worth flagging that came up during the work, beyond what was originally scoped:
+
+- **Content Strategy Guide turned out to already be clean** — no `textInputs`/mismatched-state-name issue actually present, despite being grouped with Content Audit and Email Marketing Audit in the original writeup. No changes needed there.
+- **Real functional bug found in Content Audit and Email Marketing Audit, not just a naming issue**: the four custom text fields in each tool (Pages Indexed/Avg Traffic/Opportunities/Actions, and List Size/Open Rate/Opportunities/Actions respectively) were never actually saving what got typed into them — the save listener was only ever attached to the checklist container, which doesn't contain those fields (they sit in sibling sections above/below it). Fixed in both tools, plus added the missing step that reloads saved values back into the fields on page load (which never existed either). Worth a mental note: "not broken, just confusing" backlog items are worth a quick functional check before assuming the fix is cosmetic-only.
+
+*Next step: pick Tier 2, 3, or 4 whenever ready.*
