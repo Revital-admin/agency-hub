@@ -1,114 +1,22 @@
 /* ============================================================
    copywriting-assistant/css/style.css
-   Restyled to match the rest of the Hub's "module-body" system
-   (vars.css + shared-components.css + forms.css) instead of the
-   bespoke purple/glass/Fraunces theme this tool used before -
-   that theme shared no fonts, colors, or button styles with any
-   other tool in the Hub, which is why it looked out of place.
-   Hero header (eyebrow badge + gradient title) uses the same
-   local indigo/purple + Space Grotesk pattern as Meeting Notes,
-   Mood Board Builder, Case Study Builder and Brand Guidelines -
-   everything else (buttons, inputs, focus states, accents) pulls
-   from the shared vars.css orange accent like the rest of the Hub.
+   Migrated off vars.css/shared-components.css/forms.css onto the
+   shared ../style.css shell (Tier 4 design-system standardization,
+   Aug 2026). .site-header/.header-eyebrow/.site-title/.site-subtitle,
+   .form-group, .btn-primary/.btn-secondary/.btn-sm all now come from
+   the shared stylesheet (root already had an equivalent .btn-sm, so
+   the local duplicate is gone too). Everything below Target Input is
+   genuinely tool-specific and untouched - it already referenced
+   var(--color-x) directly throughout (no vars.css-only fallback
+   pattern to worry about). Only the .container utility forms.css
+   used to provide stays local.
    ============================================================ */
-
-:root {
-  --primary: #f68d5f;
-  --secondary: #d85a30;
-  --text-bright: #f5f1e8;
-  --text-muted: #8a887f;
-  --font-heading: 'Fraunces', Georgia, serif;
-}
-
-.module-body {
-  margin: 0;
-  padding: 0;
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  font-family: 'Inter', sans-serif;
-  min-height: 100vh;
-}
-
-.module-container {
-  padding: 24px;
-  box-sizing: border-box;
-}
-
-/* Base layout for the header row - other modules define only the
-   flex-direction:column mobile override and assume a desktop base
-   exists, but it doesn't live anywhere shared, so it's defined here
-   in full so the title and header-right buttons actually sit side
-   by side instead of stacking with no layout at all. */
-.module-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 20px;
-  flex-wrap: wrap;
-  margin-bottom: 24px;
-}
-
-.module-header-right {
-  display: flex;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-/* .btn-sm isn't defined in forms.css/vars.css's shared chain (only
-   exists in the old root style.css this module doesn't load), so
-   it's defined locally here to shrink the two header buttons down
-   to fit next to the title instead of using forms.css's full-size
-   default padding. */
-.btn-sm {
-  padding: 6px 14px;
-  font-size: 12px;
-}
-
-.header-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(246, 141, 95, 0.08);
-  border: 1px solid rgba(246, 141, 95, 0.2);
-  border-radius: 100px;
-  padding: 4px 12px;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--primary);
-  margin-bottom: 12px;
-}
-
-.header-eyebrow .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--primary);
-  box-shadow: 0 0 6px var(--primary);
-}
-
-.site-title {
-  font-family: var(--font-heading);
-  font-size: 2.25rem;
-  font-weight: 700;
-  line-height: 1.15;
-  color: var(--text-bright);
-  letter-spacing: -0.5px;
-  margin-bottom: 8px;
-}
-
-.site-title em {
-  font-style: normal;
-  background: linear-gradient(135deg, var(--primary), var(--secondary));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.site-subtitle {
-  font-size: 1rem;
-  color: var(--text-muted);
-  max-width: 700px;
-  margin: 0;
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
 }
 
 /* ── Target Input ────────────────────────────────────────────── */
@@ -256,9 +164,10 @@
   color: var(--color-accent);
 }
 
-/* ── Custom select (native input/textarea styling comes from
-   forms.css's shared .form-group rules; select needs its own
-   dropdown-arrow treatment since forms.css doesn't set one) ── */
+/* ── Custom select (native input/textarea styling comes from the
+   shared .form-group rules in ../style.css; select needs its own
+   dropdown-arrow treatment since the shared stylesheet doesn't set
+   one) ── */
 .form-group select {
   appearance: none;
   background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a887f' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
@@ -372,8 +281,5 @@
 @media (max-width: 900px) {
   .site-title {
     font-size: 1.75rem;
-  }
-  .module-header {
-    flex-direction: column;
   }
 }
