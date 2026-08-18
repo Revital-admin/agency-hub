@@ -7169,6 +7169,38 @@ function adminNotifTimeAgo(isoString) {
 // stream doesn't leak what those two tools already keep hidden.
 const ADMIN_ONLY_NOTIF_TYPES = new Set(['insurance_renewal', 'subscription_renewal']);
 
+// Click-to-navigate (Aug 2026 - "clicking a notification should take you
+// to the tool or task that needs to be done" instead of just marking it
+// read). Maps each notification `type` to the sidebar tab it's actually
+// about - see navigateToTab/switchClient below for what actually runs.
+// A type left off this map still just marks itself read on click, same
+// as before, rather than throwing - not every notification has one
+// obvious destination (e.g. insurance_renewal/subscription_renewal are
+// agency-wide, not per-client, and already link to their own tool by
+// name in the message text).
+const ADMIN_NOTIF_TARGET_TAB = {
+  contract_renewal: 'tab-contractinvoice',
+  stale_client: 'tab-portal',
+  client_drive_folder: 'tab-portal',
+  report_overdue: 'tab-reportarchive',
+  reengagement_reminder: 'tab-renewaltracker',
+  upsell_opportunity: 'tab-budgetpacing',
+  proposal_followup: 'tab-followuptracker',
+  scope_creep: 'tab-changeorder',
+  stale_approval: 'tab-portal',
+  heavy_action_items: 'tab-meetingnotes',
+  stale_contact: 'tab-meetingnotes',
+  approval: 'tab-portal',
+  approval_comment: 'tab-portal',
+  testimonial: 'tab-testimonialtracker',
+  moodboard_viewed: 'tab-moodboard',
+  moodboard_feedback: 'tab-moodboard',
+  moodboard_annotation: 'tab-moodboard',
+  client_pulse_low: 'tab-portal',
+  budget_pacing_90: 'tab-budgetpacing',
+  onboarding_complete: 'tab-onboarding'
+};
+
 // Same "fade then disappear, but never actually delete" pattern as
 // recentlyReadNotifIds in portal/js/app.js - see that comment for why
 // adminNotifications itself still keeps every entry forever (item.read
@@ -7261,6 +7293,21 @@ function renderAdminNotifications() {
           recentlyReadAdminNotifIds.delete(item.id);
           renderAdminNotifications();
         }, ADMIN_NOTIF_FADE_MS);
+      }
+
+      // Click-to-navigate: jump straight to the tool (and, if this
+      // notification is about a specific client, that client's
+      // workspace) instead of leaving the person to go find it
+      // themselves. See ADMIN_NOTIF_TARGET_TAB's own comment above for
+      // why not every type is mapped.
+      const targetTab = ADMIN_NOTIF_TARGET_TAB[item.type];
+      if (targetTab) {
+        if (item.clientName && clientsDb[item.clientName] && item.clientName !== activeClientName) {
+          switchClient(item.clientName);
+        }
+        navigateToTab(targetTab);
+        const dropdown = document.getElementById("adminNotifDropdown");
+        if (dropdown) dropdown.style.display = "none";
       }
     });
 
