@@ -4378,6 +4378,76 @@ async function handleRestrictedClientData(request, env) {
   }
 }
 
+// ── Portal fold-in helpers (server-side port of app.js's client-side
+// versions - foldInOnboardingChecked, foldInNotificationReadState,
+// foldInApprovalDecisions) ──
+// Needed so handleRestrictedClientDataWrite below can safely project
+// onboardingChecklist/notifications/pendingApprovals/approvalHistory into
+// the public clients/{token} doc, the same way syncPublicPortalDocs
+// (app.js) does for an unrestricted admin's own save. Each of these
+// fields can be changed by the CLIENT directly on their own portal (a
+// checked onboarding item, a read notification, an approval decision),
+// so a plain overwrite here - like the one reportArchive already safely
+// gets, since clients never write that field - would risk clobbering
+// whatever the client just did if their change hasn't reached this
+// caller's copy of clientsDb yet. Operates on cloned data, never mutates
+// the caller's actual write payload or the internal clientsDb shard
+// already persisted above - this is purely about what gets projected
+// into the separate public doc. Keep in sync with the app.js originals
+// if that fold-in logic ever changes.
+function foldInOnboardingCheckedServer(targetCategories, existingCategories) {
+  const cloned = JSON.parse(JSON.stringify(Array.isArray(targetCategories) ? targetCategories : []));
+  if (!Array.isArray(existingCategories)) return cloned;
+  const checkedIds = new Set();
+  existingCategories.forEach(cat => (cat && cat.items || []).forEach(item => {
+    if (item && item.checked) checkedIds.add(item.id);
+  }));
+  cloned.forEach(cat => (cat.items || []).forEach(item => {
+    if (checkedIds.has(item.id) && !item.checked) item.checked = true;
+  }));
+  return cloned;
+}
+
+function foldInNotificationReadStateServer(targetNotifications, existingNotifications) {
+  const cloned = JSON.parse(JSON.stringify(Array.isArray(targetNotifications) ? targetNotifications : []));
+  if (!Array.isArray(existingNotifications)) return cloned;
+  const readIds = new Set(existingNotifications.filter(n => n && n.read).map(n => n.id));
+  cloned.forEach(n => {
+    if (readIds.has(n.id) && !n.read) n.read = true;
+  });
+  return cloned;
+}
+
+// Mirrors foldInApprovalDecisions' signature loosely - takes the caller's
+// current pendingApprovals/approvalHistory (from the just-saved internal
+// clientsDb record, which reflects this write) and folds in any
+// approvalHistory entry the existing public doc already has that this
+// copy doesn't, moving the matching pendingApprovals entry (if any) out
+// to mirror it - same "a client decision always wins" reasoning as the
+// client-side version.
+function foldInApprovalDecisionsServer(pendingApprovals, approvalHistory, existingApprovalHistory) {
+  const result = {
+    pendingApprovals: JSON.parse(JSON.stringify(Array.isArray(pendingApprovals) ? pendingApprovals : [])),
+    approvalHistory: JSON.parse(JSON.stringify(Array.isArray(approvalHistory) ? approvalHistory : []))
+  };
+  if (!Array.isArray(existingApprovalHistory)) return result;
+  const knownIds = new Set(result.approvalHistory.map(a => a.id));
+  existingApprovalHistory.forEach(entry => {
+    if (!knownIds.has(entry.id)) {
+      result.approvalHistory = result.approvalHistory.concat([entry]);
+      result.pendingApprovals = result.pendingApprovals.filter(p => p.id !== entry.id);
+    }
+  });
+  return result;
+}
+
+// Which written fields should trigger a public-portal re-project, and
+// how to fold each one - mirrors syncPublicPortalDocs' field list
+// (app.js) for the subset that's actually safe to project this way today
+// (see the long comment inside handleRestrictedClientDataWrite below for
+// which ones aren't yet, and why).
+const PORTAL_SYNCED_FIELDS = ["reportArchive", "onboardingChecklist", "clientChecklist", "notifications", "pendingApprovals", "approvalHistory"];
+
 // ── POST /api/restricted-client-data ──
 // Body: { clientName: string, fields: { fieldName: value, ... } }
 // Validates every key in `fields` is one this caller's granted sections
@@ -4487,30 +4557,38 @@ async function handleRestrictedClientDataWrite(request, env) {
     });
 
     // Bug fix (Aug 2026 - "Monthly Reports aren't reaching the Client
-    // Portal"): the internal clientsDb write above is the whole story for
-    // an UNRESTRICTED admin save - commitDatabaseToCloud (app.js) follows
-    // it up with syncPublicPortalDocs, which projects reportArchive (and
-    // everything else portal-facing) into the public clients/{token} doc
-    // the portal actually reads from. THIS endpoint is the other save
-    // path - every Team-Access-restricted teammate, and also any account
-    // that's been assigned a Team Access role at all regardless of how
-    // broad (confirmed to include Ronald's own account - see
-    // applyRestrictedClientsDbSnapshot's comment in app.js) - and it never
-    // called anything equivalent, so a report saved through here reached
-    // clientsDb fine but silently never reached the portal, even though
-    // the tool's own success banner claims "published to Client Portal."
+    // Portal", later widened to cover onboardingChecklist/clientChecklist/
+    // notifications/pendingApprovals/approvalHistory too): the internal
+    // clientsDb write above is the whole story for an UNRESTRICTED admin
+    // save - commitDatabaseToCloud (app.js) follows it up with
+    // syncPublicPortalDocs, which projects all of these into the public
+    // clients/{token} doc the portal actually reads from. THIS endpoint is
+    // the other save path - every Team-Access-restricted teammate, and
+    // also any account that's been assigned a Team Access role at all
+    // regardless of how broad (confirmed to include Ronald's own account -
+    // see applyRestrictedClientsDbSnapshot's comment in app.js) - and it
+    // never called anything equivalent, so these fields saved fine into
+    // clientsDb but silently never reached the portal.
     //
-    // Scoped to reportArchive only for now - it's the one portal field
-    // genuinely safe to project this way with a plain overwrite, per
-    // syncPublicPortalDocs' own comment: "Admin-only to create - clients
-    // never write this field, so no fold-in-existing-progress step is
-    // needed." onboardingChecklist/clientChecklist/notifications/approvals
-    // etc. have real client-submitted-state fold-in logic client-side
-    // (foldInOnboardingChecked, foldInApprovalDecisions, etc. in app.js)
-    // that would need porting into the Worker too before it'd be safe to
-    // sync them here the same way - left as a known follow-up rather than
-    // risking a rushed, partial port of that logic in this pass.
-    if (Object.prototype.hasOwnProperty.call(fields, "reportArchive")) {
+    // reportArchive/clientChecklist get a plain overwrite (admin-only-
+    // create, or "admin's in-memory copy always wins" respectively - see
+    // syncPublicPortalDocs' own comments for why each is safe as-is).
+    // onboardingChecklist/notifications/pendingApprovals+approvalHistory
+    // can each be changed by the CLIENT directly on their own portal, so
+    // those go through the same fold-in logic syncPublicPortalDocs uses
+    // client-side (ported above as foldInOnboardingCheckedServer/
+    // foldInNotificationReadStateServer/foldInApprovalDecisionsServer)
+    // before being projected, so this save can't clobber a client
+    // decision/read-state/checked-item that hasn't reached this caller's
+    // copy of clientsDb yet.
+    //
+    // Still NOT ported: testimonialSubmission, moodBoardStyleFeedback,
+    // moodBoardAnnotations, clientPulseFeedback, lastVisitedAt - each has
+    // its own more involved item-by-item fold-in client-side and isn't
+    // part of what was actually reported broken. Left as a further
+    // follow-up rather than porting untested logic in this same pass.
+    const touchedPortalFields = PORTAL_SYNCED_FIELDS.filter(key => Object.prototype.hasOwnProperty.call(fields, key));
+    if (touchedPortalFields.length) {
       const savedClient = targetShardData[clientName];
       const token = savedClient && savedClient.portalConfig && savedClient.portalConfig.magicToken;
       if (token) {
@@ -4521,19 +4599,35 @@ async function handleRestrictedClientDataWrite(request, env) {
           // first real unrestricted admin save (syncPublicPortalDocs), and
           // this endpoint has no business bootstrapping a partial one from
           // scratch. If it doesn't exist yet, the next unrestricted save
-          // will create it with reportArchive already included anyway
-          // (reportArchive already lives in clientsDb by this point).
+          // will create it with all of this already included anyway
+          // (it's already sitting in clientsDb by this point).
           if (existingPublicDoc) {
-            await firestoreSetDoc(accessToken, projectId, `clients/${token}`, Object.assign({}, existingPublicDoc, {
-              reportArchive: fields.reportArchive
-            }));
+            const patch = {};
+            if (touchedPortalFields.includes("reportArchive")) {
+              patch.reportArchive = savedClient.reportArchive || [];
+            }
+            if (touchedPortalFields.includes("clientChecklist")) {
+              patch.clientChecklist = savedClient.clientChecklist || [];
+            }
+            if (touchedPortalFields.includes("onboardingChecklist")) {
+              patch.onboardingChecklist = foldInOnboardingCheckedServer(savedClient.onboardingChecklist, existingPublicDoc.onboardingChecklist);
+            }
+            if (touchedPortalFields.includes("notifications")) {
+              patch.notifications = foldInNotificationReadStateServer(savedClient.notifications, existingPublicDoc.notifications);
+            }
+            if (touchedPortalFields.includes("pendingApprovals") || touchedPortalFields.includes("approvalHistory")) {
+              const folded = foldInApprovalDecisionsServer(savedClient.pendingApprovals, savedClient.approvalHistory, existingPublicDoc.approvalHistory);
+              patch.pendingApprovals = folded.pendingApprovals;
+              patch.approvalHistory = folded.approvalHistory;
+            }
+            await firestoreSetDoc(accessToken, projectId, `clients/${token}`, Object.assign({}, existingPublicDoc, patch));
           }
         } catch (e) {
           // Don't fail the whole save over this - the internal clientsDb
           // write above already succeeded and is the source of truth;
           // worst case the portal is stale until the next unrestricted
           // admin save picks it up via syncPublicPortalDocs instead.
-          console.error("Restricted-path reportArchive portal sync failed:", e);
+          console.error("Restricted-path portal sync failed:", e);
         }
       }
     }
