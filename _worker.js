@@ -4486,6 +4486,58 @@ async function handleRestrictedClientDataWrite(request, env) {
       version: currentVersion + 1
     });
 
+    // Bug fix (Aug 2026 - "Monthly Reports aren't reaching the Client
+    // Portal"): the internal clientsDb write above is the whole story for
+    // an UNRESTRICTED admin save - commitDatabaseToCloud (app.js) follows
+    // it up with syncPublicPortalDocs, which projects reportArchive (and
+    // everything else portal-facing) into the public clients/{token} doc
+    // the portal actually reads from. THIS endpoint is the other save
+    // path - every Team-Access-restricted teammate, and also any account
+    // that's been assigned a Team Access role at all regardless of how
+    // broad (confirmed to include Ronald's own account - see
+    // applyRestrictedClientsDbSnapshot's comment in app.js) - and it never
+    // called anything equivalent, so a report saved through here reached
+    // clientsDb fine but silently never reached the portal, even though
+    // the tool's own success banner claims "published to Client Portal."
+    //
+    // Scoped to reportArchive only for now - it's the one portal field
+    // genuinely safe to project this way with a plain overwrite, per
+    // syncPublicPortalDocs' own comment: "Admin-only to create - clients
+    // never write this field, so no fold-in-existing-progress step is
+    // needed." onboardingChecklist/clientChecklist/notifications/approvals
+    // etc. have real client-submitted-state fold-in logic client-side
+    // (foldInOnboardingChecked, foldInApprovalDecisions, etc. in app.js)
+    // that would need porting into the Worker too before it'd be safe to
+    // sync them here the same way - left as a known follow-up rather than
+    // risking a rushed, partial port of that logic in this pass.
+    if (Object.prototype.hasOwnProperty.call(fields, "reportArchive")) {
+      const savedClient = targetShardData[clientName];
+      const token = savedClient && savedClient.portalConfig && savedClient.portalConfig.magicToken;
+      if (token) {
+        try {
+          const existingPublicDoc = await firestoreGetDoc(accessToken, projectId, `clients/${token}`);
+          // Only patch an ALREADY-EXISTING public doc - it's created with
+          // its full correct shape (portalConfig, checklists, etc.) by the
+          // first real unrestricted admin save (syncPublicPortalDocs), and
+          // this endpoint has no business bootstrapping a partial one from
+          // scratch. If it doesn't exist yet, the next unrestricted save
+          // will create it with reportArchive already included anyway
+          // (reportArchive already lives in clientsDb by this point).
+          if (existingPublicDoc) {
+            await firestoreSetDoc(accessToken, projectId, `clients/${token}`, Object.assign({}, existingPublicDoc, {
+              reportArchive: fields.reportArchive
+            }));
+          }
+        } catch (e) {
+          // Don't fail the whole save over this - the internal clientsDb
+          // write above already succeeded and is the source of truth;
+          // worst case the portal is stale until the next unrestricted
+          // admin save picks it up via syncPublicPortalDocs instead.
+          console.error("Restricted-path reportArchive portal sync failed:", e);
+        }
+      }
+    }
+
     return jsonResponse({ success: true }, 200, { "Cache-Control": "no-store" });
   } catch (e) {
     console.error("restricted-client-data write failed:", e);
