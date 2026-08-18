@@ -8336,7 +8336,26 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       overlay.style.display === 'flex' ? closeCmdK() : openCmdK();
     }
-    
+
+    // Fallback for "shortcut doesn't work on Windows" (Aug 2026): Ctrl+K
+    // is a reserved browser-chrome shortcut (jump to the address bar's
+    // search box) in Edge - Windows' default browser - and Edge doesn't
+    // let a page's keydown/preventDefault override it the way Chrome
+    // does. That's a browser difference, not something fixable from here,
+    // so "/" (unmodified, when not typing in a text field) is a second,
+    // never-reserved way to open the palette - same pattern GitHub/Linear
+    // use for exactly this reason. Only listens on the outer document;
+    // each tool iframe would need its own copy to catch "/" while focus
+    // is inside a tool, same limitation Cmd/Ctrl+K already has here.
+    if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const tag = (e.target && e.target.tagName || '').toLowerCase();
+      const isEditable = tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable);
+      if (!isEditable) {
+        e.preventDefault();
+        overlay.style.display === 'flex' ? closeCmdK() : openCmdK();
+      }
+    }
+
     // Esc
     if (e.key === 'Escape' && overlay.style.display === 'flex') {
       closeCmdK();
