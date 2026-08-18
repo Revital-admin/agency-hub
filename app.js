@@ -3811,11 +3811,11 @@ function renderSocialAudit() {
 
 // ── Competitor Analysis Matricies (Website & Social) ──
 function renderWebCompetitors() {
-  setIframeAbsoluteSrc('#tab-webcomp iframe', "competitor-analysis/Website Competitor Analysis Form.html");
+  setIframeAbsoluteSrc('#tab-webcomp iframe', "website-competitor-analysis/index.html");
 }
 
 function renderSocialCompetitors() {
-  setIframeAbsoluteSrc('#tab-socialcomp iframe', "competitor-analysis/Competiteor Analysis Form.html");
+  setIframeAbsoluteSrc('#tab-socialcomp iframe', "social-competitor-analysis/index.html");
 }
 
 // SWOT grid rendering helper with interactive prompt buttons

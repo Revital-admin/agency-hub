@@ -1,0 +1,590 @@
+/* ============================================================
+   social-competitor-analysis/css/style.css
+   Tier 4 rebuild (Aug 2026): this tool used to be an unwired legacy
+   file ("Competiteor Analysis Form.html" - typo baked into the
+   filename and referenced directly by that typo in app.js) sitting
+   in the competitor-analysis/ folder with no index.html, loading its
+   own fully standalone design system (css/styles.css duplicated
+   bg-grid/brand-bar/site-header instead of using the shared one).
+   Now on the shared ../style.css shell - .bg-grid/.brand-bar/
+   .brand-logo-container/.site-header/.header-eyebrow/.dot/.site-title/
+   .site-subtitle all come from there. Everything below is genuinely
+   tool-specific (meta row, competitor table, SWOT cards, insight box)
+   and kept local, since root style.css's own .table-wrap/.comp-table/
+   .swot-grid/.swot-card/.insight-box classes were built for a
+   different, never-wired markup shape (comp-name-input/comp-cell-
+   textarea/swot-card-title etc.) - this tool's actual JS-built markup
+   uses different class names (.comp-name/.cell-input/.prompt-toggle),
+   so these local rules simply take over by source order, same as
+   every other tool this session with a same-named local override. */
+
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+}
+
+/* ── Download PDF button (brand-bar right side) ── */
+.download-pdf-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 8px 18px;
+  border-radius: 100px;
+  border: 1px solid var(--color-accent) !important;
+  background: var(--color-accent-glow, rgba(246,141,95,0.06));
+  color: var(--color-accent);
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: all var(--transition);
+  box-shadow: 0 0 12px rgba(246, 141, 95, 0.05);
+}
+
+.download-pdf-btn:hover {
+  background: var(--color-accent);
+  color: var(--color-bg, #0f0f0d);
+  box-shadow: 0 0 16px rgba(246, 141, 95, 0.2);
+  transform: translateY(-1px);
+}
+
+.download-pdf-btn:active {
+  transform: translateY(1px);
+}
+
+/* ── Section Labels ─────────────────────────────────────────── */
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  margin-top: 2rem;
+}
+
+.section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
+/* ── Meta Section / Inputs ──────────────────────────────────── */
+.meta-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 1.5rem;
+}
+
+.meta-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+  transition: border-color var(--transition);
+}
+
+.meta-card:hover {
+  border-color: var(--color-border-md);
+}
+
+.meta-card label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+
+.meta-card input {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  border-radius: 6px;
+  font-family: var(--font-body, var(--font-sans));
+  font-size: 14px;
+  color: var(--color-text-primary);
+  outline: none;
+  padding: 8px 10px;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.meta-card input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 0.6;
+}
+
+.meta-card input:focus {
+  border-color: var(--color-accent);
+  background: var(--color-surface-2);
+  box-shadow: 0 0 0 3px var(--color-accent-dim);
+}
+
+/* ── Table Styling ──────────────────────────────────────────── */
+.table-wrap {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--color-surface);
+  margin-bottom: 1.5rem;
+}
+
+.comp-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.comp-table thead tr {
+  background: var(--color-surface-2);
+}
+
+.comp-table th {
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+  border-right: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  text-align: center;
+  vertical-align: middle;
+}
+
+.comp-table th:first-child {
+  width: 24%;
+  text-align: center;
+}
+
+.comp-table th:last-child {
+  border-right: none;
+}
+
+.tier-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.tier-head .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: none;
+}
+
+.comp-name {
+  display: block;
+  width: 80%;
+  margin: 4px auto 0;
+  border: none;
+  border-bottom: 1px dashed var(--color-border-md);
+  background: transparent;
+  font-family: var(--font-body, var(--font-sans));
+  font-size: 13px;
+  color: var(--color-text-primary);
+  text-align: center;
+  outline: none;
+  padding: 2px 0;
+  transition: border-color var(--transition);
+}
+
+.comp-name:focus {
+  border-bottom: 1px solid var(--color-accent);
+  border-bottom-style: solid;
+}
+
+.comp-table td {
+  border-right: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+  padding: 0;
+}
+
+.comp-table td:last-child {
+  border-right: none;
+}
+
+.comp-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.comp-table tbody tr:nth-child(even) td {
+  background: rgba(255,255,255,0.01);
+}
+
+.row-label {
+  padding: 12px 14px;
+  font-family: var(--font-body, var(--font-sans));
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  background: var(--color-surface-2) !important;
+  text-align: center !important;
+}
+
+.cell-input {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-family: var(--font-body, var(--font-sans));
+  font-size: 13px;
+  color: var(--color-text-primary);
+  resize: none;
+  outline: none;
+  padding: 10px 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.cell-input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 0.6;
+}
+
+/* ── Ratings & Scores ────────────────────────────────────────── */
+.stars {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 10px 6px;
+}
+
+.star {
+  font-size: 18px;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  user-select: none;
+  transition: color var(--transition), text-shadow var(--transition);
+}
+
+.star:hover,
+.star.on {
+  color: var(--color-accent);
+  text-shadow: 0 0 8px rgba(246, 141, 95, 0.4);
+}
+
+.score-bar {
+  height: 4px;
+  background: var(--color-surface-2);
+  margin: 0 14px 12px;
+  border-radius: 100px;
+  overflow: hidden;
+}
+
+.score-fill {
+  height: 100%;
+  border-radius: 100px;
+  transition: width 0.35s ease;
+}
+
+/* ── SWOT Grid & Cards ───────────────────────────────────────── */
+.swot-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 1.5rem;
+}
+
+.swot-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl, var(--radius-lg));
+  padding: 16px;
+  transition: border-color var(--transition);
+}
+
+.swot-card:hover {
+  border-color: var(--color-border-md);
+}
+
+.swot-card h3 {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prompt-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 100px;
+  cursor: pointer;
+  padding: 4px 12px;
+  margin-bottom: 10px;
+  transition: all var(--transition);
+}
+
+.prompt-toggle:hover {
+  border-color: var(--color-text-muted);
+  color: var(--color-text-primary);
+}
+
+.prompt-toggle svg.chevron {
+  transition: transform 0.25s ease;
+}
+
+.prompt-toggle.open svg.chevron {
+  transform: rotate(180deg);
+}
+
+.prompt-panel {
+  display: none;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.prompt-panel.open {
+  display: block;
+}
+
+.prompt-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 0;
+  cursor: pointer;
+}
+
+.prompt-item input[type="checkbox"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.prompt-item label {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  line-height: 1.45;
+}
+
+.prompt-item.checked label {
+  color: var(--color-text-primary);
+}
+
+.swot-ta {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-family: var(--font-body, var(--font-sans));
+  font-size: 13px;
+  color: var(--color-text-primary);
+  resize: none;
+  outline: none;
+  line-height: 1.6;
+  margin-top: 6px;
+}
+
+.swot-ta::placeholder {
+  color: var(--color-text-muted);
+  opacity: 0.6;
+}
+
+/* ── Takeaway / Insight Box ──────────────────────────────────── */
+.insight-box {
+  background: var(--color-accent-glow, rgba(246,141,95,0.06));
+  border: 1px solid rgba(246, 141, 95, 0.25);
+  border-radius: var(--radius-xl, var(--radius-lg));
+  padding: 14px 18px;
+  font-size: 14px;
+  color: var(--color-text-primary);
+  line-height: 1.65;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 0 16px rgba(246, 141, 95, 0.02);
+}
+
+.insight-box strong {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-accent);
+  display: block;
+  margin-bottom: 6px;
+}
+
+.insight-text {
+  outline: none;
+}
+
+/* ── Controls Row & Reset Button ── */
+.controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.reset-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 16px;
+  border-radius: 100px;
+  border: 1px solid var(--color-border-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: all var(--transition);
+}
+
+.reset-btn:hover {
+  border-color: #f57a7a;
+  color: #f57a7a;
+}
+
+/* ── Custom Checkbox (SWOT prompt items) ── */
+.custom-checkbox {
+  display: block;
+  position: relative;
+  padding-left: 28px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.95rem;
+  line-height: 20px;
+}
+.custom-checkbox input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
+}
+.checkmark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 20px;
+  width: 20px;
+  background-color: var(--color-surface-2);
+  border-radius: 4px;
+  border: 1px solid var(--color-border-md);
+  transition: all 0.2s ease;
+}
+.custom-checkbox:hover input ~ .checkmark {
+  background-color: var(--color-surface);
+}
+.custom-checkbox input:checked ~ .checkmark {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.checkmark:after {
+  content: "";
+  position: absolute;
+  display: none;
+}
+.custom-checkbox input:checked ~ .checkmark:after {
+  display: block;
+}
+.custom-checkbox .checkmark:after {
+  left: 6px;
+  top: 2px;
+  width: 5px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* ── Print Styles ───────────────────────────────────────────── */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 15mm 12mm;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+    padding: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .bg-grid {
+    display: none !important;
+  }
+  .container {
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+  .controls-row,
+  .prompt-toggle,
+  .prompt-panel,
+  .download-pdf-btn,
+  .reset-btn {
+    display: none !important;
+  }
+  .swot-ta,
+  .cell-input,
+  .comp-name,
+  input {
+    color: #000 !important;
+  }
+  .comp-table,
+  .swot-card,
+  .insight-box,
+  .meta-card {
+    break-inside: avoid;
+    background: transparent !important;
+    border: 1px solid #ddd !important;
+  }
+  .row-label {
+    background: #f5f5f5 !important;
+    color: #000 !important;
+  }
+}
+
+/* ── Responsive ── */
+@media (max-width: 620px) {
+  .meta-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .swot-grid {
+    grid-template-columns: 1fr;
+  }
+  .container {
+    padding: 2rem 1rem;
+  }
+}

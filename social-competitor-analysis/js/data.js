@@ -1,18 +1,25 @@
 /* ============================================================
-   data.js — all editable content lives here
+   social-competitor-analysis/js/data.js — all editable content lives here
    Edit this file to customize rows, prompts, and SWOT cards.
    ============================================================ */
 
+// Each row needs a unique `key` - app.js uses it to store that row's three
+// competitor values at socialComp.rows[row.key]. Previously these rows had
+// no `key` field at all, so every row's textareas silently shared the exact
+// same socialComp.rows[undefined] bucket - typing in "Posting Frequency" for
+// Competitor A would overwrite whatever was typed in "Followers" for the
+// same competitor, and every row displayed identical content. Fixed as part
+// of the Tier 4 rebuild (Aug 2026).
 const TABLE_ROWS = [
-  { label: 'Followers',              placeholder: 'e.g. 120K IG, 45K TT' },
-  { label: 'Posting Frequency',      placeholder: 'e.g. Daily reels, 3x/week' },
-  { label: 'Content Style',          placeholder: 'Cinematic, UGC, editorial…' },
-  { label: 'Engagement Rate',        placeholder: 'e.g. ~3.2% avg' },
-  { label: 'Avg Video Views',        placeholder: 'e.g. 50K per reel' },
-  { label: 'Best Performing Content',placeholder: 'BTS, client results, trends…' },
-  { label: 'Pricing Model',          placeholder: 'Retainer / project / hourly' },
-  { label: 'Brand Identity',         placeholder: 'Tone, aesthetic, positioning…' },
-  { label: 'Target Clients',         placeholder: 'SMBs, lifestyle brands…' },
+  { key: 'followers',    label: 'Followers',              placeholder: 'e.g. 120K IG, 45K TT' },
+  { key: 'frequency',    label: 'Posting Frequency',      placeholder: 'e.g. Daily reels, 3x/week' },
+  { key: 'style',        label: 'Content Style',          placeholder: 'Cinematic, UGC, editorial…' },
+  { key: 'engagement',   label: 'Engagement Rate',        placeholder: 'e.g. ~3.2% avg' },
+  { key: 'video-views',  label: 'Avg Video Views',        placeholder: 'e.g. 50K per reel' },
+  { key: 'top-content',  label: 'Best Performing Content',placeholder: 'BTS, client results, trends…' },
+  { key: 'pricing',      label: 'Pricing Model',          placeholder: 'Retainer / project / hourly' },
+  { key: 'identity',     label: 'Brand Identity',         placeholder: 'Tone, aesthetic, positioning…' },
+  { key: 'target',       label: 'Target Clients',         placeholder: 'SMBs, lifestyle brands…' },
 ];
 
 const COMPETITOR_COLORS = {

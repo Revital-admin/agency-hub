@@ -1,18 +1,25 @@
 /* ============================================================
-   website-data.js — all editable content lives here
+   website-competitor-analysis/js/data.js — all editable content lives here
    ============================================================ */
 
+// Each row needs a unique `key` - app.js uses it to store that row's three
+// competitor values at webComp.rows[row.key]. Previously these rows had no
+// `key` field at all, so every row's textareas silently shared the exact
+// same webComp.rows[undefined] bucket - typing in "Design & UX Quality" for
+// Competitor A would overwrite whatever was typed in "Primary Value Prop"
+// for the same competitor, and every row displayed identical content. Fixed
+// as part of the Tier 4 rebuild (Aug 2026).
 const TABLE_ROWS = [
-  { label: 'Primary Value Prop',      placeholder: 'e.g. Messaging clarity, core hook...' },
-  { label: 'Design & UX Quality',     placeholder: 'e.g. Modern, clean, typography...' },
-  { label: 'Mobile Responsive UX',    placeholder: 'e.g. Navigation, scaling, tap-friendly...' },
-  { label: 'Key Site Features',       placeholder: 'e.g. Booking, portal, blog, search...' },
-  { label: 'Primary CTA & Funnel',    placeholder: 'e.g. Inquire button, lead magnet...' },
-  { label: 'SEO & Organic Keywords',  placeholder: 'e.g. Ranks #1 for "X production", backlinks...' },
-  { label: 'Load Speed & Perf',       placeholder: 'e.g. Lighthouse score, desktop vs mobile...' },
-  { label: 'Technology Stack',        placeholder: 'e.g. Webflow, WordPress, Shopify...' },
-  { label: 'Social Proof & Trust',    placeholder: 'e.g. Testimonials, logos, case studies...' },
-  { label: 'Navigation & Structure',  placeholder: 'e.g. Simple, intuitive menu, internal links...' }
+  { key: 'value-prop',    label: 'Primary Value Prop',      placeholder: 'e.g. Messaging clarity, core hook...' },
+  { key: 'design-ux',     label: 'Design & UX Quality',     placeholder: 'e.g. Modern, clean, typography...' },
+  { key: 'mobile-ux',     label: 'Mobile Responsive UX',    placeholder: 'e.g. Navigation, scaling, tap-friendly...' },
+  { key: 'features',      label: 'Key Site Features',       placeholder: 'e.g. Booking, portal, blog, search...' },
+  { key: 'cta-funnel',    label: 'Primary CTA & Funnel',    placeholder: 'e.g. Inquire button, lead magnet...' },
+  { key: 'seo',           label: 'SEO & Organic Keywords',  placeholder: 'e.g. Ranks #1 for "X production", backlinks...' },
+  { key: 'load-speed',    label: 'Load Speed & Perf',       placeholder: 'e.g. Lighthouse score, desktop vs mobile...' },
+  { key: 'tech-stack',    label: 'Technology Stack',        placeholder: 'e.g. Webflow, WordPress, Shopify...' },
+  { key: 'social-proof',  label: 'Social Proof & Trust',    placeholder: 'e.g. Testimonials, logos, case studies...' },
+  { key: 'navigation',    label: 'Navigation & Structure',  placeholder: 'e.g. Simple, intuitive menu, internal links...' }
 ];
 
 const COMPETITOR_COLORS = {
