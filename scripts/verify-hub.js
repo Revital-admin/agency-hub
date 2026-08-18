@@ -214,11 +214,27 @@ function checkUnguardedWrites() {
   console.log('\n── Unguarded writes (advisory) ──');
   const jsFiles = walkJsFiles(ROOT).filter(f => f.includes(`${path.sep}js${path.sep}app.js`));
   let flagged = 0;
+  // Investigated Aug 2026 (hours-tracker and resource-booking-calendar
+  // were the only two flagging at the time): both write to a PER-ENTITY
+  // Firestore doc built from a get*DocRef(id)-style helper (one doc per
+  // hours-log entry / per booking, e.g. getEntryDocRef(id),
+  // getBookingDocRef(booking.id)) rather than one shared doc the whole
+  // tool overwrites - the same inherently-safe pattern
+  // contractInvoiceRecords already uses (confirmed safe elsewhere in this
+  // codebase without needing saveVersionedAgencyDoc's optimistic-
+  // concurrency check, since two saves can only ever race on the exact
+  // same entity's own doc, not clobber unrelated entities the way a
+  // whole-doc overwrite could). Recognize that pattern here too so this
+  // advisory stops re-flagging an already-confirmed-safe design on every
+  // run - a file with a *DocRef(id) helper feeding the write call is
+  // exempted; anything else still gets flagged for a human to check.
+  const perEntityDocRefPattern = /firebaseSetDocFromJSON\s*\(\s*get\w*DocRef\s*\(\s*\w/;
   jsFiles.forEach(f => {
     const src = fs.readFileSync(f, 'utf8');
     const usesVersionedHelper = /saveVersionedAgencyDoc/.test(src);
     const hasDirectWrite = /firebaseSetDocFromJSON\s*\(|\bsetDoc\s*\(/.test(src);
-    if (hasDirectWrite && !usesVersionedHelper) {
+    const usesPerEntityDocRef = perEntityDocRefPattern.test(src);
+    if (hasDirectWrite && !usesVersionedHelper && !usesPerEntityDocRef) {
       warn(`${path.relative(ROOT, f)} calls a direct Firestore write but never calls saveVersionedAgencyDoc - confirm it has its own version-guard (e.g. a sharded doc) or is otherwise safe.`);
       flagged++;
     }
