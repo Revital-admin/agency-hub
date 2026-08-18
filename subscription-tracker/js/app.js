@@ -187,6 +187,10 @@ function removeEntry(id) {
 }
 
 function monthlyEquivalent(entry) {
+  // "No Cycle" means the tool is used free (no plan we're paying for) -
+  // exclude it from cost totals outright rather than trusting whatever's
+  // sitting in the cost field, in case it's ever non-zero by mistake.
+  if (entry.billingCycle === 'No Cycle') return 0;
   const cost = parseFormattedNumber(entry.monthlyCost);
   return entry.billingCycle === 'Annual' ? cost / 12 : cost;
 }
