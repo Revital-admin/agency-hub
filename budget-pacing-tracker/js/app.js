@@ -215,6 +215,47 @@ function escapeHtmlBp(str) {
   return div.innerHTML;
 }
 
+// ── Jump to the Hub's active client on load ──
+// This tool tracks every client's budget on one screen rather than being
+// scoped to a single active client like most other tools - useful, but it
+// meant there was no way to land here from the Hub's client switcher and
+// actually see the client you'd just switched to; you had to scroll/hunt
+// for their card among everyone else's. Runs once per page load, right
+// after client data is actually populated - boot calls renderTable()
+// several times as data trickles in (see DOMContentLoaded below), and
+// this is deliberately only invoked from those boot call sites, not from
+// renderTable() itself, so it doesn't re-trigger on every routine field
+// edit the tool makes afterward.
+let scrolledToActiveClient = false;
+function scrollToActiveClientOnce() {
+  if (scrolledToActiveClient || !isEmbedded) return;
+  // getActiveClient() returns the active client OBJECT, not its name - the
+  // parent's activeClientName variable isn't exposed on window (top-level
+  // let/const don't attach to window). Reverse-lookup by object identity
+  // instead (works because getAllClients() returns the live clientsDb
+  // object by reference across this same-origin iframe boundary, not a
+  // serialized copy) - same pattern Mood Board Builder's
+  // getGlobalActiveClientName() already uses.
+  let activeName = null;
+  try {
+    const active = typeof window.parent.getActiveClient === 'function' ? window.parent.getActiveClient() : null;
+    if (!active) return;
+    const clients = getClients();
+    activeName = Object.keys(clients).find(n => clients[n] === active) || null;
+  } catch (e) { return; }
+  if (!activeName) return;
+
+  const cards = document.querySelectorAll(`.pacing-card[data-client-name="${CSS.escape(activeName)}"]`);
+  if (!cards.length) return; // not tracked here yet, or data hasn't loaded - a later boot call will retry
+
+  scrolledToActiveClient = true;
+  cards[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  cards.forEach(card => {
+    card.classList.add('pacing-card-active-highlight');
+    setTimeout(() => card.classList.remove('pacing-card-active-highlight'), 2200);
+  });
+}
+
 function renderTable() {
   const clients = getClients();
   const listEl = el('trackerList');
@@ -282,6 +323,7 @@ function renderTable() {
 
       const card = document.createElement('div');
       card.className = 'pacing-card';
+      card.dataset.clientName = name;
 
       card.innerHTML = `
         <div class="card-header">
@@ -455,12 +497,13 @@ el('addTrackerBtn').addEventListener('click', () => {
 document.addEventListener('DOMContentLoaded', () => {
   populateClientSelect();
   renderTable();
+  scrollToActiveClientOnce();
 
   // Rate/hours/billing data for the cost-and-margin panel loads
   // separately from client data (three more Firestore reads) - render
   // once immediately with whatever's cached, then again once this
   // resolves so the panel doesn't sit blank/stale on first load.
-  loadAuxData().then(() => renderTable());
+  loadAuxData().then(() => { renderTable(); scrollToActiveClientOnce(); });
 
   // The parent Hub loads its client database asynchronously (instant
   // localStorage boot, then a Firestore sync on top of that). If this
@@ -479,6 +522,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (hasClients) {
         populateClientSelect();
         renderTable();
+        scrollToActiveClientOnce();
       }
     }
   }, 250);

@@ -83,6 +83,14 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Briefly highlights the active Hub client's card(s) after
+   scrollToActiveClientOnce() scrolls to them on load (js/app.js). */
+.pacing-card-active-highlight {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent), 0 0 20px rgba(246, 141, 95, 0.25);
 }
 
 .card-header {
