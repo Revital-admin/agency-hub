@@ -4,25 +4,27 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QBR Generator</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../vars.css">
-  <link rel="stylesheet" href="../shared-components.css">
-  <link rel="stylesheet" href="../forms.css?v=2">
-  <link rel="stylesheet" href="css/style.css?v=2">
+  <link rel="stylesheet" href="../style.css?v=2">
+  <link rel="stylesheet" href="css/style.css?v=3">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
-<body class="module-body">
-  <div class="module-container">
-    <div class="module-header">
-      <div class="module-header-left">
-        <div class="site-header">
-          <div class="header-eyebrow"><span class="dot"></span><span>Account Management</span></div>
-          <h1 class="site-title">QBR <em>Generator</em></h1>
-          <p class="site-subtitle">Pulls a client's health history, deliverables, referrals, and billing status into a renewal/upsell-ready one-pager, instead of assembling it by hand every quarter.</p>
-        </div>
-      </div>
-      <div class="module-header-right">
-        <select id="clientSelect" class="form-control" style="width: 250px;"></select>
+<body>
+  <div class="bg-grid"></div>
+
+  <main class="container">
+    <div class="brand-bar">
+      <div class="brand-logo-container"></div>
+    </div>
+
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:16px;">
+      <header class="site-header" style="margin-bottom:0;">
+        <div class="header-eyebrow"><span class="dot"></span><span>Account Management</span></div>
+        <h1 class="site-title">QBR <em>Generator</em></h1>
+        <p class="site-subtitle">Pulls a client's health history, deliverables, referrals, and billing status into a renewal/upsell-ready one-pager, instead of assembling it by hand every quarter.</p>
+      </header>
+      <div class="form-group" style="margin-bottom:0; min-width:250px;">
+        <select id="clientSelect"></select>
       </div>
     </div>
 
@@ -105,7 +107,7 @@
         <div id="revisionsSummary" class="qbr-stats-row"></div>
       </div>
     </div>
-  </div>
-  <script src="js/app.js?v=2"></script>
+  </main>
+  <script src="js/app.js?v=3"></script>
 </body>
 </html>

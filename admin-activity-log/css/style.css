@@ -1,100 +1,20 @@
-/* ── Hub-native hero header (matches Brand Asset Kit / Mood Board /
-   Brand Guidelines and the rest of the Hub's core modules) ──
-   Missing until now - this tool linked vars.css/shared-components.css/
-   forms.css like the other generator tools, but never defined its own
-   .module-body/.module-container (every other tool using this pattern
-   does, locally, in its own css/style.css - shared-components.css does
-   NOT provide it). Without it the page body had no background/text-color
-   at all, so it fell back to unstyled browser defaults instead of the
-   Hub's dark theme - this block is copied from red-flag-checklist's
-   css/style.css, the canonical version of this pattern. */
-:root {
-  --primary: #f68d5f;
-  --secondary: #d85a30;
-  --text-bright: #f5f1e8;
-  --text-muted: #8a887f;
-  --font-heading: 'Fraunces', Georgia, serif;
+/* Migrated off vars.css/shared-components.css/forms.css onto the shared
+   ../style.css shell (Tier 4 design-system standardization, Aug 2026).
+   .step-card, .site-header/.header-eyebrow/.site-title/.site-subtitle,
+   .form-group, .btn-primary/.btn-secondary all now come from the shared
+   stylesheet - only truly tool-specific rules and the two small
+   utility classes forms.css used to provide (.container, .form-row)
+   stay local, same pattern every other tool on the shared shell uses. */
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
 }
 
-.site-header {
-  margin-bottom: 0;
-}
-
-.header-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(246, 141, 95, 0.08);
-  border: 1px solid rgba(246, 141, 95, 0.2);
-  border-radius: 100px;
-  padding: 4px 12px;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--primary);
-  margin-bottom: 12px;
-}
-
-.header-eyebrow .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--primary);
-  box-shadow: 0 0 6px var(--primary);
-}
-
-.site-title {
-  font-family: var(--font-heading);
-  font-size: 2.25rem;
-  font-weight: 700;
-  line-height: 1.15;
-  color: var(--text-bright);
-  letter-spacing: -0.5px;
-  margin-bottom: 8px;
-}
-
-.site-title em {
-  font-style: normal;
-  background: linear-gradient(135deg, var(--primary), var(--secondary));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.site-subtitle {
-  font-size: 1rem;
-  color: var(--text-muted);
-  max-width: 800px;
-  margin: 0;
-}
-
-.module-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 20px;
-  flex-wrap: wrap;
-  margin-bottom: 24px;
-}
-
-.module-body {
-  margin: 0;
-  padding: 0;
-  /* Was var(--color-surface) - an opaque fill that hid the Hub's shared
-     .bg-grid/.bg-glow ambient background, leaving this tool looking flat
-     next to Service Pricing Admin (another Admin-panel tool that
-     deliberately lets the parent's background show through). .step-card
-     elements below already have their own opaque background, so this
-     only affects the empty space around them. */
-  background: transparent;
-  color: var(--color-text-primary);
-  font-family: 'Inter', sans-serif;
-  min-height: 100vh;
-}
-
-.module-container {
-  padding: 24px;
-  box-sizing: border-box;
-}
+.form-row { display: flex; gap: 16px; flex-wrap: wrap; }
+.form-row .form-group { flex: 1; min-width: 0; }
 
 .activity-log-list {
   max-height: 70vh;

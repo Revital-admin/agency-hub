@@ -35,7 +35,7 @@ Small logic additions that would make existing fields actually trustworthy inste
 - **Email Signature Generator** — no required-field check on Name/Email; the signature just renders with blanks silently if you skip them.
 - **Contractor Portal** — no validation preventing an end date before a start date, or an unreasonable hours value on time-off requests. Low stakes (contractor-facing, low volume) but easy to add.
 
-## Tier 4 — Bigger decisions (worth talking through before building)
+## Tier 4 — Bigger decisions (worth talking through before building) — brand sync + 6 tools migrated (Aug 18, 2026)
 
 These aren't quick fixes — each is either a real architectural question or a noticeable rebuild. Flagging them rather than just building them.
 
@@ -76,3 +76,13 @@ All six items done:
 Nothing found beyond the original scope this round — no surprise bugs like Tier 1's Content Audit save issue.
 
 *Next step: Tier 4 (bigger decisions) whenever ready — those are flagged as worth discussing first, not just building.*
+
+## Tier 4 progress notes (Aug 18, 2026)
+
+Talked through each item before building, per how this tier was scoped. Outcomes:
+
+- **Brand data sync** — investigation found the backlog's framing was partly stale: `client.brandGuideline` being independent from `client.brandVault`/`brandKit` is *intentional* (documented in `ARCHITECTURE.md`, with a code comment saying as much), not an oversight, so left that separation alone. The real gap was narrower: `client.portalConfig.primaryColor/secondaryColor/accentColor` (which actually re-skins the live client Portal's theme) only ever got set by Client Portal Manager's manual "Sync Colors" button, so edits after the last click left the Portal stale. Fixed by having Brand Guidelines Builder and Brand Identity Vault both auto-push to `portalConfig` on save, mirroring the button's own source precedence. Manual button left in place as a no-op-safe override.
+- **Design system split** — researched effort per tool (6 small/class-rename-only, 5 medium, 3 large/genuinely risky - Mood Board Builder, Sales Pipeline Board, Copywriting Assistant). Migrated the 6 small ones to the shared `../style.css` shell: Admin Activity Log, Testimonial Tracker, Red Flag Checklist, QBR Generator, Budget Pacing Tracker, Review & Reputation Tracker. All now match the other 47 tools' look (DM Mono/Fraunces, `.step-card`/`.tracker-controls-row`-style shell) instead of the older Inter-based `vars.css`/`shared-components.css`/`forms.css` chain. The 5 medium and 3 large tools are untouched - worth revisiting later if there's appetite, but not done this round.
+- **Competitor Analysis rebuild, content/creative strategy naming, tools skipping the page shell** — not picked this round; still open whenever there's interest.
+
+Nothing found beyond scope this round on the migrated tools, except two dynamically-rendered `.form-control` inputs (Budget Pacing Tracker's spent/total/date fields) that lived outside a `.form-group` wrapper and needed a small local CSS rule added to keep working, since forms.css's standalone `.form-control` styling no longer applies once that stylesheet chain is dropped - checked all 6 migrated tools for this same gap individually.
