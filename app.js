@@ -2184,6 +2184,7 @@ function refreshAllViews(options) {
   try { runStaleApprovalNudgeCheck(); } catch (e) { console.error("Error in runStaleApprovalNudgeCheck:", e); }
   try { runHeavyActionItemsNudgeCheck(); } catch (e) { console.error("Error in runHeavyActionItemsNudgeCheck:", e); }
   try { runStaleContactNudgeCheck(); } catch (e) { console.error("Error in runStaleContactNudgeCheck:", e); }
+  try { runProductionDeadlineNudgeCheck(); } catch (e) { console.error("Error in runProductionDeadlineNudgeCheck:", e); }
 
   // Toggle Sandbox Banner
   const sandboxName = "Quick Sandbox (One-Offs)";
@@ -7180,6 +7181,56 @@ function runStaleContactNudgeCheck() {
   });
 }
 
+const PRODUCTION_DEADLINE_NUDGE_CHECK_INTERVAL_MS = 60 * 60 * 1000; // same hourly cadence as the other sweeps
+const PRODUCTION_DEADLINE_HOURS_THRESHOLD = 48;
+// Shorter than the day-scale cooldowns above (renewal/insurance/etc.) on
+// purpose - a task inside a 48h window is a fast-moving thing, and half a
+// day of silence on an undone item that close to its deadline isn't
+// unreasonable to re-surface, unlike a renewal that's still weeks out.
+const PRODUCTION_DEADLINE_NUDGE_COOLDOWN_MS = 12 * 60 * 60 * 1000;
+let lastProductionDeadlineNudgeCheckAt = 0;
+
+// Production/Creative notification trigger (settled Hub trigger list,
+// Aug 2026 - "a deadline is inside 48h and the linked task isn't marked
+// done"). Scans client.productionBoard directly rather than
+// productionBoardCompleted - an item only lives in productionBoard while
+// it's still active (see markComplete/archiveItemAsComplete in
+// production-board/js/app.js, which move it to productionBoardCompleted
+// the moment it's actually done), so "still in this array" already means
+// "not done," no separate status field to check. Includes items already
+// past their deadline (hoursUntil negative), not just approaching it -
+// an overdue, still-undone item is strictly more urgent, not less.
+// Dedup is keyed by item id (folded into the notification message
+// implicitly via title+date, but checked explicitly here by id so two
+// different overdue items for the same client don't suppress each
+// other's very first nudge the way a plain type+clientName cooldown
+// check would).
+function runProductionDeadlineNudgeCheck() {
+  const now = Date.now();
+  if (now - lastProductionDeadlineNudgeCheckAt < PRODUCTION_DEADLINE_NUDGE_CHECK_INTERVAL_MS) return;
+  lastProductionDeadlineNudgeCheckAt = now;
+
+  Object.entries(clientsDb).forEach(([name, client]) => {
+    if (!client || !Array.isArray(client.productionBoard)) return;
+    client.productionBoard.forEach(item => {
+      if (!item || !item.targetDate) return;
+      const hoursUntil = (new Date(item.targetDate + 'T23:59:59').getTime() - now) / (60 * 60 * 1000);
+      if (hoursUntil > PRODUCTION_DEADLINE_HOURS_THRESHOLD) return;
+
+      const alreadyNudged = adminNotifications.some(n =>
+        n.type === 'deadline_48h' &&
+        n.clientName === name &&
+        n.message.indexOf(`"${item.title}"`) !== -1 &&
+        (now - new Date(n.createdAt).getTime()) < PRODUCTION_DEADLINE_NUDGE_COOLDOWN_MS
+      );
+      if (alreadyNudged) return;
+
+      const phrase = hoursUntil < 0 ? `was due ${item.targetDate}` : `is due ${item.targetDate}`;
+      pushAdminNotification('deadline_48h', `${name}: "${item.title}" ${phrase} and isn't marked done.`, name, null);
+    });
+  });
+}
+
 function adminNotifTimeAgo(isoString) {
   if (!isoString) return "";
   const diffMs = Date.now() - new Date(isoString).getTime();
@@ -7232,7 +7283,9 @@ const ADMIN_NOTIF_TARGET_TAB = {
   budget_pacing_90: 'tab-budgetpacing',
   onboarding_complete: 'tab-onboarding',
   invoice_overdue: 'tab-contractinvoice',
-  deal_won: 'tab-pipelineboard'
+  deal_won: 'tab-pipelineboard',
+  production_request: 'tab-productionboard',
+  deadline_48h: 'tab-productionboard'
 };
 
 // Same "fade then disappear, but never actually delete" pattern as

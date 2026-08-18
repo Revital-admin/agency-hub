@@ -826,6 +826,13 @@ function moveToProductionBoard(id) {
   if (isEmbedded && window.parent.iframeNeedsReload) {
     window.parent.iframeNeedsReload["tab-productionboard"] = true;
   }
+  // Production/Creative notification trigger (settled Hub trigger list,
+  // Aug 2026 - "a content/creative request is submitted"). This move IS
+  // that moment from the production team's side: an idea just became a
+  // real, assignable task on their board.
+  if (isEmbedded && window.parent.pushAdminNotification) {
+    window.parent.pushAdminNotification('production_request', `New production request for ${client.name}: "${board.title}" was moved to the Production Board.`, client.name, null);
+  }
   if (editingBoardId === id) resetForm();
   renderBoardsList();
   if (isEmbedded && window.parent.showBanner) {
