@@ -34,19 +34,21 @@
       <div class="step-card">
         
         <div class="form-group">
-          <label for="empName">Full Name</label>
+          <label for="empName">Full Name <span class="required-mark">*</span></label>
           <input type="text" id="empName" placeholder="e.g. John Doe">
         </div>
-        
+
         <div class="form-group">
           <label for="empTitle">Job Title</label>
           <input type="text" id="empTitle" placeholder="e.g. Account Manager">
         </div>
 
         <div class="form-group">
-          <label for="empEmail">Revital Email</label>
+          <label for="empEmail">Revital Email <span class="required-mark">*</span></label>
           <input type="email" id="empEmail" placeholder="e.g. john@revitalproductions.com">
         </div>
+
+        <p id="requiredFieldsWarning" class="required-fields-warning" style="display:none;">Full Name and Revital Email are required - the signature currently has placeholder text where they should be.</p>
 
         <div class="form-group">
           <label for="empPhone">Direct Phone (Optional)</label>
@@ -84,6 +86,6 @@
   </main>
   
   <script src="js/logo.js"></script>
-  <script src="js/app.js?v=67"></script>
+  <script src="js/app.js?v=68"></script>
 </body>
 </html>

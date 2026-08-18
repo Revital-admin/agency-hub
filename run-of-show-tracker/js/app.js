@@ -182,7 +182,17 @@ function renderTable() {
   renderSummary();
 
   const filterClient = el('filterClientInput').value.trim().toLowerCase();
-  const rows = entries.filter(e => !filterClient || e.clientName.toLowerCase().includes(filterClient));
+  const rows = entries
+    .filter(e => !filterClient || e.clientName.toLowerCase().includes(filterClient))
+    .slice()
+    .sort((a, b) => {
+      // Soonest-upcoming first, since this is a scheduling tool - not
+      // insertion order. Entries with no date yet sort to the end.
+      if (!a.eventDate && !b.eventDate) return 0;
+      if (!a.eventDate) return 1;
+      if (!b.eventDate) return -1;
+      return a.eventDate.localeCompare(b.eventDate);
+    });
 
   const tbody = el('logTableBody');
   tbody.innerHTML = '';

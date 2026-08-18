@@ -24,7 +24,7 @@ None of these are broken today — they're fine at current volume — but each i
 - **Referral Tracker** — agency-wide log, no search/filter, accumulates indefinitely.
 - **Release Forms Tracker** — has a client-name filter but no status filter. Worth adding since a pending waiver is a legal/compliance risk you'd want to isolate quickly (a "show pending only" toggle, same pattern Renewal Tracker already uses).
 
-## Tier 3 — Data accuracy gaps
+## Tier 3 — Data accuracy gaps — ✅ DONE (Aug 18, 2026)
 
 Small logic additions that would make existing fields actually trustworthy instead of manually maintained.
 
@@ -61,3 +61,18 @@ All seven Tier 1 items done. Two things worth flagging that came up during the w
 - **Real functional bug found in Content Audit and Email Marketing Audit, not just a naming issue**: the four custom text fields in each tool (Pages Indexed/Avg Traffic/Opportunities/Actions, and List Size/Open Rate/Opportunities/Actions respectively) were never actually saving what got typed into them — the save listener was only ever attached to the checklist container, which doesn't contain those fields (they sit in sibling sections above/below it). Fixed in both tools, plus added the missing step that reloads saved values back into the fields on page load (which never existed either). Worth a mental note: "not broken, just confusing" backlog items are worth a quick functional check before assuming the fix is cosmetic-only.
 
 *Next step: pick Tier 2, 3, or 4 whenever ready.*
+
+## Tier 3 completion notes (Aug 18, 2026)
+
+All six items done:
+
+- **Vendor/Rental & COI Tracker** — added `isCoiAutoExpired()`: an "On File" entry whose `coiExpiration` has passed now gets an inline "Expired" badge and counts toward the Missing/Expired summary stat, without overwriting the stored dropdown value.
+- **Run of Show Tracker** — table now sorts by soonest-upcoming `eventDate` (undated entries sort last), instead of insertion order.
+- **Monthly Report Archive** — Month/Year is now a real `<input type="month">` instead of free text, storing a `sortKey` alongside the display string; list sorts by that key. Legacy entries without a `sortKey` fall back to their `dateAdded` timestamp.
+- **Client Welcome Guide** — welcome note, selected services, and Loom link now persist to `client.welcomeGuide` on every edit (same `persist` pattern Ad Campaign Brief uses), and reload back in on return.
+- **Email Signature Generator** — Full Name and Revital Email are now marked required; a warning banner appears and the Copy Signature button disables itself until both are filled, so placeholder text (`[Your Name]`) can no longer get copied into a real signature.
+- **Contractor Portal** — time-off End Date can no longer be set before Start Date (client-side date-picker `min` plus a submit-time check); hours logged for a single day are capped at 24.
+
+Nothing found beyond the original scope this round — no surprise bugs like Tier 1's Content Audit save issue.
+
+*Next step: Tier 4 (bigger decisions) whenever ready — those are flagged as worth discussing first, not just building.*

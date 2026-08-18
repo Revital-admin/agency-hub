@@ -52,16 +52,47 @@ document.addEventListener('DOMContentLoaded', () => {
     if (portalLinkInput) {
       portalLinkInput.value = buildPortalLink(client);
     }
+
+    loadSavedGuideState(client);
   }
 
-  function renderPreview() {
+  // Unlike Ad Campaign Brief and similar generators, this tool's welcome
+  // note / selected services / Loom link were never saved back to the
+  // client record - only the auto-filled AM/portal fields survived a
+  // reload, so leaving the tab lost anything typed. Persist to
+  // client.welcomeGuide the same way Ad Campaign Brief persists to
+  // client.adCampaignBrief.
+  function loadSavedGuideState(client) {
+    const state = client && client.welcomeGuide;
+    if (!state) return;
+    const welcomeNoteInput = document.getElementById('welcomeNote');
+    const loomLinkInput = document.getElementById('loomLink');
+    if (welcomeNoteInput && !welcomeNoteInput.value && state.welcomeNote) {
+      welcomeNoteInput.value = state.welcomeNote;
+    }
+    if (loomLinkInput && !loomLinkInput.value && state.loomLink) {
+      loomLinkInput.value = state.loomLink;
+    }
+    if (Array.isArray(state.selectedServices)) {
+      document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.checked = state.selectedServices.includes(cb.value);
+      });
+    }
+  }
+
+  // persist (default true): whether to also write the welcome
+  // note/selected services/Loom link back to the parent Hub's clientsDb.
+  // Same reasoning as Ad Campaign Brief's generateMarkdown(persist) - the
+  // init calls below run before/independent of any real user edit, so
+  // they pass false to avoid an unconditional save loop on every reload.
+  function renderPreview(persist = true) {
     const clientName = document.getElementById('clientName').value || 'Acme Corp';
     const portalLink = document.getElementById('portalLink').value || 'https://hub.revitalproductions.com/portal/...';
     const amName = document.getElementById('amName').value || 'Jane Doe';
     const amEmail = document.getElementById('amEmail').value || 'jane@revitalproductions.com';
     const welcomeNote = document.getElementById('welcomeNote').value || `We are thrilled to partner with ${clientName} and can't wait to get started!`;
     const loomLink = document.getElementById('loomLink').value.trim();
-    
+
     const checkboxes = document.querySelectorAll('input[type="checkbox"]:checked');
     let servicesHtml = '';
     if (checkboxes.length === 0) {
@@ -178,12 +209,24 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
     `;
     pdfContainer.innerHTML = html;
+
+    if (persist) {
+      const client = getParentActiveClient();
+      if (client && window.parent.saveDatabase) {
+        client.welcomeGuide = {
+          welcomeNote: document.getElementById('welcomeNote').value,
+          loomLink,
+          selectedServices: Array.from(checkboxes).map(cb => cb.value)
+        };
+        window.parent.saveDatabase();
+      }
+    }
   }
 
   formInputs.forEach(input => {
-    input.addEventListener('input', renderPreview);
+    input.addEventListener('input', () => renderPreview());
     if(input.type === 'checkbox') {
-      input.addEventListener('change', renderPreview);
+      input.addEventListener('change', () => renderPreview());
     }
   });
 
@@ -269,12 +312,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // the same reason), then auto-fill and render.
   setTimeout(() => {
     autoFillFromActiveClient();
-    renderPreview();
+    renderPreview(false);
   }, 300);
 
   // Initial render (before the auto-fill above resolves, so the preview
   // isn't blank while waiting).
-  renderPreview();
+  renderPreview(false);
 
   // ── Email to Client (real auto-send via Resend, PDF attached) ──
   // Deliberately a manual button, not fired automatically at client

@@ -83,6 +83,19 @@
 .section-tag.status-expired { border-color: #ef4444; color: #ef4444; }
 .tracker-table tr.row-coi-flag { border-left: 3px solid #ef4444; background: rgba(239, 68, 68, 0.04); }
 
+.stale-badge {
+  display: inline-block;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 100px;
+  white-space: nowrap;
+  margin-left: 6px;
+}
+
 .row-actions { display: flex; flex-direction: column; gap: 4px; min-width: 90px; }
 .row-actions button {
   background: rgba(255, 255, 255, 0.05);

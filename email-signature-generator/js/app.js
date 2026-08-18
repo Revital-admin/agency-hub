@@ -20,12 +20,26 @@ document.addEventListener('DOMContentLoaded', () => {
   const copyBtn = document.getElementById('copyBtn');
 
   function renderPreview() {
-    const name = document.getElementById('empName').value || '[Your Name]';
+    const nameRaw = document.getElementById('empName').value.trim();
+    const emailRaw = document.getElementById('empEmail').value.trim();
+    const name = nameRaw || '[Your Name]';
     const title = document.getElementById('empTitle').value || '';
-    const email = document.getElementById('empEmail').value || '[yourname@revitalproductions.com]';
+    const email = emailRaw || '[yourname@revitalproductions.com]';
     const phone = document.getElementById('empPhone').value || '';
     const calendar = document.getElementById('empCalendar').value || '';
-    
+
+    // Name/Email had no required check - the signature just rendered
+    // with bracketed placeholder text ("[Your Name]") if skipped, which
+    // could get copied and pasted into Gmail as-is. Surface a warning
+    // and block Copy until both are filled.
+    const missingRequired = !nameRaw || !emailRaw;
+    const warningEl = document.getElementById('requiredFieldsWarning');
+    if (warningEl) warningEl.style.display = missingRequired ? 'block' : 'none';
+    if (copyBtn) {
+      copyBtn.disabled = missingRequired;
+      copyBtn.title = missingRequired ? 'Fill in Full Name and Revital Email before copying.' : '';
+    }
+
     // Use an absolute URL for the logo so it works in emails
     // Replace with the actual hosted URL if available, but for now we'll assume a standard path or base64
     const logoUrl = typeof LOGO_BASE64 !== 'undefined' ? LOGO_BASE64 : '';
@@ -106,6 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   copyBtn.addEventListener('click', () => {
+    if (copyBtn.disabled) return;
     const range = document.createRange();
     range.selectNode(signatureContainer.firstElementChild);
     window.getSelection().removeAllRanges();

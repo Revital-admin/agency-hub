@@ -8,8 +8,30 @@ try {
 }
 
 const SANDBOX_NAME = "Quick Sandbox (One-Offs)";
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 function el(id) { return document.getElementById(id); }
+
+// Month/Year used to be free text ("October 2024", "Oct 2024", "10/2024" -
+// all typed by different people over time), which meant the list could
+// only ever sort by insertion order, not by the actual month. The input
+// is now a real <input type="month"> (value like "2024-10"), so every
+// new entry gets a reliable sortKey alongside the display string. Old
+// entries saved before this change won't have a sortKey - fall back to
+// the ISO dateAdded timestamp's year-month, which is a reasonable proxy
+// since reports were normally logged the same month they were for.
+function sortKeyFor(report) {
+  if (report.sortKey) return report.sortKey;
+  if (report.dateAdded) return report.dateAdded.slice(0, 7);
+  return '0000-00';
+}
+
+function formatMonthYear(monthInputValue) {
+  const [yearStr, monthStr] = (monthInputValue || '').split('-');
+  const monthIdx = parseInt(monthStr, 10) - 1;
+  if (!yearStr || isNaN(monthIdx) || !MONTH_NAMES[monthIdx]) return monthInputValue || '';
+  return `${MONTH_NAMES[monthIdx]} ${yearStr}`;
+}
 
 function getClients() {
   if (isEmbedded) {
@@ -58,10 +80,9 @@ function renderState() {
   el('emptyState').style.display = 'none';
   el('reportsInterface').style.display = 'block';
 
-  // Set default month text
+  // Set default month
   const d = new Date();
-  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-  el('newMonth').value = `${months[d.getMonth()]} ${d.getFullYear()}`;
+  el('newMonth').value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
   const clients = getClients();
   const reports = clients[clientName].reportArchive || [];
@@ -74,8 +95,8 @@ function renderState() {
     return;
   }
 
-  // Reverse chronological (newest at top based on array order)
-  [...reports].reverse().forEach(r => {
+  // Reverse chronological by actual month, not insertion order
+  [...reports].sort((a, b) => sortKeyFor(b).localeCompare(sortKeyFor(a))).forEach(r => {
     const card = document.createElement('div');
     card.className = 'report-card';
 
@@ -114,11 +135,12 @@ function saveReport() {
   const clientName = el('clientSelect').value;
   if (!clientName) return;
 
-  const monthYear = el('newMonth').value.trim();
+  const monthRaw = el('newMonth').value.trim();
+  const monthYear = formatMonthYear(monthRaw);
   const url = el('newUrl').value.trim();
   const notes = el('newNotes').value.trim();
 
-  if (!monthYear || !url) {
+  if (!monthRaw || !url) {
     if (isEmbedded && window.parent.showBanner) {
       window.parent.showBanner('error', 'Please provide a Month and a URL.');
     } else {
@@ -134,6 +156,7 @@ function saveReport() {
 
   clients[clientName].reportArchive.push({
     id: uid(),
+    sortKey: monthRaw,
     monthYear,
     url,
     notes,

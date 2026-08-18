@@ -215,6 +215,10 @@
       showStatus('cpTimeOffStatus', 'Pick a start date.', false);
       return;
     }
+    if (endDate && endDate < startDate) {
+      showStatus('cpTimeOffStatus', 'End date cannot be before the start date.', false);
+      return;
+    }
     const btn = el('cpTimeOffSubmitBtn');
     btn.disabled = true;
     try {
@@ -257,6 +261,10 @@
 
     if (!date || !hours || hours <= 0) {
       showStatus('cpHoursStatus', 'Add a date and hours.', false);
+      return;
+    }
+    if (hours > 24) {
+      showStatus('cpHoursStatus', 'Hours for a single day can\'t exceed 24.', false);
       return;
     }
     const btn = el('cpHoursSubmitBtn');
@@ -306,6 +314,13 @@
 
     el('cpTimeOffSubmitBtn').addEventListener('click', submitTimeOff);
     el('cpHoursSubmitBtn').addEventListener('click', submitHours);
+
+    // Keep the End Date picker from even offering dates before Start
+    // Date, as a first line of defense on top of the submitTimeOff()
+    // check above (which still applies if End is edited before Start).
+    el('cpTimeOffStart').addEventListener('change', () => {
+      el('cpTimeOffEnd').min = el('cpTimeOffStart').value || '';
+    });
   }
 
   document.addEventListener('DOMContentLoaded', init);

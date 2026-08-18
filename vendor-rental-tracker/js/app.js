@@ -107,6 +107,23 @@ function coiSlug(status) {
   return 'status-' + (status || 'Not Required').toLowerCase().replace(/[^a-z]/g, '');
 }
 
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+
+// coiStatus is a manual dropdown that's never cross-checked against
+// coiExpiration - an "On File" entry whose date has already passed
+// would otherwise sit un-flagged until someone remembers to update it
+// by hand. Auto-detect that case (same pattern SEO Rank Tracker uses
+// for isStale()) without silently overwriting the stored dropdown
+// value, so the underlying data still reflects what was actually
+// selected.
+function isCoiAutoExpired(entry) {
+  return entry.coiStatus === 'On File' && !!entry.coiExpiration && entry.coiExpiration < todayStr();
+}
+
+function isCoiFlagged(entry) {
+  return entry.coiStatus === 'Missing' || entry.coiStatus === 'Expired' || isCoiAutoExpired(entry);
+}
+
 const FORM_FIELDS = ['vendorName', 'recordType', 'itemService', 'jobReference', 'startDate', 'endDate', 'cost', 'status', 'coiStatus', 'coiExpiration', 'conditionNotes', 'notes'];
 
 function resetForm() {
@@ -180,7 +197,7 @@ function removeEntry(id) {
 
 function renderSummary() {
   const active = entries.filter(e => e.status === 'Active');
-  const flagged = entries.filter(e => e.coiStatus === 'Missing' || e.coiStatus === 'Expired');
+  const flagged = entries.filter(isCoiFlagged);
   el('summaryActive').textContent = active.length;
   el('summaryMissingCoi').textContent = flagged.length;
   el('summaryTotal').textContent = entries.length;
@@ -197,7 +214,8 @@ function renderTable() {
   el('emptyState').style.display = rows.length === 0 ? 'block' : 'none';
 
   rows.forEach(entry => {
-    const flagged = entry.coiStatus === 'Missing' || entry.coiStatus === 'Expired';
+    const autoExpired = isCoiAutoExpired(entry);
+    const flagged = isCoiFlagged(entry);
     const tr = document.createElement('tr');
     tr.className = flagged ? 'row-coi-flag' : '';
     const dateRange = [entry.startDate, entry.endDate].filter(Boolean).join(' → ') || '--';
@@ -208,7 +226,7 @@ function renderTable() {
       <td>${escapeHtml(entry.itemService) || '--'}${costText ? ` <span style="color:var(--color-text-muted);">(${costText})</span>` : ''}</td>
       <td>${escapeHtml(entry.jobReference) || '--'}</td>
       <td class="date-cell">${escapeHtml(dateRange)}</td>
-      <td><span class="section-tag ${coiSlug(entry.coiStatus)}">${escapeHtml(entry.coiStatus) || 'Not Required'}</span></td>
+      <td><span class="section-tag ${coiSlug(entry.coiStatus)}">${escapeHtml(entry.coiStatus) || 'Not Required'}</span>${autoExpired ? '<span class="stale-badge" title="Marked On File but the COI expiration date has already passed">Expired</span>' : ''}</td>
       <td>
         <div class="row-actions">
           <button class="edit-btn" data-id="${entry.id}">Edit</button>
