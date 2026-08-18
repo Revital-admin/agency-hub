@@ -1,5 +1,5 @@
 /* ============================================================
-   SEO AUDIT CHECKLIST — APP
+   CAMPAIGN LAUNCH CHECKLIST — APP
    State management, rendering, filtering, and metric animations.
    Connected Mode: Interfaces directly with the parent workspace database
    ============================================================ */
@@ -75,21 +75,21 @@ function initState() {
     state.textInputs = parentClient.campaignLaunch.textInputs;
   } else {
     try {
-      const saved = localStorage.getItem('seo-checklist-state');
+      const saved = localStorage.getItem('campaign-launch-checklist-state');
       if (saved) {
         const parsed = JSON.parse(saved);
         Object.keys(parsed).forEach(k => {
           if (k in state.checked) state.checked[k] = parsed[k];
         });
       }
-      const savedNotes = localStorage.getItem('seo-checklist-notes');
+      const savedNotes = localStorage.getItem('campaign-launch-checklist-notes');
       if (savedNotes) {
         const parsedNotes = JSON.parse(savedNotes);
         Object.keys(parsedNotes).forEach(k => {
           if (k in state.notes) state.notes[k] = parsedNotes[k];
         });
       }
-      const savedData = localStorage.getItem('seo-checklist-data');
+      const savedData = localStorage.getItem('campaign-launch-checklist-data');
       if (savedData) {
         const parsedData = JSON.parse(savedData);
         if (parsedData.targetUrl) {
@@ -115,9 +115,9 @@ function saveState() {
     window.parent.renderDashboard();
   } else {
     try {
-      localStorage.setItem('seo-checklist-state', JSON.stringify(state.checked));
-      localStorage.setItem('seo-checklist-notes', JSON.stringify(state.notes));
-      localStorage.setItem('seo-checklist-data', JSON.stringify({ targetUrl: state.targetUrl, textInputs: state.textInputs }));
+      localStorage.setItem('campaign-launch-checklist-state', JSON.stringify(state.checked));
+      localStorage.setItem('campaign-launch-checklist-notes', JSON.stringify(state.notes));
+      localStorage.setItem('campaign-launch-checklist-data', JSON.stringify({ targetUrl: state.targetUrl, textInputs: state.textInputs }));
     } catch (e) {}
   }
 }

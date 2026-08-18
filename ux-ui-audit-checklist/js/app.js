@@ -551,19 +551,6 @@ if (typeof window.hexToRgba === 'undefined') {
   };
 }
 
-// Global helpers missing from original codebase
-if (typeof window.hexToRgba === 'undefined') {
-  window.hexToRgba = function(hex, alpha) {
-    if (!hex) return `rgba(0,0,0,${alpha})`;
-    let c = hex.replace('#', '');
-    if (c.length === 3) c = c.split('').map(x => x + x).join('');
-    const r = parseInt(c.slice(0, 2), 16) || 0;
-    const g = parseInt(c.slice(2, 4), 16) || 0;
-    const b = parseInt(c.slice(4, 6), 16) || 0;
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  };
-}
-
 if (typeof window.escHtml === 'undefined') {
   window.escHtml = function(unsafe) {
     if (!unsafe || typeof unsafe !== 'string') return unsafe || '';
@@ -576,15 +563,10 @@ if (typeof window.escHtml === 'undefined') {
   };
 }
 
-// Auto-injected Module Bootloader
 document.addEventListener('DOMContentLoaded', () => {
-  if (typeof initState === 'function') initState();
-  if (typeof renderSteps === 'function') renderSteps();
-  if (typeof updateScoreCards === 'function') updateScoreCards();
-  if (typeof attachEvents === 'function') attachEvents();
-  if (typeof startLabelRotation === 'function') startLabelRotation();
-  if (typeof setupEventHandlers === 'function') setupEventHandlers();
-  if (typeof renderDynamicPlatforms === 'function') renderDynamicPlatforms();
-  if (typeof updateProgress === 'function') updateProgress();
-  if (typeof renderPreview === 'function') renderPreview();
+  initState();
+  renderSteps();
+  updateScoreCards();
+  attachEvents();
+  startLabelRotation();
 });

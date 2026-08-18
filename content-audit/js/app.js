@@ -1,5 +1,5 @@
 /* ============================================================
-   SEO AUDIT CHECKLIST — APP
+   CONTENT AUDIT — APP
    State management, rendering, filtering, and metric animations.
    Connected Mode: Interfaces directly with the parent workspace database
    ============================================================ */
@@ -24,7 +24,7 @@ const state = {
   filter: 'all', // 'all' | 'incomplete' | 'complete'
   labelIndices: { steps: 0, tasks: 0, remaining: 0, score: 0 },
   targetUrl: '', // Website or client being audited
-  textInputs: { listSize: "", openRate: "", opportunities: "", actions: "" } // Email Marketing Inputs
+  textInputs: { pagesIndexed: "", avgTraffic: "", opportunities: "", actions: "" }
 };
 
 // Initialise all tasks as unchecked, restore from localStorage or parent if available
@@ -38,7 +38,7 @@ function initState() {
 
   if (isEmbedded && parentClient) {
     if (!parentClient.contentAudit) {
-      parentClient.contentAudit = { checked: {}, notes: {}, targetUrl: "", textInputs: { listSize: "", openRate: "", opportunities: "", actions: "" } };
+      parentClient.contentAudit = { checked: {}, notes: {}, targetUrl: "", textInputs: { pagesIndexed: "", avgTraffic: "", opportunities: "", actions: "" } };
     }
     if (!parentClient.contentAudit.checked) {
       parentClient.contentAudit.checked = {};
@@ -47,7 +47,17 @@ function initState() {
       parentClient.contentAudit.notes = {};
     }
     if (!parentClient.contentAudit.textInputs) {
-      parentClient.contentAudit.textInputs = { listSize: "", openRate: "", opportunities: "", actions: "" };
+      parentClient.contentAudit.textInputs = { pagesIndexed: "", avgTraffic: "", opportunities: "", actions: "" };
+    }
+    // One-time carry-forward for clients saved before these two fields were
+    // renamed from the email-marketing-audit-copy-paste names (listSize/
+    // openRate) to what they actually represent here (pagesIndexed/
+    // avgTraffic) - so existing entries don't just go blank.
+    if (parentClient.contentAudit.textInputs.listSize && !parentClient.contentAudit.textInputs.pagesIndexed) {
+      parentClient.contentAudit.textInputs.pagesIndexed = parentClient.contentAudit.textInputs.listSize;
+    }
+    if (parentClient.contentAudit.textInputs.openRate && !parentClient.contentAudit.textInputs.avgTraffic) {
+      parentClient.contentAudit.textInputs.avgTraffic = parentClient.contentAudit.textInputs.openRate;
     }
     // Bind child state object reference directly to the parent object
     Object.keys(parentClient.contentAudit.checked).forEach(k => {
@@ -97,6 +107,13 @@ function initState() {
         }
         if (parsedData.textInputs) {
           state.textInputs = parsedData.textInputs;
+          // Same carry-forward as the parentClient path above.
+          if (state.textInputs.listSize && !state.textInputs.pagesIndexed) {
+            state.textInputs.pagesIndexed = state.textInputs.listSize;
+          }
+          if (state.textInputs.openRate && !state.textInputs.avgTraffic) {
+            state.textInputs.avgTraffic = state.textInputs.openRate;
+          }
         }
       }
     } catch (e) {
@@ -350,26 +367,19 @@ function attachEvents() {
         saveState();
       }
     }
-    
-    // Handle text inputs
-    if (e.target.matches('.em-input')) {
-        state.textInputs[e.target.dataset.key] = e.target.value;
-        saveState();
-    }
-    
-    if (e.target.matches('input[id^="pa"]')) {
-      const id = e.target.id;
-      if (id === 'emListSize') state.textInputs.listSize = e.target.value;
-      if (id === 'emOpenRate') state.textInputs.openRate = e.target.value;
-      saveState();
-    }
   });
 
+  // Handle the tool's own text inputs (Pages Indexed / Avg Traffic /
+  // Opportunities / Actions) - these live in their own <section>s above and
+  // below #stepsList, not inside it, so they need their own listener rather
+  // than piggybacking on `list` above. (Bug found while renaming these
+  // fields off their old email-marketing-audit-copy-paste names: the old
+  // code only ever attached this handler to `list`, so none of these four
+  // fields' typed values were actually being saved - fixed here, not just
+  // renamed.)
   document.body.addEventListener('input', e => {
-    if (e.target.matches('textarea[id^="pa"]')) {
-      const id = e.target.id;
-      if (id === 'emOpportunities') state.textInputs.opportunities = e.target.value;
-      if (id === 'emActions') state.textInputs.actions = e.target.value;
+    if (e.target.matches('.ca-input')) {
+      state.textInputs[e.target.dataset.key] = e.target.value;
       saveState();
     }
   });
@@ -609,13 +619,23 @@ if (typeof window.escHtml === 'undefined') {
 
 // Auto-injected Module Bootloader
 document.addEventListener('DOMContentLoaded', () => {
-  if (typeof initState === 'function') initState();
-  if (typeof renderSteps === 'function') renderSteps();
-  if (typeof updateScoreCards === 'function') updateScoreCards();
-  if (typeof attachEvents === 'function') attachEvents();
-  if (typeof startLabelRotation === 'function') startLabelRotation();
-  if (typeof setupEventHandlers === 'function') setupEventHandlers();
-  if (typeof renderDynamicPlatforms === 'function') renderDynamicPlatforms();
-  if (typeof updateProgress === 'function') updateProgress();
-  if (typeof renderPreview === 'function') renderPreview();
+  initState();
+  renderSteps();
+  updateScoreCards();
+  attachEvents();
+  startLabelRotation();
+  hydrateTextInputs();
 });
+
+// Populates the four .ca-input fields (Pages Indexed / Avg Traffic /
+// Opportunities / Actions) from state.textInputs on load - without this,
+// values that just started actually saving (see the listener-scope fix in
+// attachEvents above) still wouldn't show back up on the next visit.
+function hydrateTextInputs() {
+  document.querySelectorAll('.ca-input').forEach(el => {
+    const key = el.dataset.key;
+    if (key && state.textInputs && state.textInputs[key]) {
+      el.value = state.textInputs[key];
+    }
+  });
+}

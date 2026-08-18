@@ -1,5 +1,5 @@
 /* ============================================================
-   SEO AUDIT CHECKLIST — APP
+   EMAIL MARKETING AUDIT — APP
    State management, rendering, filtering, and metric animations.
    Connected Mode: Interfaces directly with the parent workspace database
    ============================================================ */
@@ -350,26 +350,18 @@ function attachEvents() {
         saveState();
       }
     }
-    
-    // Handle text inputs
-    if (e.target.matches('.em-input')) {
-        state.textInputs[e.target.dataset.key] = e.target.value;
-        saveState();
-    }
-    
-    if (e.target.matches('input[id^="pa"]')) {
-      const id = e.target.id;
-      if (id === 'emListSize') state.textInputs.listSize = e.target.value;
-      if (id === 'emOpenRate') state.textInputs.openRate = e.target.value;
-      saveState();
-    }
   });
 
+  // Handle the tool's own text inputs (List Size / Open Rate /
+  // Opportunities / Actions) - these live in their own <section>s above and
+  // below #stepsList, not inside it, so they need their own listener rather
+  // than piggybacking on `list` above. (Bug found while cleaning up dead
+  // code alongside this: the old code only ever attached this handler to
+  // `list`, so none of these four fields' typed values were actually being
+  // saved - fixed here.)
   document.body.addEventListener('input', e => {
-    if (e.target.matches('textarea[id^="pa"]')) {
-      const id = e.target.id;
-      if (id === 'emOpportunities') state.textInputs.opportunities = e.target.value;
-      if (id === 'emActions') state.textInputs.actions = e.target.value;
+    if (e.target.matches('.em-input')) {
+      state.textInputs[e.target.dataset.key] = e.target.value;
       saveState();
     }
   });
@@ -609,13 +601,23 @@ if (typeof window.escHtml === 'undefined') {
 
 // Auto-injected Module Bootloader
 document.addEventListener('DOMContentLoaded', () => {
-  if (typeof initState === 'function') initState();
-  if (typeof renderSteps === 'function') renderSteps();
-  if (typeof updateScoreCards === 'function') updateScoreCards();
-  if (typeof attachEvents === 'function') attachEvents();
-  if (typeof startLabelRotation === 'function') startLabelRotation();
-  if (typeof setupEventHandlers === 'function') setupEventHandlers();
-  if (typeof renderDynamicPlatforms === 'function') renderDynamicPlatforms();
-  if (typeof updateProgress === 'function') updateProgress();
-  if (typeof renderPreview === 'function') renderPreview();
+  initState();
+  renderSteps();
+  updateScoreCards();
+  attachEvents();
+  startLabelRotation();
+  hydrateTextInputs();
 });
+
+// Populates the four .em-input fields (List Size / Open Rate /
+// Opportunities / Actions) from state.textInputs on load - without this,
+// values that just started actually saving (see the listener-scope fix in
+// attachEvents above) still wouldn't show back up on the next visit.
+function hydrateTextInputs() {
+  document.querySelectorAll('.em-input').forEach(el => {
+    const key = el.dataset.key;
+    if (key && state.textInputs && state.textInputs[key]) {
+      el.value = state.textInputs[key];
+    }
+  });
+}
