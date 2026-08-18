@@ -5224,6 +5224,27 @@ function saveBrandVault() {
   client.brandKit.toneOfVoice = bv.brandVoice.adjectives || client.brandKit.toneOfVoice || '';
   client.brandKit.logoUrl = bv.assets.logoUrl || client.brandKit.logoUrl || '';
 
+  // ── Keep the live client Portal's theme colors in sync too ──
+  // client.portalConfig.primaryColor/secondaryColor/accentColor actually
+  // re-skin the Portal's UI (--color-primary), and used to only ever be
+  // set by Client Portal Manager's manual "Sync Colors from Brand Kit"
+  // button. Mirror that button's own precedence exactly (brandGuideline
+  // preferred over brandKit when both exist - see
+  // client-portal-manager/js/app.js's syncFromBrandKitBtn handler and
+  // brand-guidelines-builder/js/app.js's syncBrandColorsToPortal, which
+  // does the equivalent push on that tool's own Save) so a Vault-only
+  // client (no Guidelines Builder used) still gets its Portal theme kept
+  // current automatically, without this clobbering a more deliberate
+  // Guidelines Builder palette if one's already been saved.
+  const bg = client.brandGuideline;
+  const hasGuidelineColors = bg && (bg.primaryColor || bg.secondaryColor || bg.accentColor);
+  if (!hasGuidelineColors && (client.brandKit.primaryColor || client.brandKit.secondaryColor || client.brandKit.accentColor)) {
+    if (!client.portalConfig) client.portalConfig = {};
+    if (client.brandKit.primaryColor) client.portalConfig.primaryColor = client.brandKit.primaryColor;
+    if (client.brandKit.secondaryColor) client.portalConfig.secondaryColor = client.brandKit.secondaryColor;
+    if (client.brandKit.accentColor) client.portalConfig.accentColor = client.brandKit.accentColor;
+  }
+
   saveDatabase();
   renderDashboard();
 

@@ -280,11 +280,31 @@ function collectGuidelineFromForm() {
   };
 }
 
+// Keeps the Client Portal's synced brand colors from going stale.
+// client.portalConfig.primaryColor/secondaryColor/accentColor actually
+// re-skin the live client-facing Portal (the --color-primary theme
+// variable) - Client Portal Manager's "Sync Colors from Brand Kit"
+// button used to be the only way these ever got set, which meant
+// editing colors here after the last manual sync left the Portal
+// showing stale ones until someone remembered to click Sync again.
+// Mirrors that button's own field mapping exactly (see
+// client-portal-manager/js/app.js's syncFromBrandKitBtn handler).
+function syncBrandColorsToPortal(client, guideline) {
+  if (!client) return;
+  if (!guideline.primaryColor && !guideline.secondaryColor && !guideline.accentColor) return;
+  if (!client.portalConfig) client.portalConfig = {};
+  if (guideline.primaryColor) client.portalConfig.primaryColor = guideline.primaryColor;
+  if (guideline.secondaryColor) client.portalConfig.secondaryColor = guideline.secondaryColor;
+  if (guideline.accentColor) client.portalConfig.accentColor = guideline.accentColor;
+}
+
 function saveGuideline() {
   const clientName = el('clientSelect').value;
   if (!clientName) return;
   const clients = getClients();
-  clients[clientName].brandGuideline = collectGuidelineFromForm();
+  const guideline = collectGuidelineFromForm();
+  clients[clientName].brandGuideline = guideline;
+  syncBrandColorsToPortal(clients[clientName], guideline);
   persist();
 
   if (isEmbedded && window.parent.showBanner) {
