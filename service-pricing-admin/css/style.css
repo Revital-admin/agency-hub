@@ -1,25 +1,32 @@
 /* ============================================================
    SERVICE PRICING ADMIN — styles
-   Reuses the Proposal Calculator's design tokens (loaded first in
-   index.html) so this feels like a natural extension of it, with a
-   handful of admin-specific additions: category price tables,
-   the unsaved-changes badge, and status banner.
-   ============================================================ */
+   Tier 4 rebuild (Aug 2026): this tool used to skip the shared page
+   shell entirely, borrowing Proposal Calculator's css/style.css
+   wholesale instead of ../style.css - no bg-grid/brand-bar/site-header,
+   flagged in the backlog as "the biggest outlier structurally."
+   Proposal Calculator's own custom full-screen two-pane layout is a
+   deliberate exception (transparent body, lets the Hub's own bg-grid
+   show through - see its own css/style.css) that's fine to leave as
+   is; this page isn't that kind of tool, it's a plain single-column
+   admin settings list, so it gets the same shell every other tool
+   uses instead of inheriting Proposal Calculator's one-off approach.
 
-/* The Proposal Calculator stylesheet loaded before this one sets
-   body { height: 100vh; overflow: hidden } because its own two-pane
-   layout scrolls internally per-pane. This page is a plain single-column
-   list, not a two-pane layout, so that rule was clipping everything past
-   one screen and blocking scroll entirely. Override back to normal
-   document flow so the page (and the iframe it sits in) can scroll. */
-html, body {
-  height: auto;
-  min-height: 100%;
-  overflow: visible;
+   A handful of component classes (.calc-title, .section-desc,
+   .num-input/.select-input, .cb-label, .btn-copy, .service-category)
+   only existed in Proposal Calculator's stylesheet and aren't part of
+   the shared ../style.css - copied down here verbatim so nothing
+   changes visually, just where the rules live. Two of Proposal
+   Calculator's local :root tokens this page's own rules already
+   depended on (--color-bg, --color-accent-money) aren't defined in
+   root style.css either - given real values below instead of being
+   left dangling. */
+
+:root {
+  --color-accent-money: var(--success, #10b981);
 }
 
 body {
-  background: var(--color-bg);
+  background: var(--bg-main, #15130f);
   font-family: var(--font-body);
   color: var(--color-text-primary);
   margin: 0;
@@ -27,8 +34,171 @@ body {
 }
 
 .pricing-admin-layout {
+  position: relative;
+  z-index: 1;
   max-width: 980px;
   margin: 0 auto;
+}
+
+/* ── Pulled from proposal-calculator/css/style.css (not part of the
+   shared ../style.css) - kept verbatim so nothing visually changes ──
+   (.calc-title was here too, but the title/subtitle above are now
+   .site-header/.site-title/.site-subtitle from the shared shell, so
+   it's no longer used anywhere in this tool - dropped rather than
+   left as dead CSS.) */
+.section-desc {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 12px;
+}
+
+.num-input, .select-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.num-input:focus, .select-input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+.cb-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.95rem !important;
+  cursor: pointer;
+  color: var(--color-text-primary) !important;
+  transition: color 0.2s ease;
+}
+
+.cb-label:hover {
+  color: #fff !important;
+}
+
+.cb-label input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.cb-label input[type="checkbox"]:hover {
+  border-color: rgba(255,255,255,0.4);
+  background-color: rgba(0,0,0,0.5);
+}
+
+.cb-label input[type="checkbox"]:checked {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.cb-label input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  width: 5px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  margin-bottom: 2px;
+}
+
+.btn-copy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  background: var(--color-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(246, 141, 95, 0.2);
+}
+
+.btn-copy:hover {
+  background: var(--border-focus);
+  box-shadow: 0 4px 16px rgba(246, 141, 95, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-copy:active {
+  transform: translateY(0);
+}
+
+/* Accordions (category price tables use <details class="service-category">) */
+.service-category {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  overflow: hidden;
+  transition: background 0.3s ease;
+}
+
+.service-category:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.service-category summary {
+  padding: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  list-style: none;
+}
+
+.service-category summary::-webkit-details-marker {
+  display: none;
+}
+
+.service-category summary h3 {
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-bright);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.service-category summary::after {
+  content: '▼';
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  transition: transform 0.3s ease;
+}
+
+.service-category[open] summary::after {
+  transform: rotate(180deg);
 }
 
 .pricing-admin-header {
