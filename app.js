@@ -5717,9 +5717,18 @@ function commitRestrictedClientEditsNow() {
 
   const allowedSet = new Set(restrictedAllowedSections || []);
 
+  // Bug fix (Aug 2026 - "checkboxes uncheck themselves after a few
+  // clicks", reported against both Onboarding Checklist and Client
+  // Checklist, which share nothing except this save path): captured here
+  // so the success handler below can tell whether a NEWER edit landed
+  // while this write was still in flight, rather than blindly trusting
+  // that `names` is still an accurate list of "everything now safely
+  // saved" by the time the network round-trip finishes.
+  const sentFieldsByName = new Map();
+
   const writes = names.map(name => {
     const client = clientsDb[name];
-    if (!client) return Promise.resolve({ ok: true });
+    if (!client) return Promise.resolve({ ok: true, name });
     const serverClient = restrictedLastServerClientState[name] || {};
     const fields = {};
     Object.keys(client).forEach(key => {
@@ -5734,7 +5743,8 @@ function commitRestrictedClientEditsNow() {
         fields[key] = client[key];
       }
     });
-    if (!Object.keys(fields).length) return Promise.resolve({ ok: true });
+    sentFieldsByName.set(name, fields);
+    if (!Object.keys(fields).length) return Promise.resolve({ ok: true, name });
     return fetch('/api/restricted-client-data', {
       method: 'POST',
       credentials: 'include',
@@ -5744,7 +5754,31 @@ function commitRestrictedClientEditsNow() {
   });
 
   Promise.all(writes).then(results => {
-    names.forEach(name => pendingLocalClientEdits.delete(name));
+    // Only clear a name from pendingLocalClientEdits if nothing changed
+    // for it since the fields snapshot above was taken. The debounced
+    // save timer (saveDatabase's 500ms setTimeout) collapses most rapid
+    // clicks into one request already, but a click landing just after
+    // THIS request's snapshot was taken and while it's still in flight
+    // (normal network latency, not a rare edge case for someone clicking
+    // through a 40-item checklist) used to get silently unmarked as
+    // pending here regardless - meaning it was never actually sent, AND
+    // no longer protected from applyRestrictedClientsDbSnapshot's
+    // pendingLocalClientEdits guard (see that function's own comment).
+    // The very next poll (or this save's own success refetch two lines
+    // below) would then overwrite clientsDb[name] with the server's
+    // confirmed state, silently reverting that click - exactly the
+    // "unchecking after a few boxes" symptom. Leaving the name in the set
+    // when this happens means the next debounced save (already scheduled
+    // by that very click) picks it up for real instead of a false "all
+    // clear".
+    names.forEach(name => {
+      const sentFields = sentFieldsByName.get(name);
+      const client = clientsDb[name];
+      const stillMatches = !sentFields || !client || Object.keys(sentFields).every(
+        key => JSON.stringify(client[key]) === JSON.stringify(sentFields[key])
+      );
+      if (stillMatches) pendingLocalClientEdits.delete(name);
+    });
     const failed = results.filter(r => r && r.ok === false);
 
     if (indicator) {
@@ -5759,7 +5793,11 @@ function commitRestrictedClientEditsNow() {
     } else {
       // Refetch so this restricted view reflects the confirmed cloud
       // state right away, rather than waiting up to a minute for the
-      // next poll (see startRestrictedClientsDbSync).
+      // next poll (see startRestrictedClientsDbSync). Safe even for a
+      // name left in pendingLocalClientEdits above (a newer, still-unsent
+      // edit) - applyRestrictedClientsDbSnapshot's own guard re-layers
+      // clientsDb[name] back over whatever this fetch returns for any
+      // name still in that set.
       fetchRestrictedClientsDbSnapshot();
     }
   }).catch(err => {
