@@ -325,11 +325,26 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function matchesFilters(e) {
+  const search = el('filterSearchInput').value.trim().toLowerCase();
+  const dateFrom = el('filterDateFrom').value;
+  const dateTo = el('filterDateTo').value;
+  if (search) {
+    const haystack = `${e.memberName || ''} ${e.clientName || ''} ${e.projectName || ''} ${e.notes || ''}`.toLowerCase();
+    if (!haystack.includes(search)) return false;
+  }
+  if (dateFrom && (!e.date || e.date < dateFrom)) return false;
+  if (dateTo && (!e.date || e.date > dateTo)) return false;
+  return true;
+}
+
 function renderTable() {
   renderSummary();
   renderRollup();
 
-  const rows = [...entries].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const rows = entries
+    .filter(matchesFilters)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
   const tbody = el('trackerTableBody');
   tbody.innerHTML = '';
@@ -459,6 +474,9 @@ function initListeners() {
     }
     populateProjectDatalist();
   });
+  el('filterSearchInput').addEventListener('input', renderTable);
+  el('filterDateFrom').addEventListener('change', renderTable);
+  el('filterDateTo').addEventListener('change', renderTable);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

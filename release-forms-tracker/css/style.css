@@ -38,6 +38,16 @@
   color: var(--color-text-primary);
 }
 
+.show-closed-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-left: auto;
+  cursor: pointer;
+}
+
 .table-card { padding: 0; overflow: hidden; }
 .tracker-table-wrap { overflow-x: auto; }
 .tracker-table { width: 100%; border-collapse: collapse; font-size: 13px; }

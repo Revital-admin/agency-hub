@@ -30,7 +30,8 @@
 .tracker-controls { margin-bottom: 20px; }
 .tracker-controls-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .tracker-controls-row input[type="text"],
-.tracker-controls-row input[type="date"] {
+.tracker-controls-row input[type="date"],
+.tracker-controls-row select {
   padding: 8px 12px;
   border: 1px solid var(--color-border-md);
   border-radius: 6px;

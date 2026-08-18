@@ -109,8 +109,19 @@ function renderState() {
     return;
   }
 
+  const searchInput = el('meetingSearchInput');
+  const search = searchInput ? searchInput.value.trim().toLowerCase() : '';
+  const filteredNotes = search
+    ? notes.filter(m => (m.title || '').toLowerCase().includes(search) || (m.summary || '').toLowerCase().includes(search))
+    : notes;
+
+  if (filteredNotes.length === 0) {
+    listEl.innerHTML = '<p style="color: var(--color-text-secondary)">No meetings match your search.</p>';
+    return;
+  }
+
   // Sort newest first
-  [...notes].sort((a, b) => b.date.localeCompare(a.date)).forEach(m => {
+  [...filteredNotes].sort((a, b) => b.date.localeCompare(a.date)).forEach(m => {
     const card = document.createElement('div');
     card.className = 'meeting-card';
 
@@ -393,6 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
   el('clientSelect').addEventListener('change', renderState);
   el('addActionItemBtn').addEventListener('click', () => addActionItemRow());
   el('saveMeetingBtn').addEventListener('click', saveMeeting);
+  el('meetingSearchInput').addEventListener('input', renderState);
   wireNotesDropzone();
   renderState();
 

@@ -167,7 +167,10 @@ function renderTable() {
   renderSummary();
 
   const filterClient = el('filterClientInput').value.trim().toLowerCase();
-  const rows = entries.filter(e => !filterClient || e.clientName.toLowerCase().includes(filterClient));
+  const showAllStatuses = el('showAllStatusesToggle').checked;
+  const rows = entries
+    .filter(e => !filterClient || e.clientName.toLowerCase().includes(filterClient))
+    .filter(e => showAllStatuses || e.status === 'Pending');
 
   const tbody = el('logTableBody');
   tbody.innerHTML = '';
@@ -206,6 +209,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   el('saveEntryBtn').addEventListener('click', saveEntry);
   el('filterClientInput').addEventListener('input', renderTable);
+  el('showAllStatusesToggle').addEventListener('change', renderTable);
 
   let pollAttempts = 0;
   const pollTimer = setInterval(() => {

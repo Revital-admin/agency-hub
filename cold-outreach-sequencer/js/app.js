@@ -175,9 +175,11 @@ function renderTable() {
   renderSummary();
 
   const showClosed = el('showClosedToggle').checked;
+  const search = el('filterSearchInput').value.trim().toLowerCase();
 
   const rows = [...leads]
     .filter(l => showClosed || l.status === 'active')
+    .filter(l => !search || (l.leadName || '').toLowerCase().includes(search))
     .sort((a, b) => {
       if (a.status !== b.status) return a.status === 'active' ? -1 : 1;
       return (a.nextTouchDue || '9999').localeCompare(b.nextTouchDue || '9999');
@@ -445,6 +447,7 @@ if (sendOutreachCopyBtn) {
 function initListeners() {
   el('addLeadBtn').addEventListener('click', addLead);
   el('showClosedToggle').addEventListener('change', renderTable);
+  el('filterSearchInput').addEventListener('input', renderTable);
   const composeBtn = el('composeTouch1Btn');
   if (composeBtn) composeBtn.addEventListener('click', openTouch1Panel);
 }

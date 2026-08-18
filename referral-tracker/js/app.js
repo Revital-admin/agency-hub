@@ -180,10 +180,23 @@ function optionsHtml(list, selected) {
   return list.map(s => `<option value="${s}" ${s === selected ? 'selected' : ''}>${s}</option>`).join('');
 }
 
+function matchesFilters(r) {
+  const search = el('filterSearchInput').value.trim().toLowerCase();
+  const status = el('filterStatus').value;
+  if (search) {
+    const haystack = `${r.referrerName || ''} ${r.referredName || ''}`.toLowerCase();
+    if (!haystack.includes(search)) return false;
+  }
+  if (status && r.status !== status) return false;
+  return true;
+}
+
 function renderTable() {
   renderSummary();
 
-  const rows = [...referrals].sort((a, b) => (b.dateReferred || '').localeCompare(a.dateReferred || ''));
+  const rows = referrals
+    .filter(matchesFilters)
+    .sort((a, b) => (b.dateReferred || '').localeCompare(a.dateReferred || ''));
 
   const tbody = el('trackerTableBody');
   tbody.innerHTML = '';
@@ -608,6 +621,8 @@ function initListeners() {
   if (composeAskBtn) composeAskBtn.addEventListener('click', openAskReferralPanel);
   const referrerInput = el('newReferrerName');
   if (referrerInput) referrerInput.addEventListener('input', updateReferrerNameHint);
+  el('filterSearchInput').addEventListener('input', renderTable);
+  el('filterStatus').addEventListener('change', renderTable);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
