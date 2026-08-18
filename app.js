@@ -3397,12 +3397,28 @@ function renderOnboardingChecklist() {
   }
 
   document.getElementById("onboardingCardPct").textContent = `${obPct}%`;
-  
+
   // Progress Bar
   const fill = document.getElementById("onboardingProgressFill");
   fill.style.width = `${obPct}%`;
   document.getElementById("onboardingProgressText").textContent = `${checkedTasks} of ${totalTasks} tasks complete`;
   document.getElementById("onboardingProgressPct").textContent = `${obPct}%`;
+
+  // Operations & Admin notification trigger: fires once when a client's
+  // onboarding checklist first hits 100% (settled Hub trigger list, Aug
+  // 2026). client.onboardingCompleteNotifSent is the dedup flag, persisted
+  // on the client itself so it survives reloads and doesn't refire on
+  // every render - only re-arms if the checklist genuinely drops back
+  // under 100% (an item got unchecked) so a later real re-completion
+  // notifies again.
+  if (totalTasks > 0 && obPct === 100 && !client.onboardingCompleteNotifSent) {
+    client.onboardingCompleteNotifSent = true;
+    pushAdminNotification('onboarding_complete', `${activeClientName}'s onboarding checklist is fully complete.`, activeClientName, null);
+    saveDatabase();
+  } else if (obPct < 100 && client.onboardingCompleteNotifSent) {
+    client.onboardingCompleteNotifSent = false;
+    saveDatabase();
+  }
 }
 
 // Onboarding listeners moved to initParentEventListeners
@@ -3410,6 +3426,18 @@ function renderOnboardingChecklist() {
 function setIframeAbsoluteSrc(iframeSelector, relativeFallbackPath) {
   const iframe = document.querySelector(iframeSelector);
   if (iframe) {
+    // Idle Session Lock defense-in-depth: this function only ever runs off
+    // a real user action (clicking a nav tab, or switching the active
+    // client - see the comment below), so treat it as activity directly
+    // rather than relying solely on the DOM activity listeners noticing.
+    // Closes a real gap: while someone's mouse/keyboard stays entirely
+    // inside a tool iframe that's mid-reload (iframe.src is briefly
+    // "about:blank" a few lines down), there's a small window where
+    // neither the old iframe doc's listeners (about to be torn down) nor
+    // the new one's (not attached until its own 'load' fires) are live -
+    // this call means the navigation that caused the reload always counts
+    // regardless of that race.
+    if (typeof resetIdleTimer === "function") resetIdleTimer();
     const newSrc = new URL(relativeFallbackPath, window.location.href).href;
     // Force an actual reload every time this is called (called only when a
     // tab is freshly navigated to, or right after switching the active

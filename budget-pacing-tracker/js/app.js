@@ -295,7 +295,32 @@ function renderTable() {
       const effectiveSpent = isRetainerHours ? (liveHoursTotal || 0) : p.spentToDate;
 
       const pct = p.totalBudget ? Math.min(100, Math.round((effectiveSpent / p.totalBudget) * 100)) : 0;
+      // Uncapped version of pct just for the 90% alert threshold below -
+      // the display value above is clamped to 100 so the progress bar
+      // never overflows, but a client at 140% should still read as "over,"
+      // not silently re-treated as exactly 100.
+      const rawPct = p.totalBudget ? Math.round((effectiveSpent / p.totalBudget) * 100) : 0;
       const paceClass = getPacingClass(effectiveSpent, p.totalBudget, p.startDate, p.endDate);
+
+      // Finance notification trigger: fires once when a project first
+      // crosses 90% of its cap (see Hub bug-fix round, Aug 2026 - "budget
+      // pacing crosses 90%" was one of the settled Finance-role triggers).
+      // p.pacingAlertSent90 is persisted on the project itself so this
+      // survives reloads and doesn't refire on every render() poll tick;
+      // it only re-arms once spend drops back under 80% (a buffer so it
+      // doesn't flicker right at the line) so a genuine future re-crossing
+      // (e.g. cap raised, then spend catches back up) notifies again.
+      if (isEmbedded && typeof window.parent.pushAdminNotification === 'function') {
+        if (p.totalBudget && rawPct >= 90 && !p.pacingAlertSent90) {
+          p.pacingAlertSent90 = true;
+          const label = hasMultiple ? `${p.name || 'General'} (${name})` : name;
+          window.parent.pushAdminNotification('budget_pacing_90', `${label} is at ${rawPct}% of its ${(p.budgetType || 'budget').toLowerCase()} cap.`, name, null);
+          persist();
+        } else if (p.pacingAlertSent90 && rawPct < 80) {
+          p.pacingAlertSent90 = false;
+          persist();
+        }
+      }
 
       const labor = getLaborCost(name, p.startDate, p.endDate, p.name, hasMultiple);
       const monthlyBilling = getActiveMonthlyBilling(name);
