@@ -895,17 +895,11 @@ function applyTeamAccessRestrictions(allowedSections) {
     businessInsuranceBtn.style.display = allowedSections ? 'none' : '';
   }
 
-  // Financial Center - same admin/leadership-only footer gating as every
-  // other financial tool in this list. Missing until now (Aug 2026,
-  // found while deduping the Finance section's shortcuts below) - this
-  // button was genuinely never hidden for a restricted account, unlike
-  // its siblings right next to it, so it was visible in the footer to
-  // literally any restricted teammate regardless of which sections they
-  // had, a real access-visibility gap beyond just looking duplicated.
-  const financialCenterBtn = document.getElementById('financialCenterFooterBtn');
-  if (financialCenterBtn) {
-    financialCenterBtn.style.display = allowedSections ? 'none' : '';
-  }
+  // Financial Center used to also have a footer copy here (and, briefly,
+  // a gating fix for it) - Ronald asked to just keep it in the Finance
+  // section instead of both places, so the footer button was removed
+  // from index.html entirely rather than kept and hidden. Nothing to
+  // gate here anymore; the Finance section's own copy is the only one.
 
   // Activity Log shows who did what across every client - same
   // admin/leadership-only gating as the rest of the footer tools.
@@ -923,10 +917,12 @@ function applyTeamAccessRestrictions(allowedSections) {
   }
 
   // De-duplicate the Finance section's shortcut buttons (Aug 2026 -
-  // Ronald flagged Contract & Invoice Tracker, Subscription Tracker,
-  // Budget Pacing, and later Financial Center too, as looking like
-  // duplicated tools). They aren't actually
-  // duplicate TOOLS - the Finance nav-section deliberately re-links to
+  // Ronald flagged Contract & Invoice Tracker, Subscription Tracker, and
+  // Budget Pacing as looking like duplicated tools; Financial Center got
+  // flagged too, but was resolved differently - see the comment a bit
+  // further down where its old footer button used to be). The remaining
+  // three aren't actually duplicate TOOLS - the Finance nav-section
+  // deliberately re-links to
   // tools that live under other sections (Sales Pipeline, Ad Accounts &
   // Access) or the admin-only footer, specifically so a Finance-role
   // restricted teammate - who has none of those - can still reach them
@@ -947,14 +943,16 @@ function applyTeamAccessRestrictions(allowedSections) {
     };
     hideFinanceShortcutIfRedundant('tab-contractinvoice', !allowedSections || allowedSections.indexOf('sales-pipeline') !== -1);
     hideFinanceShortcutIfRedundant('tab-budgetpacing', !allowedSections || allowedSections.indexOf('ad-accounts-access') !== -1);
-    // Subscription Tracker's and Financial Center's only other copy is
-    // their admin-only footer button, which is hidden for EVERY
-    // restricted account regardless of which sections it grants (see
-    // subscriptionTrackerBtn/financialCenterBtn above) - so the
-    // Finance-section copy is only ever truly redundant for a fully
+    // Subscription Tracker's only other copy is the admin-only footer
+    // button, which is hidden for EVERY restricted account regardless of
+    // which sections it grants (see subscriptionTrackerBtn above) - so
+    // the Finance-section copy is only ever truly redundant for a fully
     // unrestricted viewer, not just a broad-access restricted one.
+    // Financial Center has no other copy anymore (its footer button was
+    // removed entirely - see the comment above this function) so it's
+    // not part of this dedup at all; the Finance section is its one and
+    // only home now.
     hideFinanceShortcutIfRedundant('tab-subscriptiontracker', !allowedSections);
-    hideFinanceShortcutIfRedundant('tab-financialcenter', !allowedSections);
   }
 
   // If restrictions just hid whatever tab the user was looking at,
