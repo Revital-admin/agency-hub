@@ -260,6 +260,26 @@ const EMAIL_TEMPLATES = [
     content: "<p>Hi {{contactName}},</p><p>We've really loved working with {{clientName}} and the results we've seen together. We put together in-depth case studies for our best client partnerships — it's great exposure for your brand too since it gets your company featured in our marketing.</p><p>Would you be open to sharing a few sentences about your experience? I've set up a quick spot in your client portal under \"Leave a Testimonial\" where you can type it directly whenever's convenient — takes less than five minutes.</p><p>No pressure at all, and thank you again for the trust.</p>"
   },
   {
+    id: "tpl-content-request-22",
+    category: "Content & Asset Requests",
+    templateNumber: "#22",
+    title: "Content/Asset Request",
+    subjectLine: "A few things we need from you for {{deliverableName}}",
+    format: "html",
+    date: "2026-08-18",
+    content: "<p>Hi {{contactName}},</p><p>We're getting started on {{deliverableName}} for {{clientName}} and need a few things from your end before we can move forward:</p><ul><li>{{itemNeeded1}}</li><li>{{itemNeeded2}}</li><li>{{itemNeeded3}}</li></ul><p>If you can get these to us by {{dueDate}}, we'll stay on track for {{targetCompletionDate}}. You can reply directly to this email or upload files through your client portal — whichever's easier.</p><p>Let us know if anything on the list needs clarifying.</p><p>Thanks,<br>{{accountManagerName}}</p>"
+  },
+  {
+    id: "tpl-content-request-followup-22b",
+    category: "Content & Asset Requests",
+    templateNumber: "#22B",
+    title: "Content/Asset Request — Follow-Up (No Response)",
+    subjectLine: "Quick reminder — still need a few things for {{deliverableName}}",
+    format: "html",
+    date: "2026-08-18",
+    content: "<p>Hi {{contactName}},</p><p>Just a friendly nudge — we're still waiting on {{itemNeeded1}} (and anything else from our last note) before we can move forward on {{deliverableName}}.</p><p>To keep {{clientName}} on track for {{targetCompletionDate}}, we'd need these by {{dueDate}}. Let us know if you're missing anything or need more time, and we'll adjust the timeline together.</p>"
+  },
+  {
     id: "tpl-contract-send-21",
     category: "Contracts",
     templateNumber: "#21",
