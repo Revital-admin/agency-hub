@@ -232,3 +232,15 @@
   .container, .container-wide { width: 100%; padding: 2rem 1rem 3rem; }
   .summary-stat { min-width: 130px; }
 }
+
+/* Approve/Decline on a pending time-off request get disabled the instant
+   they're clicked (see approveTimeOffRequest/declineTimeOffRequest in
+   js/app.js) so the button doesn't just sit there looking unresponsive
+   during the round trip - but .btn/.btn-secondary have no [disabled]
+   styling anywhere in the shared stylesheet, so without this the disabled
+   state was invisible (same washed-out look as enabled). */
+.pending-timeoff-approve-btn:disabled,
+.pending-timeoff-decline-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

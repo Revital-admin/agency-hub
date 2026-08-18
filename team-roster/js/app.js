@@ -173,21 +173,35 @@ function renderPendingTimeOffCard() {
     </div>`).join('');
 
   list.querySelectorAll('.pending-timeoff-approve-btn').forEach(btn => {
-    btn.addEventListener('click', () => approveTimeOffRequest(btn.getAttribute('data-member-id'), btn.getAttribute('data-req-id')));
+    btn.addEventListener('click', () => approveTimeOffRequest(btn.getAttribute('data-member-id'), btn.getAttribute('data-req-id'), btn));
   });
   list.querySelectorAll('.pending-timeoff-decline-btn').forEach(btn => {
-    btn.addEventListener('click', () => declineTimeOffRequest(btn.getAttribute('data-member-id'), btn.getAttribute('data-req-id')));
+    btn.addEventListener('click', () => declineTimeOffRequest(btn.getAttribute('data-member-id'), btn.getAttribute('data-req-id'), btn));
   });
 }
 
 // Approving moves the request out of pendingTimeOff and into the same
 // timeOff array/Google Calendar sync path addTimeOff() uses directly, so
 // there's exactly one place that talks to the calendar API, not two.
-async function approveTimeOffRequest(memberId, reqId) {
+async function approveTimeOffRequest(memberId, reqId, btn) {
   const member = members.find(m => m.id === memberId);
   if (!member || !Array.isArray(member.pendingTimeOff)) return;
   const req = member.pendingTimeOff.find(r => r.id === reqId);
   if (!req) return;
+
+  // persist() below is a full getDoc+setDoc round trip through the parent
+  // frame - with no visual change until it resolves, the button just sat
+  // there looking unclicked/unresponsive for a couple seconds, which is
+  // exactly what got reported as "very bugged and delayed" after a stress
+  // test (Aug 2026). Give immediate feedback and block double-clicks on
+  // both buttons for this row (a second click on the same row while the
+  // first is still in flight would otherwise no-op silently, which looks
+  // just as broken as a real double-submit).
+  const row = btn ? btn.closest('div') : null;
+  const declineBtn = row ? row.querySelector('.pending-timeoff-decline-btn') : null;
+  const originalLabel = btn ? btn.textContent : null;
+  if (btn) { btn.disabled = true; btn.textContent = 'Approving…'; }
+  if (declineBtn) declineBtn.disabled = true;
 
   const previousPending = member.pendingTimeOff;
   const previousTimeOff = member.timeOff;
@@ -200,6 +214,8 @@ async function approveTimeOffRequest(memberId, reqId) {
   if (!ok) {
     member.pendingTimeOff = previousPending;
     member.timeOff = previousTimeOff;
+    if (btn) { btn.disabled = false; btn.textContent = originalLabel || 'Approve'; }
+    if (declineBtn) declineBtn.disabled = false;
     return;
   }
   renderPendingTimeOffCard();
@@ -229,17 +245,30 @@ async function approveTimeOffRequest(memberId, reqId) {
 // teammate their request was seen and turned down, not just silently
 // vanish. declined/approved-elsewhere entries older than 30 days get
 // swept out on save so this doesn't grow forever.
-async function declineTimeOffRequest(memberId, reqId) {
+async function declineTimeOffRequest(memberId, reqId, btn) {
   const member = members.find(m => m.id === memberId);
   if (!member || !Array.isArray(member.pendingTimeOff)) return;
   const req = member.pendingTimeOff.find(r => r.id === reqId);
   if (!req) return;
+
+  // Same immediate-feedback fix as approveTimeOffRequest above.
+  const row = btn ? btn.closest('div') : null;
+  const approveBtn = row ? row.querySelector('.pending-timeoff-approve-btn') : null;
+  const originalLabel = btn ? btn.textContent : null;
+  if (btn) { btn.disabled = true; btn.textContent = 'Declining…'; }
+  if (approveBtn) approveBtn.disabled = true;
+
   const previous = member.pendingTimeOff;
   req.status = 'declined';
   req.decidedAt = new Date().toISOString();
 
   const ok = await persist();
-  if (!ok) { member.pendingTimeOff = previous; return; }
+  if (!ok) {
+    member.pendingTimeOff = previous;
+    if (btn) { btn.disabled = false; btn.textContent = originalLabel || 'Decline'; }
+    if (approveBtn) approveBtn.disabled = false;
+    return;
+  }
   renderPendingTimeOffCard();
 }
 
