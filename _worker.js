@@ -4286,6 +4286,7 @@ const CLIENT_FIELD_SECTIONS = {
   copywriting: "content-creation",
   creativeBrief: "content-creation",
   contentStrategy: "content-creation",
+  creativeStrategy: "content-creation",
 
   campaignLaunch: "account-ops",
   meetingNotes: "account-ops",

@@ -5612,7 +5612,7 @@ const CLIENT_FIELD_SECTIONS_MIRROR = {
   moodBoardViews: "content-creation", moodBoardStyleFeedback: "content-creation",
   moodBoardAnnotations: "content-creation", brandRoadmap: "content-creation",
   copywriting: "content-creation", creativeBrief: "content-creation",
-  contentStrategy: "content-creation",
+  contentStrategy: "content-creation", creativeStrategy: "content-creation",
 
   campaignLaunch: "account-ops", meetingNotes: "account-ops",
 
