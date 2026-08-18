@@ -7198,7 +7198,9 @@ const ADMIN_NOTIF_TARGET_TAB = {
   moodboard_annotation: 'tab-moodboard',
   client_pulse_low: 'tab-portal',
   budget_pacing_90: 'tab-budgetpacing',
-  onboarding_complete: 'tab-onboarding'
+  onboarding_complete: 'tab-onboarding',
+  invoice_overdue: 'tab-contractinvoice',
+  deal_won: 'tab-pipelineboard'
 };
 
 // Same "fade then disappear, but never actually delete" pattern as

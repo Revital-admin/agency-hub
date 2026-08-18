@@ -407,7 +407,19 @@ function billingCellHtml(r) {
 
 function renderTable() {
   const changed = reconcileOverdueInvoices();
-  changed.forEach(r => saveOneRecord(r));
+  changed.forEach(r => {
+    saveOneRecord(r);
+    // Finance notification trigger (settled Hub trigger list, Aug 2026):
+    // fires exactly once, right at the moment reconcileOverdueInvoices()
+    // itself flips a record to Overdue - not on every render after that,
+    // since `changed` only ever contains records that transitioned THIS
+    // pass (reconcileOverdueInvoices only matches invoiceStatus === 'Sent'
+    // rows, which this one no longer is after the flip above).
+    if (isEmbedded && typeof window.parent.pushAdminNotification === 'function') {
+      const amount = formatCurrency(parseAmountToNumber(r.invoiceAmount));
+      window.parent.pushAdminNotification('invoice_overdue', `${r.clientName}'s invoice for ${amount} is overdue (was due ${r.invoiceDueDate}).`, r.clientName, null);
+    }
+  });
 
   renderSummary();
 
