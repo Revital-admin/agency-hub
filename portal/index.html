@@ -3,7 +3,15 @@
 <head>
 <script>
 window.addEventListener('error', function(e) {
-  document.getElementById('loader').innerHTML = '<h2 style="color:red;">Error</h2><p>' + e.message + ' at line ' + e.lineno + '</p>';
+  // Client-facing - never show the raw error message/line number here,
+  // just log it for us and give the client a generic, non-alarming
+  // message. See Hub_Tool_Improvement_Backlog.md Tier 1.
+  console.error('Client Portal error:', e.message, 'at line', e.lineno);
+  var loaderEl = document.getElementById('loader');
+  if (loaderEl) {
+    loaderEl.innerHTML = '<h2>Something went wrong</h2><p>We\'ve been notified and are looking into it. Please try refreshing the page in a moment.</p>';
+    loaderEl.style.display = 'flex';
+  }
 });
 </script>
 
