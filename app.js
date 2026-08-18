@@ -910,6 +910,38 @@ function applyTeamAccessRestrictions(allowedSections) {
     businessRoadmapBtn.style.display = allowedSections ? 'none' : '';
   }
 
+  // De-duplicate the Finance section's shortcut buttons (Aug 2026 -
+  // Ronald flagged Contract & Invoice Tracker, Subscription Tracker, and
+  // Budget Pacing as looking like duplicated tools). They aren't actually
+  // duplicate TOOLS - the Finance nav-section deliberately re-links to
+  // tools that live under other sections (Sales Pipeline, Ad Accounts &
+  // Access) or the admin-only footer, specifically so a Finance-role
+  // restricted teammate - who has none of those - can still reach them
+  // (see the FINANCE section's own comment in team-access-manager/js/app.js).
+  // But for anyone who can ALREADY see the real original elsewhere in
+  // their own sidebar (a broader role, or a fully unrestricted account),
+  // showing the same tool a second time under Finance is just clutter.
+  // Hide each Finance-section shortcut specifically when its real
+  // original is also visible to THIS viewer, rather than removing the
+  // shortcut outright and breaking it for the narrower Finance role it
+  // exists for.
+  const financeSection = document.querySelector('.nav-section[data-section="finance"]');
+  if (financeSection) {
+    const hideFinanceShortcutIfRedundant = (tabId, alsoVisibleElsewhere) => {
+      const btn = financeSection.querySelector(`.nav-item-btn[data-tab="${tabId}"]`);
+      const li = btn && btn.closest('li');
+      if (li) li.style.display = alsoVisibleElsewhere ? 'none' : '';
+    };
+    hideFinanceShortcutIfRedundant('tab-contractinvoice', !allowedSections || allowedSections.indexOf('sales-pipeline') !== -1);
+    hideFinanceShortcutIfRedundant('tab-budgetpacing', !allowedSections || allowedSections.indexOf('ad-accounts-access') !== -1);
+    // Subscription Tracker's only other copy is the admin-only footer
+    // button, which is hidden for EVERY restricted account regardless of
+    // which sections it grants (see subscriptionTrackerBtn above) - so
+    // the Finance-section copy is only ever truly redundant for a fully
+    // unrestricted viewer, not just a broad-access restricted one.
+    hideFinanceShortcutIfRedundant('tab-subscriptiontracker', !allowedSections);
+  }
+
   // If restrictions just hid whatever tab the user was looking at,
   // land them on the first tab they're still allowed to see instead
   // of leaving them on a now-hidden section.
