@@ -717,11 +717,11 @@ function renderTemplatePickerInto(listElId, onPick) {
   const templates = allTemplates();
   list.innerHTML = templates.map(t => `
     <div class="template-picker-row">
-      <div>
+      <div class="template-picker-info">
         <div class="template-picker-name">${escapeHtml(t.name)}</div>
         <div class="template-picker-desc">${escapeHtml(t.description || '')}</div>
       </div>
-      <div style="display:flex; align-items:center; gap:12px;">
+      <div class="template-picker-actions">
         <span class="template-picker-count">${t.phases.length} phases</span>
         <button type="button" class="btn-primary pick-template-btn" data-id="${t.id}">Use This Template</button>
       </div>
