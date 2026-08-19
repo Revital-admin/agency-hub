@@ -216,6 +216,64 @@ function renderTable() {
   document.querySelectorAll('.remove-btn').forEach(btn => btn.addEventListener('click', () => removeEntry(btn.getAttribute('data-id'))));
 }
 
+// Client Ad Account Log already tracks Account ID/Owned By/Access Level
+// for a client's ad platforms specifically - this tool is general-purpose
+// (any platform/tool, not just ad accounts), so the two ended up
+// capturing the same three facts independently whenever someone logged
+// an ad platform's access here too. Rather than re-typing them, check
+// for a matching Client Ad Account Log entry and offer to copy its
+// values in. "Platform / Tool Name" is free text here (unlike Ad Account
+// Log's fixed dropdown), so the match is a simple keyword check, not an
+// exact-name lookup.
+const AD_PLATFORM_KEYWORDS = [
+  { keyword: 'meta', platform: 'Meta' },
+  { keyword: 'facebook', platform: 'Meta' },
+  { keyword: 'google', platform: 'Google' },
+  { keyword: 'tiktok', platform: 'TikTok' },
+  { keyword: 'linkedin', platform: 'LinkedIn' }
+];
+let matchedAdAccountPlatform = null;
+
+async function checkAdAccountLogMatch() {
+  const hint = el('adAccountLogHint');
+  if (!hint) return;
+  matchedAdAccountPlatform = null;
+  hint.style.display = 'none';
+
+  const clientName = el('clientName').value.trim();
+  const platformName = el('platformName').value.trim().toLowerCase();
+  if (!clientName || !platformName || !isEmbedded || !window.parent.getAdAccountLogPlatforms) return;
+
+  const match = AD_PLATFORM_KEYWORDS.find(k => platformName.includes(k.keyword));
+  if (!match) return;
+
+  const platforms = await window.parent.getAdAccountLogPlatforms(clientName);
+  const found = platforms.find(p => (p.platform || '').toLowerCase() === match.platform.toLowerCase());
+  if (!found) return;
+
+  matchedAdAccountPlatform = found;
+  hint.innerHTML = `Already logged in <strong>Client Ad Account Log</strong>: ` +
+    `${found.accountId ? `Account ID <strong>${escapeHtml(found.accountId)}</strong>, ` : ''}` +
+    `Owned by <strong>${escapeHtml(found.ownedBy || 'Client')}</strong>` +
+    `${found.accessLevel ? `, access <strong>${escapeHtml(found.accessLevel)}</strong>` : ''}. ` +
+    `<button type="button" id="useAdAccountLogValuesBtn" class="btn btn-secondary btn-sm" style="margin-left:6px;">Use these values</button>`;
+  hint.style.display = 'block';
+
+  const useBtn = el('useAdAccountLogValuesBtn');
+  if (useBtn) useBtn.addEventListener('click', () => {
+    if (!matchedAdAccountPlatform) return;
+    if (matchedAdAccountPlatform.accountId) el('accountId').value = matchedAdAccountPlatform.accountId;
+    if (matchedAdAccountPlatform.ownedBy) el('ownedBy').value = matchedAdAccountPlatform.ownedBy;
+    if (matchedAdAccountPlatform.accessLevel) el('ourAccessType').value = matchedAdAccountPlatform.accessLevel;
+  });
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str || '';
+  return d.innerHTML;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   populateClientDatalist();
   resetForm();
@@ -225,6 +283,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   el('saveEntryBtn').addEventListener('click', saveEntry);
   el('showRemovedToggle').addEventListener('change', renderTable);
   el('filterClientInput').addEventListener('input', renderTable);
+  el('clientName').addEventListener('change', checkAdAccountLogMatch);
+  el('platformName').addEventListener('change', checkAdAccountLogMatch);
 
   // Same iframe-race fix used across the other cross-client tools: the
   // client datalist can be empty if this loads before the parent Hub's

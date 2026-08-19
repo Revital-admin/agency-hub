@@ -4357,6 +4357,34 @@ async function getAllTeamTransitionOnboardingStatuses() {
   }
 }
 
+// Cross-tool bridge (Aug 2026): Access & Login Log calls this to check
+// whether a client already has an ad platform logged in Client Ad
+// Account Log before someone re-types its Account ID/Owned By/Access
+// Level from scratch - both tools ended up capturing the same three
+// facts independently for ad platforms specifically (Access & Login Log
+// is general-purpose, Ad Account Log is ad-platform-specific). Read-only,
+// agency-wide (not per-client scoped) - returns the raw platforms array
+// for the given client so the caller can do its own free-text keyword
+// matching against platform name (Access & Login Log's "Platform / Tool
+// Name" field is free text, not a fixed list, so the match has to happen
+// on that side).
+async function getAdAccountLogPlatforms(clientName) {
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return [];
+  const target = (clientName || "").trim().toLowerCase();
+  if (!target) return [];
+  try {
+    const docRef = window.firebaseDoc(window.firebaseDb, "agency", "adAccountLog");
+    const snap = await window.firebaseGetDoc(docRef);
+    const data = snap && snap.exists ? snap.data() : null;
+    const list = (data && data.list) || [];
+    const entry = list.find(e => (e.clientName || "").trim().toLowerCase() === target);
+    return (entry && entry.platforms) || [];
+  } catch (e) {
+    console.error("Couldn't read Client Ad Account Log:", e);
+    return [];
+  }
+}
+
 // ── Account Manager Capacity Snapshot ──
 // Team Roster & Capacity used to rely entirely on a manually-typed
 // "current client count" per person, which drifts stale the moment

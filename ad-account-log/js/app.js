@@ -102,6 +102,45 @@ function populatePlatformSelect() {
   el('platformStatusSelect').innerHTML = STATUS_OPTIONS.map(s => `<option value="${s}">${s}</option>`).join('');
 }
 
+// Ad Account Setup (the per-client, one-time technical-setup checklist)
+// already captures each platform's real Account ID and spend limit as
+// part of walking through Business Manager/Ads Manager configuration -
+// this used to get typed a second time here with no connection to that,
+// so the two could quietly disagree if either one changed later. Maps
+// this tool's platform names to the field keys Ad Account Setup stores
+// them under (client.adAccountSetup.<schemaKey>.<field> - see that
+// tool's PLATFORM_SCHEMAS for the source of these key names).
+const AD_SETUP_FIELD_MAP = {
+  Meta: { schemaKey: 'meta', idField: 'adAccountId', budgetField: 'monthlySpendLimit' },
+  Google: { schemaKey: 'google', idField: 'googleAdsAccountId', budgetField: 'monthlyBudget' },
+  TikTok: { schemaKey: 'tiktok', idField: 'adAccountId', budgetField: 'monthlySpendLimit' },
+  LinkedIn: { schemaKey: 'linkedin', idField: 'accountId', budgetField: 'monthlyBudget' }
+};
+
+// Autofill only - never overwrites something already typed, and never
+// runs for "Other" (no matching Ad Account Setup schema). Fires when
+// either the client or the platform changes, since both are needed to
+// know which client.adAccountSetup.<platform> object to read.
+function autofillFromAdAccountSetup() {
+  const clientName = el('clientName').value.trim();
+  const platform = el('platformSelect').value;
+  const map = AD_SETUP_FIELD_MAP[platform];
+  if (!clientName || !map) return;
+
+  const client = getClients()[clientName];
+  const setup = client && client.adAccountSetup && client.adAccountSetup[map.schemaKey];
+  if (!setup) return;
+
+  const idInput = el('platformAccountId');
+  const spendInput = el('platformSpendLimit');
+  if (idInput && !idInput.value.trim() && setup[map.idField]) {
+    idInput.value = setup[map.idField];
+  }
+  if (spendInput && !spendInput.value.trim() && setup[map.budgetField]) {
+    spendInput.value = setup[map.budgetField];
+  }
+}
+
 function addDraftPlatform() {
   const platform = el('platformSelect').value;
   const accountName = el('platformAccountName').value.trim();
@@ -259,6 +298,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   el('addPlatformBtn').addEventListener('click', addDraftPlatform);
   el('saveEntryBtn').addEventListener('click', saveEntry);
   el('filterClientInput').addEventListener('input', renderTable);
+  el('clientName').addEventListener('change', autofillFromAdAccountSetup);
+  el('platformSelect').addEventListener('change', autofillFromAdAccountSetup);
 
   let pollAttempts = 0;
   const pollTimer = setInterval(() => {
