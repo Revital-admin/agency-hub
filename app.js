@@ -4311,6 +4311,52 @@ async function syncPipelineLeadStage(prospectName, outcome) {
   return { ok: true, lead };
 }
 
+// Cross-tool bridge (Aug 2026): Team Roster's onboarding widget calls this
+// instead of keeping its own separate 6-item checklist. Team Roster used
+// to duplicate the same 6 milestones (email, ClickUp, password manager,
+// agreement, Hub access, first client) that Team Onboarding & Offboarding
+// already tracks in full (16 items across 4 categories) - two independent
+// checkbox sets for the same new hire, unlinked. This reads the real
+// checklist instead of re-tracking it. Read-only by design (no write path
+// - Team Roster links out to Team Onboarding & Offboarding to actually
+// check things off, same "link instead of duplicate" fix already applied
+// to the Paid Client Kickoff checklist).
+//
+// Returns a name->{done, completedAt} lookup for every onboarding entry
+// in one read, rather than one call per roster member - Team Roster shows
+// a badge on every row, and N Firestore reads for N team members on every
+// table render would be wasteful. `done` is a raw count rather than a
+// fraction - deliberately not hardcoding the item total here too, since
+// that list lives in team-transitions/js/data.js and could grow without
+// this needing to change.
+async function getAllTeamTransitionOnboardingStatuses() {
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return {};
+  try {
+    const docRef = window.firebaseDoc(window.firebaseDb, "agency", "teamTransitions");
+    const snap = await window.firebaseGetDoc(docRef);
+    const data = snap && snap.exists ? snap.data() : null;
+    const list = (data && data.list) || [];
+    const byName = {};
+    list.filter(e => e.type === "onboarding" && e.employeeName).forEach(entry => {
+      const key = entry.employeeName.trim().toLowerCase();
+      // Prefer an in-progress entry over a completed one if somehow both
+      // exist for the same name (e.g. a rehire) - that's the one worth
+      // surfacing on the roster badge.
+      if (byName[key] && byName[key].completedAt && !entry.completedAt) {
+        // fall through, replace below
+      } else if (byName[key] && !byName[key].completedAt) {
+        return; // already have the in-progress one, keep it
+      }
+      const done = entry.checked ? Object.values(entry.checked).filter(Boolean).length : 0;
+      byName[key] = { done, completedAt: entry.completedAt || null };
+    });
+    return byName;
+  } catch (e) {
+    console.error("Couldn't read team transitions onboarding statuses:", e);
+    return {};
+  }
+}
+
 // ── Account Manager Capacity Snapshot ──
 // Team Roster & Capacity used to rely entirely on a manually-typed
 // "current client count" per person, which drifts stale the moment

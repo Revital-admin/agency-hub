@@ -625,33 +625,20 @@ function renderTimeline() {
 }
 
 // ── Onboarding Checklist (new-hire setup, not client onboarding) ──
-// Same "only shown once a member exists" pattern as Time Off - nothing
-// to check off for a brand-new, not-yet-saved entry. A fixed list of
-// steps rather than free-form (like QC Checklist/Red Flag Checklist),
-// since "did we actually do the standard setup steps" is the whole
-// point - a blank free-text box would just recreate the "did we
-// remember to..." problem this exists to solve. Deliberately generic
-// enough to cover both contractors and employees rather than two
-// separate lists.
-const ONBOARDING_ITEMS = [
-  { key: 'email', label: 'Company email created', sopId: 'sop-new-hire-email-access-setup' },
-  { key: 'clickup', label: 'Added to ClickUp' },
-  { key: 'passwordmanager', label: 'Password manager access granted' },
-  { key: 'agreement', label: 'Agreement sent (contractor) or offer signed (employee)' },
-  { key: 'hubaccess', label: 'Hub login confirmed' },
-  { key: 'firstclient', label: 'First client assigned' }
-];
-
-function getOnboardingState(entry) {
-  if (!entry.onboarding || typeof entry.onboarding !== 'object') entry.onboarding = { items: {} };
-  if (!entry.onboarding.items || typeof entry.onboarding.items !== 'object') entry.onboarding.items = {};
-  return entry.onboarding;
-}
+// This used to keep its own 6-item checkbox set (email, ClickUp, password
+// manager, agreement, Hub access, first client) - all 6 duplicated items
+// already tracked in full on the Team Onboarding & Offboarding tool's own
+// 16-item checklist, unlinked, so the two could disagree about whether
+// onboarding was actually done. Now a read-only summary pulled from that
+// tool via getAllTeamTransitionOnboardingStatuses (see app.js) instead -
+// same "link instead of duplicate" fix already applied to the Paid
+// Client Kickoff checklist. See renderOnboardingSection below.
+let onboardingStatusCache = {}; // memberId -> {exists, done, completedAt} | undefined while loading
 
 function onboardingProgress(entry) {
-  if (!entry.onboarding || !entry.onboarding.items) return { done: 0, total: ONBOARDING_ITEMS.length };
-  const done = ONBOARDING_ITEMS.filter(item => entry.onboarding.items[item.key] && entry.onboarding.items[item.key].done).length;
-  return { done, total: ONBOARDING_ITEMS.length };
+  const status = onboardingStatusCache[entry.id];
+  if (!status || !status.exists) return null;
+  return status;
 }
 
 // ── Legal / compliance (contractors only) ──
@@ -688,49 +675,66 @@ function renderOnboardingSection() {
   const entry = members.find(m => m.id === editingId);
   const listEl = el('onboardingList');
   if (!entry || !listEl) return;
-  const state = getOnboardingState(entry);
 
-  listEl.innerHTML = ONBOARDING_ITEMS.map(item => {
-    const itemState = state.items[item.key] || { done: false };
-    return `
-      <label style="display:flex; align-items:center; gap:8px; font-size:0.82rem; padding:5px 0; border-bottom:1px solid var(--color-border); cursor:pointer;">
-        <input type="checkbox" class="onboarding-item-checkbox" data-key="${item.key}" ${itemState.done ? 'checked' : ''} style="width:auto;">
-        <span style="flex:1;">${escapeHtml(item.label)}</span>
-        ${item.sopId ? `<button type="button" class="onboarding-sop-link-btn" data-sop-id="${item.sopId}" style="background:none; border:none; color:var(--color-accent); font-size:0.72rem; text-decoration:underline; cursor:pointer; padding:0; white-space:nowrap;">How to set this up</button>` : ''}
-        ${itemState.done && itemState.doneDate ? `<span style="font-size:0.7rem; color:var(--color-text-muted);">${formatShortDate(itemState.doneDate)}</span>` : ''}
-      </label>`;
-  }).join('');
+  const status = onboardingStatusCache[entry.id];
+  if (status === undefined) {
+    // Not in the cache yet - most likely a member added this session,
+    // after the one-time bulk load on page open. Kick off a refresh
+    // (which re-renders this section once it resolves) rather than
+    // leaving this stuck on a loading state forever.
+    listEl.innerHTML = `<p style="font-size:0.82rem; color:var(--color-text-muted);">Loading...</p>`;
+    refreshOnboardingStatuses();
+    return;
+  }
 
-  listEl.querySelectorAll('.onboarding-item-checkbox').forEach(cb => {
-    cb.addEventListener('change', () => toggleOnboardingItem(cb.getAttribute('data-key'), cb.checked));
-  });
-
-  // Jumps to the SOP Wiki tab for the referenced doc (e.g. New Hire Email
-  // & Access Setup) - doesn't deep-link to the exact entry (SOP Wiki has
-  // no URL-param support for that), just gets you to the right tool with
-  // the doc one click/search away.
-  listEl.querySelectorAll('.onboarding-sop-link-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (isEmbedded && window.parent.navigateToTab) {
-        window.parent.navigateToTab('tab-sopwiki');
-      }
+  if (!status.exists) {
+    listEl.innerHTML = `
+      <p style="font-size:0.82rem; color:var(--color-text-muted); margin:0 0 8px 0;">No onboarding checklist started yet.</p>
+      <button type="button" id="startOnboardingBtn" class="btn btn-secondary btn-sm">Start onboarding checklist</button>
+    `;
+    const startBtn = el('startOnboardingBtn');
+    if (startBtn) startBtn.addEventListener('click', () => {
+      if (isEmbedded && window.parent.navigateToTab) window.parent.navigateToTab('tab-teamtransitions');
     });
+    return;
+  }
+
+  const statusLine = status.completedAt
+    ? `Complete (${formatShortDate(status.completedAt.slice(0, 10))})`
+    : `${status.done} item${status.done === 1 ? '' : 's'} checked off so far`;
+  listEl.innerHTML = `
+    <p style="font-size:0.82rem; margin:0 0 8px 0;">${statusLine}</p>
+    <button type="button" id="openOnboardingBtn" class="btn btn-secondary btn-sm">Open onboarding checklist &rarr;</button>
+  `;
+  const openBtn = el('openOnboardingBtn');
+  if (openBtn) openBtn.addEventListener('click', () => {
+    if (isEmbedded && window.parent.navigateToTab) window.parent.navigateToTab('tab-teamtransitions');
   });
 }
 
-async function toggleOnboardingItem(key, checked) {
-  const entry = members.find(m => m.id === editingId);
-  if (!entry) return;
-  const state = getOnboardingState(entry);
-  const previous = { ...state.items };
-  state.items = { ...state.items, [key]: { done: checked, doneDate: checked ? todayStr() : null } };
-
-  const ok = await persist();
-  if (!ok) { state.items = previous; renderOnboardingSection(); return; }
-  renderOnboardingSection();
+// Fetches every team member's onboarding status from Team Onboarding &
+// Offboarding in one read (see getAllTeamTransitionOnboardingStatuses in
+// app.js), populates onboardingStatusCache keyed by roster member id, then
+// re-renders whatever's currently showing so the badges/edit panel pick
+// it up. Called once on load and after any roster edit that could affect
+// matching (a name change).
+async function refreshOnboardingStatuses() {
+  if (!isEmbedded || !window.parent.getAllTeamTransitionOnboardingStatuses) return;
+  let byName = {};
+  try {
+    byName = await window.parent.getAllTeamTransitionOnboardingStatuses();
+  } catch (e) {
+    console.error("Couldn't load onboarding statuses:", e);
+    return;
+  }
+  const next = {};
+  members.forEach(m => {
+    const key = (m.memberName || '').trim().toLowerCase();
+    next[m.id] = (key && byName[key]) ? { exists: true, ...byName[key] } : { exists: false };
+  });
+  onboardingStatusCache = next;
   renderTable();
+  renderOnboardingSection();
 }
 
 function el(id) { return document.getElementById(id); }
@@ -1988,12 +1992,14 @@ function renderTable() {
     const timeOffBadge = timeOffInfo
       ? `<div style="font-size:0.68rem; color:${timeOffInfo.color}; margin-top:2px;">${timeOffInfo.text}</div>`
       : '';
-    // Only nag about unfinished onboarding - once complete, the badge
-    // disappears rather than sitting there permanently as a "✓ done"
-    // that nobody needs to see again.
+    // Only nag about unfinished onboarding - once complete (or if no
+    // checklist was ever started, e.g. a team member added before Team
+    // Onboarding & Offboarding existed), the badge stays quiet rather
+    // than sitting there permanently or nagging about something that
+    // predates the tool.
     const onboardingProg = onboardingProgress(m);
-    const onboardingBadge = onboardingProg.done < onboardingProg.total
-      ? `<div style="font-size:0.68rem; color:#f68d5f; margin-top:2px;">Onboarding ${onboardingProg.done}/${onboardingProg.total}</div>`
+    const onboardingBadge = (onboardingProg && !onboardingProg.completedAt)
+      ? `<div style="font-size:0.68rem; color:#f68d5f; margin-top:2px;">Onboarding: ${onboardingProg.done} checked</div>`
       : '';
     const complianceBadge = complianceIssues(m)
       .map(issue => `<div style="font-size:0.68rem; color:${issue.color}; margin-top:2px;">${escapeHtml(issue.text)}</div>`)
@@ -2088,6 +2094,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   resetForm();
   await Promise.all([loadMembers(), refreshCapacitySnapshot(), refreshHubAccessData()]);
   refreshViews();
+  refreshOnboardingStatuses();
 
   el('newMemberBtn').addEventListener('click', () => {
     resetForm();
