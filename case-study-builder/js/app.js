@@ -82,6 +82,32 @@ function resetForm() {
   el('formTitle').textContent = 'New Case Study';
   el('saveCaseStudyBtn').textContent = 'Save Case Study';
   el('cancelEditBtn').style.display = 'none';
+  updatePullTestimonialVisibility();
+}
+
+// Testimonial Tracker link (full audit finding #12): client.testimonialSubmission
+// is the quote a client typed into their portal's "Leave a Testimonial"
+// view (synced in by the root app.js). Before this, filling in a case
+// study's testimonial meant retyping or copy-pasting that quote by hand
+// from Testimonial Tracker - this pulls it directly instead. Only fills
+// the fields on an explicit click (never silently overwrites a draft in
+// progress), matching the opt-in pattern used elsewhere in the Hub.
+function updatePullTestimonialVisibility() {
+  const wrap = el('pullTestimonialWrap');
+  if (!wrap) return;
+  const client = currentClient();
+  const submission = client && client.testimonialSubmission;
+  wrap.style.display = (submission && submission.quote) ? 'block' : 'none';
+}
+
+function pullTestimonialFromSubmission() {
+  const client = currentClient();
+  const submission = client && client.testimonialSubmission;
+  if (!submission || !submission.quote) return;
+  const authorLine = [submission.authorName, submission.authorTitle].filter(Boolean).join(' — ');
+  el('csTestimonial').value = submission.quote;
+  el('csTestimonialAuthor').value = authorLine;
+  if (isEmbedded && window.parent.showBanner) window.parent.showBanner('success', 'Pulled the testimonial submission in.');
 }
 
 function addDraftEmbedLink() {
@@ -217,6 +243,7 @@ function startEditCaseStudy(id) {
   el('formTitle').textContent = 'Edit Case Study';
   el('saveCaseStudyBtn').textContent = 'Update Case Study';
   el('cancelEditBtn').style.display = 'inline-block';
+  updatePullTestimonialVisibility();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -361,6 +388,7 @@ document.addEventListener('DOMContentLoaded', () => {
   el('saveCaseStudyBtn').addEventListener('click', saveCaseStudy);
   el('cancelEditBtn').addEventListener('click', resetForm);
   el('addEmbedBtn').addEventListener('click', addDraftEmbedLink);
+  el('pullTestimonialBtn').addEventListener('click', pullTestimonialFromSubmission);
   wireDropZone(el('imageDropZone'), el('imageFileInput'), handleDroppedImage);
 
   // Same iframe-race fix used across the other client-aware modules: the
