@@ -444,8 +444,13 @@ function renderReportArchive() {
     card.style.borderRadius = "8px";
     card.style.padding = "20px";
     
-    // Check if it's the old schema or the new schema
-    if (report.monthYear && report.url) {
+    // Two write paths land here: a link logged in the Report Archive tool
+    // (monthYear/url/notes), or a full in-app report published from the
+    // Monthly Report tool (date/focus/platforms/cellData). New entries set
+    // `type` explicitly; fall back to the old shape-guess for entries
+    // saved before that existed.
+    const isExternalLink = report.type ? report.type === 'external-link' : !!(report.monthYear && report.url);
+    if (isExternalLink) {
       card.innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <div>

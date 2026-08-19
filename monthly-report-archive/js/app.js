@@ -100,16 +100,40 @@ function renderState() {
     const card = document.createElement('div');
     card.className = 'report-card';
 
-    card.innerHTML = `
-      <div class="report-info">
-        <h4>${(r.monthYear || 'Unknown').replace(/</g, '&lt;')}</h4>
-        ${r.notes ? `<p>${r.notes.replace(/</g, '&lt;')}</p>` : ''}
-      </div>
-      <div class="report-actions">
-        <a href="${r.url}" target="_blank" class="btn-secondary sm" style="text-decoration:none">Open Link</a>
-        <button class="btn-remove-action delete-rep-btn" data-id="${r.id}" style="color:#f87171">✕</button>
-      </div>
-    `;
+    // Two things can land in reportArchive: a link logged here (has
+    // monthYear/url/notes), or a full in-app report published from the
+    // Monthly Report tool itself (has date/focus/platforms/cellData, no
+    // url - it's viewed on the client's portal, not at an external link).
+    // This used to just assume every entry had monthYear/url and render
+    // Monthly-Report-published entries as "Unknown" with a dead Open Link
+    // button pointing at undefined. Branch explicitly on `type` (new
+    // entries set it going forward) and fall back to the same shape-based
+    // guess the portal uses for entries saved before this existed.
+    const isInAppReport = r.type ? r.type === 'in-app-report' : !(r.monthYear && r.url);
+
+    if (isInAppReport) {
+      card.innerHTML = `
+        <div class="report-info">
+          <h4>${(r.date || 'Untitled report').replace(/</g, '&lt;')}</h4>
+          ${r.focus ? `<p>${r.focus.replace(/</g, '&lt;')}</p>` : ''}
+          <p style="opacity:0.7; font-size:12px; margin-top:4px;">Built in the Monthly Report tool - full report viewable on the client's portal, no external link.</p>
+        </div>
+        <div class="report-actions">
+          <button class="btn-remove-action delete-rep-btn" data-id="${r.id}" style="color:#f87171">✕</button>
+        </div>
+      `;
+    } else {
+      card.innerHTML = `
+        <div class="report-info">
+          <h4>${(r.monthYear || 'Unknown').replace(/</g, '&lt;')}</h4>
+          ${r.notes ? `<p>${r.notes.replace(/</g, '&lt;')}</p>` : ''}
+        </div>
+        <div class="report-actions">
+          <a href="${r.url}" target="_blank" class="btn-secondary sm" style="text-decoration:none">Open Link</a>
+          <button class="btn-remove-action delete-rep-btn" data-id="${r.id}" style="color:#f87171">✕</button>
+        </div>
+      `;
+    }
     listEl.appendChild(card);
   });
 
@@ -156,6 +180,7 @@ function saveReport() {
 
   clients[clientName].reportArchive.push({
     id: uid(),
+    type: 'external-link',
     sortKey: monthRaw,
     monthYear,
     url,

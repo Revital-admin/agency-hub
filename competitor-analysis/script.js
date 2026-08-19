@@ -302,6 +302,7 @@ function publishToClientPortal() {
 
   const snapshot = {
     id: 'report_' + Date.now(),
+    type: 'in-app-report',
     date: reportState.date || '',
     preparedBy: reportState.preparedBy || '',
     focus: reportState.focus || '',
