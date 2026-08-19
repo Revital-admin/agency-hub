@@ -123,6 +123,9 @@ function saveEntry() {
   }
 
   const entry = gatherForm();
+  // Snapshot before mutating - idx-assign/unshift edit the array in place,
+  // so we need the actual old contents (not just a reference) to undo it.
+  const previous = entries.slice();
   if (editingId) {
     const idx = entries.findIndex(e => e.id === editingId);
     if (idx >= 0) entries[idx] = entry;
@@ -131,7 +134,10 @@ function saveEntry() {
   }
 
   persist().then(ok => {
-    if (!ok) return;
+    if (!ok) {
+      entries = previous; // roll back so the failed save doesn't linger in memory as if it stuck
+      return;
+    }
     resetForm();
     populateClientDatalist();
     renderTable();
@@ -152,9 +158,13 @@ function removeEntry(id) {
   const entry = entries.find(e => e.id === id);
   if (!entry) return;
   if (!confirm(`Remove the footage log entry for ${entry.clientName} — ${entry.projectTitle}?`)) return;
+  const previous = entries;
   entries = entries.filter(e => e.id !== id);
   persist().then(ok => {
-    if (!ok) return;
+    if (!ok) {
+      entries = previous; // roll back on a failed write
+      return;
+    }
     if (editingId === id) resetForm();
     renderTable();
   });

@@ -146,19 +146,39 @@ function saveEntry() {
 
   const type = el('type').value;
 
+  // Snapshot before mutating so a failed persist() can be undone below.
+  // The edit branch updates fields on the existing entry object in place
+  // (rather than replacing it), so we snapshot its old field values; the
+  // new-entry branch snapshots the list itself since unshift mutates in place.
+  let previousFields = null;
+  let previousList = null;
+
   if (editingId) {
     const entry = entries.find(e => e.id === editingId);
     if (entry) {
+      previousFields = {};
+      TOP_FIELDS.forEach(id => { previousFields[id] = entry[id]; });
       TOP_FIELDS.forEach(id => { entry[id] = el(id).value.trim ? el(id).value.trim() : el(id).value; });
     }
   } else {
+    previousList = entries.slice();
     const entry = { id: uid(), checked: {}, notes: '', createdDate: new Date().toISOString(), completedAt: null };
     TOP_FIELDS.forEach(id => { entry[id] = el(id).value.trim ? el(id).value.trim() : el(id).value; });
     entries.unshift(entry);
   }
 
   persist().then(ok => {
-    if (!ok) return;
+    if (!ok) {
+      // Roll back whichever mutation happened above so the failed save
+      // doesn't linger in memory as if it stuck.
+      if (previousFields) {
+        const entry = entries.find(e => e.id === editingId);
+        if (entry) Object.assign(entry, previousFields);
+      } else if (previousList) {
+        entries = previousList;
+      }
+      return;
+    }
     resetForm();
     renderTable();
     if (window.parent.showBanner) window.parent.showBanner('success', `Saved ${type} entry for ${employeeName}.`);
@@ -179,10 +199,14 @@ function removeEntry(id) {
   const entry = entries.find(e => e.id === id);
   if (!entry) return;
   if (!confirm(`Remove the ${entry.type} entry for ${entry.employeeName}?`)) return;
+  const previous = entries;
   entries = entries.filter(e => e.id !== id);
   if (expandedId === id) { expandedId = null; el('detailPanel').style.display = 'none'; }
   persist().then(ok => {
-    if (!ok) return;
+    if (!ok) {
+      entries = previous; // roll back on a failed write
+      return;
+    }
     if (editingId === id) resetForm();
     renderTable();
   });
@@ -317,10 +341,20 @@ function renderDetail() {
 
   document.querySelectorAll('.transition-check').forEach(cb => {
     cb.addEventListener('change', () => {
-      entry.checked[cb.getAttribute('data-id')] = cb.checked;
+      const itemId = cb.getAttribute('data-id');
+      const previousChecked = entry.checked[itemId]; // for rollback if persist() fails
+      entry.checked[itemId] = cb.checked;
       const justCompleted = markCompleteIfDone(entry);
       persist().then(ok => {
-        if (!ok) return;
+        if (!ok) {
+          // Roll back the checklist toggle so it doesn't silently render as
+          // checked next time anything re-renders. (A completion notification
+          // that already fired above can't be un-sent, but the checklist
+          // state itself shouldn't drift from what's actually saved.)
+          entry.checked[itemId] = previousChecked;
+          cb.checked = previousChecked;
+          return;
+        }
         renderDetail();
         renderTable();
         if (justCompleted && window.parent.showBanner) {
