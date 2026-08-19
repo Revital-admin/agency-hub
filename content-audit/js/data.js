@@ -19,7 +19,11 @@ const STEPS = [
     subs: [
       { id: "ca_seo_1", label: "Top-performing pages identified via organic traffic and backlinks." },
       { id: "ca_seo_2", label: "Keyword rankings analyzed and cannibalization issues resolved." },
-      { id: "ca_seo_3", label: "Meta titles and descriptions are compelling and fully optimized." },
+      // Meta title/description optimization used to be its own item here,
+      // duplicating the SEO Audit Checklist's "Check metadata" section
+      // (title tags + meta descriptions) under a different name. Linked
+      // to that checklist as the authoritative check instead.
+      { id: "ca_seo_3", label: "Meta titles and descriptions optimized (see SEO Audit Checklist → Check metadata)." },
       { id: "ca_seo_4", label: "Internal linking structure effectively distributes page authority." }
     ]
   },
