@@ -8,74 +8,32 @@
   <meta http-equiv="Expires" content="0">
   <title>Revital Hub</title>
   <link rel="stylesheet" href="style.css?v=12">
-  <!-- Firebase SDK Compat (Synchronous loading so app.js can use it immediately) -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-
-  <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyDszpFkygCjr8ktkPe0ILxbLNHxRkb0bIY",
-      authDomain: "revitalhub-895c1.firebaseapp.com",
-      projectId: "revitalhub-895c1",
-      storageBucket: "revitalhub-895c1.firebasestorage.app",
-      messagingSenderId: "501330884945",
-      appId: "1:501330884945:web:7f94e80c49036d9f2b3b70",
-      measurementId: "G-8SLZMJG18S"
-    };
-
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
-    
-    // Map compat functions to window for app.js to use synchronously
-    window.firebaseDb = db;
-    // options is only forwarded when actually provided - passing an
-    // explicit `undefined` as the 2nd arg to the real Firestore .set()
-    // is NOT the same as omitting it (the SDK validates whatever is in
-    // that argument slot), so every existing 2-argument call across the
-    // Hub must still resolve to the plain docRef.set(data) form.
-    window.firebaseSetDoc = function(docRef, data, options) {
-      return options !== undefined ? docRef.set(data, options) : docRef.set(data);
-    };
-    // Tool iframes (Client Portal Manager, SOP Wiki, etc.) run in their own
-    // browsing context with their own separate Object/JSON/Array globals.
-    // An object literal built inside an iframe and handed straight to
-    // firebaseSetDoc above gets rejected by the Firestore SDK ("a custom
-    // Object object") because it doesn't recognize a plain object from a
-    // different JS realm as one of its own - even though it looks
-    // identical. Passing a JSON string instead and parsing it here, in the
-    // parent's own realm, produces a plain object native to this page that
-    // Firestore accepts normally. Iframes needing to write cross-boundary
-    // objects should use this instead of firebaseSetDoc directly.
-    window.firebaseSetDocFromJSON = function(docRef, jsonString) {
-      return docRef.set(JSON.parse(jsonString));
-    };
-    window.firebaseDoc = function(db, collectionPath, docPath) { return db.collection(collectionPath).doc(docPath); };
-    window.firebaseOnSnapshot = function(docRef, callback, errorCallback) { return docRef.onSnapshot(callback, errorCallback); };
-    window.firebaseGetDoc = function(docRef) { return docRef.get(); };
-    // Subcollection helpers (Aug 2026 storage-scaling work) - everything
-    // above this predates any tool storing one-document-per-record;
-    // every existing agency/* doc packs a growing list into a single
-    // document instead. New tools that need per-record documents (so a
-    // growing collection never risks Firestore's ~1MB single-document
-    // limit the way clientsDb once did - see data-loss-prevention-plan.md)
-    // should use these instead of the list-in-one-doc pattern.
-    window.firebaseCollection = function(db, ...pathSegments) { return db.collection(pathSegments.join('/')); };
-    // Returns a plain array of {id, ...data()} objects rather than the
-    // raw QuerySnapshot - every caller just wants the records, and this
-    // keeps the shape consistent with the {list: [...]} arrays every
-    // other agency doc already hands back, so existing render logic
-    // barely has to change when a tool migrates to this pattern.
-    window.firebaseGetDocs = function(collectionRef) {
-      return collectionRef.get().then(snap => snap.docs.map(d => Object.assign({ id: d.id }, d.data())));
-    };
-    window.firebaseDeleteDoc = function(docRef) { return docRef.delete(); };
-  </script>
-
-  <!-- Central references and Application State Controller -->
-  <script src="data-store.js?v=3"></script>
-  <script src="app.js?v=137"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <!-- Firebase SDK Compat, config, central references, and the app
+       controller - all `defer`red (perf fix, Aug 2026). These used to
+       load synchronously with no defer/async, which meant the browser
+       had to fully fetch+execute all of them (3 external Firebase SDKs,
+       a large inline config block, data-store.js, app.js at ~400KB, and
+       html2pdf.js) before it was allowed to even start parsing the rest
+       of this document - a blank screen on every load while that
+       happened. `defer` scripts execute in the order they appear here,
+       right before DOMContentLoaded fires, same relative timing as
+       before (app.js's own init is itself wrapped in a DOMContentLoaded
+       listener), but the browser can now parse and paint the page's
+       actual HTML/CSS in parallel with the downloads instead of
+       blocking on them first. The Firebase config previously lived in
+       an inline script block here - inline scripts can't be deferred (they
+       always run immediately at their position, blocking), which is
+       why nothing else here could be deferred either without breaking
+       init order - so it's now its own deferred file, firebase-config.js,
+       positioned right where the inline block used to be so execution
+       order is unchanged. -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" defer></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" defer></script>
+  <script src="firebase-config.js?v=1" defer></script>
+  <script src="data-store.js?v=3" defer></script>
+  <script src="app.js?v=137" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
 
 </head>
 <body>
