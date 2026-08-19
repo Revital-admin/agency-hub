@@ -95,9 +95,13 @@ const QC_SERVICE_TYPES = [
       "Primary text (body copy) is clear and leads to the CTA",
       "CTA button matches the campaign objective",
       "Ad does not violate platform advertising policies",
-      "Pixel / conversion tracking confirmed firing on the destination page",
-      "UTM parameters correctly formatted (source / medium / campaign / content)",
-      "Budget and campaign start/end dates set correctly",
+      // Pixel tracking, UTM parameters, and budget/dates used to each be
+      // their own item here, duplicating Campaign Launch Checklist's
+      // pre-flight items of the same three facts almost word-for-word.
+      // Collapsed to one line pointing at that checklist as the
+      // authoritative pre-launch check, rather than re-verifying the
+      // same three technical facts a second time under a different name.
+      "Tracking pixel, UTM parameters, and budget/dates confirmed via Campaign Launch Checklist (not re-verified here)",
       "Ad reviewed and approved by account manager before going live"
     ]
   },
