@@ -12,10 +12,14 @@ const PAID_CLIENT_CATEGORIES = [
   {
     category: "Kickoff (First 30 Days)",
     items: [
-      { id: "paid-intake-done", label: "Intake form & red-flag review complete" },
+      // Intake form, kickoff call, and welcome guide used to be tracked
+      // separately here too, duplicating 3 of the 11 items on the actual
+      // Onboarding tab's checklist (Discovery & Kickoff category). Collapsed
+      // into one linking item so the two checklists can't silently drift
+      // out of sync - this still gates the rest of the Paid Client
+      // lifecycle on kickoff being done, without re-tracking it twice.
+      { id: "paid-onboarding-complete", label: "Onboarding checklist fully complete (see Onboarding tab)" },
       { id: "paid-portal-built", label: "Client's Hub portal built and live" },
-      { id: "paid-kickoff-held", label: "Kickoff call held" },
-      { id: "paid-welcome-sent", label: "Welcome guide sent" },
       { id: "paid-content-strategy", label: "Content strategy & initial audits built" }
     ]
   },
