@@ -217,15 +217,51 @@ function renderTable() {
   document.querySelectorAll('.remove-btn').forEach(btn => btn.addEventListener('click', () => removeEntry(btn.getAttribute('data-id'))));
 }
 
+// Venue Tech-Spec Library autofill - keyed by venue name so a repeat
+// venue's address never has to be re-typed (or drift from what the
+// library has on file). Only fills the Address field, and only when
+// it's empty - never overwrites something already typed, e.g. a
+// one-off/temporary address for a venue that happens to share a name.
+let venueLibrary = [];
+
+async function loadVenueLibrary() {
+  if (!isEmbedded || !window.parent.getVenueTechSpecs) return;
+  try {
+    venueLibrary = await window.parent.getVenueTechSpecs();
+  } catch (e) {
+    venueLibrary = [];
+  }
+  populateVenueDatalist();
+}
+
+function populateVenueDatalist() {
+  const list = el('venueOptions');
+  if (!list) return;
+  list.innerHTML = [...new Set(venueLibrary.map(v => v.venueName).filter(Boolean))]
+    .sort()
+    .map(name => `<option value="${name.replace(/"/g, '&quot;')}">`)
+    .join('');
+}
+
+function autofillVenueAddress() {
+  const name = el('locationName').value.trim().toLowerCase();
+  const addressInput = el('locationAddress');
+  if (!name || !addressInput || addressInput.value.trim()) return;
+  const match = venueLibrary.find(v => (v.venueName || '').trim().toLowerCase() === name);
+  if (match && match.address) addressInput.value = match.address;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   populateClientDatalist();
   resetForm();
   await loadEntries();
   renderTable();
+  loadVenueLibrary();
 
   el('saveEntryBtn').addEventListener('click', saveEntry);
   el('showCancelledToggle').addEventListener('change', renderTable);
   el('filterClientInput').addEventListener('input', renderTable);
+  el('locationName').addEventListener('change', autofillVenueAddress);
 
   let pollAttempts = 0;
   const pollTimer = setInterval(() => {

@@ -4385,6 +4385,27 @@ async function getAdAccountLogPlatforms(clientName) {
   }
 }
 
+// Cross-tool bridge (Aug 2026): Call Sheet Builder calls this to offer
+// venue autofill instead of re-typing a venue's name/address from
+// scratch every time - Venue Tech-Spec Library already exists specifically
+// to be the reusable reference for repeat venues (power/rigging/load-in/
+// permits alongside the address), but Call Sheet Builder had two plain
+// free-text fields with no connection to it, so the address could drift
+// between the two for the same venue, and the library's operational
+// specs never surfaced when building a call sheet. Read-only, agency-wide.
+async function getVenueTechSpecs() {
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return [];
+  try {
+    const docRef = window.firebaseDoc(window.firebaseDb, "agency", "venueTechSpecs");
+    const snap = await window.firebaseGetDoc(docRef);
+    const data = snap && snap.exists ? snap.data() : null;
+    return (data && data.list) || [];
+  } catch (e) {
+    console.error("Couldn't read Venue Tech-Spec Library:", e);
+    return [];
+  }
+}
+
 // ── Account Manager Capacity Snapshot ──
 // Team Roster & Capacity used to rely entirely on a manually-typed
 // "current client count" per person, which drifts stale the moment
