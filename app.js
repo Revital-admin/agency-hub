@@ -4255,6 +4255,62 @@ async function syncAccountManagerToOnboardingHandoff(clientName, amEmail) {
   }
 }
 
+// Cross-tool bridge (Aug 2026): Proposal Follow-Up Tracker's "Mark Won"/
+// "Mark Lost" buttons call this so closing a proposal there also moves the
+// matching Sales Pipeline Board lead to Closed Won/Lost - before this,
+// each tool had its own independent closed/open flag for the same deal
+// (Sales Pipeline Board's `stage`, Proposal Follow-Up Tracker's `status`),
+// matched only by free-text prospect name with no sync between them, so a
+// deal closed in one tool could sit "live" in the other indefinitely.
+// Matches by the same case-insensitive name lookup addLeadToSalesPipeline
+// above already uses. No-ops quietly (not an error) if the prospect was
+// never added to Sales Pipeline Board - most proposals for brand-new
+// prospects won't have a pipeline card yet, and that's fine; this is a
+// best-effort sync, not a requirement that every proposal have one.
+async function syncPipelineLeadStage(prospectName, outcome) {
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) {
+    return { ok: false, reason: "not_ready" };
+  }
+  const trimmedName = (prospectName || "").trim();
+  if (!trimmedName) return { ok: false, reason: "no_name" };
+  const targetStage = outcome === "won" ? "✅ closed won" : "❌closed lost";
+
+  const docRef = window.firebaseDoc(window.firebaseDb, "agency", "salesPipeline");
+  const snap = await window.firebaseGetDoc(docRef);
+  const data = snap && snap.exists ? snap.data() : null;
+  const list = (data && data.list) || [];
+  const version = (data && data.version) || 0;
+
+  const lead = list.find(l => (l.name || "").trim().toLowerCase() === trimmedName.toLowerCase());
+  if (!lead) return { ok: true, reason: "no_matching_lead" };
+  if (lead.stage === targetStage) return { ok: true, alreadyInSync: true };
+
+  lead.stage = targetStage;
+  lead.updatedDate = new Date().toISOString().slice(0, 10);
+
+  const result = await saveVersionedAgencyDoc({
+    docRef,
+    currentVersion: version,
+    buildPayload: (v) => ({ list, version: v })
+  });
+  if (!result.ok) return { ok: false, reason: result.reason, error: result.error };
+
+  // Same fire-and-forget ClickUp sync addLeadToSalesPipeline uses above -
+  // a failure here never blocks the Hub-side save, which already
+  // succeeded; the pipeline card just shows stale ClickUp status until
+  // the next manual edit in Sales Pipeline Board retries it.
+  fetch("/api/pipeline/sync-clickup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      taskId: lead.clickupTaskId, name: lead.name, stage: lead.stage,
+      contactEmail: lead.contactEmail, source: lead.source, notes: lead.notes
+    })
+  }).catch(err => console.error("ClickUp sync failed for pipeline stage sync:", err));
+
+  return { ok: true, lead };
+}
+
 // ── Account Manager Capacity Snapshot ──
 // Team Roster & Capacity used to rely entirely on a manually-typed
 // "current client count" per person, which drifts stale the moment

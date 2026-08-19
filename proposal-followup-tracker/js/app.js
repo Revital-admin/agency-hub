@@ -510,6 +510,17 @@ async function closeProposal(id, outcome) {
   if (ok && isEmbedded && window.parent.showBanner) {
     window.parent.showBanner('success', `Marked ${p.prospectName} as ${outcome === 'won' ? 'Won 🎉' : 'Lost'}.`);
   }
+
+  // Also move the matching Sales Pipeline Board lead to Closed Won/Lost,
+  // if one exists - these used to be two fully independent "is this deal
+  // closed" flags with no link between them (see syncPipelineLeadStage in
+  // the main app.js for the full explanation). Best-effort: a missing
+  // match or a sync failure shouldn't undo the close above, which already
+  // succeeded and is the source of truth for this tool.
+  if (ok && isEmbedded && window.parent.syncPipelineLeadStage) {
+    window.parent.syncPipelineLeadStage(p.prospectName, outcome).catch(err =>
+      console.error("Couldn't sync closed status to Sales Pipeline Board:", err));
+  }
 }
 
 async function deleteProposal(id) {
