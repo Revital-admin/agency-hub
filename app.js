@@ -7827,6 +7827,20 @@ function foldInPendingApprovalComments(target, publicData) {
 // matched back to a client by name. One read per sync rather than a
 // standing listener, since this only needs to be current as of the next
 // save, not instantaneous.
+//
+// Keyed by the EXACT clientName string (not case-folded) - security-review
+// finding (Aug 2026): this used to key by clientName.toLowerCase(), joined
+// in syncPublicPortalDocs against the clientsDb key also lowercased. Since
+// this data lands on a client-facing public portal doc, a lowercase
+// collision (two clientsDb entries differing only by case, or a churned
+// client's stale record matching a new client's near-identical name) would
+// have silently put one client's contract status/invoice amounts/due dates
+// into a DIFFERENT client's portal - a real cross-client data leak with no
+// attacker action needed, just an ordinary name collision. clientsDb keys
+// are already guaranteed unique as exact strings (it's a single JS object
+// keyed by name), so exact-match here can never collide the way the
+// lowercased version could; a genuine full-string duplicate would mean two
+// records for what is, by the Hub's own data model, the same client.
 async function fetchBillingSummaries() {
   const summaries = {};
   try {
@@ -7834,7 +7848,7 @@ async function fetchBillingSummaries() {
     const list = (snap.exists && snap.data().list) || [];
     list.forEach(rec => {
       if (!rec.clientName) return;
-      summaries[rec.clientName.toLowerCase()] = {
+      summaries[rec.clientName] = {
         contractStatus: rec.contractStatus || "",
         contractRenewalDate: rec.contractRenewalDate || "",
         invoiceStatus: rec.invoiceStatus || "",
@@ -7855,6 +7869,11 @@ async function fetchBillingSummaries() {
 // yet). Aggregates every entry where referrerName matches this client by
 // name into one summary: how many referrals, how many became clients, and
 // the individual entries so the portal can list them.
+//
+// Keyed by the EXACT referrerName string - same cross-client leak fix as
+// fetchBillingSummaries above, same reasoning: this is joined against a
+// client-facing public portal doc, so an exact match against the unique
+// clientsDb key is required rather than a case-folded one.
 async function fetchReferralSummaries() {
   const summaries = {};
   try {
@@ -7862,7 +7881,7 @@ async function fetchReferralSummaries() {
     const list = (snap.exists && snap.data().list) || [];
     list.forEach(rec => {
       if (!rec.referrerName) return;
-      const key = rec.referrerName.toLowerCase();
+      const key = rec.referrerName;
       if (!summaries[key]) {
         summaries[key] = { totalReferrals: 0, becameClientCount: 0, entries: [] };
       }
@@ -7982,11 +8001,15 @@ async function syncPublicPortalDocs(dbSnapshot) {
       // Status Tracker (see fetchBillingSummaries above). null if this
       // client isn't tracked there under a matching name. The portal only
       // shows this at all if portalConfig.showBillingInPortal is on.
-      billingSummary: billingSummaries[name.toLowerCase()] || null,
+      // Exact-match against `name` (the clientsDb key) - see the security-
+      // review comment on fetchBillingSummaries for why this is no longer
+      // case-folded (was a real cross-client leak vector on this
+      // client-facing doc).
+      billingSummary: billingSummaries[name] || null,
       // Read-only referral tracking pulled from the Referral Tracker (see
       // fetchReferralSummaries above). null if this client has never
-      // referred anyone under a matching name.
-      referralSummary: referralSummaries[name.toLowerCase()] || null,
+      // referred anyone under a matching name. Exact-match, same reasoning.
+      referralSummary: referralSummaries[name] || null,
       // Client-driven, same story as clientChecklist above (not
       // lastVisitedAt's story): ensureClientPortalListeners keeps
       // client.moodBoardViews continuously up to date as views come in, so
