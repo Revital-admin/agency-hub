@@ -52,9 +52,25 @@
                               that tool's own index.html. Can false-
                               positive on dynamically-created ids, so
                               also advisory.
+     7. UNVERSIONED ASSETS  - every local <script src> and <link
+                              rel="stylesheet" href> across every tool
+                              must carry a ?v=N query string. This
+                              stopped being just a style convention in
+                              Aug 2026, when _headers switched local
+                              .js/.css files to
+                              "Cache-Control: public, max-age=31536000,
+                              immutable" specifically because every
+                              reference was (at the time) confirmed
+                              versioned - an un-versioned reference
+                              under that policy means a future fix to
+                              that file can get stuck cached in a
+                              returning admin's browser indefinitely,
+                              which is exactly the silent-staleness bug
+                              class the ?v=N convention exists to
+                              prevent. Real failure, not advisory.
 
-   Exit code is non-zero only for categories 1-4 (real bugs). 5 and 6
-   print but never fail the run.
+   Exit code is non-zero only for categories 1-4 and 7 (real bugs). 5
+   and 6 print but never fail the run.
    ============================================================ */
 
 const fs = require('fs');
@@ -283,11 +299,55 @@ function checkElementIds() {
   if (flaggedFiles === 0) ok('Every el()/getElementById() reference resolves to an id in the same tool\'s HTML.');
 }
 
+// ── 7. Every local script/stylesheet reference must carry a ?v=N ──
+function checkVersionTags() {
+  console.log('\n── Static asset cache-bust coverage ──');
+  const htmlFiles = [];
+  (function walkHtml(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'scripts') continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walkHtml(full);
+      else if (entry.name.endsWith('.html')) htmlFiles.push(full);
+    }
+  })(ROOT);
+
+  let missing = 0;
+  htmlFiles.forEach(f => {
+    const html = fs.readFileSync(f, 'utf8');
+    const rel = path.relative(ROOT, f);
+
+    [...html.matchAll(/<script[^>]*?\ssrc=["']([^"']+)["']/g)].forEach(m => {
+      const src = m[1];
+      if (src.startsWith('http')) return; // external CDN scripts aren't ours to cache-bust
+      if (!src.includes('?v=')) {
+        fail(`${rel} loads "${src}" with no ?v=N cache-bust query string - under the current immutable-caching policy for .js/.css (see _headers), this file can get stuck cached forever in a returning admin's browser after a future fix. Add ?v=1 (or bump if this is a re-add).`);
+        missing++;
+      }
+    });
+
+    [...html.matchAll(/<link\b[^>]*>/g)].forEach(m => {
+      const tag = m[0];
+      if (!/rel=["']stylesheet["']/.test(tag)) return;
+      const hrefMatch = tag.match(/href=["']([^"']+)["']/);
+      if (!hrefMatch) return;
+      const href = hrefMatch[1];
+      if (href.startsWith('http')) return;
+      if (!href.includes('?v=')) {
+        fail(`${rel} loads stylesheet "${href}" with no ?v=N cache-bust query string - same staleness risk as the script case above. Add ?v=1 (or bump if this is a re-add).`);
+        missing++;
+      }
+    });
+  });
+  if (missing === 0) ok(`Every local <script src> and <link rel="stylesheet"> across ${htmlFiles.length} HTML files carries a ?v=N cache-bust query string.`);
+}
+
 checkSyntax();
 checkToolWiring();
 checkIframeDispatchCoverage();
 checkUnguardedWrites();
 checkElementIds();
+checkVersionTags();
 
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`${failures} failure(s), ${advisories} advisory warning(s).`);

@@ -1,8 +1,25 @@
 /*.html
   Cache-Control: no-cache, must-revalidate
 
+# JS/CSS below are long-lived + immutable (Aug 2026 perf fix), not
+# no-cache like the HTML above. Every JS/CSS file across the Hub is
+# always referenced with a ?v=N version query string (see the various
+# "cache-bust bumps" throughout git history) - a new deploy that
+# changes a file's content always changes the URL that references it
+# (N goes up), so there's no staleness risk in caching a given
+# ?v=N URL forever: it either matches exactly what's currently
+# deployed, or it's simply never requested again because the HTML
+# that used to reference it now references a newer ?v= instead.
+# The HTML files above stay no-cache/must-revalidate specifically
+# because THEY aren't versioned themselves - they're what tells the
+# browser which ?v=N to ask for next, so they always need a fresh
+# check. Confirmed via full-repo audit (Aug 2026) that every local
+# <script src> and <link rel="stylesheet"> in every tool references
+# its target with ?v=N - if a new one is ever added without one, it
+# will get stuck cached under this policy until manually version-
+# tagged, so keep that convention going for any new file references.
 /*.js
-  Cache-Control: no-cache, must-revalidate
+  Cache-Control: public, max-age=31536000, immutable
 
 /*.css
-  Cache-Control: no-cache, must-revalidate
+  Cache-Control: public, max-age=31536000, immutable
