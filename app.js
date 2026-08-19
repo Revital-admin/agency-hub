@@ -4406,6 +4406,32 @@ async function getAdAccountLogPlatforms(clientName) {
   }
 }
 
+// Cross-tool bridge (full audit finding #13): Budget Pacing Tracker
+// calls this so a new "Ad Spend" project defaults to the client's real
+// monthly ad budget instead of a flat, unrelated $5,000 guess. Ad
+// Account Log's totalMonthlyBudget is filled in during ad account
+// setup, which happens before spend pacing tracking starts for that
+// client, so it's already the right number to default from. Read-only;
+// returns null (caller falls back to its own default) if the client
+// isn't in Ad Account Log yet or has no budget entered.
+async function getAdAccountLogTotalBudget(clientName) {
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return null;
+  const target = (clientName || "").trim().toLowerCase();
+  if (!target) return null;
+  try {
+    const docRef = window.firebaseDoc(window.firebaseDb, "agency", "adAccountLog");
+    const snap = await window.firebaseGetDoc(docRef);
+    const data = snap && snap.exists ? snap.data() : null;
+    const list = (data && data.list) || [];
+    const entry = list.find(e => (e.clientName || "").trim().toLowerCase() === target);
+    const budget = entry && parseFloat(String(entry.totalMonthlyBudget || "").replace(/[^0-9.-]/g, ""));
+    return (budget && !isNaN(budget) && budget > 0) ? budget : null;
+  } catch (e) {
+    console.error("Couldn't read Ad Account Log for budget default:", e);
+    return null;
+  }
+}
+
 // Cross-tool bridge (Aug 2026): Call Sheet Builder calls this to offer
 // venue autofill instead of re-typing a venue's name/address from
 // scratch every time - Venue Tech-Spec Library already exists specifically

@@ -483,7 +483,7 @@ function getMonthStart() {
   return d.toISOString().slice(0, 10);
 }
 
-el('addTrackerBtn').addEventListener('click', () => {
+el('addTrackerBtn').addEventListener('click', async () => {
   const clientName = el('newClientSelect').value;
   if (!clientName) {
     alert("Select a client first.");
@@ -503,11 +503,25 @@ el('addTrackerBtn').addEventListener('click', () => {
     name = (prompt('Name this project (e.g. "Q3 Event Shoot") so it stays separate from the existing tracked budget below:', '') || '').trim() || `Project ${list.length + 1}`;
   }
 
+  // Ad Account Log link (full audit finding #13): a new Ad Spend project
+  // used to always default to a flat $5,000 regardless of what the
+  // client's actual ad budget is - Ad Account Log already has that number
+  // (totalMonthlyBudget) since ad account setup happens before spend
+  // tracking starts. Falls back to the old $5,000 default if the client
+  // isn't in Ad Account Log yet or has no budget entered there.
+  let totalBudget = type === 'Ad Spend' ? 5000 : 20;
+  if (type === 'Ad Spend' && isEmbedded && window.parent.getAdAccountLogTotalBudget) {
+    try {
+      const logged = await window.parent.getAdAccountLogTotalBudget(clientName);
+      if (logged) totalBudget = logged;
+    } catch (e) { /* fall back to default */ }
+  }
+
   list.push({
     id: uid(),
     name,
     budgetType: type,
-    totalBudget: type === 'Ad Spend' ? 5000 : 20,
+    totalBudget,
     spentToDate: 0,
     startDate: getMonthStart(),
     endDate: getNextMonthEnd()
