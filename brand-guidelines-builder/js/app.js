@@ -3,8 +3,12 @@
    The "deep" complement to Brand Asset Kit (Lite). Same own
    client-select pattern, same clients[name].* + saveDatabase()
    persistence, stored separately at client.brandGuideline so it
-   doesn't collide with the Lite tool's client.brandKit object -
-   the two are intentionally independent, not layered on each other.
+   doesn't collide with the Lite tool's client.brandKit object.
+   Storage stays independent, but a brand-new guideline (nothing saved
+   here yet) now prefills colors/fonts/logo/audience from Brand Identity
+   Vault instead of generic blank defaults - see prefilledBlankGuideline
+   below. Everything here stays fully editable after that; this is a
+   one-time starting point, not an ongoing sync.
    ============================================================ */
 
 let isEmbedded = false;
@@ -178,6 +182,37 @@ function blankGuideline() {
   };
 }
 
+// Brand Identity Vault and this tool used to capture colors/fonts/logo/
+// audience completely independently - two places for the same facts to
+// disagree. Only runs the very first time this tool is opened for a
+// client (no client.brandGuideline saved yet) - once anything's been
+// saved here, that saved data is always what's shown, this never
+// overwrites it. Same "prefill once, no overwrite" pattern already used
+// for Brand Asset Kit (Lite)'s client.brandKit derivation from the Vault.
+function prefilledBlankGuideline(client) {
+  const g = blankGuideline();
+  const bv = client && client.brandVault;
+  if (!bv) return g;
+
+  if (bv.colors && bv.colors[0] && bv.colors[0].hex) g.primaryColor = bv.colors[0].hex;
+  if (bv.colors && bv.colors[1] && bv.colors[1].hex) g.secondaryColor = bv.colors[1].hex;
+  if (bv.colors && bv.colors[2] && bv.colors[2].hex) g.accentColor = bv.colors[2].hex;
+
+  if (bv.typography) {
+    if (bv.typography.primaryFont) g.fontPrimary = bv.typography.primaryFont;
+    if (bv.typography.secondaryFont) g.fontSecondary = bv.typography.secondaryFont;
+  }
+
+  if (bv.assets && bv.assets.logoUrl) g.primaryLogoUrl = bv.assets.logoUrl;
+
+  if (bv.targetAudience) {
+    const parts = [bv.targetAudience.demographic, bv.targetAudience.painPoints].filter(Boolean);
+    if (parts.length) g.audience = parts.join('\n\n');
+  }
+
+  return g;
+}
+
 function renderState() {
   const clientName = el('clientSelect').value;
   if (!clientName) {
@@ -189,7 +224,7 @@ function renderState() {
   el('guidelineInterface').style.display = 'flex';
 
   const clients = getClients();
-  const g = clients[clientName].brandGuideline || blankGuideline();
+  const g = clients[clientName].brandGuideline || prefilledBlankGuideline(clients[clientName]);
 
   el('bgMission').value = g.mission || '';
   el('bgStory').value = g.story || '';
