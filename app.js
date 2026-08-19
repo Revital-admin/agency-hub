@@ -1158,6 +1158,7 @@ let iframeNeedsReload = {
   "tab-portal": true,
   "tab-intakerequest": true,
   "tab-welcomeguide": true,
+  "tab-ninetydayplan": true,
   "tab-emailsig": true,
   "tab-creativebrief": true,
   "tab-adcampaignbrief": true,
@@ -1716,6 +1717,9 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-welcomeguide":
       renderWelcomeGuide();
+      break;
+    case "tab-ninetydayplan":
+      renderNinetyDayPlan();
       break;
       case "tab-adaccountsetup":
       renderAdAccountSetup();
@@ -3530,6 +3534,88 @@ function renderIntakeRequest() {
 // ── Client Welcome Guide Controller ──
 function renderWelcomeGuide() {
   setIframeAbsoluteSrc('#tab-welcomeguide iframe', "client-welcome-guide/index.html");
+}
+
+// ── 90-Day Plan Controller ──
+function renderNinetyDayPlan() {
+  setIframeAbsoluteSrc('#tab-ninetydayplan iframe', "ninety-day-plan/index.html");
+}
+
+// Shared HTML builder for the 90-Day Marketing Roadmap document. Lives
+// here (not duplicated in ninety-day-plan/js/app.js) so both that tool's
+// own live preview/Download PDF AND Welcome Guide's "Also attach 90-Day
+// Plan" send option build byte-for-byte identical content from the same
+// data - same reasoning as every other cross-tool bridge function in this
+// file. Pure function: no DB reads, no window.parent calls of its own.
+// clientName: string. plan: { planIntro, month1, month2, month3,
+// channelRecommendations, budgetAllocation, success3mo, success6mo,
+// success12mo } - all optional strings (falls back to placeholder copy).
+// Only uses CSS classes defined in BOTH client-welcome-guide/css/style.css
+// and ninety-day-plan/css/style.css (pdf-page, pdf-logo, pdf-title,
+// pdf-subtitle, welcome-note, pdf-h2, roadmap-timeline, timeline-item,
+// plan-block, success-grid, success-card, page-number) so the capture
+// renders identically regardless of which tool's iframe it runs in.
+function build90DayPlanHtml(clientName, plan) {
+  const p = plan || {};
+  const name = clientName || 'Acme Corp';
+  return `
+    <div class="pdf-page" id="page-1">
+      <img src="../logo.png" class="pdf-logo" alt="Revital Hub">
+      <div class="pdf-title">90-Day Marketing Roadmap</div>
+      <div class="pdf-subtitle">${name} &mdash; Your First Quarter Plan</div>
+
+      ${p.planIntro ? `
+      <div class="welcome-note">${p.planIntro}</div>
+      ` : ''}
+
+      <div class="pdf-h2" style="margin-top: 0;">The Roadmap</div>
+      <div class="roadmap-timeline">
+        <div class="timeline-item">
+          <strong>Month 1</strong>
+          <p>${p.month1 || 'Priorities to be defined.'}</p>
+        </div>
+        <div class="timeline-item">
+          <strong>Month 2</strong>
+          <p>${p.month2 || 'Priorities to be defined.'}</p>
+        </div>
+        <div class="timeline-item">
+          <strong>Month 3</strong>
+          <p>${p.month3 || 'Priorities to be defined.'}</p>
+        </div>
+      </div>
+      <div class="page-number">Page 1</div>
+    </div>
+
+    <div class="pdf-page" id="page-2">
+      <img src="../logo.png" class="pdf-logo" alt="Revital Hub">
+      <div class="pdf-h2" style="margin-top: 0;">Channels & Budget</div>
+      <div class="plan-block">
+        <h3>Recommended Channels</h3>
+        <p>${p.channelRecommendations || 'To be defined.'}</p>
+      </div>
+      <div class="plan-block">
+        <h3>Budget Allocation</h3>
+        <p>${p.budgetAllocation || 'To be defined.'}</p>
+      </div>
+
+      <div class="pdf-h2">Success Criteria</div>
+      <div class="success-grid">
+        <div class="success-card">
+          <h3>At 3 Months</h3>
+          <p>${p.success3mo || 'To be defined.'}</p>
+        </div>
+        <div class="success-card">
+          <h3>At 6 Months</h3>
+          <p>${p.success6mo || 'To be defined.'}</p>
+        </div>
+        <div class="success-card">
+          <h3>At 12 Months</h3>
+          <p>${p.success12mo || 'To be defined.'}</p>
+        </div>
+      </div>
+      <div class="page-number">Page 2</div>
+    </div>
+  `;
 }
 
 // ── Email Signature Generator Controller ──

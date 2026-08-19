@@ -1,0 +1,63 @@
+/* .container mirrors client-welcome-guide/css/style.css's rule of the
+   same name - <main class="container"> is this tool's page wrapper and
+   nothing else on the page defines it (not even the shared ../style.css). */
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+}
+
+.alert-box { background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: 6px; padding: 16px; display: flex; gap: 12px; font-size: 13px; color: var(--color-text-muted); margin-top: 30px; }
+.alert-box svg { color: #3b82f6; flex-shrink: 0; }
+
+/* PDF Output Styling - same tuned rules as client-welcome-guide's
+   css/style.css (see that file's comments for the full history of why
+   each of these exists: fixed height + overflow:hidden to stop
+   html2canvas from measuring an overflowed scrollHeight and producing
+   spurious extra pages, no box-shadow so its blur doesn't tip the
+   measured height over the one-page threshold, explicit pdf-logo
+   width/height so it doesn't render stretched before the image loads). */
+.pdf-page {
+  width: 8.5in; height: 11in; overflow: hidden; background: var(--color-surface);
+  padding: 1in; box-sizing: border-box; position: relative;
+  flex-shrink: 0;
+  display: flex; flex-direction: column;
+}
+.pdf-logo {
+  height: 40px; width: 115px; object-fit: contain; margin-bottom: 0.5in;
+}
+.pdf-title { font-size: 32px; font-weight: 800; color: var(--color-text-primary); letter-spacing: -1px; margin-bottom: 12px; }
+.pdf-subtitle { font-size: 18px; color: var(--color-text-muted); margin-bottom: 0.5in; font-weight: 500; }
+.pdf-h2 { font-size: 18px; font-weight: 700; color: var(--color-text-primary); margin-top: 0.3in; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid var(--color-border); padding-bottom: 8px; }
+
+.welcome-note { font-size: 16px; color: var(--color-text-secondary); line-height: 1.6; margin-bottom: 0.3in; white-space: pre-wrap; }
+
+.roadmap-timeline { position: relative; padding-left: 24px; margin-bottom: 0.3in; }
+.roadmap-timeline::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: #e2e8f0; }
+.timeline-item { position: relative; margin-bottom: 24px; }
+.timeline-item:last-child { margin-bottom: 0; }
+.timeline-item::before { content: ''; position: absolute; left: -29px; top: 6px; width: 12px; height: 12px; border-radius: 50%; background: #f68d5f; border: 3px solid white; }
+.timeline-item strong { display: block; font-size: 16px; color: var(--color-text-primary); margin-bottom: 4px; }
+.timeline-item p { font-size: 14px; color: var(--color-text-muted); white-space: pre-wrap; }
+
+/* Simple text block for Channel Recommendations / Budget Allocation -
+   just a bordered card holding pre-wrapped free text, no special
+   internal structure needed. */
+.plan-block { background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: 8px; padding: 16px 20px; margin-bottom: 0.3in; }
+.plan-block h3 { font-size: 14px; font-weight: 700; color: var(--color-text-primary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+.plan-block p { font-size: 14px; color: var(--color-text-secondary); line-height: 1.5; white-space: pre-wrap; }
+
+/* Distinct from client-welcome-guide's .policy-grid (2-col "Agency
+   Policies" cards) - this is its own 3-col class so the shared
+   build90DayPlanHtml() output renders identically whichever tool's
+   stylesheet happens to be loaded (see app.js's shared builder). */
+.success-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.success-card { background: var(--color-surface-2); padding: 16px; border-radius: 8px; border: 1px solid var(--color-border); }
+.success-card h3 { font-size: 14px; color: var(--color-text-primary); margin-bottom: 8px; }
+.success-card p { font-size: 12px; color: var(--color-text-muted); line-height: 1.5; white-space: pre-wrap; }
+
+.page-number { position: absolute; bottom: 0.5in; right: 0.5in; font-size: 12px; color: #94a3b8; }
+
+.form-group textarea { min-height: 70px; resize: vertical; }

@@ -336,6 +336,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const emailToClientSendBtn = document.getElementById('emailToClientSendBtn');
   const emailToClientStatus = document.getElementById('emailToClientStatus');
   const emailToClientCloseBtn = document.getElementById('emailToClientCloseBtn');
+  const attach90DayPlanCheckbox = document.getElementById('attach90DayPlan');
+  const attach90DayPlanNote = document.getElementById('attach90DayPlanNote');
 
   if (emailToClientCloseBtn) {
     emailToClientCloseBtn.addEventListener('click', () => {
@@ -395,6 +397,20 @@ document.addEventListener('DOMContentLoaded', () => {
       emailToClientSubject.value = subject;
       emailToClientBody.value = body;
       refreshEmailToClientMailto();
+
+      // Gate the "Also attach 90-Day Plan" checkbox on whether the client
+      // actually has any saved plan data yet (client.ninetyDayPlan, written
+      // by the 90-Day Plan Gen tool) - checking an empty box would just
+      // send a PDF full of "To be defined." placeholder copy.
+      const hasNinetyDayPlan = !!(client.ninetyDayPlan && Object.values(client.ninetyDayPlan).some(v => (v || '').trim()));
+      if (attach90DayPlanCheckbox) {
+        attach90DayPlanCheckbox.disabled = !hasNinetyDayPlan;
+        attach90DayPlanCheckbox.checked = false;
+      }
+      if (attach90DayPlanNote) {
+        attach90DayPlanNote.style.display = hasNinetyDayPlan ? 'none' : 'block';
+        attach90DayPlanNote.textContent = hasNinetyDayPlan ? '' : 'No 90-Day Plan saved for this client yet - fill one in on the 90-Day Plan Gen tab first.';
+      }
 
       currentEmailToClientFrom = (amEmail && amName) ? `${amName} <${amEmail}>` : null;
       if (emailToClientSendBtn) {
@@ -470,6 +486,35 @@ document.addEventListener('DOMContentLoaded', () => {
         const base64 = dataUri.slice(dataUri.indexOf(',') + 1);
         if (!base64) throw new Error('PDF generation produced no data');
 
+        const attachments = [{ filename: opt.filename, content: base64 }];
+
+        // Optional second PDF: built from the SAME shared
+        // window.parent.build90DayPlanHtml() the 90-Day Plan Gen tool
+        // itself uses (see that tool's app.js and root app.js), rendered
+        // into its own detached container and captured with the identical
+        // tuned html2pdf options - not the live pdfContainer above, which
+        // only ever holds Welcome Guide content.
+        if (attach90DayPlanCheckbox && attach90DayPlanCheckbox.checked) {
+          const client = getParentActiveClient();
+          if (client && client.ninetyDayPlan && window.parent.build90DayPlanHtml) {
+            const planClientName = (document.getElementById('clientName').value || '').trim() || client.name || 'Client';
+            const planContainer = document.createElement('div');
+            planContainer.innerHTML = window.parent.build90DayPlanHtml(planClientName, client.ninetyDayPlan);
+            const planOpt = {
+              margin: 0,
+              filename: `90_Day_Plan_${planClientName.replace(/\s+/g, '_')}.pdf`,
+              image: { type: 'jpeg', quality: 0.92 },
+              html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 },
+              jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+            const planDataUri = await html2pdf().set(planOpt).from(planContainer).outputPdf('datauristring');
+            const planBase64 = planDataUri.slice(planDataUri.indexOf(',') + 1);
+            if (planBase64) {
+              attachments.push({ filename: planOpt.filename, content: planBase64 });
+            }
+          }
+        }
+
         emailToClientSendBtn.textContent = 'Sending...';
 
         const res = await fetch('/api/send-email', {
@@ -480,7 +525,7 @@ document.addEventListener('DOMContentLoaded', () => {
             subject: emailToClientSubject.value,
             body: emailToClientBody.value,
             from: currentEmailToClientFrom,
-            attachments: [{ filename: opt.filename, content: base64 }]
+            attachments
           })
         });
         const data = await res.json().catch(() => ({}));

@@ -91,3 +91,19 @@
 .policy-card p { font-size: 13px; color: var(--color-text-muted); line-height: 1.5; }
 
 .page-number { position: absolute; bottom: 0.5in; right: 0.5in; font-size: 12px; color: #94a3b8; }
+
+/* Added for the shared build90DayPlanHtml() bridge function (see app.js) -
+   when the "Attach 90-Day Plan PDF" option is used from this tool's Email
+   to Client panel, the plan's HTML is captured inside THIS page's DOM, so
+   this stylesheet needs the same classes the ninety-day-plan tool's own
+   css/style.css defines for that markup. Kept as a distinct .plan-block /
+   .success-grid pair rather than reusing .policy-grid above, since that
+   class already has a specific 2-col meaning ("Agency Policies") here. */
+.plan-block { background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: 8px; padding: 16px 20px; margin-bottom: 0.3in; }
+.plan-block h3 { font-size: 14px; font-weight: 700; color: var(--color-text-primary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+.plan-block p { font-size: 14px; color: var(--color-text-secondary); line-height: 1.5; white-space: pre-wrap; }
+
+.success-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.success-card { background: var(--color-surface-2); padding: 16px; border-radius: 8px; border: 1px solid var(--color-border); }
+.success-card h3 { font-size: 14px; color: var(--color-text-primary); margin-bottom: 8px; }
+.success-card p { font-size: 12px; color: var(--color-text-muted); line-height: 1.5; white-space: pre-wrap; }

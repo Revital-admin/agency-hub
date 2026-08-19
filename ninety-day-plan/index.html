@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Client Welcome Guide Generator</title>
+  <title>90-Day Marketing Roadmap Generator</title>
   <link rel="stylesheet" href="../style.css?v=3">
-  <link rel="stylesheet" href="css/style.css?v=6">
+  <link rel="stylesheet" href="css/style.css?v=1">
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
@@ -29,7 +29,7 @@
 
     <div id="emailToClientPanel" style="display:none; max-width: 640px; margin: 0 auto 24px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md, 10px); padding: 20px; position: relative;">
       <button type="button" id="emailToClientCloseBtn" aria-label="Close" style="position: absolute; top: 14px; right: 14px; background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; line-height: 1; cursor: pointer; padding: 4px;">&times;</button>
-      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; padding-right: 24px;">Email ready to send (with the Welcome Guide PDF attached):</p>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; padding-right: 24px;">Email ready to send (with the 90-Day Plan PDF attached):</p>
       <div class="form-group">
         <label for="emailToClientTo">To</label>
         <input type="text" id="emailToClientTo">
@@ -42,11 +42,6 @@
         <label for="emailToClientBody">Body</label>
         <textarea id="emailToClientBody" rows="8"></textarea>
       </div>
-      <div class="form-group" style="display:flex; align-items:center; gap:8px;">
-        <input type="checkbox" id="attach90DayPlan" style="width:auto; margin:0;">
-        <label for="attach90DayPlan" style="margin:0; font-size:0.8rem; cursor:pointer;">Also attach 90-Day Plan PDF (built from the 90-Day Plan Gen tool)</label>
-      </div>
-      <div id="attach90DayPlanNote" style="font-size: 0.75rem; color: var(--color-error, #f68d5f); margin-bottom: 12px; display:none;"></div>
       <div style="display:flex; gap:8px; flex-wrap: wrap; align-items: center;">
         <a href="#" id="emailToClientOpenBtn" class="download-pdf-btn" style="padding: 10px 20px; text-decoration:none;" target="_blank" rel="noopener">Open in Email App</a>
         <button class="btn-secondary" id="emailToClientCopyBtn" type="button" style="padding: 10px 20px;">Copy Text</button>
@@ -58,28 +53,63 @@
     <header class="site-header">
       <div class="header-eyebrow">
         <span class="dot"></span>
-        <span>Client Onboarding</span>
+        <span>Strategy</span>
       </div>
-      <h1 class="site-title">Welcome Guide<br /><em>Generator</em></h1>
-      <p class="site-subtitle">Generate a universal welcome PDF for a new client.</p>
+      <h1 class="site-title">90-Day Plan<br /><em>Generator</em></h1>
+      <p class="site-subtitle">Build the client-facing 90-day marketing roadmap - month-by-month priorities, channel recommendations, budget allocation, and success criteria.</p>
     </header>
 
     <div class="main-content split-layout-wide-right">
       <div class="step-card">
-        
+
         <div class="form-group">
           <label for="clientName">Client Name</label>
           <input type="text" id="clientName" placeholder="e.g. Acme Corp">
         </div>
-        
+
         <div class="form-group">
-          <label for="portalLink">Client Portal Link</label>
-          <input type="text" id="portalLink" readonly placeholder="Automatically pulled from the active client in the Hub" style="background: rgba(255,255,255,0.02); color: var(--color-text-secondary);">
+          <label for="planIntro">Intro Note (optional, 1-2 sentences)</label>
+          <textarea id="planIntro" rows="2" placeholder="e.g. Here's how we'll spend our first 90 days together turning your launch into momentum."></textarea>
         </div>
 
         <div class="form-group">
-          <label for="loomLink">Portal Walkthrough Video Link (Loom)</label>
-          <input type="text" id="loomLink" placeholder="https://www.loom.com/share/...">
+          <label for="month1">Month 1: Priorities & Campaigns</label>
+          <textarea id="month1" rows="3" placeholder="e.g. Foundational audits, brand guidelines, initial creative production, launch paid social."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="month2">Month 2: Priorities & Campaigns</label>
+          <textarea id="month2" rows="3" placeholder="e.g. Scale winning ad sets, launch SEO content calendar, first optimization pass."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="month3">Month 3: Priorities & Campaigns</label>
+          <textarea id="month3" rows="3" placeholder="e.g. Full-funnel retargeting live, quarterly performance review, Q2 planning."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="channelRecommendations">Recommended Channels & Why</label>
+          <textarea id="channelRecommendations" rows="3" placeholder="e.g. Meta + Google Search for near-term demand capture; SEO/content for compounding long-term traffic."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="budgetAllocation">Budget Allocation</label>
+          <textarea id="budgetAllocation" rows="3" placeholder="e.g. 60% Paid Social, 25% Paid Search, 15% Content Production."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="success3mo">Success Criteria - At 3 Months</label>
+          <textarea id="success3mo" rows="2" placeholder="e.g. Full campaign infrastructure live and generating qualified leads."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="success6mo">Success Criteria - At 6 Months</label>
+          <textarea id="success6mo" rows="2" placeholder="e.g. CPA down 20% from baseline, organic traffic up 2x."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="success12mo">Success Criteria - At 12 Months</label>
+          <textarea id="success12mo" rows="2" placeholder="e.g. Marketing-sourced pipeline covers X% of revenue target."></textarea>
         </div>
 
         <div class="form-group">
@@ -92,55 +122,9 @@
           <input type="email" id="amEmail" placeholder="e.g. jane@revitalproductions.com">
         </div>
 
-        <div class="form-group">
-          <label for="welcomeNote">Custom Welcome Note (1-2 sentences)</label>
-          <textarea id="welcomeNote" rows="3" placeholder="e.g. We are so excited to help Acme Corp hit your $10k MRR goal!"></textarea>
-        </div>
-
-        <div class="form-group">
-          <label>Included Services</label>
-          <div class="form-group checkbox-grid">
-          <label class="checkbox-item">
-            <div class="custom-checkbox">
-              <input type="checkbox" id="srvAds" value="Paid Advertising" checked>
-              <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            </div>
-            <span>Paid Advertising</span>
-          </label>
-          <label class="checkbox-item">
-            <div class="custom-checkbox">
-              <input type="checkbox" id="srvSeo" value="SEO Optimization">
-              <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            </div>
-            <span>SEO Optimization</span>
-          </label>
-          <label class="checkbox-item">
-            <div class="custom-checkbox">
-              <input type="checkbox" id="srvWeb" value="Website Development">
-              <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            </div>
-            <span>Website Development</span>
-          </label>
-          <label class="checkbox-item">
-            <div class="custom-checkbox">
-              <input type="checkbox" id="srvSocial" value="Social Media Management">
-              <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            </div>
-            <span>Social Media Management</span>
-          </label>
-          <label class="checkbox-item">
-            <div class="custom-checkbox">
-              <input type="checkbox" id="srvContent" value="Content Creation">
-              <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            </div>
-            <span>Content Creation</span>
-          </label>
-        </div>
-        </div>
-        
         <div class="alert-box">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-          <div>The 30-Day Roadmap, Communication Policies, and Approval Guidelines are automatically baked into the PDF.</div>
+          <div>This plan can also be attached alongside the Welcome Guide PDF from the "Email to Client" panel in Welcome Guide Gen, once saved here.</div>
         </div>
       </div>
 
@@ -154,8 +138,8 @@
       </div>
     </div>
   </main>
-  
+
   <script src="js/logo.js?v=1"></script>
-  <script src="js/app.js?v=75"></script>
+  <script src="js/app.js?v=1"></script>
 </body>
 </html>
