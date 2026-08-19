@@ -229,10 +229,14 @@ function renderContentTable() {
 function markPosted(id) {
   const item = contentItems.find(i => i.id === id);
   if (!item) return;
+  const previous = { status: item.status, postedDate: item.postedDate };
   item.status = 'Posted';
   item.postedDate = todayStr();
   persist().then(ok => {
-    if (!ok) return;
+    if (!ok) {
+      Object.assign(item, previous); // roll back — never actually saved as posted, so don't leave it looking Posted in memory
+      return;
+    }
     renderContentTable();
     if (window.parent.showBanner) window.parent.showBanner('success', `Marked "${item.title}" as posted.`);
   });
@@ -365,15 +369,23 @@ function renderAdsTable() {
 function toggleAdStatus(id) {
   const c = adCampaigns.find(x => x.id === id);
   if (!c) return;
+  const previous = c.status;
   c.status = c.status === 'Active' ? 'Paused' : 'Active';
-  persist().then(ok => { if (ok) renderAdsTable(); });
+  persist().then(ok => {
+    if (ok) { renderAdsTable(); return; }
+    c.status = previous; // roll back — the status change was never saved
+  });
 }
 
 function endAdCampaign(id) {
   const c = adCampaigns.find(x => x.id === id);
   if (!c) return;
+  const previous = c.status;
   c.status = 'Ended';
-  persist().then(ok => { if (ok) renderAdsTable(); });
+  persist().then(ok => {
+    if (ok) { renderAdsTable(); return; }
+    c.status = previous; // roll back — the status change was never saved
+  });
 }
 
 function deleteAdCampaign(id) {
@@ -524,10 +536,14 @@ function renderEmailTable() {
 function markEmailSent(id) {
   const item = emailSends.find(e => e.id === id);
   if (!item) return;
+  const previous = { status: item.status, sentDate: item.sentDate };
   item.status = 'Sent';
   item.sentDate = todayStr();
   persist().then(ok => {
-    if (!ok) return;
+    if (!ok) {
+      Object.assign(item, previous); // roll back — never actually saved as sent, so don't leave it looking Sent in memory
+      return;
+    }
     renderEmailTable();
     if (window.parent.showBanner) window.parent.showBanner('success', `Marked "${item.subject}" as sent.`);
   });

@@ -329,16 +329,32 @@ async function saveBooking() {
   saveBtn.disabled = true;
   try {
     let booking;
+    let previousBookingState = null;
+    let isNewBooking = false;
     if (editingBookingId) {
       booking = bookings.find(b => b.id === editingBookingId);
+      previousBookingState = { ...booking }; // snapshot so we can roll back if the save fails
       Object.assign(booking, { memberName, clientName, startDate, endDate, hoursPerWeek, notes });
     } else {
+      isNewBooking = true;
       booking = { id: uid(), memberName, clientName, startDate, endDate, hoursPerWeek, notes, calendarEventId: null, createdAt: new Date().toISOString() };
       bookings.push(booking);
     }
 
     const ok = await saveOneBooking(booking);
-    if (!ok) return;
+    if (!ok) {
+      // This tool has no realtime listener re-fetching from the server
+      // (loadBookings is a one-time fetch), so an un-rolled-back mutation
+      // here would sit wrong in memory - and keep looking "saved" on the
+      // next unrelated render - for the rest of the session.
+      if (isNewBooking) {
+        bookings = bookings.filter(b => b.id !== booking.id);
+      } else {
+        Object.assign(booking, previousBookingState);
+      }
+      renderAll();
+      return;
+    }
 
     const calResult = await syncBookingToCalendar('upsert', {
       calendarEventId: booking.calendarEventId,

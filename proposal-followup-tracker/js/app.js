@@ -478,6 +478,8 @@ async function logFollowUp(id) {
   const p = findProposal(id);
   if (!p || p.status !== 'open') return;
 
+  const previous = { lastContactDate: p.lastContactDate, followUpStage: p.followUpStage, nextFollowUpDate: p.nextFollowUpDate };
+
   const today = todayStr();
   p.lastContactDate = today;
 
@@ -492,6 +494,9 @@ async function logFollowUp(id) {
   }
 
   const ok = await persist();
+  if (!ok) {
+    Object.assign(p, previous); // roll back — the stage never actually advanced
+  }
   renderTable();
 
   if (ok && isEmbedded && window.parent.showBanner) {
@@ -502,9 +507,13 @@ async function logFollowUp(id) {
 async function closeProposal(id, outcome) {
   const p = findProposal(id);
   if (!p) return;
+  const previous = { status: p.status, followUpStage: p.followUpStage };
   p.status = outcome;
   p.followUpStage = outcome === 'won' ? 'Closed Won' : 'Closed Lost';
   const ok = await persist();
+  if (!ok) {
+    Object.assign(p, previous); // roll back — the proposal was never actually closed
+  }
   renderTable();
 
   if (ok && isEmbedded && window.parent.showBanner) {

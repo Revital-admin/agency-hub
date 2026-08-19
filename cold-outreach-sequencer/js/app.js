@@ -259,6 +259,8 @@ async function logNextTouch(id) {
   const lead = findLead(id);
   if (!lead || lead.status !== 'active' || !TOUCH_STAGES.includes(lead.stage)) return;
 
+  const previous = { lastContactDate: lead.lastContactDate, stage: lead.stage, nextTouchDue: lead.nextTouchDue };
+
   const today = todayStr();
   lead.lastContactDate = today;
 
@@ -274,6 +276,9 @@ async function logNextTouch(id) {
   }
 
   const ok = await persist();
+  if (!ok) {
+    Object.assign(lead, previous); // roll back — the touch was never actually logged
+  }
   renderTable();
 
   if (ok && isEmbedded && window.parent.showBanner) {
@@ -284,9 +289,13 @@ async function logNextTouch(id) {
 async function closeLead(id, outcome) {
   const lead = findLead(id);
   if (!lead) return;
+  const previous = { status: lead.status, stage: lead.stage };
   lead.status = outcome;
   lead.stage = outcome === 'booked' ? 'Assessment Booked' : 'Declined';
   const ok = await persist();
+  if (!ok) {
+    Object.assign(lead, previous); // roll back — the lead was never actually closed
+  }
   renderTable();
 
   if (!ok) return;

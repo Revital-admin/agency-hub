@@ -301,12 +301,16 @@ el('saveLeadBtn').addEventListener('click', async () => {
   let lead;
   let needsSync;
   let justWon = false;
+  let previousLeadState = null;
+  let isNewLead = false;
   if (editingLeadId) {
     lead = leads.find(l => l.id === editingLeadId);
+    previousLeadState = { ...lead }; // snapshot so we can roll back if the save fails
     justWon = stage === WON_STAGE && lead.stage !== WON_STAGE;
     needsSync = lead.stage !== stage || lead.name !== name; // resync on stage or name change
     Object.assign(lead, { name, contactEmail, source, notes, stage, updatedDate: todayStr() });
   } else {
+    isNewLead = true;
     justWon = stage === WON_STAGE;
     lead = {
       id: 'lead_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
@@ -320,10 +324,23 @@ el('saveLeadBtn').addEventListener('click', async () => {
   }
 
   const ok = await persist();
+  if (!ok) {
+    // Roll back the mutation so the board never shows an edit that didn't
+    // actually save, and leave the modal open (with the error banner from
+    // persist() visible) so the admin can retry without losing their input.
+    if (isNewLead) {
+      leads = leads.filter(l => l.id !== lead.id);
+    } else {
+      Object.assign(lead, previousLeadState);
+    }
+    renderBoard();
+    return;
+  }
+
   closeLeadModal();
   renderBoard();
-  if (ok && needsSync) syncToClickUp(lead);
-  if (ok && justWon) notifyDealWon(lead);
+  if (needsSync) syncToClickUp(lead);
+  if (justWon) notifyDealWon(lead);
 });
 
 // Marking a lead Won here is what actually flips the matching ClickUp task's
