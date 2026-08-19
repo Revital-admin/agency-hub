@@ -135,6 +135,10 @@ function saveEntry() {
   }
 
   const entry = gatherForm();
+  // Snapshot before mutating: index-replace/unshift below mutate `entries` in
+  // place, so we need a real copy to restore from if persist() fails —
+  // otherwise "previous" would already include the unsaved change too.
+  const previous = entries.slice();
   if (editingId) {
     const idx = entries.findIndex(e => e.id === editingId);
     if (idx >= 0) entries[idx] = entry;
@@ -143,7 +147,10 @@ function saveEntry() {
   }
 
   persist().then(ok => {
-    if (!ok) return;
+    if (!ok) {
+      entries = previous; // roll back the unsaved add/edit so it doesn't silently stick around in memory
+      return;
+    }
     resetForm();
     populateClientDatalist();
     renderTable();
@@ -164,9 +171,13 @@ function removeEntry(id) {
   const entry = entries.find(e => e.id === id);
   if (!entry) return;
   if (!confirm(`Remove the access log entry for ${entry.clientName} — ${entry.platformName}?`)) return;
+  const previous = entries;
   entries = entries.filter(e => e.id !== id);
   persist().then(ok => {
-    if (!ok) return;
+    if (!ok) {
+      entries = previous; // roll back the removal on a failed write
+      return;
+    }
     if (editingId === id) resetForm();
     renderTable();
   });
