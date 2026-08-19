@@ -16,6 +16,22 @@ try {
   console.warn("CORS prevented parent access:", e);
 }
 
+// Content Planning Blueprint pillar link (full audit finding #10):
+// "Establish 3-4 Content Pillars" here used to just be a checkbox with
+// a generic example, with no connection to Content Strategy Builder's
+// actual pillar1Name..pillar4Name fields for this client - so a real
+// pillar set could exist there while this item still showed the
+// placeholder example, or vice versa. parentClient is the same live
+// client object Content Strategy Builder writes to, so this reads it
+// directly rather than duplicating storage - read-only, never writes.
+function getContentPillarsFromBlueprint() {
+  if (!isEmbedded || !parentClient || !parentClient.strategyBuilder || !parentClient.strategyBuilder.data) return [];
+  const d = parentClient.strategyBuilder.data;
+  return [d.pillar1Name, d.pillar2Name, d.pillar3Name, d.pillar4Name]
+    .map(n => (n || '').trim())
+    .filter(Boolean);
+}
+
 /* ── State ──────────────────────────────────────────────────── */
 
 const state = {
@@ -224,6 +240,17 @@ function renderSteps() {
     // Sub-tasks HTML
     const subsHtml = step.subs.map(sub => {
       const checked = state.checked[sub.id];
+      // Content Planning Blueprint link: once pillars have actually been
+      // defined there (Content Strategy Builder), show what was saved
+      // instead of the generic example text, so this item points at the
+      // real pillars rather than duplicating pillar definitions here.
+      let descText = sub.desc;
+      if (sub.id === 'cs3a') {
+        const pillars = getContentPillarsFromBlueprint();
+        if (pillars.length) {
+          descText = `Pillars saved in Content Planning Blueprint: ${pillars.join(', ')}.`;
+        }
+      }
       return `
         <div class="sub-item${checked ? ' checked' : ''}" data-sub-id="${sub.id}">
           <input
@@ -235,7 +262,7 @@ function renderSteps() {
           />
           <div class="sub-content">
             <div class="sub-label">${escHtml(sub.label)}</div>
-            <div class="sub-desc">${escHtml(sub.desc)}</div>
+            <div class="sub-desc">${escHtml(descText)}</div>
             <div class="sub-notes-wrapper">
               <textarea class="sub-notes-input" placeholder="Add notes..." rows="1">${escHtml(state.notes[sub.id] || "")}</textarea>
             </div>
