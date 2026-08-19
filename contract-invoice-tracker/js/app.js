@@ -502,6 +502,11 @@ function wireRowListeners() {
       r.contractRenewalDate = inp.value;
       await saveOneRecord(r);
       renderTable();
+      // Keep Renewal Tracker in sync if this client is already tracked
+      // there - never creates a new Renewal Tracker entry on its own.
+      if (isEmbedded && window.parent.syncContractRenewalDateToRenewalTracker) {
+        window.parent.syncContractRenewalDateToRenewalTracker(r.clientName, r.contractRenewalDate).catch(() => {});
+      }
     });
   });
 
@@ -2052,13 +2057,27 @@ async function addTrackedClient() {
     return;
   }
 
+  // Renewal Tracker link (full audit finding #11): Renewal Tracker is
+  // the richer, purpose-built home for a client's renewal date (churn
+  // workflow, auto-advance on renewal, renewal-notice emails), so if
+  // this client is already tracked there, prefill from it instead of
+  // starting this record's renewal date blank and letting the two drift.
+  let prefillRenewalDate = '';
+  if (isEmbedded && typeof window.parent.getAllClients === 'function') {
+    try {
+      const clients = window.parent.getAllClients() || {};
+      const match = clients[clientName];
+      if (match && match.renewal && match.renewal.renewalDate) prefillRenewalDate = match.renewal.renewalDate;
+    } catch (e) { /* ignore */ }
+  }
+
   const newRecord = {
     id: uid(),
     clientName,
     contractStatus: 'Not Sent',
     contractSentDate: '',
     contractSignedDate: '',
-    contractRenewalDate: '',
+    contractRenewalDate: prefillRenewalDate,
     invoiceStatus: 'Not Sent',
     invoiceSentDate: '',
     invoiceDueDate: '',

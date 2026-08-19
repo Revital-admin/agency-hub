@@ -4311,6 +4311,27 @@ async function syncPipelineLeadStage(prospectName, outcome) {
   return { ok: true, lead };
 }
 
+// Cross-tool bridge (full audit finding #11): keeps Renewal Tracker's
+// client.renewal.renewalDate in sync when the admin edits the renewal
+// date from inside Contract & Invoice Tracker instead. Before this, the
+// two tools each kept their own independent renewal date for the same
+// client (Renewal Tracker's client.renewal.renewalDate vs Contract &
+// Invoice Tracker's own contractRenewalDate field) with nothing keeping
+// them aligned. Renewal Tracker is the richer, purpose-built home for
+// this date (churn workflow, auto-advance on renewal, renewal-notice
+// emails), so it's treated as the source of truth: this only updates an
+// existing Renewal Tracker record and never creates one on its own,
+// since a new entry there also needs a contract length to be useful.
+async function syncContractRenewalDateToRenewalTracker(clientName, renewalDate) {
+  const trimmedName = (clientName || "").trim();
+  if (!trimmedName || !clientsDb[trimmedName] || !clientsDb[trimmedName].renewal) {
+    return { ok: true, reason: "not_tracked_in_renewal_tracker" };
+  }
+  clientsDb[trimmedName].renewal.renewalDate = renewalDate;
+  saveDatabase();
+  return { ok: true };
+}
+
 // Cross-tool bridge (Aug 2026): Team Roster's onboarding widget calls this
 // instead of keeping its own separate 6-item checklist. Team Roster used
 // to duplicate the same 6 milestones (email, ClickUp, password manager,
