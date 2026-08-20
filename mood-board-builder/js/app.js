@@ -748,8 +748,14 @@ function saveBoard() {
   if (editingBoardId) {
     const idx = client.moodBoards.findIndex(b => b.id === editingBoardId);
     if (idx >= 0) client.moodBoards[idx] = board;
+    // Editing in place - stay on whatever page the user was already on,
+    // where this board is still visible.
   } else {
     client.moodBoards.unshift(board);
+    // New boards land at the front of the list - jump back to page 1 so
+    // the board they just created is actually visible, not buried behind
+    // whichever page they happened to be on.
+    boardsListPage = 1;
   }
 
   persist();
@@ -1041,13 +1047,34 @@ function renderBoardCardThumbs(board) {
   return `<div style="display:flex; align-items:center; gap:6px; margin-top:10px; flex-wrap:wrap;">${imageThumbs}${overflowBadge}${videoThumbs}${linkNote}</div>`;
 }
 
+// ── Mood board list pagination (Aug 2026) ──
+// Before this, "Mood Boards for This Client" rendered every saved board
+// as one continuously growing vertical stack - fine for a new client
+// with one or two boards, unusable once a long-running client
+// accumulated a dozen+ (each card carries a full thumbnail row, idea
+// summary, internal notes, and style-scale mini chart, so the page got
+// very long very fast). Numbered pages + Prev/Next, same convention a
+// person would expect from any other paginated list.
+const MOOD_BOARDS_PAGE_SIZE = 5;
+let boardsListPage = 1;
+
 function renderBoardsList() {
   const client = currentClient();
   const container = el('boardsList');
   const boards = client && Array.isArray(client.moodBoards) ? client.moodBoards : [];
 
   el('boardsEmptyState').style.display = boards.length === 0 ? 'block' : 'none';
-  container.innerHTML = boards.map(board => `
+
+  // Clamp here (not at each call site) so this self-corrects regardless
+  // of what changed since the last render - e.g. deleting the only
+  // board on the last page, or a client switch leaving a stale page
+  // number from a previous, longer list.
+  const totalPages = Math.max(1, Math.ceil(boards.length / MOOD_BOARDS_PAGE_SIZE));
+  boardsListPage = Math.min(Math.max(1, boardsListPage), totalPages);
+  const startIdx = (boardsListPage - 1) * MOOD_BOARDS_PAGE_SIZE;
+  const pageBoards = boards.slice(startIdx, startIdx + MOOD_BOARDS_PAGE_SIZE);
+
+  container.innerHTML = pageBoards.map(board => `
     <div class="board-card">
       <div class="board-card-header">
         <div>
@@ -1083,6 +1110,53 @@ function renderBoardsList() {
   });
   document.querySelectorAll('.board-card-video-thumb[data-board-id]').forEach(tile => {
     tile.addEventListener('click', () => openVideoLightbox(tile.getAttribute('data-board-id'), parseInt(tile.getAttribute('data-video-idx'), 10)));
+  });
+
+  renderBoardsPagination(boards.length, totalPages);
+}
+
+// Numbered pages + Prev/Next for the boards list above. Hidden entirely
+// (not just empty) when everything fits on one page, so a client with
+// only a couple boards never sees pagination chrome for nothing.
+function renderBoardsPagination(totalBoards, totalPages) {
+  const container = el('boardsPagination');
+  if (!container) return;
+
+  if (totalBoards <= MOOD_BOARDS_PAGE_SIZE) {
+    container.innerHTML = '';
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'flex';
+  const pageButtons = Array.from({ length: totalPages }, (_, i) => i + 1).map(p =>
+    `<button type="button" class="board-page-btn${p === boardsListPage ? ' active' : ''}" data-page="${p}">${p}</button>`
+  ).join('');
+
+  container.innerHTML = `
+    <button type="button" id="boardsPrevBtn" class="board-page-nav-btn" ${boardsListPage <= 1 ? 'disabled' : ''}>&lsaquo; Prev</button>
+    <div class="board-page-numbers">${pageButtons}</div>
+    <button type="button" id="boardsNextBtn" class="board-page-nav-btn" ${boardsListPage >= totalPages ? 'disabled' : ''}>Next &rsaquo;</button>
+  `;
+
+  document.querySelectorAll('.board-page-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      boardsListPage = parseInt(btn.getAttribute('data-page'), 10);
+      renderBoardsList();
+      container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  });
+  const prevBtn = el('boardsPrevBtn');
+  if (prevBtn) prevBtn.addEventListener('click', () => {
+    boardsListPage = Math.max(1, boardsListPage - 1);
+    renderBoardsList();
+    container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+  const nextBtn = el('boardsNextBtn');
+  if (nextBtn) nextBtn.addEventListener('click', () => {
+    boardsListPage = Math.min(totalPages, boardsListPage + 1);
+    renderBoardsList();
+    container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
 }
 
@@ -1214,6 +1288,7 @@ function renderState() {
   el('moodBoardInterface').style.display = 'block';
   resetForm();
   renderTasteProfile();
+  boardsListPage = 1; // back to page 1 on every client switch, not wherever the last client's list happened to be
   renderBoardsList();
 }
 

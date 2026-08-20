@@ -766,3 +766,57 @@
   .moodboard-annotate-toolbar { flex-wrap: wrap; row-gap: 6px; }
   .annotate-hint { width: 100%; }
 }
+
+/* ── Mood boards list pagination (Aug 2026) ──
+   Numbered pages + Prev/Next for "Mood Boards for This Client"
+   (renderBoardsPagination in js/app.js) - only shown once a client has
+   more boards than fit on one page. */
+.mb-boards-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+.board-page-numbers {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.board-page-btn, .board-page-nav-btn {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface, transparent);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.board-page-btn:hover, .board-page-nav-btn:not(:disabled):hover {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+.board-page-btn.active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #1a1408;
+  font-weight: 600;
+  cursor: default;
+}
+.board-page-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+@media (max-width: 480px) {
+  /* A long-running client could have 6-8+ pages - let the number row
+     wrap onto its own line under Prev/Next rather than squeezing every
+     button into one row on a phone. */
+  .mb-boards-pagination { row-gap: 10px; }
+  .board-page-numbers { justify-content: center; width: 100%; order: 3; }
+}
