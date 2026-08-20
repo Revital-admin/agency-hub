@@ -4148,6 +4148,53 @@ function hideSaveConflictBanner() {
 // Resolves to {ok:true, version} on success, or {ok:false, reason:
 // 'conflict'|'error', error?} - callers should store `version` back into
 // their own version variable on success.
+// ── Idle-lock-aware save-failure recovery (Aug 2026) ──
+// Root-caused a "Couldn't save - Missing or insufficient permissions"
+// report from mobile: the idle lock (see isIdleLocked() in
+// firestore.rules, IDLE_TIMEOUT_MS above) is engaged SERVER-SIDE per
+// EMAIL, not per device/tab. If the same @revitalproductions.com
+// account is open in a second tab/device (desktop left open, say) and
+// THAT session idles out, Firestore starts rejecting writes for that
+// email everywhere - including a phone session that's been actively
+// touched and has no idea anything changed, since nothing pushes a
+// live "you just got locked elsewhere" signal to an already-open tab.
+// The write just fails with Firestore's raw permission-denied error,
+// and every save path here used to show that raw text in a banner/
+// indicator and stop - a dead end with no path back in, easy to miss
+// entirely on mobile (commitDatabaseToCloud's version is just a small
+// sidebar indicator, not even a banner).
+// Fix: on any save failure, check whether THIS is actually the idle
+// lock (rather than some other permission issue, e.g. a Team Access
+// restriction) via /api/idle-lock/status, and if so, show the exact
+// same full-screen lock + PIN-unlock overlay that would have appeared
+// automatically if this tab's own idle timer had fired - the correct,
+// already-built recovery path, instead of a cryptic dead end. Returns
+// true if it recognized+handled an idle-lock error (caller should skip
+// its own generic error UI in that case), false otherwise (caller
+// should fall back to its normal error handling).
+async function handlePossibleIdleLockSaveError(err) {
+  const looksLikePermissionDenied = err && (
+    err.code === 'permission-denied' ||
+    (typeof err.message === 'string' && err.message.toLowerCase().includes('insufficient permissions'))
+  );
+  if (!looksLikePermissionDenied) return false;
+  try {
+    const res = await fetch("/api/idle-lock/status", { credentials: "include" });
+    const data = await res.json();
+    if (data && data.locked) {
+      // Mirrors what showIdleLockOverlay itself does on a normal local
+      // idle timeout - safe to call even though idleLocked is still
+      // false here (this tab never detected its own timeout), since
+      // showIdleLockOverlay doesn't assume that.
+      try { await showIdleLockOverlay(); } catch (e) { console.error("IdleSessionLock Error (from save-failure recovery):", e); }
+      return true;
+    }
+  } catch (e) {
+    console.warn("Couldn't check idle-lock status after a save failure:", e);
+  }
+  return false;
+}
+
 async function saveVersionedAgencyDoc({ docRef, currentVersion, buildPayload }) {
   try {
     const freshSnap = await window.firebaseGetDoc(docRef);
@@ -4193,6 +4240,7 @@ async function saveVersionedAgencyDoc({ docRef, currentVersion, buildPayload }) 
 
     return { ok: true, version: nextVersion };
   } catch (e) {
+    await handlePossibleIdleLockSaveError(e);
     return { ok: false, reason: "error", error: e };
   }
 }
@@ -6130,8 +6178,15 @@ function commitRestrictedClientEditsNow() {
       // name still in that set.
       fetchRestrictedClientsDbSnapshot();
     }
-  }).catch(err => {
+  }).catch(async err => {
     console.error("commitRestrictedClientEdits failed:", err);
+    // See handlePossibleIdleLockSaveError - shows the real lock+PIN
+    // overlay instead of this generic banner when that's the actual
+    // cause (cross-device/session idle lock), which is the more common
+    // reason a routine save suddenly 403s than an actual permissions
+    // change.
+    const handled = await handlePossibleIdleLockSaveError(err);
+    if (handled) return;
     if (indicator) {
       indicator.innerHTML = "Cloud Save Error ❌";
       setTimeout(() => { indicator.style.opacity = "0"; }, 4000);
@@ -6361,12 +6416,23 @@ function commitDatabaseToCloud() {
         });
       });
     });
-  }).catch(err => {
+  }).catch(async err => {
     resolved = true;
     console.error("Firebase save failed:", err);
+    // See handlePossibleIdleLockSaveError - shows the real lock+PIN
+    // overlay instead of the indicator below when that's the actual
+    // cause. Worth checking here especially: this indicator-only path
+    // (no banner) is easy to miss entirely on mobile, which is exactly
+    // how this got reported - a save silently failed with no visible
+    // explanation beyond a small sidebar indicator most people never
+    // look at while mid-edit.
+    const handled = await handlePossibleIdleLockSaveError(err);
     if (indicator) {
       indicator.innerHTML = "Cloud Error ❌: " + err.message;
       setTimeout(() => { indicator.style.opacity = "0"; }, 5000);
+    }
+    if (!handled) {
+      showBanner("error", "Couldn't save your change to the cloud: " + err.message);
     }
   });
 }

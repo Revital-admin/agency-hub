@@ -73,6 +73,30 @@ body {
   line-height: 1.5;
 }
 
+/* ── Mobile overflow safety net (Aug 2026) ──
+   Reported bug: on a phone-width screen, a date input inside Subscription
+   Tracker's .form-grid was clipped at the right edge instead of wrapping
+   to its own row. Root cause, confirmed to repeat across ~28 tools that
+   all copy the same ".form-grid { display:grid; grid-template-columns:
+   repeat(auto-fill, minmax(NNNpx, 1fr)); }" pattern into their own local
+   css/style.css: grid/flex items default to min-width:auto, not 0, which
+   means a child (a native <input type="date">, which has its own
+   browser-enforced intrinsic minimum width) can refuse to shrink below
+   its content size even though its 1fr track wants to. The grid then
+   overflows its container instead of collapsing that item onto its own
+   row - exactly what auto-fill/minmax is supposed to prevent. The
+   body{overflow-x:hidden} directly above was already masking the
+   symptom (nothing to horizontally scroll to see it) without fixing the
+   cause, so the clipped input was invisible instead of merely narrow.
+   Since every one of those ~28 tools defines .form-grid itself (this
+   file is loaded ALONGSIDE each tool's own css/style.css, not instead of
+   it), a rule here targeting the same class name reaches all of them at
+   once without editing each tool's file individually. Safe/low-risk:
+   min-width:0 only changes shrink behavior, never visual size unless an
+   item was already being forced wider than its track. */
+.form-grid > *, .checkbox-grid > * { min-width: 0; }
+input, select, textarea { max-width: 100%; }
+
 /* Dynamic Grid Background */
 .bg-grid {
   position: fixed;
