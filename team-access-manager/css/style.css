@@ -132,3 +132,26 @@ body {
 .role-row-chevron { flex-shrink: 0; transition: transform var(--transition-fast, 0.15s ease); }
 .role-row-expanded .role-row-chevron { transform: rotate(180deg); }
 .role-row-body { padding: 0 18px 18px; border-top: 1px solid var(--color-border); margin-top: 2px; padding-top: 16px; }
+
+/* ── Mobile (≤768px) ──
+   .section-checkbox-grid is the same auto-fill/minmax(220px,1fr) grid
+   pattern as the shared .form-grid, but under its own tool-specific
+   class name - the centrally-fixed shared rule only targets
+   ".form-grid > *, .checkbox-grid > *", so this tool's checkbox labels
+   never got the min-width:0 fix and can still force their grid cell
+   (and the whole page) wider than the viewport. The Hub Admins
+   email-input + "+ Add Admin" button row is a plain 2-child flex row
+   with no wrap and no class of its own to hook (inline-styled in
+   index.html), targeted here via :has() the same way the shared
+   stylesheet already does elsewhere in this codebase. */
+@media (max-width: 768px) {
+  .section-checkbox-grid > * {
+    min-width: 0;
+  }
+  #hubAdminsCard > div:has(#addHubAdminBtn) {
+    flex-wrap: wrap;
+  }
+  #hubAdminsCard > div:has(#addHubAdminBtn) .form-group {
+    min-width: 200px;
+  }
+}

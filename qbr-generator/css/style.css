@@ -97,3 +97,16 @@
 .qbr-health-yellow { background: #eab308; }
 .qbr-health-red { background: #ef4444; }
 .qbr-health-none { background: var(--color-text-muted); }
+
+@media (max-width: 768px) {
+  /* .qbr-list-row is a flex row (label + nowrap meta text) with no wrap -
+     long deliverable/client names + a nowrap meta badge can overflow a
+     ~375-414px screen since neither child was allowed to shrink/wrap. */
+  .qbr-list-row {
+    flex-wrap: wrap;
+  }
+  .qbr-list-row-label {
+    min-width: 0;
+    word-break: break-word;
+  }
+}

@@ -37,3 +37,21 @@
    other date-range fields in the hub. */
 .form-group.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .form-group.two-col label { margin-bottom: 6px; }
+
+@media (max-width: 768px) {
+  /* Flight Start / Flight End collapse to one column instead of squeezing
+     two date inputs side by side. */
+  .form-group.two-col {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  /* .split-layout already stacks to one column at 992px (shared style.css),
+     but the sticky "Live Preview" column (inline style="position: sticky;
+     top: 24px;" in index.html) still sticks once stacked, which pins the
+     preview card oddly under the sticky brand bar. Reset it to static now
+     that it's a full-width stacked column. */
+  .split-layout .step-card:last-child {
+    position: static !important;
+    top: auto !important;
+  }
+}

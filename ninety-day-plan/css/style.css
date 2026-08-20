@@ -61,3 +61,20 @@
 .page-number { position: absolute; bottom: 0.5in; right: 0.5in; font-size: 12px; color: #94a3b8; }
 
 .form-group textarea { min-height: 70px; resize: vertical; }
+
+@media (max-width: 768px) {
+  /* .brand-bar (shared root class) packs the logo + two action buttons
+     with no wrap - on a ~375-414px phone that overflows the header row. */
+  .brand-bar {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+
+  /* .pdf-page is a fixed 8.5in (816px) print-accurate page render - don't
+     force it to reflow (that would misrepresent the actual PDF output),
+     just let its container scroll horizontally instead of overflowing
+     the whole app shell. */
+  .preview-scroll {
+    overflow-x: auto;
+  }
+}

@@ -107,3 +107,34 @@
 .success-card { background: var(--color-surface-2); padding: 16px; border-radius: 8px; border: 1px solid var(--color-border); }
 .success-card h3 { font-size: 14px; color: var(--color-text-primary); margin-bottom: 8px; }
 .success-card p { font-size: 12px; color: var(--color-text-muted); line-height: 1.5; white-space: pre-wrap; }
+
+@media (max-width: 768px) {
+  /* "Included Services" checkbox list on the live form - explicit 2-col
+     grid squeezes long labels ("Social Media Management") into ~150px
+     columns on a phone. Stack to one column. */
+  .checkbox-grid {
+    grid-template-columns: 1fr;
+  }
+  /* .split-layout-wide-right (shared style.css) already stacks to one
+     column at 992px, but the sticky "Live Preview" card (inline
+     style="position: sticky; top: 24px;") still sticks once stacked. */
+  .split-layout-wide-right .step-card:last-child {
+    position: static !important;
+    top: auto !important;
+  }
+  /* .pdf-page inside the preview is a fixed 8.5in (816px) document page -
+     intentional, it's what gets captured for the PDF export, so it can't
+     just reflow. #pdfContainer/.preview-scroll (undefined classes with no
+     overflow-x handling) let that fixed width blow out the whole page's
+     horizontal scroll instead of staying contained in its own card. */
+  .preview-scroll {
+    overflow-x: auto;
+  }
+  /* Header row: logo + "Download PDF"/"Email to Client" buttons (inline
+     style="display:flex; gap:8px" in index.html, no wrap) inside the
+     shared sticky .brand-bar - two buttons that size can push the row
+     past 375-414px and force page-wide horizontal scroll. */
+  .brand-bar > div:has(#generatePdfBtn) {
+    flex-wrap: wrap;
+  }
+}

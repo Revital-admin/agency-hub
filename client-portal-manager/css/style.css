@@ -289,3 +289,17 @@ input[type="color"]::-webkit-color-swatch {
   color: var(--color-text-secondary);
   margin-bottom: 12px;
 }
+
+@media (max-width: 768px) {
+  /* Magic Login Link row (readonly input + "Copy Link" button, inline
+     style="display:flex; gap:8px" in index.html, no wrap/shrink handling)
+     can force horizontal overflow on narrow screens since the readonly
+     input has no flex-basis to shrink from. */
+  .form-group > div:has(> #magicLink) {
+    flex-wrap: wrap;
+  }
+  #magicLink {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}

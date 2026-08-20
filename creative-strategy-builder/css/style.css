@@ -78,3 +78,16 @@
 }
 
 .empty-state { padding: 30px; text-align: center; color: var(--color-text-secondary); font-size: 13px; }
+
+@media (max-width: 768px) {
+  /* .csb-tag-grid uses the same auto-fill/minmax pattern as the shared
+     .form-grid (already fixed centrally in ../style.css), but under a
+     different class name - so it isn't covered by that fix. Grid items
+     default to min-width:auto, which lets a track that should be
+     shrinking still get pushed wider than its column by an input's own
+     intrinsic minimum, forcing the grid to overflow instead of settling
+     into a single column. */
+  .csb-tag-grid > .form-group {
+    min-width: 0;
+  }
+}

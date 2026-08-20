@@ -75,3 +75,34 @@
 .channel-table tr:last-child td { border-bottom: none; }
 
 .report-footer { text-align: center; font-size: 12px; color: #94a3b8; padding-top: 24px; border-top: 1px solid var(--color-border); }
+
+@media (max-width: 768px) {
+  /* Baseline vs. Recommended cards are a fixed 2-column grid - fine on
+     desktop, but once the preview card itself is only ~300-340px wide
+     each column is squeezed to ~140px, cramping the 36px metric numbers
+     and their detail lines. Stack them like every other side-by-side
+     block on narrow viewports. */
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Label + value pairs (e.g. "Suggested Range (Annual)" against
+     "$153,000 - $207,000") have no wrap allowance and can get tight
+     once the card narrows - let them drop to two lines instead of
+     crowding the edge. */
+  .roi-row {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  /* Channel Allocation table (Channel / % / Monthly / Annual) has no
+     horizontal-scroll wrapper of its own - give it one plus a min-width
+     so it scrolls within its section instead of squeezing the Channel
+     name column illegibly thin. */
+  .form-section:has(.channel-table) {
+    overflow-x: auto;
+  }
+  .channel-table {
+    min-width: 480px;
+  }
+}

@@ -101,3 +101,14 @@
 .btn.btn-secondary-outline:hover {
   border-color: var(--text-main);
 }
+
+@media (max-width: 768px) {
+  .platform-chip {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .platform-chip button.remove-platform-btn {
+    align-self: flex-start;
+  }
+}

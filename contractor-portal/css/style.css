@@ -375,3 +375,32 @@ body::before {
   color: var(--color-accent, #f68d5f);
   margin-bottom: 6px;
 }
+
+@media (max-width: 768px) {
+  /* Two fixed columns (Name/Role/Start Date/Agreement Status) get too
+     cramped once the card itself is only ~340px wide - stack to one
+     column so labels/values aren't squeezed into ~150px each. */
+  .cp-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Brand color swatches have no flex-wrap, so a client with several
+     brand colors could push the row past the card edge instead of
+     flowing onto a second line. */
+  .cp-swatch-row {
+    flex-wrap: wrap;
+  }
+
+  /* Time off / hours list rows pack a (possibly long) note/description
+     against a status badge with no wrap and no shrink allowance - long
+     text could force the badge off the edge of the card. */
+  .cp-list-item {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .cp-list-item-main {
+    min-width: 0;
+    word-break: break-word;
+  }
+}

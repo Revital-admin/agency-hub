@@ -100,3 +100,12 @@
 .add-chip-btn:hover { color: var(--color-accent); }
 
 .empty-state { text-align: center; padding: 40px 20px; color: var(--color-text-muted); font-size: 14px; }
+
+@media (max-width: 768px) {
+  /* #bookingFormCard's .form-actions row (Save/Delete/Cancel) has no
+     flex-wrap in its inline style - three buttons side by side can
+     crowd/overflow a ~375-414px screen. */
+  .form-actions {
+    flex-wrap: wrap;
+  }
+}

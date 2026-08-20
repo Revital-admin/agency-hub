@@ -669,3 +669,24 @@ body {
   width: 6px;
   height: 6px;
 }
+
+/* ── Mobile (≤768px) ──
+   .pricing-row-table (Service/Price/Type/Cost/Margin/Reset, 6 columns
+   with three 110px-wide inputs among them) was never wrapped in a
+   horizontal-scroll container the way every other tracker table in the
+   Hub is (there's no .tracker-table-wrap div here - the table sits
+   directly inside its <details class="service-category"> accordion) -
+   at phone width its fixed-width cells alone already exceed the
+   viewport, so give the table an explicit min-width and let its
+   .service-category parent (already the table's only wrapper) scroll it
+   horizontally instead of forcing the whole page wider. Only overriding
+   overflow-x here so the accordion's existing overflow:hidden (needed
+   for its rounded corners) still clips vertically. */
+@media (max-width: 768px) {
+  .service-category {
+    overflow-x: auto;
+  }
+  .pricing-row-table {
+    min-width: 620px;
+  }
+}

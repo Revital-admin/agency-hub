@@ -63,3 +63,21 @@
 .total-row .roi-value { font-size: 28px; }
 
 .report-footer { text-align: center; font-size: 12px; color: #94a3b8; padding-top: 24px; border-top: 1px solid var(--color-border); }
+
+/* ── Mobile (≤768px) ──
+   .split-layout itself already collapses to a single column via the
+   shared root stylesheet at 992px - this only covers the report-specific
+   constructs still inside it: the baseline/projected metrics grid (a
+   fixed 2-column grid, not the auto-fill .form-grid pattern the shared
+   fix covers) and the label/value ROI rows, which have 2 children in a
+   flex row with no wrap. */
+@media (max-width: 768px) {
+  .metrics-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .roi-row {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+}
