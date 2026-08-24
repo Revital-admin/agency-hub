@@ -12,7 +12,7 @@
 
   // ── Schema definitions ──────────────────────────────────────────────
   // item types: 'check' (boolean, counts toward progress), 'text',
-  // 'number', 'textarea', 'select' (options: [{value,label}])
+  // 'number', 'date', 'textarea', 'select' (options: [{value,label}])
   const PLATFORM_SCHEMAS = {
     meta: {
       label: 'Meta',
@@ -327,7 +327,9 @@
               { value: 'approved', label: 'Approved' },
               { value: 'rejected', label: 'Rejected — needs work' }
             ] },
+            { type: 'date', key: 'submittedDate', label: 'Date submitted for review' },
             { type: 'textarea', key: 'rejectionNotes', label: 'Rejection reason(s) / follow-up notes', hint: 'e.g. "Low value content" — note what was fixed and when resubmitted' },
+            { type: 'date', key: 'resubmitAfterDate', label: 'Do not resubmit before', hint: 'AdSense typically wants 2–3 weeks after a rejection before you reapply' },
             { type: 'check', key: 'autoAdsEnabled', label: 'Auto ads enabled (or manual ad units placed if client prefers manual control)' }
           ]
         },
@@ -629,7 +631,7 @@
       });
     } else {
       input = document.createElement('input');
-      input.type = item.type === 'number' ? 'number' : 'text';
+      input.type = item.type === 'number' ? 'number' : (item.type === 'date' ? 'date' : 'text');
       input.value = value || '';
     }
 
