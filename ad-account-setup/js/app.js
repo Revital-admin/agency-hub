@@ -272,10 +272,84 @@
           ]
         }
       ]
+    },
+    adsense: {
+      label: 'AdSense',
+      // Unlike the platforms above (which run paid ads FOR a client),
+      // AdSense is publisher monetization — ads placed ON a client's own
+      // content to earn revenue from pageviews. It's a fundamentally
+      // different fit, so this schema leads with a notice card instead
+      // of jumping straight into setup steps.
+      notice: {
+        title: 'Which sites this is for',
+        text: 'AdSense fits content-first sites the visitor comes to read — blogs, news, niche content/review sites, and forums with substantial original written content. It does NOT fit lead-gen sites, agency/portfolio sites, or landing pages built to convert a visitor into a call or purchase — ads compete with (and usually hurt) that conversion goal. Confirm the client’s site is a content property, not a conversion page, before starting this checklist.'
+      },
+      sections: [
+        {
+          title: 'Section 1 — Eligibility',
+          items: [
+            { type: 'select', key: 'siteType', label: 'Site type', options: [
+              { value: '', label: 'Select…' },
+              { value: 'blog', label: 'Blog / editorial content' },
+              { value: 'news', label: 'News' },
+              { value: 'niche', label: 'Niche content / review site' },
+              { value: 'forum', label: 'Forum / community' },
+              { value: 'other', label: 'Other content site' }
+            ] },
+            { type: 'check', key: 'contentDepth', label: 'Site has substantial original content (aim for 20-30+ posts, 15,000+ total words)' },
+            { type: 'check', key: 'contentOriginal', label: 'Content is original and human-written, not thin, duplicated, or scraped' },
+            { type: 'check', key: 'hasPrivacyPolicy', label: 'Site has a live, linked Privacy Policy page',
+              guide: 'Required for AdSense approval, not just good practice — make sure it’s an actual page in the sitemap, not a PDF or off-site link' },
+            { type: 'check', key: 'hasAboutContact', label: 'Site has About and Contact pages' },
+            { type: 'check', key: 'noGatedContent', label: 'Content isn’t gated behind forced sign-up/share before viewing' },
+            { type: 'check', key: 'policyCompliant', label: 'Site reviewed against AdSense program policies (no prohibited content)' }
+          ]
+        },
+        {
+          title: 'Section 2 — AdSense Account & Site Setup',
+          items: [
+            { type: 'check', key: 'hasAdSenseAccount', label: 'Client has (or created) a Google AdSense account',
+              guide: 'If no: Go to adsense.google.com → Get Started → enter site URL and payment country' },
+            { type: 'text', key: 'publisherId', label: 'AdSense Publisher ID (pub-XXXXXXXXXXXXXXXX)' },
+            { type: 'check', key: 'siteAdded', label: 'Site added to the AdSense account' },
+            { type: 'check', key: 'siteVerified', label: 'Site ownership verified (HTML tag, DNS, or Google Analytics/Tag Manager)' },
+            { type: 'check', key: 'adsTxtAdded', label: 'ads.txt file published at site root',
+              guide: 'Required — without a correct ads.txt file, ad revenue can be blocked even after approval' }
+          ]
+        },
+        {
+          title: 'Section 3 — Application & Review',
+          items: [
+            { type: 'select', key: 'applicationStatus', label: 'Application status', options: [
+              { value: '', label: 'Select…' },
+              { value: 'not_submitted', label: 'Not submitted yet' },
+              { value: 'under_review', label: 'Under review' },
+              { value: 'approved', label: 'Approved' },
+              { value: 'rejected', label: 'Rejected — needs work' }
+            ] },
+            { type: 'textarea', key: 'rejectionNotes', label: 'Rejection reason(s) / follow-up notes', hint: 'e.g. "Low value content" — note what was fixed and when resubmitted' },
+            { type: 'check', key: 'autoAdsEnabled', label: 'Auto ads enabled (or manual ad units placed if client prefers manual control)' }
+          ]
+        },
+        {
+          title: 'Section 4 — Payment Setup (post-approval)',
+          items: [
+            { type: 'check', key: 'paymentAddressVerified', label: 'Payment address verified in AdSense' },
+            { type: 'check', key: 'taxInfoSubmitted', label: 'Tax information submitted' },
+            { type: 'check', key: 'paymentMethodAdded', label: 'Payment method added' }
+          ]
+        },
+        {
+          title: 'Section 5 — Account Notes',
+          items: [
+            { type: 'textarea', key: 'notes', label: 'AdSense Notes', hint: 'Any account-specific details, restrictions, or context' }
+          ]
+        }
+      ]
     }
   };
 
-  const PLATFORM_ORDER = ['meta', 'google', 'tiktok', 'linkedin'];
+  const PLATFORM_ORDER = ['meta', 'google', 'tiktok', 'linkedin', 'adsense'];
 
   // ── Agency reference IDs ─────────────────────────────────────────────
   // Revital Productions' own account IDs, shown at the top of each
@@ -327,6 +401,10 @@
     linkedin: [
       { key: 'accountId', label: 'Account ID' },
       { key: 'monthlyBudget', label: 'Monthly Budget', prefix: '$' }
+    ],
+    adsense: [
+      { key: 'publisherId', label: 'Publisher ID' },
+      { key: 'applicationStatus', label: 'Application Status' }
     ]
   };
 
@@ -394,6 +472,9 @@
 
     panel.innerHTML = '';
 
+    const noticeCard = renderNoticeCard(schema);
+    if (noticeCard) panel.appendChild(noticeCard);
+
     const idCard = renderAgencyIdCard(platform);
     if (idCard) panel.appendChild(idCard);
 
@@ -412,6 +493,28 @@
 
       panel.appendChild(sectionEl);
     });
+  }
+
+  // Platform-level notice — used by AdSense to flag which site types it
+  // fits before anyone starts checking boxes. Other platforms don't set
+  // schema.notice, so this renders nothing for them.
+  function renderNoticeCard(schema) {
+    if (!schema.notice) return null;
+
+    const card = document.createElement('div');
+    card.className = 'aas-notice-card';
+
+    const title = document.createElement('div');
+    title.className = 'aas-notice-title';
+    title.textContent = schema.notice.title;
+    card.appendChild(title);
+
+    const text = document.createElement('div');
+    text.className = 'aas-notice-text';
+    text.textContent = schema.notice.text;
+    card.appendChild(text);
+
+    return card;
   }
 
   function renderAgencyIdCard(platform) {

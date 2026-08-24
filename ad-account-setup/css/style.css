@@ -288,6 +288,32 @@ body {
   margin-top: 4px;
 }
 
+/* Platform notice card (e.g. AdSense "which sites this is for") —
+   amber accent to read as a "check this before proceeding" callout,
+   distinct from the purple agency-ID card below it. */
+.aas-notice-card {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.aas-notice-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #f59e0b;
+  margin-bottom: 8px;
+}
+
+.aas-notice-text {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-main);
+}
+
 /* Agency reference ID card (top of each platform tab) */
 .aas-agency-id-card {
   background: var(--bg-card);
