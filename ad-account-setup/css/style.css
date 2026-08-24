@@ -1,17 +1,13 @@
 /* Ad Account Setup — tool-specific styles (uses shared ../style.css variables) */
 
-/* The shared --bg-card token (rgba(17,24,39,0.6)) blends into --bg-main
-   (#070a13) by only a few RGB units once composited - on this page,
-   with no other content behind the panels, that makes every section
-   card/agency-ID card/summary card almost impossible to distinguish
-   from the page background. Overriding it locally (this tool only,
-   not the shared file - other pages using --bg-card weren't reported
-   as having this problem) with a more opaque, slightly lighter navy
-   so cards actually read as distinct panels. */
-:root {
-  --bg-card: rgba(40, 37, 30, 0.92);
-  --bg-card-hover: rgba(48, 45, 37, 0.95);
-}
+/* The shared translucent --bg-card blends into --bg-main by only a few
+   RGB units once composited - on this page, with no other content
+   behind the panels, that made every section card/agency-ID card/
+   summary card hard to distinguish from the page background. Rather
+   than invent a local override color, this tool uses the Hub's own
+   --bg-card-opaque token instead — the same flat, solid, no-blur card
+   surface the dashboard shell already uses for this exact situation
+   (see .tool-progress-card in the shared style.css). */
 
 body {
   background: var(--bg-main);
@@ -66,10 +62,10 @@ body {
 }
 
 .btn-primary {
-  background: var(--primary, #6366f1);
+  background: var(--primary, #f68d5f);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md, 10px);
   padding: 10px 18px;
   font-size: 14px;
   font-weight: 600;
@@ -78,14 +74,14 @@ body {
 }
 
 .btn-primary:hover {
-  background: var(--primary-hover, #4f46e5);
+  background: var(--primary-hover, #f4794a);
 }
 
 .btn-secondary {
   background: transparent;
   color: var(--text-main);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-md, 10px);
   padding: 10px 18px;
   font-size: 14px;
   font-weight: 600;
@@ -94,7 +90,7 @@ body {
 }
 
 .btn-secondary:hover {
-  border-color: var(--border-focus, rgba(99, 102, 241, 0.6));
+  border-color: var(--border-focus, rgba(246, 141, 95, 0.6));
   background: var(--bg-card-hover);
 }
 
@@ -125,8 +121,8 @@ body {
 }
 
 .aas-platform-tab.active {
-  color: var(--primary, #6366f1);
-  border-bottom-color: var(--primary, #6366f1);
+  color: var(--primary, #f68d5f);
+  border-bottom-color: var(--primary, #f68d5f);
 }
 
 /* Progress bar */
@@ -149,7 +145,7 @@ body {
 .aas-progress-bar-fill {
   height: 100%;
   width: 0%;
-  background: linear-gradient(90deg, var(--primary, #6366f1), var(--secondary, #a855f7));
+  background: linear-gradient(90deg, var(--primary, #f68d5f), var(--secondary, #d85a30));
   transition: width 0.25s ease;
 }
 
@@ -161,7 +157,7 @@ body {
 
 /* Sections */
 .aas-section {
-  background: var(--bg-card);
+  background: var(--bg-card-opaque);
   border: 1px solid var(--border-color);
   border-radius: 14px;
   padding: 20px 22px;
@@ -204,7 +200,7 @@ body {
   width: 18px;
   height: 18px;
   margin-top: 1px;
-  accent-color: var(--primary, #6366f1);
+  accent-color: var(--primary, #f68d5f);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -231,9 +227,9 @@ body {
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--text-muted);
-  background: rgba(99, 102, 241, 0.08);
-  border-left: 2px solid var(--primary, #6366f1);
-  border-radius: 6px;
+  background: rgba(246, 141, 95, 0.08);
+  border-left: 2px solid var(--primary, #f68d5f);
+  border-radius: var(--radius-sm, 6px);
   padding: 8px 10px;
 }
 
@@ -257,13 +253,14 @@ body {
 
 .aas-field-row input[type="text"],
 .aas-field-row input[type="number"],
+.aas-field-row input[type="date"],
 .aas-field-row select,
 .aas-field-row textarea {
   width: 100%;
   box-sizing: border-box;
   background: var(--bg-main);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-md, 10px);
   color: var(--text-main);
   font-size: 14px;
   font-family: inherit;
@@ -274,7 +271,7 @@ body {
 .aas-field-row select:focus,
 .aas-field-row textarea:focus {
   outline: none;
-  border-color: var(--border-focus, rgba(99, 102, 241, 0.6));
+  border-color: var(--border-focus, rgba(246, 141, 95, 0.6));
 }
 
 .aas-field-row textarea {
@@ -289,10 +286,11 @@ body {
 }
 
 /* Platform notice card (e.g. AdSense "which sites this is for") —
-   amber accent to read as a "check this before proceeding" callout,
-   distinct from the purple agency-ID card below it. */
+   amber accent (matches the Hub's shared --warning token) to read as
+   a "check this before proceeding" callout, distinct from the orange
+   agency-ID card below it. */
 .aas-notice-card {
-  background: rgba(245, 158, 11, 0.08);
+  background: rgba(245, 158, 11, 0.12);
   border: 1px solid rgba(245, 158, 11, 0.3);
   border-radius: 14px;
   padding: 16px 20px;
@@ -304,7 +302,7 @@ body {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: #f59e0b;
+  color: var(--warning, #f59e0b);
   margin-bottom: 8px;
 }
 
@@ -316,7 +314,7 @@ body {
 
 /* Agency reference ID card (top of each platform tab) */
 .aas-agency-id-card {
-  background: var(--bg-card);
+  background: var(--bg-card-opaque);
   border: 1px solid var(--border-color);
   border-radius: 14px;
   padding: 16px 20px;
@@ -341,23 +339,23 @@ body {
 }
 
 .aas-agency-id-value {
-  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-family: var(--font-mono, 'DM Mono', monospace);
   font-size: 18px;
   font-weight: 700;
-  color: var(--primary, #6366f1);
-  background: rgba(99, 102, 241, 0.08);
-  border: 1px solid rgba(99, 102, 241, 0.2);
-  border-radius: 8px;
+  color: var(--primary, #f68d5f);
+  background: rgba(246, 141, 95, 0.08);
+  border: 1px solid rgba(246, 141, 95, 0.2);
+  border-radius: var(--radius-md, 10px);
   padding: 8px 14px;
   letter-spacing: 0.02em;
   word-break: break-all;
 }
 
 .aas-agency-id-copy-btn {
-  background: var(--primary, #6366f1);
+  background: var(--primary, #f68d5f);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md, 10px);
   padding: 8px 16px;
   font-size: 13px;
   font-weight: 600;
@@ -367,7 +365,7 @@ body {
 }
 
 .aas-agency-id-copy-btn:hover {
-  background: var(--primary-hover, #4f46e5);
+  background: var(--primary-hover, #f4794a);
 }
 
 .aas-agency-id-copy-btn.copied {
@@ -395,7 +393,7 @@ body {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-  background: var(--bg-card);
+  background: var(--bg-card-opaque);
   border: 1px solid var(--border-color);
   border-radius: 14px;
   padding: 16px 20px;
@@ -428,7 +426,7 @@ body {
 }
 
 .aas-summary-card {
-  background: var(--bg-card);
+  background: var(--bg-card-opaque);
   border: 1px solid var(--border-color);
   border-radius: 14px;
   padding: 18px 20px;
