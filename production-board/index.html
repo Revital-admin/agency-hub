@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Production Board</title>
 <link rel="stylesheet" href="../style.css?v=3">
-<link rel="stylesheet" href="css/style.css?v=8">
+<link rel="stylesheet" href="css/style.css?v=9">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
 </head>
 <body>
@@ -82,6 +82,7 @@ Choose a client above to see what's on the production board.
 </div>
 <div id="itemsList" class="prod-board-grid"></div>
 <p id="itemsEmptyState" class="empty-state" style="display:none;">Nothing matches right now.</p>
+<div id="itemsPagination" class="prod-items-pagination" style="display:none;"></div>
 </div>
 
 <div id="completedSection" class="step-card" style="display:none;">
@@ -96,7 +97,25 @@ Choose a client above to see what's on the production board.
 <datalist id="assigneeOptions"></datalist>
 
 </main>
+
+<!-- Read-only "View Item" modal (mirrors Mood Board Builder's mbViewBoardModal
+     pattern/chrome) - a card summary already shows most fields inline, but
+     this gives a clean, single-screen readout (with due/priority/assignee
+     context alongside the write-up) without dropping the card into Edit
+     just to review it. -->
+<div id="pbViewItemModal" class="prod-view-modal" style="display:none;">
+  <div class="prod-view-modal-backdrop" id="pbViewItemBackdrop"></div>
+  <div class="prod-view-modal-body">
+    <button type="button" id="pbViewItemClose" class="prod-view-modal-close" aria-label="Close">✕</button>
+    <div class="prod-view-modal-header">
+      <h2 id="pbViewItemTitle"></h2>
+      <div id="pbViewItemBadges" class="prod-view-modal-badges"></div>
+    </div>
+    <div id="pbViewItemFields"></div>
+  </div>
+</div>
+
 <script src="js/logo.js?v=1"></script>
-<script src="js/app.js?v=9"></script>
+<script src="js/app.js?v=10"></script>
 </body>
 </html>

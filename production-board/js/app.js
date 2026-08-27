@@ -220,6 +220,15 @@ function populateFilterAssignee() {
   if (prevValue) select.value = prevValue;
 }
 
+// ── Items list pagination (Aug 2026) ──
+// Same numbered-pages + Prev/Next convention Mood Board Builder uses for
+// its own "Mood Boards for This Client" list (MOOD_BOARDS_PAGE_SIZE /
+// boardsListPage in mood-board-builder/js/app.js) - ported here since
+// "All Clients" view (and any long-running single client) can grow well
+// past what's comfortable as one continuous grid.
+const PRODUCTION_ITEMS_PAGE_SIZE = 5;
+let itemsListPage = 1;
+
 // Bulk-selection state: item id -> clientName. Keyed by id rather than a
 // composite "client::id" string since ids are already globally unique
 // (uid()/timestamp-based) - avoids any delimiter-parsing edge case with
@@ -283,6 +292,7 @@ function sortRows(rows) {
 function setViewMode(mode) {
   viewMode = mode;
   selectedItems.clear();
+  itemsListPage = 1;
   el('viewModeSingleBtn').classList.toggle('active', mode === 'single');
   el('viewModeAllBtn').classList.toggle('active', mode === 'all');
   el('clientSelectGroup').style.display = mode === 'single' ? 'block' : 'none';
@@ -323,10 +333,23 @@ function renderItemsList() {
   const rows = sortRows(getActiveRows().filter(r => matchesFilters(r.item)));
 
   el('itemsEmptyState').style.display = rows.length === 0 ? 'block' : 'none';
-  container.innerHTML = rows.map(({ clientName, item }) =>
+
+  // Clamp here (not at each call site) so this self-corrects regardless of
+  // what changed since the last render - deleting/completing the last item
+  // on the last page, a filter shrinking the result set, or a client/view
+  // switch leaving a stale page number from a previous, longer list.
+  const totalPages = Math.max(1, Math.ceil(rows.length / PRODUCTION_ITEMS_PAGE_SIZE));
+  itemsListPage = Math.min(Math.max(1, itemsListPage), totalPages);
+  const startIdx = (itemsListPage - 1) * PRODUCTION_ITEMS_PAGE_SIZE;
+  const pageRows = rows.slice(startIdx, startIdx + PRODUCTION_ITEMS_PAGE_SIZE);
+
+  container.innerHTML = pageRows.map(({ clientName, item }) =>
     (item.id === editingItemId && clientName === editingClientName) ? editCardTemplate(item, clientName) : viewCardTemplate(item, clientName)
   ).join('');
 
+  document.querySelectorAll('.view-item-btn').forEach(btn => {
+    btn.addEventListener('click', () => viewItem(btn.getAttribute('data-client'), btn.getAttribute('data-id'), 'active'));
+  });
   document.querySelectorAll('.complete-item-btn').forEach(btn => {
     btn.addEventListener('click', () => markComplete(btn.getAttribute('data-client'), btn.getAttribute('data-id')));
   });
@@ -365,6 +388,52 @@ function renderItemsList() {
 
   renderBulkBar();
   renderCompletedList();
+  renderItemsPagination(rows.length, totalPages);
+}
+
+// Numbered pages + Prev/Next for the active items grid above. Hidden
+// entirely (not just empty) when everything fits on one page, same as
+// Mood Board Builder's renderBoardsPagination.
+function renderItemsPagination(totalItems, totalPages) {
+  const container = el('itemsPagination');
+  if (!container) return;
+
+  if (totalItems <= PRODUCTION_ITEMS_PAGE_SIZE) {
+    container.innerHTML = '';
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'flex';
+  const pageButtons = Array.from({ length: totalPages }, (_, i) => i + 1).map(p =>
+    `<button type="button" class="prod-page-btn${p === itemsListPage ? ' active' : ''}" data-page="${p}">${p}</button>`
+  ).join('');
+
+  container.innerHTML = `
+    <button type="button" id="itemsPrevBtn" class="prod-page-nav-btn" ${itemsListPage <= 1 ? 'disabled' : ''}>&lsaquo; Prev</button>
+    <div class="prod-page-numbers">${pageButtons}</div>
+    <button type="button" id="itemsNextBtn" class="prod-page-nav-btn" ${itemsListPage >= totalPages ? 'disabled' : ''}>Next &rsaquo;</button>
+  `;
+
+  document.querySelectorAll('.prod-page-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      itemsListPage = parseInt(btn.getAttribute('data-page'), 10);
+      renderItemsList();
+      container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  });
+  const prevBtn = el('itemsPrevBtn');
+  if (prevBtn) prevBtn.addEventListener('click', () => {
+    itemsListPage = Math.max(1, itemsListPage - 1);
+    renderItemsList();
+    container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+  const nextBtn = el('itemsNextBtn');
+  if (nextBtn) nextBtn.addEventListener('click', () => {
+    itemsListPage = Math.min(totalPages, itemsListPage + 1);
+    renderItemsList();
+    container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
 }
 
 function renderBulkBar() {
@@ -397,6 +466,7 @@ function renderCompletedList() {
           </div>
         </div>
         <div class="prod-actions">
+          <button class="view-completed-item-btn" data-client="${escapeHtml(clientName)}" data-id="${item.id}">View</button>
           <button class="restore-item-btn" data-client="${escapeHtml(clientName)}" data-id="${item.id}">Restore to Board</button>
         </div>
       </div>
@@ -404,6 +474,13 @@ function renderCompletedList() {
     </div>
   `).join('');
 
+  // Own "view-completed-item-btn" class (not the active grid's
+  // "view-item-btn") so this wiring can't double up with renderItemsList's
+  // own document-wide querySelectorAll pass over the same button text/class
+  // pattern - both lists render into the same document at once.
+  document.querySelectorAll('.view-completed-item-btn').forEach(btn => {
+    btn.addEventListener('click', () => viewItem(btn.getAttribute('data-client'), btn.getAttribute('data-id'), 'completed'));
+  });
   document.querySelectorAll('.restore-item-btn').forEach(btn => {
     btn.addEventListener('click', () => restoreCompletedItem(btn.getAttribute('data-client'), btn.getAttribute('data-id')));
   });
@@ -437,6 +514,7 @@ function viewCardTemplate(item, clientName) {
           </div>
         </div>
         <div class="prod-actions">
+          <button class="view-item-btn" data-client="${escapeHtml(clientName)}" data-id="${item.id}">View</button>
           <button class="edit-item-btn" data-client="${escapeHtml(clientName)}" data-id="${item.id}">Edit</button>
           <button class="complete-item-btn" data-client="${escapeHtml(clientName)}" data-id="${item.id}">Mark Complete</button>
           <button class="sendback-item-btn" data-client="${escapeHtml(clientName)}" data-id="${item.id}">Send Back to Mood Boards</button>
@@ -507,6 +585,69 @@ function editCardTemplate(item, clientName) {
       </div>
     </div>
   `;
+}
+
+// ── View Item (read-only) ──
+// Opens pbViewItemModal with the full write-up plus the context fields
+// (priority/due/assignee/production notes) that live outside the card's
+// inline text - same "look without dropping into Edit" convenience Mood
+// Board Builder's viewBoard gives for a saved mood board. source is
+// 'active' or 'completed' so the right array gets searched.
+function viewItem(clientName, id, source) {
+  const client = getClientByName(clientName);
+  if (!client) return;
+  const list = source === 'completed' ? client.productionBoardCompleted : client.productionBoard;
+  const item = Array.isArray(list) ? list.find(i => i.id === id) : null;
+  if (!item) return;
+
+  const modal = el('pbViewItemModal');
+  if (!modal) return;
+
+  const titleEl = el('pbViewItemTitle');
+  if (titleEl) titleEl.textContent = item.title || 'Untitled';
+
+  const badges = [
+    `<span class="prod-category-badge">${escapeHtml(item.category || 'Other')}</span>`,
+    priorityBadge(item.priority)
+  ];
+  if (source === 'completed') {
+    badges.push(`<span class="prod-meta">Completed ${formatDate(item.completedAt)}</span>`);
+  } else {
+    badges.push(dueBadge(item));
+    badges.push(stuckBadge(item));
+  }
+  badges.push(`<span class="prod-meta">${item.assignee ? `Assigned to ${escapeHtml(item.assignee)}` : 'Unassigned'}</span>`);
+  const badgesEl = el('pbViewItemBadges');
+  if (badgesEl) badgesEl.innerHTML = badges.filter(Boolean).join('');
+
+  const fieldRows = [
+    ['Idea Summary', item.ideaSummary],
+    ['Visual Direction', item.visualDirection],
+    ['Key Elements to Include', item.keyElements],
+    ['Internal Notes', item.internalNotes],
+    ['Production Notes', item.productionNotes]
+  ].filter(([, val]) => (val || '').trim());
+
+  const fieldsHtml = fieldRows.map(([label, val]) => `
+    <div class="prod-view-field">
+      <div class="prod-view-field-label">${escapeHtml(label)}</div>
+      <div class="prod-view-field-value">${escapeHtml(val)}</div>
+    </div>`).join('');
+
+  const linksHtml = linksBlock(item);
+
+  const fieldsContainer = el('pbViewItemFields');
+  if (fieldsContainer) {
+    fieldsContainer.innerHTML = (fieldsHtml + linksHtml) ||
+      '<p style="color:var(--color-text-secondary); font-size:13px; margin-top:16px;">No write-up added yet.</p>';
+  }
+
+  modal.style.display = 'flex';
+}
+
+function closeViewItemModal() {
+  const modal = el('pbViewItemModal');
+  if (modal) modal.style.display = 'none';
 }
 
 function startEditItem(clientName, id) {
@@ -731,14 +872,15 @@ document.addEventListener('DOMContentLoaded', () => {
   loadTeamMembers();
   el('clientSelect').addEventListener('change', () => {
     selectedItems.clear();
+    itemsListPage = 1;
     renderState();
   });
   el('viewModeSingleBtn').addEventListener('click', () => setViewMode('single'));
   el('viewModeAllBtn').addEventListener('click', () => setViewMode('all'));
-  el('filterSearchInput').addEventListener('input', renderItemsList);
-  el('filterAssignee').addEventListener('change', renderItemsList);
-  el('filterPriority').addEventListener('change', renderItemsList);
-  el('sortBy').addEventListener('change', renderItemsList);
+  el('filterSearchInput').addEventListener('input', () => { itemsListPage = 1; renderItemsList(); });
+  el('filterAssignee').addEventListener('change', () => { itemsListPage = 1; renderItemsList(); });
+  el('filterPriority').addEventListener('change', () => { itemsListPage = 1; renderItemsList(); });
+  el('sortBy').addEventListener('change', () => { itemsListPage = 1; renderItemsList(); });
   el('showCompletedToggle').addEventListener('change', renderCompletedList);
   el('selectAllVisible').addEventListener('change', () => {
     const rows = sortRows(getActiveRows().filter(r => matchesFilters(r.item)));
@@ -752,6 +894,13 @@ document.addEventListener('DOMContentLoaded', () => {
   el('bulkCompleteBtn').addEventListener('click', bulkMarkComplete);
   el('bulkReassignBtn').addEventListener('click', bulkReassign);
   el('bulkClearBtn').addEventListener('click', bulkClearSelection);
+
+  el('pbViewItemClose')?.addEventListener('click', closeViewItemModal);
+  el('pbViewItemBackdrop')?.addEventListener('click', closeViewItemModal);
+  document.addEventListener('keydown', (e) => {
+    const modal = el('pbViewItemModal');
+    if (modal && modal.style.display === 'flex' && e.key === 'Escape') closeViewItemModal();
+  });
 
   // Same iframe-race fix used across the other client-aware modules: the
   // parent Hub's client database loads asynchronously, so poll briefly
