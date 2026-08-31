@@ -53,11 +53,11 @@
         </div>
         <div class="score-card" id="card-fields">
           <div class="score-label">Fields Filled</div>
-          <div class="score-value" id="val-fields">0 / 68</div>
+          <div class="score-value" id="val-fields">0 / 73</div>
         </div>
         <div class="score-card" id="card-remaining">
           <div class="score-label">Remaining</div>
-          <div class="score-value warning" id="val-remaining">68</div>
+          <div class="score-value warning" id="val-remaining">73</div>
         </div>
         <div class="score-card accent" id="card-score">
           <div class="score-label">Strategy Score</div>
@@ -846,14 +846,14 @@
         <div class="step-header">
           <div class="step-num" style="background: var(--step-6);">9</div>
           <div class="step-meta">
-            <div class="step-title">Content Ideas</div>
+            <div class="step-title">Content Ideas &amp; Viral Framework</div>
             <div class="step-tools">
               <span class="tool-tag">Creative</span>
-              <span class="tool-tag">Brainstorm</span>
+              <span class="tool-tag">Viral</span>
             </div>
           </div>
           <div class="step-right">
-            <span class="step-progress-text" id="step-9-progress">0/5 filled</span>
+            <span class="step-progress-text" id="step-9-progress">0/10 filled</span>
             <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
           </div>
         </div>
@@ -878,6 +878,78 @@
             <div class="form-group">
               <label for="field_ideasBehindScenes">Behind-The-Scenes Content</label>
               <textarea id="field_ideasBehindScenes" class="custom-textarea" placeholder="List ideas showing the team, workspace, or production process..."></textarea>
+            </div>
+
+            <div class="sub-header">Viral Content Framework</div>
+            <div class="form-group">
+              <label for="field_viralHookFormulas">Hook Formulas &amp; Openers</label>
+              <textarea id="field_viralHookFormulas" class="custom-textarea" placeholder="Scroll-stopping first lines to test, e.g. 'Nobody tells you this about...', 'POV: you just...', 'Wait for it...'"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="field_viralTrendingAudio">Trending Audio / Sounds To Watch</label>
+              <textarea id="field_viralTrendingAudio" class="custom-textarea" placeholder="Log currently trending sounds, formats, or memes worth jumping on this week..."></textarea>
+            </div>
+            <div class="form-group">
+              <label for="field_viralTrendJackProcess">Trend-Jacking Process</label>
+              <textarea id="field_viralTrendJackProcess" class="custom-textarea" placeholder="How fast can the team spot and react to a trend? Who owns it? What's the turnaround target (e.g. same-day, 48 hours)?"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="field_viralRepurposing">Repurposing Plan</label>
+              <textarea id="field_viralRepurposing" class="custom-textarea" placeholder="How does one viral-format piece get cut down / reformatted across platforms (e.g. long-form to Reels to Shorts to carousel)?"></textarea>
+            </div>
+            <div class="form-group">
+              <label>Viral Content Checklist (apply before posting)</label>
+              <div class="checkbox-grid">
+                <label class="checkbox-item">
+                  <div class="custom-checkbox">
+                    <input type="checkbox" name="field_viralChecklist" value="pattern_interrupt" />
+                    <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </div>
+                  <span>Pattern interrupt in first 3 seconds</span>
+                </label>
+                <label class="checkbox-item">
+                  <div class="custom-checkbox">
+                    <input type="checkbox" name="field_viralChecklist" value="strong_hook" />
+                    <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </div>
+                  <span>Strong verbal / text hook</span>
+                </label>
+                <label class="checkbox-item">
+                  <div class="custom-checkbox">
+                    <input type="checkbox" name="field_viralChecklist" value="native_format" />
+                    <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </div>
+                  <span>Native to platform (no watermark/logo)</span>
+                </label>
+                <label class="checkbox-item">
+                  <div class="custom-checkbox">
+                    <input type="checkbox" name="field_viralChecklist" value="trending_audio" />
+                    <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </div>
+                  <span>Uses trending audio / sound</span>
+                </label>
+                <label class="checkbox-item">
+                  <div class="custom-checkbox">
+                    <input type="checkbox" name="field_viralChecklist" value="clear_cta" />
+                    <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </div>
+                  <span>Clear CTA or engagement prompt</span>
+                </label>
+                <label class="checkbox-item">
+                  <div class="custom-checkbox">
+                    <input type="checkbox" name="field_viralChecklist" value="shareable_caption" />
+                    <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </div>
+                  <span>Caption written to drive shares / saves</span>
+                </label>
+                <label class="checkbox-item">
+                  <div class="custom-checkbox">
+                    <input type="checkbox" name="field_viralChecklist" value="peak_timing" />
+                    <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  </div>
+                  <span>Scheduled at peak audience time</span>
+                </label>
+              </div>
             </div>
           </div>
         </div>
@@ -1158,6 +1230,6 @@
     // Seeding logo placeholder (will be replaced or read dynamically if available)
     window.LOGO_BASE64 = "";
   </script>
-  <script src="js/app.js?v=64"></script>
+  <script src="js/app.js?v=65"></script>
 </body>
 </html>

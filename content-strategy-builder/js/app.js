@@ -33,6 +33,7 @@ const FIELD_IDS = [
   'mainCompetitors', 'competitorStrengths', 'competitorDifferentiate', 'brandsAdmire',
   'pillar1Name', 'pillar1Topics', 'pillar2Name', 'pillar2Topics', 'pillar3Name', 'pillar3Topics', 'pillar4Name', 'pillar4Topics',
   'ideasEducational', 'ideasPromotional', 'ideasSocialProof', 'ideasViral', 'ideasBehindScenes',
+  'viralHookFormulas', 'viralTrendingAudio', 'viralTrendJackProcess', 'viralRepurposing',
   'kpisBenchmarks', 'commContact', 'commRevisions', 'commTimeline',
   'finalFocus', 'action1', 'action2', 'action3', 'action4', 'notesSection'
 ];
@@ -40,7 +41,7 @@ const FIELD_IDS = [
 const CHECKBOX_GROUPS = [
   'primaryGoals', 'brandPersonality', 'existingAssets', 'primaryContentGoals',
   'workflowPre', 'workflowProd', 'workflowPost', 'workflowPub',
-  'kpisMetrics', 'kpisFrequency', 'commMethods', 'nextSteps'
+  'kpisMetrics', 'kpisFrequency', 'commMethods', 'nextSteps', 'viralChecklist'
 ];
 
 // Content Types Configuration per Platform
@@ -87,7 +88,7 @@ const SECTIONS_CONFIG = {
   6: { title: 'Content Strategy', text: ['pillar1Name', 'pillar1Topics', 'pillar2Name', 'pillar2Topics', 'pillar3Name', 'pillar3Topics', 'pillar4Name', 'pillar4Topics'], checkboxes: ['primaryContentGoals'] },
   7: { title: 'Platform Strategy', dynamicPlatforms: true },
   8: { title: 'Content Production Workflow', text: [], checkboxes: ['workflowPre', 'workflowProd', 'workflowPost', 'workflowPub'] },
-  9: { title: 'Content Ideas', text: ['ideasEducational', 'ideasPromotional', 'ideasSocialProof', 'ideasViral', 'ideasBehindScenes'], checkboxes: [] },
+  9: { title: 'Content Ideas & Viral Framework', text: ['ideasEducational', 'ideasPromotional', 'ideasSocialProof', 'ideasViral', 'ideasBehindScenes', 'viralHookFormulas', 'viralTrendingAudio', 'viralTrendJackProcess', 'viralRepurposing'], checkboxes: ['viralChecklist'] },
   10: { title: 'KPI & Performance Tracking', text: ['kpisBenchmarks'], checkboxes: ['kpisMetrics', 'kpisFrequency'] },
   11: { title: 'Client Communication & Approval Process', text: ['commContact', 'commRevisions', 'commTimeline'], checkboxes: ['commMethods'] },
   12: { title: 'Final Strategy Summary', text: ['finalFocus', 'notesSection'], checkboxes: ['nextSteps'], custom: ['actionItems'] }
@@ -850,6 +851,23 @@ function setupEventHandlers() {
               <h3>Educational</h3><p>${formatText(d.ideasEducational)}</p>
               <h3>Promotional</h3><p>${formatText(d.ideasPromotional)}</p>
               <h3>Social Proof</h3><p>${formatText(d.ideasSocialProof)}</p>
+              <h3>Trend / Viral Content Ideas</h3><p>${formatText(d.ideasViral)}</p>
+              <h3>Behind-The-Scenes</h3><p>${formatText(d.ideasBehindScenes)}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="page">
+          <h2>9b. Viral Content Framework</h2>
+          <div class="grid">
+            <div class="col">
+              <h3>Hook Formulas & Openers</h3><p>${formatText(d.viralHookFormulas)}</p>
+              <h3>Trending Audio / Sounds To Watch</h3><p>${formatText(d.viralTrendingAudio)}</p>
+            </div>
+            <div class="col">
+              <h3>Trend-Jacking Process</h3><p>${formatText(d.viralTrendJackProcess)}</p>
+              <h3>Repurposing Plan</h3><p>${formatText(d.viralRepurposing)}</p>
+              <h3>Pre-Post Viral Checklist</h3>${formatArray(d.viralChecklist)}
             </div>
           </div>
         </div>
