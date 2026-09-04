@@ -137,6 +137,25 @@ export default {
       return handleCreateClientClickUpFolder(request, env);
     }
 
+    // TEMPORARY diagnostic route - the "Client Portal" Folder Template
+    // lookup in findClickUpFolderTemplateId isn't matching despite the
+    // template existing, and the public API docs don't show the exact
+    // response shape for GET .../folder_template. This just proxies the
+    // raw response so it can be inspected once, then gets deleted.
+    if (url.pathname === "/api/debug/clickup-folder-templates" && request.method === "GET") {
+      const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+      if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+        return jsonResponse({ error: "Not authorized" }, 403);
+      }
+      const apiToken = env.CLICKUP_API_TOKEN;
+      if (!apiToken) return jsonResponse({ error: "Server missing CLICKUP_API_TOKEN secret" }, 500);
+      const res = await fetch(`https://api.clickup.com/api/v2/team/9013958594/folder_template`, {
+        headers: { Authorization: apiToken }
+      });
+      const text = await res.text();
+      return new Response(text, { status: res.status, headers: { "Content-Type": "application/json" } });
+    }
+
     // Contractor Portal - deliberately no Cf-Access check, since this has
     // to work for someone with no revitalproductions.com account at all,
     // holding only their own magic-link token. Unlike /api/booking/* above,
