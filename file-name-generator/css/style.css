@@ -1,0 +1,48 @@
+/* Same fix as every other split-layout generator tool - .container isn't
+   defined anywhere shared, and <main class="container"> is this tool's
+   entire page wrapper. */
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+}
+
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 13px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 6px; }
+.form-group input[type="text"], .form-group input[type="month"], .form-group input[type="date"],
+.form-group input[type="number"], .form-group select {
+  width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px;
+  font-size: 14px; font-family: inherit; background: var(--color-surface); color: var(--color-text-primary);
+}
+.form-group input:focus, .form-group select:focus { outline: none; border-color: #f68d5f; box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1); }
+.help-text { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+
+/* Month/Year and Month/Day fields render as two selects side by side
+   instead of a single native type="month"/type="date" input - same
+   Safari/Firefox fallback as the Task Name Generator (see the comment
+   above MONTH_NAMES in app.js). */
+.month-year-row { display: flex; gap: 10px; }
+.month-year-row select { flex: 1; min-width: 0; }
+
+/* Shows the raw [Bracket]_[Template] or [Bracket] — [Template] straight
+   from the SOP conventions right above the fields it maps to, so there's
+   no ambiguity about which blank is which even before anything is typed. */
+.format-hint {
+  font-family: var(--font-mono, monospace); font-size: 12.5px; color: var(--color-text-muted);
+  background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: 6px;
+  padding: 8px 12px; margin: 0 0 18px;
+}
+
+/* Large monospace readout, closer to how the name will actually look
+   saved in Drive/ClickUp than a regular form input would convey - and
+   it's the thing people are here to copy, so it should be the most
+   visually dominant thing on the page. */
+.task-name-output {
+  font-family: var(--font-mono, monospace); font-size: 17px; font-weight: 600;
+  color: var(--color-text-primary); background: var(--color-surface-2);
+  border: 1px solid var(--color-border-md); border-radius: 8px; padding: 18px 20px;
+  min-height: 26px; word-break: break-word; line-height: 1.5;
+}
+.task-name-output .placeholder-segment { color: #f68d5f; font-style: italic; font-weight: 500; }

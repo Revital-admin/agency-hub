@@ -1833,6 +1833,9 @@ function refreshIframeTab(tabId) {
     case "tab-tasknamegen":
       renderTaskNameGenerator();
       break;
+    case "tab-filenamegen":
+      renderFileNameGenerator();
+      break;
     case "tab-marketingnews":
       renderMarketingNews();
       break;
@@ -3806,6 +3809,11 @@ function renderSopWiki() {
 // ── Task Name Generator Controller ──
 function renderTaskNameGenerator() {
   setIframeAbsoluteSrc('#tab-tasknamegen iframe', "task-name-generator/index.html");
+}
+
+// ── File Name Generator Controller ──
+function renderFileNameGenerator() {
+  setIframeAbsoluteSrc('#tab-filenamegen iframe', "file-name-generator/index.html");
 }
 
 function renderMarketingNews() {
