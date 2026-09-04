@@ -1593,6 +1593,7 @@ function createNewClient() {
   logAdminActivity("Client created", name);
   generateNewClientOnboardingEmails(clientsDb[name], name).catch(e => console.warn("Could not draft onboarding emails:", e));
   createClientDriveFolder(name).catch(e => console.warn("Could not auto-create Drive folder:", e));
+  createClientClickUpFolder(name).catch(e => console.warn("Could not auto-create ClickUp folder:", e));
 }
 
 function renameActiveClient() {
@@ -6985,6 +6986,30 @@ async function createClientDriveFolder(name) {
   pushAdminNotification('client_drive_folder', `Google Drive folder created for ${name}.`, name, null);
 }
 
+// Same fire-and-forget shape as createClientDriveFolder above - builds the
+// client's ClickUp folder (Delivery space, 8-list template matching every
+// existing client folder there) and writes the resulting URL into the same
+// clickupUrl field the dashboard's "ClickUp Folder" link has always used
+// (previously only ever populated by hand).
+async function createClientClickUpFolder(name) {
+  const res = await fetch("/api/create-client-clickup-folder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ clientName: name })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.folderUrl) {
+    throw new Error(data.error || `Request failed (${res.status})`);
+  }
+
+  const client = clientsDb[name];
+  if (!client) return; // renamed/deleted before this resolved
+  client.clickupUrl = data.folderUrl;
+  saveDatabase();
+  refreshAllViews({ skipActiveIframeReload: true });
+  pushAdminNotification('client_clickup_folder', `ClickUp folder created for ${name}.`, name, null);
+}
+
 // Slow-moving signal, so this only needs to run occasionally rather than on
 // every refreshAllViews() call (which fires on nearly every save). Flags
 // clients who have something waiting on them (a pending approval) AND
@@ -7628,6 +7653,7 @@ const ADMIN_NOTIF_TARGET_TAB = {
   contract_renewal: 'tab-contractinvoice',
   stale_client: 'tab-portal',
   client_drive_folder: 'tab-portal',
+  client_clickup_folder: 'tab-portal',
   report_overdue: 'tab-reportarchive',
   reengagement_reminder: 'tab-renewaltracker',
   upsell_opportunity: 'tab-budgetpacing',

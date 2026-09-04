@@ -127,6 +127,16 @@ export default {
       return handleCreateClientDriveFolder(request, env);
     }
 
+    // Auto-builds a new client's ClickUp folder inside the "Delivery" space,
+    // matching the 8-list layout every existing client folder there already
+    // uses (Evry Intention LLC, Reginald White, the Demo Client folder) -
+    // fired from createNewClient() in app.js the same fire-and-forget,
+    // non-fatal way createClientDriveFolder already is. See
+    // handleCreateClientClickUpFolder below.
+    if (url.pathname === "/api/create-client-clickup-folder" && request.method === "POST") {
+      return handleCreateClientClickUpFolder(request, env);
+    }
+
     // Contractor Portal - deliberately no Cf-Access check, since this has
     // to work for someone with no revitalproductions.com account at all,
     // holding only their own magic-link token. Unlike /api/booking/* above,
@@ -2335,6 +2345,88 @@ async function handleCreateClientDriveFolder(request, env) {
     }, 200, { "Cache-Control": "no-store" });
   } catch (e) {
     console.error("Create client Drive folder failed:", e);
+    return jsonResponse({ error: e.message }, 500);
+  }
+}
+
+// ── POST /api/create-client-clickup-folder ──
+// Auto-builds a new client's ClickUp folder inside the "Delivery" space
+// (id below), with the same 8-list layout every existing client folder
+// there already has (checked live via the workspace hierarchy - Evry
+// Intention LLC, Reginald White, and the "Demo Client - Revital
+// Productions" folder are all identical). Also mirrors the "Client Portal
+// Template" folder living in the Guides & Templates space, which is the
+// intended template but - same as the Drive folder tree above - there's
+// no ClickUp API to "duplicate a folder," so the list names are just
+// hardcoded below instead of read live from the template each time.
+//
+// Requires the same CLICKUP_API_TOKEN secret already used by the
+// Sales Pipeline / Onboarding Handoff sync routes above.
+const CLICKUP_DELIVERY_SPACE_ID = "901313679401";
+const CLICKUP_WORKSPACE_ID = "9013958594"; // confirmed via clickup_get_workspace_hierarchy
+
+const CLIENT_CLICKUP_LIST_TEMPLATE = [
+  "📋 Campaign Briefs",
+  "📅 Content Calendar",
+  "🔄 Recurring Deliverables",
+  "💬 Client Feedback & Revisions",
+  "📁 Assets & Brand Files",
+  "📊 Reports & Analytics",
+  "🚀 Active Projects & Tasks",
+  "✅ Completed Work"
+];
+
+async function handleCreateClientClickUpFolder(request, env) {
+  const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+
+  const clientName = (payload && payload.clientName || "").trim();
+  if (!clientName) {
+    return jsonResponse({ error: "clientName is required" }, 400);
+  }
+
+  const apiToken = env.CLICKUP_API_TOKEN;
+  if (!apiToken) return jsonResponse({ error: "Server missing CLICKUP_API_TOKEN secret" }, 500);
+
+  try {
+    const folderRes = await fetch(`https://api.clickup.com/api/v2/space/${CLICKUP_DELIVERY_SPACE_ID}/folder`, {
+      method: "POST",
+      headers: { Authorization: apiToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: clientName })
+    });
+    const folder = await folderRes.json().catch(() => ({}));
+    if (!folderRes.ok || !folder.id) {
+      throw new Error((folder.err) || `ClickUp folder create failed (${folderRes.status}) for "${clientName}"`);
+    }
+
+    for (const listName of CLIENT_CLICKUP_LIST_TEMPLATE) {
+      const listRes = await fetch(`https://api.clickup.com/api/v2/folder/${folder.id}/list`, {
+        method: "POST",
+        headers: { Authorization: apiToken, "Content-Type": "application/json" },
+        body: JSON.stringify({ name: listName })
+      });
+      const listData = await listRes.json().catch(() => ({}));
+      if (!listRes.ok) {
+        // Non-fatal per list - the folder itself already exists and is
+        // usable, so a single list failing (rare) shouldn't blow up the
+        // whole call. Logged server-side for follow-up.
+        console.error(`ClickUp list create failed for "${listName}" in folder ${folder.id}:`, listData.err || listRes.status);
+      }
+    }
+
+    const folderUrl = `https://app.clickup.com/${CLICKUP_WORKSPACE_ID}/v/f/${folder.id}`;
+    return jsonResponse({ ok: true, folderId: folder.id, folderUrl }, 200, { "Cache-Control": "no-store" });
+  } catch (e) {
+    console.error("Create client ClickUp folder failed:", e);
     return jsonResponse({ error: e.message }, 500);
   }
 }
