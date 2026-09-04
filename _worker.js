@@ -2255,12 +2255,26 @@ async function deleteBookingCalendarEvent(env, { calendarEventId }) {
 
 // ── POST /api/create-client-drive-folder ──
 // Auto-builds a new client's Google Drive folder structure inside the
-// "Clients Assets" Shared Drive, matching the layout of the
-// "_CLIENT TEMPLATE (duplicate for new clients)" folder (mapped by hand
-// Aug 2026 - there's no API way to "duplicate" a Shared Drive folder
-// tree, so the structure is just hardcoded below).
+// "Clients Assets" Shared Drive. Two paths, same shape as the ClickUp
+// folder route above:
 //
-// PREREQUISITE (not yet done as of Aug 2026): the GOOGLE_SERVICE_ACCOUNT_KEY
+// 1. Preferred: recursively clone the real live "_CLIENT TEMPLATE
+//    (duplicate for new clients)" folder via the Drive API (files.list to
+//    walk its tree, files.create for each subfolder, files.copy for any
+//    files found inside it). The Drive API has no single "duplicate this
+//    folder" call the way ClickUp does for Folder Templates, but the
+//    recursive list+create+copy pattern is a well-established substitute
+//    - see findClientDriveTemplateFolderId/cloneDriveFolderTree below.
+//    Confirmed live (Sept 2026) this actually matters: the hardcoded
+//    snapshot below was already stale - the real template's folders all
+//    carry emoji prefixes ("📄 Contracts & Onboarding", "📜 Signed
+//    Contracts", etc.) that the hardcoded names never had.
+// 2. Fallback: the original hardcoded structure (no emojis), used only if
+//    the template folder can't be found live for any reason - keeps
+//    client creation from breaking even if the template gets renamed,
+//    moved, or the lookup call fails.
+//
+// PREREQUISITE (not yet done as of Sept 2026): the GOOGLE_SERVICE_ACCOUNT_KEY
 // service account (same one used for calendar impersonation - see
 // getGoogleAccessTokenForUser) needs the Drive scope added to its
 // domain-wide delegation in Google Workspace Admin Console -> Security ->
@@ -2268,14 +2282,25 @@ async function deleteBookingCalendarEvent(env, { calendarEventId }) {
 // client ID entry (alongside the datastore/calendar scopes already there):
 //   https://www.googleapis.com/auth/drive
 // Only a Workspace Super Admin can do this - it can't be done from code.
-// Until then, this route will fail with an insufficient-scope error from
-// Google, which is caught below and returned as a normal error response
-// (non-fatal to client creation either way - see createClientDriveFolder
-// in app.js).
+// Confirmed live (Sept 2026) this route currently fails even earlier than
+// that - the Drive API itself isn't enabled yet in the Google Cloud
+// project (a 403 "Google Drive API has not been used in project ... or is
+// disabled" error), which is a prerequisite to the domain-wide-delegation
+// scope even mattering. Either failure is caught below and returned as a
+// normal error response (non-fatal to client creation either way - see
+// createClientDriveFolder in app.js).
 const CLIENTS_ASSETS_SHARED_DRIVE_ID = "0AJh-IlwVqRlzUk9PVA";
 
-// Mirrors "_CLIENT TEMPLATE (duplicate for new clients)" exactly, as
-// mapped out folder-by-folder in the live Shared Drive.
+// Case-insensitive substring match against folder names in the Shared
+// Drive - "_CLIENT TEMPLATE" is the stable part of the real folder's name
+// ("🧩 _CLIENT TEMPLATE (duplicate for new clients)", confirmed live via
+// Drive search), robust to the emoji or the parenthetical changing.
+const CLIENT_DRIVE_TEMPLATE_NAME_HINT = "_client template";
+
+// Fallback only - mirrors "_CLIENT TEMPLATE (duplicate for new clients)"
+// as it was mapped by hand in Aug 2026, since confirmed stale (no
+// emojis) but still a reasonable shape if the live template can't be
+// found at all.
 const CLIENT_DRIVE_FOLDER_TEMPLATE = [
   { name: "Contracts & Onboarding", children: ["Signed Contracts", "Proposals", "Intake Form", "Renewals & Amendments"] },
   { name: "Client-Submitted Files", children: [] },
@@ -2302,6 +2327,74 @@ async function createDriveFolder(accessToken, name, parentId) {
     throw new Error((data.error && data.error.message) || `Drive folder create failed (${res.status}) for "${name}"`);
   }
   return data; // { id, webViewLink }
+}
+
+const DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder";
+
+// Best-effort - not required, see the fallback path in
+// handleCreateClientDriveFolder. Searches the whole Clients Assets Shared
+// Drive (not just its top level) in case the template ever gets nested
+// or moved, and returns the first match's id.
+async function findClientDriveTemplateFolderId(accessToken) {
+  try {
+    const q = encodeURIComponent(`mimeType = '${DRIVE_FOLDER_MIME}' and name contains '_CLIENT TEMPLATE' and trashed = false`);
+    const url = `https://www.googleapis.com/drive/v3/files?q=${q}&corpora=drive&driveId=${CLIENTS_ASSETS_SHARED_DRIVE_ID}&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=files(id,name)`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !Array.isArray(data.files)) return null;
+    const match = data.files.find(f => (f.name || "").toLowerCase().includes(CLIENT_DRIVE_TEMPLATE_NAME_HINT));
+    return match ? match.id : null;
+  } catch (e) {
+    console.warn("Drive template folder lookup failed:", e);
+    return null;
+  }
+}
+
+// Lists the direct children of a Drive folder, handling pagination (the
+// template only has a handful of items today, but this doesn't assume
+// that stays true).
+async function listDriveChildren(accessToken, folderId) {
+  const children = [];
+  let pageToken = "";
+  do {
+    const q = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+    const url = `https://www.googleapis.com/drive/v3/files?q=${q}&includeItemsFromAllDrives=true&supportsAllDrives=true&fields=nextPageToken,files(id,name,mimeType)${pageToken ? `&pageToken=${pageToken}` : ""}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((data.error && data.error.message) || `Drive list children failed (${res.status})`);
+    if (Array.isArray(data.files)) children.push(...data.files);
+    pageToken = data.nextPageToken || "";
+  } while (pageToken);
+  return children;
+}
+
+async function copyDriveFile(accessToken, fileId, name, parentId) {
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/copy?supportsAllDrives=true&fields=id,webViewLink`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name, parents: [parentId] })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error((data.error && data.error.message) || `Drive file copy failed (${res.status}) for "${name}"`);
+  }
+  return data;
+}
+
+// Recursively mirrors sourceFolderId's contents into destParentId -
+// subfolders become new folders (recursing into each), files get copied
+// in place. This is the substitute for Drive's lack of a "duplicate this
+// folder tree" API call.
+async function cloneDriveFolderTree(accessToken, sourceFolderId, destParentId) {
+  const children = await listDriveChildren(accessToken, sourceFolderId);
+  for (const child of children) {
+    if (child.mimeType === DRIVE_FOLDER_MIME) {
+      const newFolder = await createDriveFolder(accessToken, child.name, destParentId);
+      await cloneDriveFolderTree(accessToken, child.id, newFolder.id);
+    } else {
+      await copyDriveFile(accessToken, child.id, child.name, destParentId);
+    }
+  }
 }
 
 async function handleCreateClientDriveFolder(request, env) {
@@ -2331,17 +2424,35 @@ async function handleCreateClientDriveFolder(request, env) {
 
     const clientFolder = await createDriveFolder(accessToken, clientName, CLIENTS_ASSETS_SHARED_DRIVE_ID);
 
-    for (const section of CLIENT_DRIVE_FOLDER_TEMPLATE) {
-      const sectionFolder = await createDriveFolder(accessToken, section.name, clientFolder.id);
-      for (const childName of section.children) {
-        await createDriveFolder(accessToken, childName, sectionFolder.id);
+    // Path 1: clone the real live template, if it can be found.
+    let clonedFromTemplate = false;
+    try {
+      const templateFolderId = await findClientDriveTemplateFolderId(accessToken);
+      if (templateFolderId) {
+        await cloneDriveFolderTree(accessToken, templateFolderId, clientFolder.id);
+        clonedFromTemplate = true;
+      }
+    } catch (e) {
+      console.warn("Drive template clone failed, falling back to hardcoded structure:", e);
+    }
+
+    // Path 2: fallback - hardcoded structure, used only if the template
+    // couldn't be found/cloned above (client folder itself already
+    // exists either way, so this never leaves it half-built).
+    if (!clonedFromTemplate) {
+      for (const section of CLIENT_DRIVE_FOLDER_TEMPLATE) {
+        const sectionFolder = await createDriveFolder(accessToken, section.name, clientFolder.id);
+        for (const childName of section.children) {
+          await createDriveFolder(accessToken, childName, sectionFolder.id);
+        }
       }
     }
 
     return jsonResponse({
       ok: true,
       folderId: clientFolder.id,
-      folderUrl: clientFolder.webViewLink || `https://drive.google.com/drive/folders/${clientFolder.id}`
+      folderUrl: clientFolder.webViewLink || `https://drive.google.com/drive/folders/${clientFolder.id}`,
+      fromTemplate: clonedFromTemplate
     }, 200, { "Cache-Control": "no-store" });
   } catch (e) {
     console.error("Create client Drive folder failed:", e);
