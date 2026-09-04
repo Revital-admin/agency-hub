@@ -156,6 +156,29 @@ export default {
       return new Response(text, { status: res.status, headers: { "Content-Type": "application/json" } });
     }
 
+    // TEMPORARY - actually attempts the create-folder-from-template call
+    // (GET above shows the template exists and matches fine, so the bug
+    // must be in the POST itself) and returns the raw ClickUp response
+    // instead of swallowing the error, so the real failure reason is
+    // visible. ?name= sets the test folder's name (defaults to a clearly
+    // marked debug name so it's easy to find and delete afterward).
+    if (url.pathname === "/api/debug/clickup-folder-template-create" && request.method === "GET") {
+      const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+      if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+        return jsonResponse({ error: "Not authorized" }, 403);
+      }
+      const apiToken = env.CLICKUP_API_TOKEN;
+      if (!apiToken) return jsonResponse({ error: "Server missing CLICKUP_API_TOKEN secret" }, 500);
+      const testName = url.searchParams.get("name") || "ZZ_DEBUG_DELETE_ME";
+      const res = await fetch(`https://api.clickup.com/api/v2/space/901313679401/folder_template/t-1000460000001740`, {
+        method: "POST",
+        headers: { Authorization: apiToken, "Content-Type": "application/json" },
+        body: JSON.stringify({ name: testName })
+      });
+      const text = await res.text();
+      return new Response(text, { status: res.status, headers: { "Content-Type": "application/json" } });
+    }
+
     // Contractor Portal - deliberately no Cf-Access check, since this has
     // to work for someone with no revitalproductions.com account at all,
     // holding only their own magic-link token. Unlike /api/booking/* above,
