@@ -1406,6 +1406,7 @@ copywriting: {
       accountManagerEmail: "",
       accountManagerPhone: "",
       calendlyLink: "",
+      calendlyLinkAutoFilled: false,
       projectsEmbedUrl: "",
       calendarEmbedUrl: "",
       campaignBriefUrl: "",

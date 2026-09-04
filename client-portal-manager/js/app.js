@@ -258,6 +258,7 @@ function init() {
       accountManagerEmail: "",
       accountManagerPhone: "",
       calendlyLink: "",
+      calendlyLinkAutoFilled: false,
       projectsEmbedUrl: "",
       calendarEmbedUrl: "",
       campaignBriefUrl: "",
@@ -418,7 +419,10 @@ function init() {
       inputs[key].value = config[key] || "";
       inputs[key].addEventListener("input", (e) => {
         updateConfig(key, e.target.value);
-        if (key === "accountManagerEmail") checkAmCapacityWarning();
+        if (key === "accountManagerEmail") {
+          checkAmCapacityWarning();
+          autoFillBookingLinkForManager(e.target.value);
+        }
         if (key === "accountManagerName") {
           // Picking (or typing exactly) a name that matches Team Roster
           // auto-fills email/phone from there, same as Kickoff Prep's
@@ -426,9 +430,15 @@ function init() {
           // silently breaking the ClickUp sync below.
           const member = findRosterMemberByName(e.target.value);
           if (member) {
-            if (member.email) { inputs.accountManagerEmail.value = member.email; updateConfig("accountManagerEmail", member.email); checkAmCapacityWarning(); }
+            if (member.email) { inputs.accountManagerEmail.value = member.email; updateConfig("accountManagerEmail", member.email); checkAmCapacityWarning(); autoFillBookingLinkForManager(member.email); }
             if (member.phone) { inputs.accountManagerPhone.value = member.phone; updateConfig("accountManagerPhone", member.phone); }
           }
+        }
+        if (key === "calendlyLink") {
+          // A person typing directly into this field is setting a real
+          // manual override - stop treating it as ours so a later
+          // account-manager change doesn't silently clobber it.
+          updateConfig("calendlyLinkAutoFilled", false);
         }
       });
     }
@@ -448,6 +458,12 @@ function init() {
   }
   const syncAmBtn = document.getElementById("syncAmClickUpBtn");
   if (syncAmBtn) syncAmBtn.addEventListener("click", () => syncAmToClickUp());
+
+  // Backfills the booking link for clients that already had an account
+  // manager set before this existed (calendlyLink was just sitting blank
+  // for them) - safe to call unconditionally, autoFillBookingLinkForManager
+  // only ever touches an empty or previously-auto-filled field.
+  autoFillBookingLinkForManager(config.accountManagerEmail);
 
   loadTeamRoster();
   refreshAmCapacitySnapshot().then(checkAmCapacityWarning);
@@ -662,6 +678,35 @@ function updateConfig(key, value) {
     client.portalConfig[key] = value;
     if (parentSave) parentSave();
   }
+}
+
+// Keeps the "Calendly Link" field showing this client's real, working
+// booking link - the Hub's own Google Calendar-backed booking system at
+// book.revitalproductions.com, the same URL portal/js/app.js already
+// falls back to at render time when calendlyLink is blank (see the
+// comment there: Calendly itself was never actually used - this field
+// predates the custom booking system and was left as a manual-override
+// escape hatch). Rather than leave the field looking unset, this writes
+// the real per-account-manager link into it whenever the AM changes.
+//
+// Only touches the field if it's currently empty or was itself written
+// by this same function before (tracked via calendlyLinkAutoFilled) - a
+// real, hand-typed Calendly link is never overwritten, so the original
+// override behavior still works exactly as before.
+function autoFillBookingLinkForManager(amEmail) {
+  const client = getActiveClient();
+  if (!client || !client.portalConfig) return;
+  const config = client.portalConfig;
+  const wasAutoFilled = config.calendlyLinkAutoFilled === true;
+  const isEmpty = !config.calendlyLink;
+  if (!isEmpty && !wasAutoFilled) return; // real manual override - leave it alone
+
+  const email = (amEmail || "").trim();
+  const newValue = email ? `https://book.revitalproductions.com/booking/?amEmail=${encodeURIComponent(email)}` : "";
+
+  if (inputs.calendlyLink) inputs.calendlyLink.value = newValue;
+  updateConfig("calendlyLink", newValue);
+  updateConfig("calendlyLinkAutoFilled", !!email);
 }
 
 // ── Client-Facing Checklist ──
