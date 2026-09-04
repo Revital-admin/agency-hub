@@ -2309,11 +2309,11 @@ const CLIENT_DRIVE_TEMPLATE_NAME_HINT = "_client template";
 // emojis) but still a reasonable shape if the live template can't be
 // found at all.
 const CLIENT_DRIVE_FOLDER_TEMPLATE = [
-  { name: "Contracts & Onboarding", children: ["Signed Contracts", "Proposals", "Intake Form", "Renewals & Amendments"] },
-  { name: "Client-Submitted Files", children: [] },
-  { name: "Client Brand Assets", children: ["Logos", "Brand Guidelines", "Fonts", "Reference & Past Campaigns"] },
-  { name: "Final Deliverables", children: ["Ad Creative", "Videos", "Graphics", "Edited Photos"] },
-  { name: "Monthly Reports", children: [] }
+  { name: "📄 Contracts & Onboarding", children: ["📜 Signed Contracts", "📝 Proposals", "📋 Intake Form", "🔄 Renewals & Amendments"] },
+  { name: "📥 Client-Submitted Files", children: [] },
+  { name: "🎨 Client Brand Assets", children: ["🖼 Logos", "📘 Brand Guidelines", "🔤 Fonts", "📸 Reference & Past Campaigns"] },
+  { name: "✅ Final Deliverables", children: ["📣 Ad Creative", "🎬 Videos", "🖌 Graphics", "✂️ Edited Photos"] },
+  { name: "📊 Monthly Reports", children: [] }
 ];
 
 async function createDriveFolder(accessToken, name, parentId) {
