@@ -110,10 +110,25 @@
         <h2 style="font-family: var(--font-heading); color: var(--color-primary);">Embed Links</h2>
       </div>
       
+      <!-- Ordered to match the ClickUp client folder's own list order
+           (Campaign Briefs -> Content Calendar -> Recurring Deliverables
+           [no portal field] -> Client Feedback & Revisions -> Assets &
+           Brand Files -> Reports & Analytics -> Active Projects & Tasks
+           -> Completed Work), so filling this out while working down the
+           ClickUp folder is a straight top-to-bottom match instead of
+           hunting around. Fields with no 1:1 ClickUp list (Content
+           Request Form, Upload Files) sit next to the list they're most
+           related to; Google Drive Folder isn't a ClickUp link at all,
+           so it stays last. -->
       <div class="responsive-2col">
         <div class="form-group">
-          <label for="projectsEmbedUrl">Active Projects (ClickUp Embed)</label>
-          <input type="text" id="projectsEmbedUrl" placeholder="https://sharing.clickup.com/.../">
+          <label for="campaignBriefUrl">Campaign Briefs (ClickUp/GDoc Embed)</label>
+          <input type="text" id="campaignBriefUrl" placeholder="https://sharing.clickup.com/.../">
+        </div>
+
+        <div class="form-group">
+          <label for="contentRequestFormUrl">Content Request Form (ClickUp Form)</label>
+          <input type="text" id="contentRequestFormUrl" placeholder="https://forms.clickup.com/.../">
         </div>
 
         <div class="form-group">
@@ -122,13 +137,23 @@
         </div>
 
         <div class="form-group">
-          <label for="campaignBriefUrl">Campaign Briefs (ClickUp/GDoc Embed)</label>
-          <input type="text" id="campaignBriefUrl" placeholder="https://sharing.clickup.com/.../">
+          <label for="feedbackFormUrl">Feedback Form (ClickUp Form)</label>
+          <input type="text" id="feedbackFormUrl" placeholder="https://forms.clickup.com/.../">
         </div>
 
         <div class="form-group">
-          <label for="completedWorkUrl">Completed Work (ClickUp/GDoc Embed)</label>
-          <input type="text" id="completedWorkUrl" placeholder="https://sharing.clickup.com/.../">
+          <label for="revisionFormUrl">Submit a Revision Form (ClickUp Form)</label>
+          <input type="text" id="revisionFormUrl" placeholder="https://forms.clickup.com/.../">
+        </div>
+
+        <div class="form-group">
+          <label for="brandAssetsUrl">Assets & Brand View (ClickUp Embed)</label>
+          <input type="text" id="brandAssetsUrl" placeholder="https://sharing.clickup.com/.../">
+        </div>
+
+        <div class="form-group">
+          <label for="fileUploadUrl">Upload Files (JotForm/Form Embed)</label>
+          <input type="text" id="fileUploadUrl" placeholder="https://form.jotform.com/...">
         </div>
 
         <div class="form-group">
@@ -137,33 +162,18 @@
         </div>
 
         <div class="form-group">
-          <label for="feedbackFormUrl">Feedback Form (ClickUp Form)</label>
-          <input type="text" id="feedbackFormUrl" placeholder="https://forms.clickup.com/.../">
-        </div>
-        
-        <div class="form-group">
-          <label for="revisionFormUrl">Submit a Revision Form (ClickUp Form)</label>
-          <input type="text" id="revisionFormUrl" placeholder="https://forms.clickup.com/.../">
-        </div>
-
-        <div class="form-group">
-          <label for="contentRequestFormUrl">Content Request Form (ClickUp Form)</label>
-          <input type="text" id="contentRequestFormUrl" placeholder="https://forms.clickup.com/.../">
-        </div>
-        
-        <div class="form-group">
-          <label for="brandAssetsUrl">Assets & Brand View (ClickUp Embed)</label>
-          <input type="text" id="brandAssetsUrl" placeholder="https://sharing.clickup.com/.../">
-        </div>
-
-        <div class="form-group">
           <label for="monthlyReportsUrl">Monthly Reports (ClickUp/GDoc Embed)</label>
           <input type="text" id="monthlyReportsUrl" placeholder="https://sharing.clickup.com/.../">
         </div>
 
         <div class="form-group">
-          <label for="fileUploadUrl">Upload Files (JotForm/Form Embed)</label>
-          <input type="text" id="fileUploadUrl" placeholder="https://form.jotform.com/...">
+          <label for="projectsEmbedUrl">Active Projects (ClickUp Embed)</label>
+          <input type="text" id="projectsEmbedUrl" placeholder="https://sharing.clickup.com/.../">
+        </div>
+
+        <div class="form-group">
+          <label for="completedWorkUrl">Completed Work (ClickUp/GDoc Embed)</label>
+          <input type="text" id="completedWorkUrl" placeholder="https://sharing.clickup.com/.../">
         </div>
 
         <div class="form-group">
