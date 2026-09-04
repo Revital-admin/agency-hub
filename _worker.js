@@ -2376,10 +2376,13 @@ async function handleCreateClientDriveFolder(request, env) {
 const CLICKUP_DELIVERY_SPACE_ID = "901313679401";
 const CLICKUP_WORKSPACE_ID = "9013958594"; // confirmed via clickup_get_workspace_hierarchy
 
-// Case-insensitive substring match against saved Folder Template names -
-// "Client Portal Template" is the folder living in Guides & Templates
-// today, but this matches loosely in case it ever gets renamed slightly.
-const CLIENT_CLICKUP_TEMPLATE_NAME_HINT = "client portal template";
+// Case-insensitive substring match against saved Folder Template names.
+// The actual saved template is named "Client Portal" (confirmed Sept
+// 2026 - not "Client Portal Template", which is just the example folder
+// it was saved from, living in Guides & Templates). Matching on the
+// shorter "client portal" catches both names plus minor future renames,
+// since .includes() only needs the template's name to CONTAIN this hint.
+const CLIENT_CLICKUP_TEMPLATE_NAME_HINT = "client portal";
 
 const CLIENT_CLICKUP_LIST_TEMPLATE = [
   "📋 Campaign Briefs",
