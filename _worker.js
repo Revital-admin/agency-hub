@@ -2351,19 +2351,35 @@ async function handleCreateClientDriveFolder(request, env) {
 
 // ── POST /api/create-client-clickup-folder ──
 // Auto-builds a new client's ClickUp folder inside the "Delivery" space
-// (id below), with the same 8-list layout every existing client folder
-// there already has (checked live via the workspace hierarchy - Evry
-// Intention LLC, Reginald White, and the "Demo Client - Revital
-// Productions" folder are all identical). Also mirrors the "Client Portal
-// Template" folder living in the Guides & Templates space, which is the
-// intended template but - same as the Drive folder tree above - there's
-// no ClickUp API to "duplicate a folder," so the list names are just
-// hardcoded below instead of read live from the template each time.
+// (id below). Two paths:
+//
+// 1. Preferred: ClickUp's real Folder Template API (GET .../folder_template
+//    to discover a saved template's id, POST .../folder_template/{id} to
+//    clone it) - this is the only way to actually carry over a template's
+//    full configuration (the "Client Portal Template" folder in Guides &
+//    Templates has a real custom status workflow per list - brief
+//    received -> in production -> internal review -> client review ->
+//    revision requested -> approved -> published -> complete, confirmed
+//    live via clickup_get_list - plus each list's description/content).
+//    Only works if that folder (or another one) has actually been saved
+//    as a Folder Template in ClickUp (right-click a folder -> Save as
+//    template, or Space Settings -> Templates) - there's no API to check
+//    that ahead of time other than the lookup below.
+// 2. Fallback: bare folder + the same 8 list names, no statuses/content -
+//    what this route did before. Used automatically if no matching
+//    template is found (or the template create call fails for any
+//    reason), so client creation never breaks even if nothing's been
+//    saved as a template yet.
 //
 // Requires the same CLICKUP_API_TOKEN secret already used by the
 // Sales Pipeline / Onboarding Handoff sync routes above.
 const CLICKUP_DELIVERY_SPACE_ID = "901313679401";
 const CLICKUP_WORKSPACE_ID = "9013958594"; // confirmed via clickup_get_workspace_hierarchy
+
+// Case-insensitive substring match against saved Folder Template names -
+// "Client Portal Template" is the folder living in Guides & Templates
+// today, but this matches loosely in case it ever gets renamed slightly.
+const CLIENT_CLICKUP_TEMPLATE_NAME_HINT = "client portal template";
 
 const CLIENT_CLICKUP_LIST_TEMPLATE = [
   "📋 Campaign Briefs",
@@ -2375,6 +2391,27 @@ const CLIENT_CLICKUP_LIST_TEMPLATE = [
   "🚀 Active Projects & Tasks",
   "✅ Completed Work"
 ];
+
+// Best-effort lookup, not required for the route to work - see the fallback
+// path above. Response shape isn't fully documented publicly, so this
+// checks the couple of key names ClickUp's other list-style endpoints use
+// rather than assuming one.
+async function findClickUpFolderTemplateId(apiToken) {
+  try {
+    const res = await fetch(`https://api.clickup.com/api/v2/team/${CLICKUP_WORKSPACE_ID}/folder_template`, {
+      headers: { Authorization: apiToken }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return null;
+    const templates = data.templates || data.folder_templates || (Array.isArray(data) ? data : []);
+    if (!Array.isArray(templates)) return null;
+    const match = templates.find(t => (t && t.name || "").trim().toLowerCase().includes(CLIENT_CLICKUP_TEMPLATE_NAME_HINT));
+    return match ? match.id : null;
+  } catch (e) {
+    console.warn("ClickUp folder template lookup failed:", e);
+    return null;
+  }
+}
 
 async function handleCreateClientClickUpFolder(request, env) {
   const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
@@ -2397,6 +2434,27 @@ async function handleCreateClientClickUpFolder(request, env) {
   const apiToken = env.CLICKUP_API_TOKEN;
   if (!apiToken) return jsonResponse({ error: "Server missing CLICKUP_API_TOKEN secret" }, 500);
 
+  // Path 1: real Folder Template, if one's been saved.
+  try {
+    const templateId = await findClickUpFolderTemplateId(apiToken);
+    if (templateId) {
+      const tplRes = await fetch(`https://api.clickup.com/api/v2/space/${CLICKUP_DELIVERY_SPACE_ID}/folder_template/${templateId}`, {
+        method: "POST",
+        headers: { Authorization: apiToken, "Content-Type": "application/json" },
+        body: JSON.stringify({ name: clientName })
+      });
+      const tplData = await tplRes.json().catch(() => ({}));
+      if (tplRes.ok && tplData && tplData.id) {
+        const folderUrl = `https://app.clickup.com/${CLICKUP_WORKSPACE_ID}/v/f/${tplData.id}`;
+        return jsonResponse({ ok: true, folderId: tplData.id, folderUrl, fromTemplate: true }, 200, { "Cache-Control": "no-store" });
+      }
+      console.warn("ClickUp create-folder-from-template failed, falling back to bare list build:", tplData.err || tplRes.status);
+    }
+  } catch (e) {
+    console.warn("ClickUp folder-template path threw, falling back to bare list build:", e);
+  }
+
+  // Path 2: fallback - bare folder + matching list names, no statuses/content.
   try {
     const folderRes = await fetch(`https://api.clickup.com/api/v2/space/${CLICKUP_DELIVERY_SPACE_ID}/folder`, {
       method: "POST",
@@ -2424,7 +2482,7 @@ async function handleCreateClientClickUpFolder(request, env) {
     }
 
     const folderUrl = `https://app.clickup.com/${CLICKUP_WORKSPACE_ID}/v/f/${folder.id}`;
-    return jsonResponse({ ok: true, folderId: folder.id, folderUrl }, 200, { "Cache-Control": "no-store" });
+    return jsonResponse({ ok: true, folderId: folder.id, folderUrl, fromTemplate: false }, 200, { "Cache-Control": "no-store" });
   } catch (e) {
     console.error("Create client ClickUp folder failed:", e);
     return jsonResponse({ error: e.message }, 500);
