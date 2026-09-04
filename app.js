@@ -1593,8 +1593,7 @@ function createNewClient() {
   showBanner("success", `Client workspace "${name}" initialized successfully!`);
   logAdminActivity("Client created", name);
   generateNewClientOnboardingEmails(clientsDb[name], name).catch(e => console.warn("Could not draft onboarding emails:", e));
-  createClientDriveFolder(name).catch(e => console.warn("Could not auto-create Drive folder:", e));
-  createClientClickUpFolder(name).catch(e => console.warn("Could not auto-create ClickUp folder:", e));
+  setUpNewClientFolders(name).catch(e => console.warn("Could not set up new client folders:", e));
 }
 
 function renameActiveClient() {
@@ -6982,6 +6981,7 @@ async function createClientDriveFolder(name) {
   if (!client) return; // renamed/deleted before this resolved
   if (!client.portalConfig) client.portalConfig = {};
   client.portalConfig.driveFolderUrl = data.folderUrl;
+  client.portalConfig.driveFolderId = data.folderId || "";
   saveDatabase();
   refreshAllViews({ skipActiveIframeReload: true });
   pushAdminNotification('client_drive_folder', `Google Drive folder created for ${name}.`, name, null);
@@ -7006,9 +7006,55 @@ async function createClientClickUpFolder(name) {
   const client = clientsDb[name];
   if (!client) return; // renamed/deleted before this resolved
   client.clickupUrl = data.folderUrl;
+  client.clickupFolderId = data.folderId || "";
   saveDatabase();
   refreshAllViews({ skipActiveIframeReload: true });
   pushAdminNotification('client_clickup_folder', `ClickUp folder created for ${name}.`, name, null);
+}
+
+// Runs the Drive + ClickUp folder auto-create together (previously two
+// independent fire-and-forget calls with only a console.warn on failure -
+// exactly how TheHightTable's missing folders went unnoticed until asked
+// about directly). Now surfaces a real admin notification on failure, and
+// once both succeed, cross-links them via /api/link-client-folders - the
+// Drive folder's description gets the ClickUp URL, and a "Client Links"
+// ClickUp Doc gets created in the folder with the Drive URL.
+async function setUpNewClientFolders(name) {
+  const [driveResult, clickupResult] = await Promise.allSettled([
+    createClientDriveFolder(name),
+    createClientClickUpFolder(name)
+  ]);
+
+  if (driveResult.status === "rejected") {
+    console.warn("Could not auto-create Drive folder:", driveResult.reason);
+    const reason = (driveResult.reason && driveResult.reason.message) || "unknown error";
+    pushAdminNotification('client_drive_folder_failed', `Couldn't auto-create a Google Drive folder for ${name} (${reason}). Add one manually in Client Portal Manager.`, name, null);
+  }
+  if (clickupResult.status === "rejected") {
+    console.warn("Could not auto-create ClickUp folder:", clickupResult.reason);
+    const reason = (clickupResult.reason && clickupResult.reason.message) || "unknown error";
+    pushAdminNotification('client_clickup_folder_failed', `Couldn't auto-create a ClickUp folder for ${name} (${reason}). Add one manually in Client Portal Manager.`, name, null);
+  }
+
+  if (driveResult.status === "fulfilled" && clickupResult.status === "fulfilled") {
+    const client = clientsDb[name];
+    const driveFolderId = client && client.portalConfig && client.portalConfig.driveFolderId;
+    const clickupFolderId = client && client.clickupFolderId;
+    if (driveFolderId && clickupFolderId) {
+      linkClientFolders(name, driveFolderId, clickupFolderId).catch(e => console.warn(`Could not cross-link folders for ${name}:`, e));
+    }
+  }
+}
+
+async function linkClientFolders(name, driveFolderId, clickupFolderId) {
+  const res = await fetch("/api/link-client-folders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ clientName: name, driveFolderId, clickupFolderId })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
 }
 
 // Slow-moving signal, so this only needs to run occasionally rather than on
@@ -7655,6 +7701,8 @@ const ADMIN_NOTIF_TARGET_TAB = {
   stale_client: 'tab-portal',
   client_drive_folder: 'tab-portal',
   client_clickup_folder: 'tab-portal',
+  client_drive_folder_failed: 'tab-portal',
+  client_clickup_folder_failed: 'tab-portal',
   client_welcome_email: 'tab-welcomeguide',
   client_intake_email: 'tab-intakerequest',
   report_overdue: 'tab-reportarchive',

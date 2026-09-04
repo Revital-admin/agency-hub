@@ -137,6 +137,13 @@ export default {
       return handleCreateClientClickUpFolder(request, env);
     }
 
+    // Cross-links a client's Drive and ClickUp folders once both exist -
+    // fired from setUpNewClientFolders() in app.js right after the two
+    // creates above both succeed. See handleLinkClientFolders below.
+    if (url.pathname === "/api/link-client-folders" && request.method === "POST") {
+      return handleLinkClientFolders(request, env);
+    }
+
     // Contractor Portal - deliberately no Cf-Access check, since this has
     // to work for someone with no revitalproductions.com account at all,
     // holding only their own magic-link token. Unlike /api/booking/* above,
@@ -2601,6 +2608,110 @@ async function handleCreateClientClickUpFolder(request, env) {
     console.error("Create client ClickUp folder failed:", e);
     return jsonResponse({ error: e.message }, 500);
   }
+}
+
+// ── POST /api/link-client-folders ──
+// Cross-links a client's Drive folder and ClickUp folder once both exist,
+// so someone working in either system can find the other without going
+// back to the Hub. Fired from setUpNewClientFolders() in app.js right
+// after both auto-creates succeed (does nothing if either failed, since
+// there's nothing to link yet).
+//
+// Two independent, best-effort operations - one succeeding doesn't
+// depend on the other, and either can fail without the client creation
+// itself being affected (both already exist and are usable regardless):
+// 1. Sets the Drive folder's own `description` field to the ClickUp
+//    folder's URL (Drive files support a native description - no need
+//    for an extra file just to hold this).
+// 2. Creates a "🔗 Client Links" Doc inside the ClickUp folder (ClickUp
+//    Folders have no description field of their own via the API, unlike
+//    Drive) with the Drive URL on its one page. Uses the same
+//    CLICKUP_API_TOKEN personal token as every other ClickUp route here -
+//    confirmed live (Sept 2026) that personal tokens work identically
+//    against the v3 Docs endpoints as the v2 ones used elsewhere, no
+//    separate OAuth token needed.
+async function handleLinkClientFolders(request, env) {
+  const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+
+  const clientName = (payload && payload.clientName || "").trim();
+  const driveFolderId = (payload && payload.driveFolderId || "").trim();
+  const clickupFolderId = (payload && payload.clickupFolderId || "").trim();
+  if (!clientName || !driveFolderId || !clickupFolderId) {
+    return jsonResponse({ error: "clientName, driveFolderId, and clickupFolderId are required" }, 400);
+  }
+
+  const clickupUrl = `https://app.clickup.com/${CLICKUP_WORKSPACE_ID}/v/f/${clickupFolderId}`;
+  const driveUrl = `https://drive.google.com/drive/folders/${driveFolderId}`;
+  const results = {};
+
+  // 1. Drive folder description -> ClickUp link
+  try {
+    const accessToken = await getGoogleAccessTokenForUser(env, "https://www.googleapis.com/auth/drive", TEAM_CALENDAR_OWNER_EMAIL);
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFolderId)}?supportsAllDrives=true`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ description: `ClickUp folder: ${clickupUrl}` })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((data.error && data.error.message) || `Drive description update failed (${res.status})`);
+    results.drive = { ok: true };
+  } catch (e) {
+    console.warn(`Drive cross-link failed for "${clientName}":`, e);
+    results.drive = { ok: false, error: e.message };
+  }
+
+  // 2. ClickUp "Client Links" Doc -> Drive link
+  try {
+    const apiToken = env.CLICKUP_API_TOKEN;
+    if (!apiToken) throw new Error("Server missing CLICKUP_API_TOKEN secret");
+
+    const docRes = await fetch(`https://api.clickup.com/api/v3/workspaces/${CLICKUP_WORKSPACE_ID}/docs`, {
+      method: "POST",
+      headers: { Authorization: apiToken, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "🔗 Client Links",
+        parent: { id: clickupFolderId, type: 5 }, // 5 = folder
+        visibility: "PRIVATE",
+        create_page: true
+      })
+    });
+    const docData = await docRes.json().catch(() => ({}));
+    if (!docRes.ok || !docData.id) throw new Error(docData.err || `ClickUp doc create failed (${docRes.status})`);
+
+    const pagesRes = await fetch(`https://api.clickup.com/api/v3/workspaces/${CLICKUP_WORKSPACE_ID}/docs/${docData.id}/pages?content_format=text/md&max_page_depth=0`, {
+      headers: { Authorization: apiToken }
+    });
+    const pagesData = await pagesRes.json().catch(() => ([]));
+    const firstPage = Array.isArray(pagesData) ? pagesData[0] : (pagesData.pages && pagesData.pages[0]);
+
+    if (firstPage && firstPage.id) {
+      await fetch(`https://api.clickup.com/api/v3/workspaces/${CLICKUP_WORKSPACE_ID}/docs/${docData.id}/pages/${firstPage.id}`, {
+        method: "PUT",
+        headers: { Authorization: apiToken, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: `# Client Links\n\n**Google Drive folder:** ${driveUrl}\n\n**ClickUp folder:** ${clickupUrl}`,
+          content_edit_mode: "replace",
+          content_format: "text/md"
+        })
+      });
+    }
+    results.clickup = { ok: true, docId: docData.id };
+  } catch (e) {
+    console.warn(`ClickUp cross-link failed for "${clientName}":`, e);
+    results.clickup = { ok: false, error: e.message };
+  }
+
+  return jsonResponse({ ok: true, results }, 200, { "Cache-Control": "no-store" });
 }
 
 // ── POST /api/resource-booking/sync-calendar ──
