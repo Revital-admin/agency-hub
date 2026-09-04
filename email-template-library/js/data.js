@@ -47,7 +47,7 @@ const EMAIL_TEMPLATES = [
     subjectLine: "Welcome to Revital Productions 🎉",
     format: "html",
     date: "2026-07-21",
-    content: "<p>Hi {{contactName}},</p><p>Welcome aboard! We're excited to start working with {{clientName}}.</p><p>Attached is your Welcome Guide — it covers how to reach us, what to expect over the next few weeks, and how to use your client portal.</p><p>Talk soon,<br>{{accountManagerName}}</p>"
+    content: "<p>Hi {{contactName}},</p><p>Welcome aboard! We're excited to start working with {{clientName}}.</p><p>Attached is your Welcome Guide — it covers how to reach us, what to expect over the next few weeks, and how to use your client portal.</p><p>You can access your client portal here: {{portalLink}}</p><p>Talk soon,<br>{{accountManagerName}}</p>"
   },
   {
     id: "tpl-kickoff-10",
@@ -187,7 +187,7 @@ const EMAIL_TEMPLATES = [
     subjectLine: "Your Onboarding Form — Revital Productions",
     format: "html",
     date: "2026-07-21",
-    content: "<p>Hi {{contactName}},</p><p>Welcome again — attached is your Client Onboarding Form. This is how we learn everything we need to know about your business, brand, and goals before our kick-off call.</p><p>Please complete and return this within 48 hours so we can schedule your kick-off call.</p>"
+    content: "<p>Hi {{contactName}},</p><p>Welcome again — attached is your Client Onboarding Form. This is how we learn everything we need to know about your business, brand, and goals before our kick-off call.</p><p>Please complete and return this within 48 hours so we can schedule your kick-off call.</p><p>As a reminder, you can access your client portal here: {{portalLink}}</p>"
   },
   {
     id: "tpl-intake-followup-17b",

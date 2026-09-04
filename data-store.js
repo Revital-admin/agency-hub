@@ -19,7 +19,14 @@ const DEFAULT_ONBOARDING_CHECKLIST = [
     items: [
       { id: 'ob_admin1', label: 'Send welcome package with timelines, team roles, and communication protocols' },
       { id: 'ob_admin2', label: 'Collect signed agreements, NDAs, and process initial invoices' },
-      { id: 'ob_admin3', label: 'Gather access credentials (GA4, Google Ads, CMS, Social accounts, etc.)' }
+      { id: 'ob_admin3', label: 'Gather access credentials (GA4, Google Ads, CMS, Social accounts, etc.)' },
+      // ClickUp's API has no endpoint to enable public sharing or mint a
+      // sharing.clickup.com link (confirmed Sept 2026 - still an open
+      // feature request, UI-only) - so the folder/lists auto-created for
+      // this client can be pulled programmatically, but these 5 public
+      // view links genuinely can't be. Paste each into Client Portal
+      // Manager's matching field once created.
+      { id: 'ob_admin4', label: "Enable public sharing on this client's ClickUp list views (Active Projects & Tasks, Content Calendar, Campaign Briefs, Completed Work, Assets & Brand Files) and paste each link into Client Portal Manager" }
     ]
   },
   {

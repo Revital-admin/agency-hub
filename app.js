@@ -6926,6 +6926,13 @@ async function generateNewClientOnboardingEmails(client, name) {
   const contactName = config.clientContactName || name;
   const accountManagerName = config.accountManagerName || "the Revital Productions team";
   const contactEmail = config.clientContactEmail || "";
+  // magicToken is set by createClientBlankState() before this ever runs
+  // (createNewClient sets clientsDb[name] first, then calls this), so the
+  // real client portal link is always available here - no more leaving
+  // {{portalLink}} for someone to hunt down in Client Portal Manager later.
+  const portalLink = config.magicToken
+    ? `${window.location.origin}/portal/index.html?c=${encodeURIComponent(name)}&t=${config.magicToken}`
+    : "";
 
   const [welcomeTpl, intakeTpl] = await Promise.all([
     fetchEmailTemplateById("tpl-welcome-8"),
@@ -6933,7 +6940,7 @@ async function generateNewClientOnboardingEmails(client, name) {
   ]);
 
   if (welcomeTpl) {
-    const filled = fillTemplateVars(welcomeTpl.content, { contactName, clientName: name, accountManagerName });
+    const filled = fillTemplateVars(welcomeTpl.content, { contactName, clientName: name, accountManagerName, portalLink });
     const body = templateHtmlToPlainText(filled) + "\n\n[Reference copy only - once this client's Account Manager info is filled in, use the \"Email to Client\" button inside the Welcome Guide Gen tool to send this with the real PDF attached.]";
     pushAdminNotification(
       'client_welcome_email',
@@ -6944,7 +6951,7 @@ async function generateNewClientOnboardingEmails(client, name) {
   }
 
   if (intakeTpl) {
-    const filled = fillTemplateVars(intakeTpl.content, { contactName, clientName: name, accountManagerName });
+    const filled = fillTemplateVars(intakeTpl.content, { contactName, clientName: name, accountManagerName, portalLink });
     const body = templateHtmlToPlainText(filled) + "\n\n[Reference copy only - once this client's Account Manager info is filled in, use the \"Email to Client\" button inside the Intake Request Gen tool to send this with the real PDF attached.]";
     pushAdminNotification(
       'client_intake_email',
