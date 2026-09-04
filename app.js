@@ -6922,42 +6922,35 @@ async function fetchEmailTemplateById(templateId) {
 // or account manager for Intake) is the one who knows when it's actually
 // ready to go out, not a fixed timing rule.
 async function generateNewClientOnboardingEmails(client, name) {
-  const config = client.portalConfig || {};
-  const contactName = config.clientContactName || name;
-  const accountManagerName = config.accountManagerName || "the Revital Productions team";
-  const contactEmail = config.clientContactEmail || "";
-  // magicToken is set by createClientBlankState() before this ever runs
-  // (createNewClient sets clientsDb[name] first, then calls this), so the
-  // real client portal link is always available here - no more leaving
-  // {{portalLink}} for someone to hunt down in Client Portal Manager later.
-  const portalLink = config.magicToken
-    ? `${window.location.origin}/portal/index.html?c=${encodeURIComponent(name)}&t=${config.magicToken}`
-    : "";
-
+  // These two used to carry a draftEmail (rendered as a small inline
+  // compose panel in the notification dropdown - To/Subject/Body/Copy/
+  // mailto, squeezed into the sidebar-width dropdown). Both were always
+  // "reference copy only" anyway - the real send happens from Welcome
+  // Guide Gen / Intake Request Gen, which already auto-fill the client's
+  // real portal link and attach the actual PDF. So instead of showing a
+  // cramped preview, these now just click-through straight to that tool
+  // (see ADMIN_NOTIF_TARGET_TAB: client_welcome_email/client_intake_email)
+  // - one click, full-size tool, nothing lost.
   const [welcomeTpl, intakeTpl] = await Promise.all([
     fetchEmailTemplateById("tpl-welcome-8"),
     fetchEmailTemplateById("tpl-intake-send-17")
   ]);
 
   if (welcomeTpl) {
-    const filled = fillTemplateVars(welcomeTpl.content, { contactName, clientName: name, accountManagerName, portalLink });
-    const body = templateHtmlToPlainText(filled) + "\n\n[Reference copy only - once this client's Account Manager info is filled in, use the \"Email to Client\" button inside the Welcome Guide Gen tool to send this with the real PDF attached.]";
     pushAdminNotification(
       'client_welcome_email',
-      `Welcome email drafted for ${name}.`,
+      `Welcome email ready for ${name} - click to open Welcome Guide Gen.`,
       name,
-      { to: contactEmail, subject: welcomeTpl.subjectLine, body: body }
+      null
     );
   }
 
   if (intakeTpl) {
-    const filled = fillTemplateVars(intakeTpl.content, { contactName, clientName: name, accountManagerName, portalLink });
-    const body = templateHtmlToPlainText(filled) + "\n\n[Reference copy only - once this client's Account Manager info is filled in, use the \"Email to Client\" button inside the Intake Request Gen tool to send this with the real PDF attached.]";
     pushAdminNotification(
       'client_intake_email',
-      `Intake form email drafted for ${name}.`,
+      `Intake form ready for ${name} - click to open Intake Request Gen.`,
       name,
-      { to: contactEmail, subject: intakeTpl.subjectLine, body: body }
+      null
     );
   }
 }
@@ -7661,6 +7654,8 @@ const ADMIN_NOTIF_TARGET_TAB = {
   stale_client: 'tab-portal',
   client_drive_folder: 'tab-portal',
   client_clickup_folder: 'tab-portal',
+  client_welcome_email: 'tab-welcomeguide',
+  client_intake_email: 'tab-intakerequest',
   report_overdue: 'tab-reportarchive',
   reengagement_reminder: 'tab-renewaltracker',
   upsell_opportunity: 'tab-budgetpacing',
