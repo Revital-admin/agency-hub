@@ -49,6 +49,61 @@ function listenToActivityLog() {
   }, (err) => console.error("Activity log listener error:", err));
 }
 
+// ── Email Delivery ──
+// One doc per Resend message id (see _worker.js's handleSendEmail /
+// handleResendWebhook) - a real Firestore collection, not a single
+// {list:[...]} doc like adminActivityLog above, so this listens on the
+// whole collection rather than one doc. Same reasoning as
+// hoursLogEntries/contractInvoiceRecords: per-record docs so a growing
+// send history never risks a single document's size limit.
+let emailSends = [];
+
+const EMAIL_STATUS_LABELS = {
+  sent: "Sent",
+  delivered: "Delivered",
+  delivery_delayed: "Delayed",
+  bounced: "Bounced",
+  complained: "Marked spam",
+  opened: "Opened",
+  clicked: "Clicked",
+  failed: "Failed"
+};
+
+function listenToEmailSends() {
+  if (!isEmbedded || !window.parent.firebaseCollection || !window.parent.firebaseDb || !window.parent.firebaseOnSnapshot) return;
+  const ref = window.parent.firebaseCollection(window.parent.firebaseDb, "emailSends");
+  window.parent.firebaseOnSnapshot(ref, (snap) => {
+    emailSends = (snap.docs || []).map(d => Object.assign({ id: d.id }, d.data()));
+    renderEmailDeliveryList();
+  }, (err) => console.error("Email delivery listener error:", err));
+}
+
+function renderEmailDeliveryList() {
+  const listEl = el('emailDeliveryList');
+  const emptyEl = el('emailDeliveryEmpty');
+  if (!listEl || !emptyEl) return;
+
+  const sorted = [...emailSends].sort((a, b) => new Date(b.sentAt || 0) - new Date(a.sentAt || 0));
+
+  emptyEl.style.display = sorted.length === 0 ? "block" : "none";
+
+  listEl.innerHTML = sorted.map(entry => {
+    const status = entry.status || "sent";
+    const label = EMAIL_STATUS_LABELS[status] || status;
+    return `
+    <div class="activity-log-row">
+      <div class="activity-log-row-main">
+        <span class="activity-log-action">${escapeHtml(entry.tool || "Email")}${entry.clientName ? ` — ${escapeHtml(entry.clientName)}` : ""}</span>
+        <span class="activity-log-details">${escapeHtml(entry.subject || "")}${entry.to ? ` · to ${escapeHtml(entry.to)}` : ""}</span>
+      </div>
+      <div class="activity-log-row-meta">
+        <span class="email-status-badge status-${escapeHtml(status)}">${escapeHtml(label)}</span>
+        <span class="activity-log-time">${timeAgoLabel(entry.statusUpdatedAt || entry.sentAt)}</span>
+      </div>
+    </div>`;
+  }).join("");
+}
+
 function renderList() {
   const searchText = (el('activityLogSearchInput').value || "").trim().toLowerCase();
   const listEl = el('activityLogList');
@@ -79,6 +134,7 @@ function renderList() {
 document.addEventListener('DOMContentLoaded', () => {
   el('activityLogSearchInput').addEventListener('input', renderList);
   listenToActivityLog();
+  listenToEmailSends();
 
   // Same iframe-load-race guard used across the other cross-client tools -
   // the parent's firebase globals can be a beat behind this iframe's own
@@ -88,6 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
     pollAttempts++;
     if (window.parent.firebaseDb) {
       listenToActivityLog();
+      listenToEmailSends();
       clearInterval(pollTimer);
     } else if (pollAttempts >= 30) {
       clearInterval(pollTimer);

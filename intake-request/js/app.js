@@ -306,6 +306,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      // Fetched once here so it's available for the emailSends metadata
+      // in the /api/send-email call further down.
+      const activeClient = getParentActiveClient();
+
       emailToClientSendBtn.disabled = true;
       emailToClientSendBtn.textContent = 'Generating PDF...';
       if (emailToClientStatus) emailToClientStatus.textContent = '';
@@ -337,7 +341,13 @@ document.addEventListener('DOMContentLoaded', () => {
             subject: emailToClientSubject.value,
             body: emailToClientBody.value,
             from: currentEmailToClientFrom,
-            attachments: [{ filename: opt.filename, content: base64 }]
+            attachments: [{ filename: opt.filename, content: base64 }],
+            // Metadata only - lets the Hub's emailSends record (and later
+            // a delivery-status webhook) show which client/tool this send
+            // belonged to. See _worker.js's handleSendEmail.
+            clientId: activeClient ? (activeClient.id || null) : null,
+            clientName: activeClient ? (activeClient.name || null) : null,
+            tool: 'Intake Request Gen'
           })
         });
         const data = await res.json().catch(() => ({}));

@@ -509,6 +509,11 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      // Fetched once here (rather than re-fetched inside the 90-Day Plan
+      // block below) so it's also available for the emailSends metadata
+      // in the /api/send-email call further down.
+      const activeClient = getParentActiveClient();
+
       emailToClientSendBtn.disabled = true;
       emailToClientSendBtn.textContent = 'Generating PDF...';
       if (emailToClientStatus) emailToClientStatus.textContent = '';
@@ -539,7 +544,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // tuned html2pdf options - not the live pdfContainer above, which
         // only ever holds Welcome Guide content.
         if (attach90DayPlanCheckbox && attach90DayPlanCheckbox.checked) {
-          const client = getParentActiveClient();
+          const client = activeClient;
           if (client && client.ninetyDayPlan && window.parent.build90DayPlanHtml) {
             const planClientName = (document.getElementById('clientName').value || '').trim() || client.name || 'Client';
             const planContainer = document.createElement('div');
@@ -569,7 +574,13 @@ document.addEventListener('DOMContentLoaded', () => {
             subject: emailToClientSubject.value,
             body: emailToClientBody.value,
             from: currentEmailToClientFrom,
-            attachments
+            attachments,
+            // Metadata only - lets the Hub's emailSends record (and later
+            // a delivery-status webhook) show which client/tool this send
+            // belonged to. See _worker.js's handleSendEmail.
+            clientId: activeClient ? (activeClient.id || null) : null,
+            clientName: activeClient ? (activeClient.name || null) : null,
+            tool: 'Welcome Guide Gen'
           })
         });
         const data = await res.json().catch(() => ({}));

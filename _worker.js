@@ -219,6 +219,18 @@ export default {
       return handleStripeWebhook(request, env);
     }
 
+    // Resend's delivery-status webhook - same book.revitalproductions.com
+    // / no-Cf-Access-check reasoning as the Stripe webhook immediately
+    // above (Resend's own servers call this directly, not through a
+    // browser that's been through Access; trust comes entirely from the
+    // Svix signature check inside the handler). MUST be registered in
+    // Resend as https://book.revitalproductions.com/api/resend-webhook,
+    // NOT the hub.revitalproductions.com one. See handleResendWebhook
+    // below for the full one-time setup steps and secret needed.
+    if (url.pathname === "/api/resend-webhook" && request.method === "POST") {
+      return handleResendWebhook(request, env);
+    }
+
     // ── QuickBooks Online (Financial Center) ──
     // oauth-start/oauth-callback are visited directly by the browser (not
     // fetch()), so they read/redirect rather than return JSON - see the
@@ -367,7 +379,13 @@ async function handleSendEmail(request, env) {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
 
-  const { to, subject, body, from, replyTo, attachments } = payload || {};
+  // clientId/clientName/tool are optional metadata (Welcome Guide Gen /
+  // Intake Request Gen pass these) - purely for the emailSends record
+  // below so a later delivery-status webhook (or a human in Activity
+  // Log) can tell which client/tool a given send belonged to. Absent for
+  // any other caller of this route; that's fine, the record just won't
+  // have them.
+  const { to, subject, body, from, replyTo, attachments, clientId, clientName, tool } = payload || {};
 
   if (!to || !subject || !body) {
     return jsonResponse({ error: "Missing required field: to, subject, and body are all required" }, 400);
@@ -436,6 +454,34 @@ async function handleSendEmail(request, env) {
     if (!resendRes.ok) {
       console.error("Resend send failed:", resendRes.status, resendData);
       return jsonResponse({ error: resendData.message || "Resend API error", status: resendRes.status }, 502);
+    }
+
+    // Best-effort record of this send, keyed by Resend's own message id -
+    // this is what lets /api/resend-webhook (see below) later attach a
+    // real delivery status to it instead of the Hub only ever knowing
+    // "we successfully handed this to Resend." A failure here should
+    // never fail the send response itself; Resend already has the email
+    // by this point, this is purely the Hub's own tracking on top.
+    if (resendData.id) {
+      try {
+        const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+        const nowIso = new Date().toISOString();
+        await firestoreSetDoc(accessToken, projectId, `emailSends/${resendData.id}`, {
+          clientId: clientId || null,
+          clientName: clientName || null,
+          tool: tool || null,
+          to: Array.isArray(to) ? to.join(", ") : (to || null),
+          subject: subject || null,
+          from: fromAddress,
+          sentAt: nowIso,
+          sentBy: accessEmail,
+          status: "sent",
+          statusUpdatedAt: nowIso,
+          events: [{ type: "sent", at: nowIso }]
+        });
+      } catch (logErr) {
+        console.error("Failed to record emailSends entry (send itself still succeeded):", logErr);
+      }
     }
 
     return jsonResponse({ success: true, id: resendData.id || null }, 200, { "Cache-Control": "no-store" });
@@ -4381,6 +4427,146 @@ async function handleStripeWebhook(request, env) {
   }
 
   return jsonResponse({ received: true });
+}
+
+// ── Resend delivery-status webhook ──
+// /api/send-email (above) only ever tells the Hub "Resend accepted this
+// for delivery" - it has no idea afterward whether the email actually
+// landed, bounced, or was opened. This webhook is how that later status
+// gets back into the Hub: Resend delivers webhooks through Svix, and
+// Svix's payload includes data.email_id, the exact same id
+// /api/send-email already stores as the emailSends/{id} document key -
+// so no matching-by-field step is needed, just a direct doc lookup.
+//
+// One-time manual setup (nothing here works until this is done once):
+//   1. Resend dashboard -> Webhooks -> Add Endpoint
+//        Endpoint: https://book.revitalproductions.com/api/resend-webhook
+//        Events: email.sent, email.delivered, email.delivery_delayed,
+//                email.bounced, email.complained, email.opened,
+//                email.clicked, email.failed
+//      (or via the API - POST https://api.resend.com/webhooks with the
+//      same endpoint + events array, using the existing RESEND_API_KEY)
+//   2. Copy the signing secret Resend gives you (starts with whsec_)
+//      and run: wrangler secret put RESEND_WEBHOOK_SECRET
+const RESEND_EVENT_STATUS_MAP = {
+  "email.sent": "sent",
+  "email.delivered": "delivered",
+  "email.delivery_delayed": "delivery_delayed",
+  "email.bounced": "bounced",
+  "email.complained": "complained",
+  "email.opened": "opened",
+  "email.clicked": "clicked",
+  "email.failed": "failed"
+};
+
+function base64ToBytes(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+function base64FromBytes(bytes) {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+// Resend webhooks are delivered through Svix, whose signing scheme is
+// HMAC-SHA256 over "{svix-id}.{svix-timestamp}.{rawBody}", keyed on the
+// signing secret with its "whsec_" prefix stripped and the remainder
+// base64-decoded (NOT used as raw UTF-8 key bytes - unlike Stripe's
+// scheme above, this is the one place that distinction matters). The
+// svix-signature header can carry multiple space-separated "v1,<sig>"
+// values (secret rotation) - match against any of them. Same
+// from-scratch approach as verifyStripeWebhookSignatureWithSecret,
+// since neither Stripe's nor Svix's SDKs run in the Workers runtime.
+async function verifyResendWebhookSignature(secret, rawBody, headers) {
+  if (!secret) throw new Error("No signing secret configured (RESEND_WEBHOOK_SECRET)");
+  const svixId = headers.get("svix-id");
+  const svixTimestamp = headers.get("svix-timestamp");
+  const svixSignature = headers.get("svix-signature");
+  if (!svixId || !svixTimestamp || !svixSignature) {
+    throw new Error("Missing svix-id/svix-timestamp/svix-signature headers");
+  }
+
+  const ageSeconds = Math.abs(Date.now() / 1000 - Number(svixTimestamp));
+  if (ageSeconds > 300) throw new Error("Webhook timestamp too old (possible replay)");
+
+  const secretBytes = base64ToBytes(secret.replace(/^whsec_/, ""));
+  const key = await crypto.subtle.importKey(
+    "raw", secretBytes,
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const signedContent = `${svixId}.${svixTimestamp}.${rawBody}`;
+  const sigBuffer = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(signedContent));
+  const expectedB64 = base64FromBytes(new Uint8Array(sigBuffer));
+
+  const candidates = svixSignature.split(" ").map(part => part.split(",")[1]).filter(Boolean);
+  if (!candidates.includes(expectedB64)) throw new Error("Signature mismatch");
+
+  return JSON.parse(rawBody);
+}
+
+async function handleResendWebhook(request, env) {
+  const rawBody = await request.text();
+
+  let event;
+  try {
+    event = await verifyResendWebhookSignature(env.RESEND_WEBHOOK_SECRET, rawBody, request.headers);
+  } catch (e) {
+    return jsonResponse({ error: `Webhook signature verification failed: ${e.message}` }, 400);
+  }
+
+  try {
+    await applyResendEventToEmailSends(env, event);
+  } catch (e) {
+    // Ack with 200 regardless - same reasoning as the Stripe webhook
+    // above, a bug in our own processing shouldn't make Resend
+    // retry-storm this event. Logged here for manual follow-up.
+    console.error("Resend webhook processing failed. type=" + event.type + " message=" + (e && e.message) + " name=" + (e && e.name) + " stack=" + (e && e.stack));
+  }
+
+  return jsonResponse({ received: true });
+}
+
+// Merges one Resend event into its matching emailSends/{email_id} doc -
+// get-then-set, same shape as applyStripeEventToContractInvoices above,
+// just keyed directly by document id instead of a list-scan match
+// (Resend hands us the exact id already, so there's no "find the right
+// record" step). Creates the doc from scratch if /api/send-email's own
+// best-effort write never landed (that write failing, or a record from
+// before this feature existed) so an event is never silently dropped.
+async function applyResendEventToEmailSends(env, event) {
+  const status = RESEND_EVENT_STATUS_MAP[event.type];
+  if (!status) return; // domain.*/contact.*/suppression.*/etc. - not tracked here
+
+  const emailId = event.data && event.data.email_id;
+  if (!emailId) return;
+
+  const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+  const existing = await firestoreGetDoc(accessToken, projectId, `emailSends/${emailId}`);
+  const nowIso = event.created_at || new Date().toISOString();
+  const record = existing || {
+    clientId: null,
+    clientName: null,
+    tool: null,
+    to: Array.isArray(event.data.to) ? event.data.to.join(", ") : (event.data.to || null),
+    subject: event.data.subject || null,
+    sentAt: event.data.created_at || nowIso,
+    sentBy: null,
+    events: []
+  };
+
+  record.status = status;
+  record.statusUpdatedAt = nowIso;
+  record.events = Array.isArray(record.events) ? record.events : [];
+  record.events.push({ type: status, at: nowIso });
+  // Cap history - these are one-to-two-page onboarding emails sent a
+  // handful of times per client, not a high-volume transactional
+  // stream, so this ceiling is generous, not a real constraint.
+  if (record.events.length > 20) record.events = record.events.slice(-20);
+
+  await firestoreSetDoc(accessToken, projectId, `emailSends/${emailId}`, record);
 }
 
 // Converts Firestore REST API's typed-value JSON shape ({fields: {name:

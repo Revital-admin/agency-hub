@@ -68,6 +68,24 @@
   color: var(--color-text-muted);
 }
 
+.email-status-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+.email-status-badge.status-sent { background: rgba(148, 163, 184, 0.12); color: #94a3b8; }
+.email-status-badge.status-delivered { background: rgba(34, 197, 94, 0.12); color: #22c55e; }
+.email-status-badge.status-opened,
+.email-status-badge.status-clicked { background: rgba(59, 130, 246, 0.12); color: #3b82f6; }
+.email-status-badge.status-delivery_delayed { background: rgba(246, 141, 95, 0.12); color: #f68d5f; }
+.email-status-badge.status-bounced,
+.email-status-badge.status-failed,
+.email-status-badge.status-complained { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
+
 .empty-state {
   text-align: center;
   padding: 40px 20px;

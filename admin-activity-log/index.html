@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Activity Log</title>
   <link rel="stylesheet" href="../style.css?v=3">
-  <link rel="stylesheet" href="css/style.css?v=3">
+  <link rel="stylesheet" href="css/style.css?v=4">
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
 </head>
 <body>
@@ -34,7 +34,22 @@
       <div id="activityLogList" class="activity-log-list"></div>
       <p id="activityLogEmpty" class="empty-state" style="display:none;">No activity logged yet.</p>
     </div>
+
+    <!-- Email Delivery - separate from the action feed above since it's
+         sourced from a different collection (emailSends, one doc per
+         Resend message id, kept updated by /api/resend-webhook) rather
+         than the single agency/adminActivityLog doc. Shows whether a
+         Welcome Guide / Intake Form email actually landed, not just that
+         someone clicked Send. -->
+    <header class="site-header" style="margin-top: 40px;">
+      <h1 class="site-title" style="font-size: 1.6rem;">Email <em>Delivery</em></h1>
+      <p class="site-subtitle">Status of Welcome Guide / Intake Form emails sent through the Hub, updated automatically as Resend reports delivery, bounces, and opens. Requires the Resend webhook to be configured (see _worker.js) - until then, entries stay at "Sent".</p>
+    </header>
+    <div class="step-card" style="margin-top: 24px; padding: 0;">
+      <div id="emailDeliveryList" class="activity-log-list"></div>
+      <p id="emailDeliveryEmpty" class="empty-state" style="display:none;">No emails sent through the Hub yet.</p>
+    </div>
   </main>
-  <script src="js/app.js?v=2"></script>
+  <script src="js/app.js?v=3"></script>
 </body>
 </html>
