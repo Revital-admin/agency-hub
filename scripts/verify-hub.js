@@ -39,20 +39,36 @@
                               exactly this way originally), or a case
                               can reference a section id that doesn't
                               exist (typo/renamed tab, dead code).
-     5. UNGUARDED WRITES    - (advisory only) tools that call a raw
+     5. FIRST-LOAD COVERAGE - every iframe-based tab must be registered
+                              `true` in app.js's iframeNeedsReload map,
+                              not just wired + dispatched (checks 2-4).
+                              A tab's nav click only ever calls the
+                              function that sets its iframe src when
+                              that map says the tab needs (re)loading -
+                              missing from the map, or present but not
+                              `true`, means the very first click after
+                              page load does nothing and the iframe
+                              stays on its empty index.html src="" from
+                              index.html forever. This is exactly what
+                              happened to File Name Generator (Sept
+                              2026): wired, dispatched, verify-hub.js's
+                              other checks all passed, and it still
+                              never rendered for a real user because
+                              this one extra registration was missed.
+     6. UNGUARDED WRITES    - (advisory only) tools that call a raw
                               Firestore setDoc-style write without
                               going through saveVersionedAgencyDoc.
                               Some of these are legitimate (sharded
                               docs like sop-wiki/clientsDb do their
                               own inline version-guard), so this is a
                               list to review, not a hard failure.
-     6. UNKNOWN ELEMENT IDS - (advisory only) a tool's js calling
+     7. UNKNOWN ELEMENT IDS - (advisory only) a tool's js calling
                               el('someId')/getElementById('someId')
                               for an id that doesn't exist anywhere in
                               that tool's own index.html. Can false-
                               positive on dynamically-created ids, so
                               also advisory.
-     7. UNVERSIONED ASSETS  - every local <script src> and <link
+     8. UNVERSIONED ASSETS  - every local <script src> and <link
                               rel="stylesheet" href> across every tool
                               must carry a ?v=N query string. This
                               stopped being just a style convention in
@@ -69,8 +85,8 @@
                               class the ?v=N convention exists to
                               prevent. Real failure, not advisory.
 
-   Exit code is non-zero only for categories 1-4 and 7 (real bugs). 5
-   and 6 print but never fail the run.
+   Exit code is non-zero only for categories 1-5 and 8 (real bugs). 6
+   and 7 print but never fail the run.
    ============================================================ */
 
 const fs = require('fs');
@@ -225,6 +241,51 @@ function checkIframeDispatchCoverage() {
   if (deadCase === 0) ok(`All ${dispatchedTabs.size} dispatch cases correspond to a real section.`);
 }
 
+// ── 4b. First-load coverage: every iframe tab must be able to load on its
+// very first click, not just on a later client switch ──
+function checkFirstLoadCoverage() {
+  console.log('\n── First-load coverage (iframeNeedsReload) ──');
+  const appJs = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+  const indexHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+
+  // A tab's nav-button click handler only calls refreshIframeTab(tab) - the
+  // function that actually sets the iframe's src - when
+  // iframeNeedsReload[tab] === true at that moment. The map's keys all
+  // start out `true` at page load and only flip back to `true` again on a
+  // client-workspace switch, so a tab that's missing from this map (or
+  // declared anything other than `true`) can never pass that check: its
+  // iframe is left with the empty src="" from index.html forever, on
+  // every load, for every user, until someone happens to click a
+  // DIFFERENT client-dependent tab first and switch clients. This is
+  // exactly the bug found in File Name Generator (Sept 2026) - wired via
+  // setIframeAbsoluteSrc, had a dispatch case, verify-hub.js's other
+  // checks all passed, and it still silently never loaded because this
+  // one extra registration was missed.
+  const mapMatch = appJs.match(/let iframeNeedsReload = \{([\s\S]*?)\n\};/);
+  if (!mapMatch) {
+    warn('Could not locate the iframeNeedsReload object literal in app.js to check first-load coverage - skipping (app.js may have been restructured; update the regex in verify-hub.js if so).');
+    return;
+  }
+  const mapBody = mapMatch[1];
+  const trueKeys = new Set([...mapBody.matchAll(/"(tab-[\w-]+)"\s*:\s*true/g)].map(m => m[1]));
+  const anyKeys = new Set([...mapBody.matchAll(/"(tab-[\w-]+)"\s*:/g)].map(m => m[1]));
+
+  const sectionBlocks = [...indexHtml.matchAll(/<section\s+id="(tab-[\w-]+)"[^>]*>([\s\S]*?)<\/section>/g)];
+  const iframeSections = sectionBlocks.filter(([, , body]) => /<iframe/.test(body)).map(([, id]) => id);
+
+  let missing = 0;
+  iframeSections.forEach(id => {
+    if (!anyKeys.has(id)) {
+      fail(`<section id="${id}"> in index.html contains an <iframe>, but "${id}" is never registered in app.js's iframeNeedsReload map - its iframe will never get a src set on a normal first click (only a direct function call bypasses this). Add "${id}": true, next to its neighbors.`);
+      missing++;
+    } else if (!trueKeys.has(id)) {
+      fail(`"${id}" is in app.js's iframeNeedsReload map but not declared \`true\` - every other entry starts \`true\` so the very first click loads it; anything else means it can never pass the click handler's check until a client switch flips it. Change it to "${id}": true,`);
+      missing++;
+    }
+  });
+  if (missing === 0) ok(`All ${iframeSections.length} iframe-based tab-sections are registered \`true\` in iframeNeedsReload and can load on first click.`);
+}
+
 // ── 5. Advisory: unguarded direct Firestore writes ──
 function checkUnguardedWrites() {
   console.log('\n── Unguarded writes (advisory) ──');
@@ -345,6 +406,7 @@ function checkVersionTags() {
 checkSyntax();
 checkToolWiring();
 checkIframeDispatchCoverage();
+checkFirstLoadCoverage();
 checkUnguardedWrites();
 checkElementIds();
 checkVersionTags();

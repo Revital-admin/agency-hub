@@ -1173,6 +1173,7 @@ let iframeNeedsReload = {
   "tab-paybackperiod": true,
   "tab-sopwiki": true,
   "tab-tasknamegen": true,
+  "tab-filenamegen": true,
   "tab-marketingnews": true,
   "tab-proposal": true,
   "tab-kickoffprep": true,
