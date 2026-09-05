@@ -27,17 +27,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return null;
   }
 
-  // Mirrors Welcome Guide Gen's buildPortalLink() - the intake form link
-  // (#intakeLink) is the shared Google Form and isn't client-specific, but
-  // the "{{portalLink}}" var in the Intake Form email template (#17) refers
-  // to the client's actual portal, same as the Welcome email does.
-  function buildPortalLink(client) {
-    if (!client || !client.portalConfig || !client.portalConfig.magicToken) return '';
-    const baseUrl = window.location.origin + '/portal/index.html';
-    const clientNameRaw = client.id || client.name || 'Client';
-    return `${baseUrl}?c=${encodeURIComponent(clientNameRaw)}&t=${client.portalConfig.magicToken}`;
-  }
-
   function autoFillFromActiveClient() {
     const client = getParentActiveClient();
     if (!client) return;
@@ -237,11 +226,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const amEmail = (document.getElementById('amEmail').value || '').trim();
       const clientName = (document.getElementById('clientName').value || '').trim() || client.name || 'there';
       const contactName = config.clientContactName || clientName;
-      const portalLinkVal = buildPortalLink(client);
+      const intakeFormLinkVal = (document.getElementById('intakeLink').value || '').trim();
 
       let subject = 'Your Onboarding Form — Revital Productions';
       let body = `Hi ${contactName.split(' ')[0]},\n\nWelcome aboard! Please find your onboarding intake form attached - once we get it back we can build out your full plan.` +
-        (portalLinkVal ? `\n\nYou'll also have access to your client portal here: ${portalLinkVal}` : '') +
+        (intakeFormLinkVal ? `\n\nYou can fill it out directly here: ${intakeFormLinkVal}` : '') +
         `\n\nThanks,\n${amName || 'The Revital Productions team'}`;
 
       if (window.parent.fetchEmailTemplateById && window.parent.fillTemplateVars && window.parent.templateHtmlToPlainText) {
@@ -252,7 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
               contactName: contactName,
               clientName: clientName,
               accountManagerName: amName || 'the Revital Productions team',
-              portalLink: portalLinkVal
+              intakeFormLink: intakeFormLinkVal
             });
             subject = tpl.subjectLine || subject;
             body = window.parent.templateHtmlToPlainText(filled);
