@@ -237,9 +237,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const amEmail = (document.getElementById('amEmail').value || '').trim();
       const clientName = (document.getElementById('clientName').value || '').trim() || client.name || 'there';
       const contactName = config.clientContactName || clientName;
+      const portalLinkVal = buildPortalLink(client);
 
       let subject = 'Your Onboarding Form — Revital Productions';
-      let body = `Hi ${contactName.split(' ')[0]},\n\nWelcome aboard! Please find your onboarding intake form attached - once we get it back we can build out your full plan.\n\nThanks,\n${amName || 'The Revital Productions team'}`;
+      let body = `Hi ${contactName.split(' ')[0]},\n\nWelcome aboard! Please find your onboarding intake form attached - once we get it back we can build out your full plan.` +
+        (portalLinkVal ? `\n\nYou'll also have access to your client portal here: ${portalLinkVal}` : '') +
+        `\n\nThanks,\n${amName || 'The Revital Productions team'}`;
 
       if (window.parent.fetchEmailTemplateById && window.parent.fillTemplateVars && window.parent.templateHtmlToPlainText) {
         try {
@@ -249,7 +252,7 @@ document.addEventListener('DOMContentLoaded', () => {
               contactName: contactName,
               clientName: clientName,
               accountManagerName: amName || 'the Revital Productions team',
-              portalLink: buildPortalLink(client)
+              portalLink: portalLinkVal
             });
             subject = tpl.subjectLine || subject;
             body = window.parent.templateHtmlToPlainText(filled);

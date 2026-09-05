@@ -187,7 +187,7 @@ const EMAIL_TEMPLATES = [
     subjectLine: "Your Onboarding Form — Revital Productions",
     format: "html",
     date: "2026-07-21",
-    content: "<p>Hi {{contactName}},</p><p>Welcome again — attached is your Client Onboarding Form. This is how we learn everything we need to know about your business, brand, and goals before our kick-off call.</p><p>Please complete and return this within 48 hours so we can schedule your kick-off call.</p><p>As a reminder, you can access your client portal here: {{portalLink}}</p>"
+    content: "<p>Hi {{contactName}},</p><p>Welcome aboard! Attached is your Client Onboarding Form — this is how we learn everything we need to know about your business, brand, and goals before our kick-off call.</p><p>Please complete and return this within 48 hours so we can get your kick-off call on the calendar.</p><p>You'll also have access to your client portal here: {{portalLink}} — we'll use it for all deliverables, feedback, and approvals going forward.</p><p>Talk soon,<br>{{accountManagerName}}</p>"
   },
   {
     id: "tpl-intake-followup-17b",
