@@ -383,7 +383,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const filled = window.parent.fillTemplateVars(tpl.content, {
               contactName: contactName,
               clientName: clientName,
-              accountManagerName: amName || 'the Revital Productions team'
+              accountManagerName: amName || 'the Revital Productions team',
+              portalLink: (document.getElementById('portalLink').value || '').trim()
             });
             subject = tpl.subjectLine || subject;
             body = window.parent.templateHtmlToPlainText(filled);
