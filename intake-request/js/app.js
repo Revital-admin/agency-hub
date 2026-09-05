@@ -27,6 +27,17 @@ document.addEventListener('DOMContentLoaded', () => {
     return null;
   }
 
+  // Mirrors Welcome Guide Gen's buildPortalLink() - the intake form link
+  // (#intakeLink) is the shared Google Form and isn't client-specific, but
+  // the "{{portalLink}}" var in the Intake Form email template (#17) refers
+  // to the client's actual portal, same as the Welcome email does.
+  function buildPortalLink(client) {
+    if (!client || !client.portalConfig || !client.portalConfig.magicToken) return '';
+    const baseUrl = window.location.origin + '/portal/index.html';
+    const clientNameRaw = client.id || client.name || 'Client';
+    return `${baseUrl}?c=${encodeURIComponent(clientNameRaw)}&t=${client.portalConfig.magicToken}`;
+  }
+
   function autoFillFromActiveClient() {
     const client = getParentActiveClient();
     if (!client) return;
@@ -237,7 +248,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const filled = window.parent.fillTemplateVars(tpl.content, {
               contactName: contactName,
               clientName: clientName,
-              accountManagerName: amName || 'the Revital Productions team'
+              accountManagerName: amName || 'the Revital Productions team',
+              portalLink: buildPortalLink(client)
             });
             subject = tpl.subjectLine || subject;
             body = window.parent.templateHtmlToPlainText(filled);
