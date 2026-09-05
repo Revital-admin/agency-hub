@@ -47,7 +47,7 @@ const EMAIL_TEMPLATES = [
     subjectLine: "Welcome to Revital Productions 🎉",
     format: "html",
     date: "2026-07-21",
-    content: "<p>Hi {{contactName}},</p><p>Welcome aboard! We're excited to start working with {{clientName}}.</p><p>Attached is your Welcome Guide — it covers how to reach us, what to expect over the next few weeks, and how to use your client portal.</p><p>You can access your client portal here: {{portalLink}}</p><p>Talk soon,<br>{{accountManagerName}}</p>"
+    content: "<p>Hi {{contactName}},</p><p>Welcome aboard! We're excited to start working with {{clientName}}.</p><p>Attached is your Welcome Guide — inside you'll find your dedicated Account Manager's contact info, what we're building for you, your first 30 days with us mapped out week by week, and how we handle communication and approvals.</p><p>You can access your client portal here: {{portalLink}}</p><p>Talk soon,<br>{{accountManagerName}}</p>"
   },
   {
     id: "tpl-kickoff-10",

@@ -352,6 +352,34 @@ document.addEventListener('DOMContentLoaded', () => {
     emailToClientOpenBtn.href = `mailto:${encodeURIComponent(emailToClientTo.value)}?subject=${encodeURIComponent(emailToClientSubject.value)}&body=${encodeURIComponent(emailToClientBody.value)}`;
   }
 
+  const NINETY_DAY_EMAIL_NOTE = "We've also attached your custom 90-Day Plan, mapping out your goals and strategy for the next three months.";
+
+  // Inserts/removes the 90-Day Plan mention from the plain-text email body
+  // so the copy always matches what's actually attached, without doing a
+  // full re-fill (which would stomp any hand edits made to the body in the
+  // meantime). Inserted right before the portal-link line so it reads as
+  // part of the same "what's attached" paragraph; falls back to appending
+  // at the end if that line was edited away.
+  function applyNinetyDayNote(body, include) {
+    const hasNote = body.includes(NINETY_DAY_EMAIL_NOTE);
+    if (include && !hasNote) {
+      const marker = 'You can access your client portal here:';
+      const idx = body.indexOf(marker);
+      if (idx !== -1) {
+        return body.slice(0, idx) + NINETY_DAY_EMAIL_NOTE + '\n\n' + body.slice(idx);
+      }
+      return body + '\n\n' + NINETY_DAY_EMAIL_NOTE;
+    }
+    if (!include && hasNote) {
+      return body
+        .split(NINETY_DAY_EMAIL_NOTE + '\n\n').join('')
+        .split(NINETY_DAY_EMAIL_NOTE).join('')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+    }
+    return body;
+  }
+
   if (emailToClientBtn) {
     emailToClientBtn.addEventListener('click', async () => {
       const client = getParentActiveClient();
@@ -372,9 +400,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const amEmail = (document.getElementById('amEmail').value || '').trim();
       const clientName = (document.getElementById('clientName').value || '').trim() || client.name || 'there';
       const contactName = config.clientContactName || clientName;
+      const portalLinkVal = (document.getElementById('portalLink').value || '').trim();
 
       let subject = 'Welcome to Revital Productions 🎉';
-      let body = `Hi ${contactName.split(' ')[0]},\n\nWelcome aboard! Your Welcome Guide is attached.\n\nThanks,\n${amName || 'The Revital Productions team'}`;
+      let body = `Hi ${contactName.split(' ')[0]},\n\nWelcome aboard! Attached is your Welcome Guide — it covers your dedicated Account Manager's contact info, what we're building for you, your first 30 days with us, and how we handle communication and approvals.` +
+        (portalLinkVal ? `\n\nYou can access your client portal here: ${portalLinkVal}` : '') +
+        `\n\nThanks,\n${amName || 'The Revital Productions team'}`;
 
       if (window.parent.fetchEmailTemplateById && window.parent.fillTemplateVars && window.parent.templateHtmlToPlainText) {
         try {
@@ -384,7 +415,7 @@ document.addEventListener('DOMContentLoaded', () => {
               contactName: contactName,
               clientName: clientName,
               accountManagerName: amName || 'the Revital Productions team',
-              portalLink: (document.getElementById('portalLink').value || '').trim()
+              portalLink: portalLinkVal
             });
             subject = tpl.subjectLine || subject;
             body = window.parent.templateHtmlToPlainText(filled);
@@ -434,6 +465,18 @@ document.addEventListener('DOMContentLoaded', () => {
   [emailToClientTo, emailToClientSubject, emailToClientBody].forEach(el => {
     if (el) el.addEventListener('input', refreshEmailToClientMailto);
   });
+
+  // Keep the email body in sync with what's actually attached: checking
+  // "Also attach 90-Day Plan" adds a line mentioning it, unchecking removes
+  // it. Uses text search/replace (applyNinetyDayNote above) rather than a
+  // full re-fill, so any other hand edits to the body survive the toggle.
+  if (attach90DayPlanCheckbox) {
+    attach90DayPlanCheckbox.addEventListener('change', () => {
+      if (!emailToClientBody) return;
+      emailToClientBody.value = applyNinetyDayNote(emailToClientBody.value, attach90DayPlanCheckbox.checked);
+      refreshEmailToClientMailto();
+    });
+  }
 
   if (emailToClientCopyBtn) {
     emailToClientCopyBtn.addEventListener('click', async () => {
