@@ -4296,6 +4296,7 @@ async function addLeadToSalesPipeline({ name, source, notes, stage }) {
     notes: notes || "",
     stage: stage || "🆕 new lead",
     clickupTaskId: null,
+    hubspotDealId: null,
     createdDate: new Date().toISOString().slice(0, 10),
     updatedDate: new Date().toISOString().slice(0, 10)
   };
@@ -4317,6 +4318,14 @@ async function addLeadToSalesPipeline({ name, source, notes, stage }) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ taskId: null, name: newLead.name, stage: newLead.stage, contactEmail: "", source: newLead.source, notes: newLead.notes })
   }).catch(err => console.error("ClickUp sync failed for auto-created pipeline lead:", err));
+
+  // Same fire-and-forget HubSpot sync Sales Pipeline Board's own save
+  // handler kicks off on a new lead - see that tool's own syncToHubSpot.
+  fetch("/api/pipeline/sync-hubspot", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dealId: null, name: newLead.name, stage: newLead.stage, contactEmail: "", source: newLead.source, notes: newLead.notes })
+  }).catch(err => console.error("HubSpot sync failed for auto-created pipeline lead:", err));
 
   return { ok: true, lead: newLead };
 }
@@ -4367,6 +4376,52 @@ async function syncAccountManagerToClickUpAssignee(clientName, amEmail) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return { ok: false, reason: "error", error: new Error(data.error || `Request failed (${res.status})`) };
     return { ok: true, assigneeMatched: !!data.assigneeMatched, accountManagerFieldSet: !!data.accountManagerFieldSet };
+  } catch (e) {
+    return { ok: false, reason: "error", error: e };
+  }
+}
+
+// HubSpot counterpart to syncAccountManagerToClickUpAssignee above - sets
+// the Deal's native hubspot_owner_id property (HubSpot's own "who owns
+// this" field, equivalent to ClickUp's Assignee) to match whoever just got
+// assigned as account manager. Same lookup-by-name/reason shapes as the
+// ClickUp version so Kickoff Prep and Client Portal Manager's existing
+// messaging code (branching on result.reason) works for either call
+// without changes. reason: 'no_deal' mirrors ClickUp's 'no_task' - the
+// lead was never synced to HubSpot yet (or was created before this
+// integration existed).
+async function syncAccountManagerToHubSpotOwner(clientName, amEmail) {
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) {
+    return { ok: false, reason: "not_ready" };
+  }
+  const trimmedName = (clientName || "").trim();
+  if (!trimmedName || !amEmail) return { ok: false, reason: "missing_input" };
+
+  let lead;
+  try {
+    const docRef = window.firebaseDoc(window.firebaseDb, "agency", "salesPipeline");
+    const snap = await window.firebaseGetDoc(docRef);
+    const data = snap && snap.exists ? snap.data() : null;
+    const list = (data && data.list) || [];
+    lead = list.find(l => (l.name || "").trim().toLowerCase() === trimmedName.toLowerCase());
+  } catch (e) {
+    return { ok: false, reason: "error", error: e };
+  }
+
+  if (!lead || !lead.hubspotDealId) return { ok: false, reason: "no_deal" };
+
+  try {
+    const res = await fetch("/api/pipeline/sync-hubspot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dealId: lead.hubspotDealId, name: lead.name, stage: lead.stage,
+        contactEmail: lead.contactEmail, ownerEmail: amEmail
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, reason: "error", error: new Error(data.error || `Request failed (${res.status})`) };
+    return { ok: true, ownerMatched: !!data.ownerMatched };
   } catch (e) {
     return { ok: false, reason: "error", error: e };
   }
@@ -4451,6 +4506,15 @@ async function syncPipelineLeadStage(prospectName, outcome) {
       contactEmail: lead.contactEmail, source: lead.source, notes: lead.notes
     })
   }).catch(err => console.error("ClickUp sync failed for pipeline stage sync:", err));
+
+  fetch("/api/pipeline/sync-hubspot", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      dealId: lead.hubspotDealId, name: lead.name, stage: lead.stage,
+      contactEmail: lead.contactEmail
+    })
+  }).catch(err => console.error("HubSpot sync failed for pipeline stage sync:", err));
 
   return { ok: true, lead };
 }

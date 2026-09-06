@@ -300,20 +300,22 @@ async function completeHandoff() {
   const originalText = btn.textContent;
 
   if (!hasEmail) {
-    if (window.parent.showBanner) window.parent.showBanner('success', `Handoff logged, but ${amName} has no email on file in Team Roster, so no notification was sent and nothing could be synced to ClickUp. Add one there to enable both.`);
+    if (window.parent.showBanner) window.parent.showBanner('success', `Handoff logged, but ${amName} has no email on file in Team Roster, so no notification was sent and nothing could be synced to ClickUp or HubSpot. Add one there to enable both.`);
     return;
   }
 
-  // Sets the ClickUp task's native Assignee field to match - that's what
-  // Ronald's team actually treats as "who owns this," not the Hub's own
-  // account-manager field, so the handoff needs to reach it too. Two
-  // separate lists get touched: Sales Pipeline (deal task, tracked by id)
-  // and Onboarding Handoff (found by client-name search - see
+  // Sets the ClickUp task's native Assignee field and the HubSpot deal's
+  // native owner field to match - that's what Ronald's team actually
+  // treats as "who owns this," not the Hub's own account-manager field, so
+  // the handoff needs to reach both. Three separate places get touched:
+  // ClickUp Sales Pipeline (deal task, tracked by id), the HubSpot deal
+  // (also tracked by id, see syncAccountManagerToHubSpotOwner), and
+  // ClickUp's Onboarding Handoff (found by client-name search - see
   // syncAccountManagerToOnboardingHandoff). Best effort either way: the
   // Hub-side handoff above already fully succeeded regardless of how these
   // turn out.
   btn.disabled = true;
-  btn.textContent = 'Syncing to ClickUp...';
+  btn.textContent = 'Syncing to ClickUp & HubSpot...';
   let salesPipelineNote = '';
   let onboardingHandoffNote = '';
   try {
@@ -335,6 +337,26 @@ async function completeHandoff() {
   } catch (e) {
     salesPipelineNote = ' Could not sync the Sales Pipeline assignee - see console for details.';
     console.error('Sales Pipeline assignee sync failed:', e);
+  }
+
+  let hubspotNote = '';
+  try {
+    const result = window.parent.syncAccountManagerToHubSpotOwner
+      ? await window.parent.syncAccountManagerToHubSpotOwner(clientName, member.email)
+      : { ok: false, reason: 'unavailable' };
+    if (result.ok && result.ownerMatched) {
+      hubspotNote = ' HubSpot deal owner updated.';
+    } else if (result.ok && !result.ownerMatched) {
+      hubspotNote = ` HubSpot deal found, but no HubSpot user matches ${member.email} - owner not set there.`;
+    } else if (result.reason === 'no_deal') {
+      hubspotNote = " No HubSpot deal on file for this client yet - owner wasn't set there.";
+    } else if (result.reason !== 'unavailable') {
+      hubspotNote = ' Could not sync the HubSpot deal owner - see console for details.';
+      if (result.error) console.error('HubSpot owner sync failed:', result.error);
+    }
+  } catch (e) {
+    hubspotNote = ' Could not sync the HubSpot deal owner - see console for details.';
+    console.error('HubSpot owner sync failed:', e);
   }
 
   try {
@@ -359,7 +381,7 @@ async function completeHandoff() {
     btn.textContent = originalText;
   }
 
-  if (window.parent.showBanner) window.parent.showBanner('success', `Handoff complete - ${amName} notified.${salesPipelineNote}${onboardingHandoffNote}`);
+  if (window.parent.showBanner) window.parent.showBanner('success', `Handoff complete - ${amName} notified.${salesPipelineNote}${hubspotNote}${onboardingHandoffNote}`);
 }
 
 // ── Kickoff Call Notes ──

@@ -83,13 +83,14 @@ function checkAmCapacityWarning() {
   warningEl.style.display = "block";
 }
 
-// ── Account Manager reassignment → ClickUp sync ──
-// Kickoff Prep's Sales → Delivery Handoff runs this same sync once, at
+// ── Account Manager reassignment → ClickUp + HubSpot sync ──
+// Kickoff Prep's Sales → Delivery Handoff runs these same syncs once, at
 // kickoff. If the account manager changes later (someone leaves, a client
 // gets reassigned), this is the only other place that field gets edited -
-// so it needs to fire the same ClickUp sync, or ClickUp's Assignee quietly
-// drifts out of sync with what the Hub says. Reuses the exact parent
-// helpers Kickoff Prep already calls (syncAccountManagerToClickUpAssignee,
+// so it needs to fire the same syncs, or ClickUp's Assignee / HubSpot's
+// deal owner quietly drift out of sync with what the Hub says. Reuses the
+// exact parent helpers Kickoff Prep already calls
+// (syncAccountManagerToClickUpAssignee, syncAccountManagerToHubSpotOwner,
 // syncAccountManagerToOnboardingHandoff) rather than duplicating them.
 let teamRosterMembers = [];
 let lastSyncedAmEmail = null; // set on load, compared on blur to detect an actual reassignment
@@ -144,7 +145,7 @@ async function syncAmToClickUp() {
   }
 
   const clientName = client.name || client.id;
-  if (btn) { btn.disabled = true; btn.textContent = 'Syncing to ClickUp...'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Syncing to ClickUp & HubSpot...'; }
   if (statusEl) statusEl.textContent = '';
 
   let salesPipelineNote = '';
@@ -171,6 +172,26 @@ async function syncAmToClickUp() {
     console.error('Sales Pipeline assignee sync failed:', e);
   }
 
+  let hubspotNote = '';
+  try {
+    const result = window.parent.syncAccountManagerToHubSpotOwner
+      ? await window.parent.syncAccountManagerToHubSpotOwner(clientName, email)
+      : { ok: false, reason: 'unavailable' };
+    if (result.ok && result.ownerMatched) {
+      hubspotNote = 'HubSpot deal owner updated.';
+    } else if (result.ok && !result.ownerMatched) {
+      hubspotNote = `HubSpot deal found, but no HubSpot user matches ${email}.`;
+    } else if (result.reason === 'no_deal') {
+      hubspotNote = 'No HubSpot deal on file for this client.';
+    } else if (result.reason !== 'unavailable') {
+      hubspotNote = 'Could not sync HubSpot deal owner - see console.';
+      if (result.error) console.error('HubSpot owner sync failed:', result.error);
+    }
+  } catch (e) {
+    hubspotNote = 'Could not sync HubSpot deal owner - see console.';
+    console.error('HubSpot owner sync failed:', e);
+  }
+
   try {
     const result = window.parent.syncAccountManagerToOnboardingHandoff
       ? await window.parent.syncAccountManagerToOnboardingHandoff(clientName, email)
@@ -189,10 +210,10 @@ async function syncAmToClickUp() {
     onboardingHandoffNote = 'Could not sync Onboarding Handoff assignee - see console.';
     console.error('Onboarding Handoff assignee sync failed:', e);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Sync to ClickUp Now'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Sync to ClickUp & HubSpot Now'; }
   }
 
-  if (statusEl) statusEl.textContent = `${salesPipelineNote} ${onboardingHandoffNote}`;
+  if (statusEl) statusEl.textContent = `${salesPipelineNote} ${hubspotNote} ${onboardingHandoffNote}`;
   lastSyncedAmEmail = email;
 
   if (window.parent.logAdminActivity) window.parent.logAdminActivity('Account manager reassigned', `${clientName} — ${config.accountManagerName || email}`);

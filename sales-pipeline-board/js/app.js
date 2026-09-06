@@ -4,9 +4,11 @@
    reasoning as Proposal Follow-Up Tracker - most leads haven't signed
    yet, so this keeps its own list at agency/salesPipeline rather than
    forcing a full Client Workspace just to track a lead. Every
-   create/stage-change also fires a one-way sync to ClickUp's own
-   "Growth > Pipeline Management > Sales Pipeline" list - see
-   syncToClickUp() below and handlePipelineSyncClickUp in _worker.js.)
+   create/stage-change also fires two one-way syncs: ClickUp's own
+   "Growth > Pipeline Management > Sales Pipeline" list (syncToClickUp,
+   handlePipelineSyncClickUp in _worker.js) and a HubSpot Deal in the
+   "Sales Pipeline" deal pipeline (syncToHubSpot, handlePipelineSyncHubSpot
+   in _worker.js) - both mirrors, this board stays authoritative.)
    ============================================================ */
 
 let isEmbedded = false;
@@ -214,6 +216,7 @@ function buildLeadCard(lead) {
     ${lead.contactEmail ? `<div class="lead-email">${escapeHtml(lead.contactEmail)}</div>` : ''}
     ${lead.source ? `<div class="lead-source">${escapeHtml(lead.source)}</div>` : ''}
     ${lead.clickupTaskId ? `<div class="lead-synced">&#10003; Synced to ClickUp</div>` : `<div class="lead-syncing">Syncing to ClickUp&hellip;</div>`}
+    ${lead.hubspotDealId ? `<div class="lead-synced">&#10003; Synced to HubSpot</div>` : `<div class="lead-syncing">Syncing to HubSpot&hellip;</div>`}
   `;
   card.addEventListener('click', () => openLeadModal(lead.id));
   return card;
@@ -276,6 +279,36 @@ async function syncToClickUp(lead) {
   }
 }
 
+// ── HubSpot sync ──
+// Same fire-and-forget contract as syncToClickUp above: a failed sync
+// never blocks saving the lead here (the Hub is always the source of
+// truth), and the card just keeps showing "Syncing..." until the next
+// edit/stage-change tries again.
+async function syncToHubSpot(lead) {
+  try {
+    const res = await fetch('/api/pipeline/sync-hubspot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dealId: lead.hubspotDealId || null,
+        name: lead.name,
+        stage: lead.stage,
+        contactEmail: lead.contactEmail
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.dealId && data.dealId !== lead.hubspotDealId) {
+      lead.hubspotDealId = data.dealId;
+      await persist();
+      renderBoard();
+    } else if (!res.ok) {
+      console.error('HubSpot sync failed:', data.error);
+    }
+  } catch (e) {
+    console.error('HubSpot sync request failed:', e);
+  }
+}
+
 el('addLeadBtn').addEventListener('click', () => openLeadModal(null));
 el('cancelLeadBtn').addEventListener('click', closeLeadModal);
 el('leadModal').addEventListener('click', (e) => {
@@ -316,6 +349,7 @@ el('saveLeadBtn').addEventListener('click', async () => {
       id: 'lead_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
       name, contactEmail, source, notes, stage,
       clickupTaskId: null,
+      hubspotDealId: null,
       createdDate: todayStr(),
       updatedDate: todayStr()
     };
@@ -339,7 +373,10 @@ el('saveLeadBtn').addEventListener('click', async () => {
 
   closeLeadModal();
   renderBoard();
-  if (needsSync) syncToClickUp(lead);
+  if (needsSync) {
+    syncToClickUp(lead);
+    syncToHubSpot(lead);
+  }
   if (justWon) notifyDealWon(lead);
 });
 

@@ -168,6 +168,10 @@ export default {
       return handlePipelineSyncClickUp(request, env);
     }
 
+    if (url.pathname === "/api/pipeline/sync-hubspot" && request.method === "POST") {
+      return handlePipelineSyncHubSpot(request, env);
+    }
+
     if (url.pathname === "/api/pipeline/sync-onboarding-handoff-assignee" && request.method === "POST") {
       return handleOnboardingHandoffAssigneeSync(request, env);
     }
@@ -3297,6 +3301,252 @@ async function handlePipelineSyncClickUp(request, env) {
     }
   } catch (e) {
     return jsonResponse({ error: `ClickUp sync failed: ${e.message}` }, 500);
+  }
+}
+
+// ── Sales Pipeline Board -> HubSpot sync ──
+//
+// Second one-way mirror off the same Hub board as syncToClickUp above -
+// every create/stage-change also lands as a Deal in HubSpot's "Sales
+// Pipeline" deal pipeline (stage labels were set up to match STAGES in
+// sales-pipeline-board/js/app.js exactly, on purpose, so this can resolve
+// a Hub stage to a HubSpot dealstage by label instead of hardcoding stage
+// ids that would silently drift if either side's stages are ever edited).
+// The Hub board stays authoritative - HubSpot edits don't flow back here,
+// same as ClickUp.
+//
+// Requires a secret named HUBSPOT_ACCESS_TOKEN, set via:
+//   wrangler secret put HUBSPOT_ACCESS_TOKEN
+// (HubSpot -> Settings -> Integrations -> Private Apps/Service Keys ->
+// token starts with "pat-" - passed as a standard "Bearer" Authorization
+// header, unlike ClickUp's bare-token convention above.)
+const HUBSPOT_API_BASE = "https://api.hubapi.com";
+const HUBSPOT_DEAL_PIPELINE_LABEL_HINT = "sales pipeline";
+
+// Resolves a Hub stage label (e.g. "🆕 new lead") to the matching HubSpot
+// pipeline + dealstage id. No caching, same reasoning as
+// findClickUpUserIdByEmail above - this only fires on a lead save, which
+// is rare enough that a live lookup each time is fine, and it means an
+// edit to either side's stage list is picked up on the very next sync
+// instead of needing a code deploy.
+async function findHubSpotPipelineStage(token, stageLabel) {
+  const res = await fetch(`${HUBSPOT_API_BASE}/crm/v3/pipelines/deals`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !Array.isArray(data.results)) {
+    throw new Error(data.message || `HubSpot pipeline lookup failed (${res.status})`);
+  }
+  const pipelines = data.results;
+  const pipeline = pipelines.find(p => (p.label || "").trim().toLowerCase() === HUBSPOT_DEAL_PIPELINE_LABEL_HINT)
+    || pipelines.find(p => p.id === "default")
+    || pipelines[0];
+  if (!pipeline) throw new Error("No deal pipelines found in HubSpot");
+
+  const stage = (pipeline.stages || []).find(s => (s.label || "").trim() === (stageLabel || "").trim());
+  if (!stage) throw new Error(`No HubSpot stage labeled "${stageLabel}" in pipeline "${pipeline.label}" - check the two stage lists still match`);
+
+  return { pipelineId: pipeline.id, stageId: stage.id };
+}
+
+// Best-effort contact upsert-by-email + deal association. Wrapped so a
+// failure here never blocks the deal sync above, which already succeeded
+// by the time this runs - a Hub lead without a valid/complete email just
+// ends up as a Deal with no linked Contact, not a failed sync.
+async function upsertHubSpotContactAndAssociate(token, dealId, email, fullName) {
+  if (!email) return { ok: false, reason: "no email" };
+  try {
+    const nameParts = (fullName || "").trim().split(/\s+/);
+    const properties = { email };
+    if (nameParts.length) properties.firstname = nameParts[0];
+    if (nameParts.length > 1) properties.lastname = nameParts.slice(1).join(" ");
+
+    let contactId = null;
+    const createRes = await fetch(`${HUBSPOT_API_BASE}/crm/v3/objects/contacts`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ properties })
+    });
+    const createData = await createRes.json().catch(() => ({}));
+    if (createRes.ok) {
+      contactId = createData.id;
+    } else if (createRes.status === 409) {
+      // Already exists - HubSpot's create endpoint 409s with the existing
+      // id embedded in the message rather than returning it as a field.
+      const match = /Existing ID:\s*(\d+)/i.exec(createData.message || "");
+      contactId = match ? match[1] : null;
+      if (!contactId) {
+        const searchRes = await fetch(`${HUBSPOT_API_BASE}/crm/v3/objects/contacts/search`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ filterGroups: [{ filters: [{ propertyName: "email", operator: "EQ", value: email }] }] })
+        });
+        const searchData = await searchRes.json().catch(() => ({}));
+        contactId = searchRes.ok && searchData.results && searchData.results[0] ? searchData.results[0].id : null;
+      }
+    } else {
+      throw new Error(createData.message || `HubSpot contact create failed (${createRes.status})`);
+    }
+    if (!contactId) return { ok: false, reason: "could not resolve contact id" };
+
+    const assocRes = await fetch(`${HUBSPOT_API_BASE}/crm/v4/objects/deals/${dealId}/associations/default/contacts/${contactId}`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!assocRes.ok) {
+      const assocData = await assocRes.json().catch(() => ({}));
+      throw new Error(assocData.message || `HubSpot association failed (${assocRes.status})`);
+    }
+    return { ok: true, contactId };
+  } catch (e) {
+    console.warn("HubSpot contact upsert/associate failed:", e);
+    return { ok: false, reason: e.message };
+  }
+}
+
+// Resolves an @revitalproductions.com email to the HubSpot Owner id the
+// deal's hubspot_owner_id property needs - HubSpot's equivalent of
+// ClickUp's Assignee/"Account Manager" field (see
+// syncAccountManagerToClickUpAssignee in app.js). Owners are provisioned
+// per HubSpot user automatically, not something this Hub creates, so a
+// miss just means that teammate doesn't have a HubSpot seat - same
+// "no match" handling as findClickUpUserIdByEmail above. No caching, same
+// reasoning as that function too (only fires on a handoff/reassignment).
+async function findHubSpotOwnerIdByEmail(token, email) {
+  const target = (email || "").trim().toLowerCase();
+  if (!target) return null;
+  try {
+    const res = await fetch(`${HUBSPOT_API_BASE}/crm/v3/owners?email=${encodeURIComponent(target)}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !Array.isArray(data.results) || !data.results[0]) return null;
+    return data.results[0].id;
+  } catch (e) {
+    console.warn("HubSpot owner lookup by email failed:", e);
+    return null;
+  }
+}
+
+// Best-effort: stamps the lead's Source + Notes onto the Deal as a Notes
+// engagement so that context isn't lost when moving off ClickUp's
+// markdown_description (Deals have no plain-text description property by
+// default on this portal, unlike ClickUp tasks). Only called on first
+// create (see handlePipelineSyncHubSpot below) - deliberately not
+// re-fired on every later edit, so a lead's notes field getting tweaked
+// repeatedly doesn't spam the deal's timeline with duplicate notes.
+async function createHubSpotDealNote(token, dealId, source, notes) {
+  const parts = [];
+  if (source) parts.push(`Source: ${source}`);
+  if (notes) parts.push(`Notes:\n${notes}`);
+  if (!parts.length) return { ok: false, reason: "nothing to note" };
+  try {
+    const noteRes = await fetch(`${HUBSPOT_API_BASE}/crm/v3/objects/notes`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        properties: {
+          hs_note_body: parts.join("\n\n") + "\n\n_Synced from the Hub's Sales Pipeline Board._",
+          hs_timestamp: Date.now()
+        }
+      })
+    });
+    const noteData = await noteRes.json().catch(() => ({}));
+    if (!noteRes.ok) throw new Error(noteData.message || `HubSpot note create failed (${noteRes.status})`);
+
+    const assocRes = await fetch(`${HUBSPOT_API_BASE}/crm/v4/objects/notes/${noteData.id}/associations/default/deals/${dealId}`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!assocRes.ok) {
+      const assocData = await assocRes.json().catch(() => ({}));
+      throw new Error(assocData.message || `HubSpot note association failed (${assocRes.status})`);
+    }
+    return { ok: true, noteId: noteData.id };
+  } catch (e) {
+    console.warn("HubSpot deal note create/associate failed:", e);
+    return { ok: false, reason: e.message };
+  }
+}
+
+async function handlePipelineSyncHubSpot(request, env) {
+  const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  if (!(await requireSection(env, accessEmail, "sales-pipeline"))) {
+    return jsonResponse({ error: "Not authorized for Sales Pipeline" }, 403);
+  }
+
+  const token = env.HUBSPOT_ACCESS_TOKEN;
+  if (!token) return jsonResponse({ error: "Server missing HUBSPOT_ACCESS_TOKEN secret" }, 500);
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "Invalid JSON body" }, 400);
+  }
+  const { dealId, name, stage, contactEmail, source, notes, ownerEmail } = payload || {};
+  if (!name || !stage) return jsonResponse({ error: "name and stage are required" }, 400);
+
+  try {
+    const { pipelineId, stageId } = await findHubSpotPipelineStage(token, stage);
+    const properties = { dealname: name, pipeline: pipelineId, dealstage: stageId };
+
+    // Only looked up when the caller actually asked to set an owner (the
+    // Sales -> Delivery Handoff completion and Client Portal Manager's
+    // account-manager reassignment are the two callers that pass this -
+    // see syncAccountManagerToHubSpotOwner in app.js) - every other sync
+    // call (Sales Pipeline Board's own saves, the referral/cold-outreach
+    // auto-create hooks) passes no ownerEmail and this stays a no-op.
+    let ownerId = null;
+    if (ownerEmail) {
+      ownerId = await findHubSpotOwnerIdByEmail(token, ownerEmail);
+      if (ownerId) properties.hubspot_owner_id = ownerId;
+    }
+
+    const isNewDeal = !dealId;
+    let resolvedDealId;
+    if (dealId) {
+      const res = await fetch(`${HUBSPOT_API_BASE}/crm/v3/objects/deals/${encodeURIComponent(dealId)}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ properties })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || `HubSpot deal update failed (${res.status})`);
+      resolvedDealId = data.id || dealId;
+    } else {
+      const res = await fetch(`${HUBSPOT_API_BASE}/crm/v3/objects/deals`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ properties })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || `HubSpot deal create failed (${res.status})`);
+      resolvedDealId = data.id;
+    }
+
+    const contactResult = contactEmail
+      ? await upsertHubSpotContactAndAssociate(token, resolvedDealId, contactEmail, name)
+      : null;
+
+    // First-create only (see createHubSpotDealNote's own comment) - carries
+    // over the Source/Notes context ClickUp's markdown_description held,
+    // without re-noting the same info on every later stage change.
+    if (isNewDeal && (source || notes)) {
+      await createHubSpotDealNote(token, resolvedDealId, source, notes);
+    }
+
+    return jsonResponse({
+      ok: true,
+      dealId: resolvedDealId,
+      contactLinked: contactResult ? contactResult.ok : undefined,
+      ownerMatched: ownerEmail ? !!ownerId : undefined
+    });
+  } catch (e) {
+    return jsonResponse({ error: `HubSpot sync failed: ${e.message}` }, 500);
   }
 }
 
