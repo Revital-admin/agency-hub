@@ -164,7 +164,15 @@ input, select, textarea { max-width: 100%; }
      panel with no way to reach it. Letting the whole sidebar scroll as a
      fallback means it's always reachable instead of cut off. */
   overflow-y: auto;
-  overflow-x: hidden;
+  /* NOT hidden (Sept 2026 fix) - this used to be overflow-x:hidden as a
+     paired default alongside the overflow-y safety net above, but that
+     silently clipped .admin-notif-dropdown (400px wide, deliberately
+     floats out past the sidebar's 280px into the main content - see that
+     rule's own comment) at the sidebar's right edge instead of letting it
+     render, which cut notification text off mid-word instead of wrapping
+     it. Nothing in the sidebar's normal nav content is wide enough to
+     overflow horizontally, so visible is safe here. */
+  overflow-x: visible;
 }
 
 .brand-section {
