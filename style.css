@@ -97,6 +97,21 @@ body {
 .form-grid > *, .checkbox-grid > * { min-width: 0; }
 input, select, textarea { max-width: 100%; }
 
+/* Same disease, one level up (Sept 2026): body{display:flex} above makes
+   .container - the standard outer wrapper nearly every tool page uses
+   (Sales Pipeline Board, and ~40+ others) - a flex item too, since
+   .bg-grid is position:fixed and out of flow, .container is body's only
+   real flex child. Same min-width:auto default as above, so on a narrow
+   viewport (sidebar eating part of the window, or just a smaller screen)
+   .container refuses to shrink below ITS content's min-content width
+   instead of down to the space actually available, pushing the whole
+   page past the viewport - which body{overflow-x:hidden} then clips
+   instead of letting the page narrow normally. Reported as "Win Rate by
+   Source" table and the pipeline board columns both looking cut off on
+   Sales Pipeline Board, but the cause lives here, not in that tool -
+   .container is what needed to shrink, not any one thing inside it. */
+.container { min-width: 0; }
+
 /* Dynamic Grid Background */
 .bg-grid {
   position: fixed;
@@ -164,15 +179,18 @@ input, select, textarea { max-width: 100%; }
      panel with no way to reach it. Letting the whole sidebar scroll as a
      fallback means it's always reachable instead of cut off. */
   overflow-y: auto;
-  /* NOT hidden (Sept 2026 fix) - this used to be overflow-x:hidden as a
-     paired default alongside the overflow-y safety net above, but that
-     silently clipped .admin-notif-dropdown (400px wide, deliberately
-     floats out past the sidebar's 280px into the main content - see that
-     rule's own comment) at the sidebar's right edge instead of letting it
-     render, which cut notification text off mid-word instead of wrapping
-     it. Nothing in the sidebar's normal nav content is wide enough to
-     overflow horizontally, so visible is safe here. */
-  overflow-x: visible;
+  /* Sept 2026: briefly tried overflow-x:visible here to stop this from
+     clipping .admin-notif-dropdown (see that rule's own comment), but
+     that didn't actually work - per the CSS overflow spec, when
+     overflow-y is anything other than visible, a sibling overflow-x:
+     visible is silently computed as auto instead (auto still clips/
+     scrolls, it isn't the same as visible). So this stays hidden, and
+     the dropdown fix instead makes the dropdown itself position:fixed
+     (see .admin-notif-dropdown), which escapes ancestor overflow
+     clipping entirely regardless of what's set here. Nothing in the
+     sidebar's normal nav content is wide enough to overflow
+     horizontally, so hidden is safe. */
+  overflow-x: hidden;
 }
 
 .brand-section {
@@ -231,17 +249,30 @@ input, select, textarea { max-width: 100%; }
   padding: 0 4px;
 }
 .admin-notif-dropdown {
-  position: absolute;
-  top: 100%;
+  /* position:fixed, not absolute (Sept 2026 fix) - as absolute, this was
+     positioned relative to .brand-section but still a DOM descendant of
+     .sidebar, so .sidebar's own overflow (needed as overflow-y:auto, see
+     that rule's comment) clipped this dropdown's right side wherever it
+     extended past the 280px sidebar - visible didn't fix it (see that
+     rule's comment on the CSS spec quirk), and hidden/auto both actively
+     clip. position:fixed removes an element from its ancestors' overflow
+     clipping entirely (positions relative to the viewport instead), which
+     is the actual escape hatch here. Trades auto-repositioning-with-parent
+     for needing JS to set top/left explicitly - initAdminNotifBell() in
+     app.js does that from the bell button's own getBoundingClientRect()
+     each time it opens, so this still tracks the bell correctly even
+     though the CSS itself no longer knows where that is. */
+  position: fixed;
+  top: 0;
   left: 0;
-  /* Deliberately NOT right:0 - that pinned this to the ~232px sidebar
-     content width (280px sidebar minus its 24px padding), which made the
-     draft-email panel below basically unusable (subject/body inputs
-     squeezed to fit). Fixed width instead, so it floats out over the main
-     content to the right - same idea as any dropdown that needs more room
-     than its trigger's own column. max-width keeps it from overflowing a
-     narrow/mobile viewport where the sidebar is the full screen width. */
-  right: auto;
+  /* Deliberately NOT anchored to the trigger's own column width - that
+     pinned this to the ~232px sidebar content width (280px sidebar minus
+     its 24px padding), which made the draft-email panel below basically
+     unusable (subject/body inputs squeezed to fit). Fixed width instead,
+     so it floats out over the main content to the right - same idea as
+     any dropdown that needs more room than its trigger's own column.
+     max-width keeps it from overflowing a narrow/mobile viewport where
+     the sidebar is the full screen width. */
   width: 400px;
   max-width: calc(100vw - 32px);
   margin-top: 10px;

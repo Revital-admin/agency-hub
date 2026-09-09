@@ -8039,7 +8039,20 @@ function initAdminNotifBell() {
 
   bellBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    dropdown.style.display = dropdown.style.display === "none" ? "flex" : "none";
+    const opening = dropdown.style.display === "none";
+    if (opening) {
+      // .admin-notif-dropdown is position:fixed (see its CSS comment for
+      // why) so it no longer inherits a position from its DOM parent -
+      // has to be told explicitly, from the bell's own actual on-screen
+      // position, every time it opens (the bell can move: sidebar admin
+      // panel above it expands/collapses, window gets resized, etc).
+      const rect = bellBtn.getBoundingClientRect();
+      const width = Math.min(400, window.innerWidth - 32);
+      const left = Math.max(16, Math.min(rect.left, window.innerWidth - width - 16));
+      dropdown.style.left = left + "px";
+      dropdown.style.top = (rect.bottom + 10) + "px";
+    }
+    dropdown.style.display = opening ? "flex" : "none";
   });
   document.addEventListener("click", (e) => {
     if (dropdown.style.display !== "none" && !dropdown.contains(e.target) && e.target !== bellBtn) {
