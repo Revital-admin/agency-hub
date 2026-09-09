@@ -20,11 +20,16 @@ try {
   console.warn("CORS prevented parent access:", e);
 }
 
-// Exact ClickUp "Growth > Pipeline Management > Sales Pipeline" list
-// status strings/colors/order (list 901327581862) - a lead's Hub stage
-// IS its ClickUp status string, kept identical on purpose so there's no
-// separate mapping table that could drift out of sync if someone edits
-// statuses on either side.
+// The Hub's own stage list. Colors/order here are the Hub board's alone.
+// (Sept 2026: this used to be kept string-identical to a dedicated
+// ClickUp list's statuses on purpose, so the sync could use the stage
+// string directly with no mapping table. That list (901327581862) sat
+// empty, so the ClickUp sync was repointed at the real "🎯 Leads List"
+// (901327581859) instead, where the team's actual 25 leads live. That
+// list has its own older, coarser 8-status workflow, so
+// mapHubStageToClickUpStatus() in _worker.js now translates a Hub stage
+// to that list's closest status on write - see the comment there for
+// the full table.)
 const STAGES = [
   { key: '🆕 new lead', color: '#87909e' },
   { key: '📧 outreach sent', color: '#87909e' },

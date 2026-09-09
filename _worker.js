@@ -3110,18 +3110,50 @@ async function handleContractorPortalHours(request, env) {
 //
 // Sales Pipeline Board (sales-pipeline-board/) is the Hub's own source
 // of truth for leads; this mirrors every create/stage-change one-way
-// into ClickUp's "Growth > Pipeline Management > Sales Pipeline" list
-// (id below) so the board that was already well-designed there but
-// sitting empty actually reflects live pipeline state, without asking
-// anyone to keep two boards in sync by hand. One-way only (ClickUp
-// edits don't flow back) - the Hub board is authoritative.
+// into ClickUp's "Growth > Prospecting & Lead Gen > 🎯 Leads List" list
+// (id below) - the list the team actually works out of day-to-day, with
+// the real 25 leads on it. One-way only (ClickUp edits don't flow back)
+// - the Hub board is authoritative.
+//
+// (Sept 2026: this used to point at "Growth > Pipeline Management >
+// Sales Pipeline" (901327581862), a separate list purpose-built with
+// status strings identical to the Hub's STAGES - clean in theory, but
+// nobody ever put real leads there, so the sync never fired on real
+// data. Repointed here at Ronald's direction so the sync targets where
+// the real leads live. This list's own statuses are a simpler, older
+// 8-value workflow (new lead/contacted/responded/qualified/proposal
+// sent/won/lost/not a fit) that doesn't match the Hub's 9 stage names
+// 1:1, so writes go through mapHubStageToClickUpStatus() below instead
+// of using the Hub stage string directly as the ClickUp status.)
 //
 // Requires a secret named CLICKUP_API_TOKEN, set via:
 //   wrangler secret put CLICKUP_API_TOKEN
 // (ClickUp -> Settings -> Apps -> generate a personal API token, starts
 // with "pk_" - passed as-is in the Authorization header, no "Bearer"
 // prefix, unlike most other APIs this Hub talks to.)
-const CLICKUP_SALES_PIPELINE_LIST_ID = "901327581862";
+const CLICKUP_SALES_PIPELINE_LIST_ID = "901327581859";
+
+// Hub stage (sales-pipeline-board/js/app.js STAGES) -> this list's actual
+// configured status string. The real list predates the Hub board and has
+// fewer, coarser statuses, so several Hub stages collapse onto the same
+// ClickUp status - that's expected: ClickUp will be less granular than
+// the Hub board, and that's the tradeoff of reusing the team's existing
+// workflow instead of rebuilding it to match the Hub 1:1. If either side's
+// stage names change, update this table - there's no dynamic lookup.
+const HUB_STAGE_TO_CLICKUP_STATUS = {
+  '🆕 new lead': 'new lead',
+  '📧 outreach sent': 'contacted',
+  '📋 assessment in progress': 'responded',
+  'discovery call scheduled': 'qualified',
+  '🔍 discovery complete': 'qualified',
+  '📄 proposal sent': 'proposal sent',
+  '🤝 negotiation': 'proposal sent',
+  '✅ closed won': 'won',
+  '❌closed lost': 'lost',
+};
+function mapHubStageToClickUpStatus(hubStage) {
+  return HUB_STAGE_TO_CLICKUP_STATUS[hubStage] || hubStage;
+}
 
 // ClickUp "Growth > Closing & Onboarding Handoff > Onboarding Handoff"
 // list (id confirmed via the list's own hierarchy/v1/subcategory network
@@ -3250,9 +3282,11 @@ async function handlePipelineSyncClickUp(request, env) {
     assigneeUserId = await findClickUpUserIdByEmail(apiToken, assigneeEmail);
   }
 
+  const clickUpStatus = mapHubStageToClickUpStatus(stage);
+
   try {
     if (taskId) {
-      const body = { name, status: stage, markdown_description };
+      const body = { name, status: clickUpStatus, markdown_description };
       if (assigneeUserId) body.assignees = { add: [assigneeUserId] };
       const res = await fetch(`https://api.clickup.com/api/v2/task/${encodeURIComponent(taskId)}`, {
         method: "PUT",
@@ -3288,7 +3322,7 @@ async function handlePipelineSyncClickUp(request, env) {
 
       return jsonResponse({ ok: true, taskId: data.id || taskId, assigneeMatched: assigneeEmail ? !!assigneeUserId : undefined, accountManagerFieldSet });
     } else {
-      const body = { name, status: stage, markdown_description };
+      const body = { name, status: clickUpStatus, markdown_description };
       if (assigneeUserId) body.assignees = [assigneeUserId];
       const res = await fetch(`https://api.clickup.com/api/v2/list/${CLICKUP_SALES_PIPELINE_LIST_ID}/task`, {
         method: "POST",
