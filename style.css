@@ -300,9 +300,19 @@ input, select, textarea { max-width: 100%; }
 .admin-notif-item.read .admin-notif-item-dot {
   background: transparent;
 }
+.admin-notif-item-body {
+  /* flex:1 + min-width:0 - without these, this flex child's intrinsic
+     content width (the longest unbreakable run in the notification text)
+     wins over wrapping, pushing past the dropdown's fixed 400px width and
+     getting silently clipped by .admin-notif-dropdown's overflow:hidden
+     instead of wrapping to a second line like it's supposed to. */
+  flex: 1;
+  min-width: 0;
+}
 .admin-notif-item-body p {
   margin: 0 0 4px 0;
   color: var(--text-main);
+  overflow-wrap: break-word;
 }
 .admin-notif-item.read .admin-notif-item-body p {
   color: var(--text-muted);
