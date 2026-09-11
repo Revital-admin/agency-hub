@@ -103,6 +103,7 @@ body {
 .section-tag.status-cancelled { border-color: var(--color-text-muted); color: var(--color-text-muted); }
 
 .tracker-table tr.row-renewal-soon { border-left: 3px solid #eab308; background: rgba(234, 179, 8, 0.06); }
+.tracker-table tr.row-renewal-overdue { border-left: 3px solid #ef4444; background: rgba(239, 68, 68, 0.08); }
 
 .btn-generate-pdf {
   background: rgba(246, 141, 95, 0.12);

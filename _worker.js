@@ -26,6 +26,7 @@ export default {
     if (event.cron === "0 12 * * *") {
       ctx.waitUntil(runDailyComplianceCheck(env));
       ctx.waitUntil(runStalePipelineCheck(env));
+      ctx.waitUntil(runOverdueSubscriptionCheck(env));
     } else {
       ctx.waitUntil(runWeeklyHealthDigest(env));
     }
@@ -6103,6 +6104,82 @@ async function runStalePipelineCheck(env) {
     });
   } catch (e) {
     console.error("Daily stale pipeline lead check failed:", e);
+  }
+}
+
+// ── Daily Overdue Subscription Check (Cron Trigger, see scheduled()
+// above) ──
+// Subscription Tracker's own "Renewing in 30 Days" stat only ever
+// counted 0 <= days <= 30 - a renewal date already in the past just
+// silently fell out of that filter with nothing else flagging it (see
+// the matching UI fix in subscription-tracker/js/app.js's
+// updateSummary/renderTable). That's a real risk here specifically
+// because two of the tracked tools (GoDaddy Domain, Google Workspace)
+// are the Hub's own hosting and email - an actually-lapsed renewal
+// isn't just a spreadsheet inaccuracy, it can take the Hub or company
+// email offline. Always routes to the digest recipients (not a
+// per-stage roster flag like the pipeline nudge) since a subscription
+// lapsing is inherently an admin/ops concern regardless of team size.
+const OVERDUE_SUBSCRIPTION_STATE_DOC_PATH = "agency/overdueSubscriptionAlertState";
+
+function buildOverdueSubscriptionSignatures(subscriptions) {
+  const today = healthDigestTodayStr();
+  const sig = {};
+  (subscriptions || []).forEach(s => {
+    if (!s.id || s.status === "Cancelled" || !s.renewalDate) return;
+    const days = healthDigestDaysBetween(today, s.renewalDate); // renewalDate - today: negative = already past
+    if (days < 0) sig[s.id] = { toolName: s.toolName || "(unnamed tool)", renewalDate: s.renewalDate, daysOverdue: -days };
+  });
+  return sig;
+}
+
+async function runOverdueSubscriptionCheck(env) {
+  const recipients = (env.HEALTH_DIGEST_RECIPIENTS || "admin@revitalproductions.com")
+    .split(",").map(s => s.trim()).filter(Boolean);
+
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const [subDoc, alertStateDoc] = await Promise.all([
+      firestoreGetDoc(accessToken, projectId, "agency/subscriptionTracker"),
+      firestoreGetDoc(accessToken, projectId, OVERDUE_SUBSCRIPTION_STATE_DOC_PATH)
+    ]);
+    const subscriptions = subDoc && Array.isArray(subDoc.list) ? subDoc.list : [];
+    const currentSig = buildOverdueSubscriptionSignatures(subscriptions);
+    const previousById = (alertStateDoc && alertStateDoc.byTool) || {};
+
+    const allIds = new Set([...Object.keys(currentSig), ...Object.keys(previousById)]);
+    const changed = [...allIds].some(id => !!currentSig[id] !== !!previousById[id]);
+
+    if (changed) {
+      const rows = Object.values(currentSig).sort((a, b) => b.daysOverdue - a.daysOverdue);
+      const subject = rows.length
+        ? `Overdue Subscription Alert — ${rows.length} renewal${rows.length === 1 ? "" : "s"} past due`
+        : "Overdue Subscription Alert — all clear";
+      const bodyIntro = "Something changed since yesterday's check.";
+      const html = rows.length
+        ? `<div style="font-family: Arial, sans-serif; color:#1e293b; max-width:600px;">
+             <h2 style="margin-bottom:4px;">Overdue Subscription Alert</h2>
+             <p style="color:#64748b; margin-top:0;">${bodyIntro} These renewal dates have already passed:</p>
+             <ul style="padding-left:20px;">${rows.map(r => `<li style="margin-bottom:6px;"><strong>${escapeHtmlForDigest(r.toolName)}</strong> — renewal was ${escapeHtmlForDigest(r.renewalDate)} (${r.daysOverdue}d ago)</li>`).join("")}</ul>
+             <p style="font-size:12px; color:#94a3b8; margin-top:24px;">This usually just means the date in Subscription Tracker was never updated after actually renewing - but verify directly with the vendor, especially for GoDaddy Domain or Google Workspace (a real lapse there takes the Hub or company email offline).</p>
+           </div>`
+        : `<div style="font-family: Arial, sans-serif; color:#1e293b; max-width:600px;">
+             <h2 style="margin-bottom:4px;">Overdue Subscription Alert</h2>
+             <p>${bodyIntro} All previously flagged overdue renewals are now resolved.</p>
+           </div>`;
+      const text = rows.length
+        ? ["OVERDUE SUBSCRIPTION ALERT", `${bodyIntro} These renewal dates have already passed:`, "", ...rows.map(r => `- ${r.toolName}: renewal was ${r.renewalDate} (${r.daysOverdue}d ago)`)].join("\n")
+        : `OVERDUE SUBSCRIPTION ALERT\n${bodyIntro} All previously flagged overdue renewals are now resolved.`;
+
+      await sendHealthDigestEmail(env, recipients, subject, html, text);
+    }
+
+    await firestoreSetDoc(accessToken, projectId, OVERDUE_SUBSCRIPTION_STATE_DOC_PATH, {
+      byTool: currentSig,
+      lastCheckedAt: new Date().toISOString()
+    });
+  } catch (e) {
+    console.error("Daily overdue subscription check failed:", e);
   }
 }
 

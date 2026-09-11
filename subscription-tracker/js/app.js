@@ -225,11 +225,23 @@ function updateSummary() {
     const days = daysUntil(e.renewalDate);
     return days !== null && days >= 0 && days <= 30;
   }).length;
+  // A renewal date already in the past used to just silently fall out
+  // of "Renewing in 30 Days" (that filter requires days >= 0) with
+  // nothing else ever surfacing it - easy to read as "nothing due soon"
+  // when it actually means "this either already lapsed or the date here
+  // is stale." Called out as its own stat so it can't hide in plain
+  // sight like that again. See runOverdueSubscriptionCheck in
+  // _worker.js for the daily email version of this same check.
+  const overdue = active.filter(e => {
+    const days = daysUntil(e.renewalDate);
+    return days !== null && days < 0;
+  }).length;
 
   el('summaryMonthlyCost').textContent = '$' + Math.round(totalMonthly).toLocaleString();
   el('summaryAnnualCost').textContent = '$' + Math.round(totalMonthly * 12).toLocaleString();
   el('summaryActiveCount').textContent = active.length;
   el('summaryRenewingSoon').textContent = renewingSoon;
+  el('summaryOverdue').textContent = overdue;
 }
 
 function renderTable() {
@@ -250,13 +262,14 @@ function renderTable() {
   tbody.innerHTML = rows.map(e => {
     const days = daysUntil(e.renewalDate);
     const renewalSoon = days !== null && days >= 0 && days <= 30;
+    const overdue = e.status !== 'Cancelled' && days !== null && days < 0;
     const statusClass = e.status === 'Cancelled' ? 'status-cancelled' : 'status-active';
-    return `<tr class="${renewalSoon ? 'row-renewal-soon' : ''}">
+    return `<tr class="${overdue ? 'row-renewal-overdue' : (renewalSoon ? 'row-renewal-soon' : '')}">
       <td class="client-cell">${escapeHtml(e.toolName)}</td>
       <td>${escapeHtml(e.category)}</td>
       <td>$${Math.round(parseFormattedNumber(e.monthlyCost)).toLocaleString()}</td>
       <td>${escapeHtml(e.billingCycle)}</td>
-      <td class="date-cell">${e.renewalDate ? escapeHtml(e.renewalDate) : '—'}</td>
+      <td class="date-cell">${e.renewalDate ? escapeHtml(e.renewalDate) : '—'}${overdue ? ` <span style="color:#ef4444; font-weight:600;">(${Math.abs(days)}d overdue - verify with vendor)</span>` : ''}</td>
       <td>${escapeHtml(e.owner) || '—'}</td>
       <td><span class="section-tag ${statusClass}">${escapeHtml(e.status)}</span></td>
       <td>
