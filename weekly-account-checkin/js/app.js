@@ -102,6 +102,22 @@ function saveCheckin() {
     window.parent.showBanner('success', `Check-in saved for ${client.name} — Health: ${entry.healthRating}.`);
   }
 
+  // Keep the HubSpot Deal's client_health/billing_status properties
+  // genuinely aligned with what was just saved here, rather than letting
+  // them be separate fields someone has to remember to update by hand in
+  // HubSpot. Silent on failure (console.warn only, no banner) - almost no
+  // clients have a HubSpot deal yet (Sept 2026), so a banner here would
+  // just be weekly noise for the "no_deal" case that's currently the norm.
+  if (window.parent.syncClientHealthToHubSpot) {
+    window.parent.syncClientHealthToHubSpot(client.name, entry.healthRating, entry.billingStatus)
+      .then(result => {
+        if (!result.ok && result.reason === 'error') {
+          console.warn('HubSpot client health/billing sync failed:', result.error);
+        }
+      })
+      .catch(e => console.warn('HubSpot client health/billing sync failed:', e));
+  }
+
   // Health just flipped to Green (only fires on the flip, not on every
   // Green check-in in a row, and only when this save is the client's
   // current/latest entry) - a good, low-effort moment to ask for a

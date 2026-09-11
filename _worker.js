@@ -3521,7 +3521,7 @@ async function handlePipelineSyncHubSpot(request, env) {
   } catch (e) {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
-  const { dealId, name, stage, contactEmail, source, notes, ownerEmail } = payload || {};
+  const { dealId, name, stage, contactEmail, source, notes, ownerEmail, clientHealth, billingStatus } = payload || {};
   if (!name || !stage) return jsonResponse({ error: "name and stage are required" }, 400);
 
   try {
@@ -3539,6 +3539,16 @@ async function handlePipelineSyncHubSpot(request, env) {
       ownerId = await findHubSpotOwnerIdByEmail(token, ownerEmail);
       if (ownerId) properties.hubspot_owner_id = ownerId;
     }
+
+    // client_health / billing_status are custom Deal properties (created
+    // Sept 2026) that mirror the Weekly Account Check-in's healthRating/
+    // billingStatus fields exactly - see syncClientHealthToHubSpot in
+    // app.js, the only caller that passes these. Every other caller
+    // (Sales Pipeline Board saves, referral/cold-outreach auto-create)
+    // passes neither and these stay no-ops, same pattern as ownerEmail
+    // above.
+    if (clientHealth) properties.client_health = clientHealth;
+    if (billingStatus) properties.billing_status = billingStatus;
 
     const isNewDeal = !dealId;
     let resolvedDealId;

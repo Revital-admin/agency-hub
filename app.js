@@ -4427,6 +4427,53 @@ async function syncAccountManagerToHubSpotOwner(clientName, amEmail) {
   }
 }
 
+// HubSpot counterpart to the Weekly Account Check-in's healthRating/
+// billingStatus fields - keeps the client_health/billing_status custom
+// Deal properties (created Sept 2026) genuinely in sync with whatever was
+// last saved in a check-in, rather than letting them be separate,
+// manually-maintained HubSpot fields that drift out of alignment with the
+// Hub's own data. Same lookup-by-name/reason shapes as
+// syncAccountManagerToHubSpotOwner above (reason: 'no_deal' when the lead
+// was never synced to HubSpot yet). Called from weekly-account-checkin's
+// saveCheckin() - see that file for the fire-and-forget/silent-failure
+// handling, since most clients have no HubSpot deal yet.
+async function syncClientHealthToHubSpot(clientName, healthRating, billingStatus) {
+  if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) {
+    return { ok: false, reason: "not_ready" };
+  }
+  const trimmedName = (clientName || "").trim();
+  if (!trimmedName || (!healthRating && !billingStatus)) return { ok: false, reason: "missing_input" };
+
+  let lead;
+  try {
+    const docRef = window.firebaseDoc(window.firebaseDb, "agency", "salesPipeline");
+    const snap = await window.firebaseGetDoc(docRef);
+    const data = snap && snap.exists ? snap.data() : null;
+    const list = (data && data.list) || [];
+    lead = list.find(l => (l.name || "").trim().toLowerCase() === trimmedName.toLowerCase());
+  } catch (e) {
+    return { ok: false, reason: "error", error: e };
+  }
+
+  if (!lead || !lead.hubspotDealId) return { ok: false, reason: "no_deal" };
+
+  try {
+    const res = await fetch("/api/pipeline/sync-hubspot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dealId: lead.hubspotDealId, name: lead.name, stage: lead.stage,
+        contactEmail: lead.contactEmail, clientHealth: healthRating, billingStatus
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, reason: "error", error: new Error(data.error || `Request failed (${res.status})`) };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: "error", error: e };
+  }
+}
+
 // Companion to the function above, for the "Growth > Closing & Onboarding
 // Handoff > Onboarding Handoff" list - a separate list with no tracked
 // task id anywhere in the Hub, so the Worker searches for the matching
