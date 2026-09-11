@@ -952,6 +952,22 @@ async function toggleAssignedClient(memberId, clientName, checked) {
   }
 }
 
+// Google's own "make a copy" URL suffix - opening this while signed into
+// any Google account prompts "Make a copy" client-side, no Drive API or
+// server round-trip needed. Deliberately not routed through the Drive API
+// (createDriveFolder/copyDriveFile in _worker.js): that integration is
+// currently broken in production (Drive API not enabled in the Google
+// Cloud project yet, domain-wide delegation scope also unset - see the
+// PREREQUISITE comment on handleCreateClientDriveFolder), so anything
+// built on it right now would just fail. The copy keeps the invoice
+// template's bound Apps Script (Contractor Tools > Pull My Hours from
+// Portal) automatically - Google Sheets carries a container-bound script
+// across File > Make a copy - so this needs nothing beyond the file id.
+const CONTRACTOR_INVOICE_SHEET_TEMPLATE_ID = "1dDMUjwukb5Nl2SaP0FOiy-xjXAH4-Aei6JTSe7VVKIk";
+function contractorInvoiceSheetCopyUrl() {
+  return `https://docs.google.com/spreadsheets/d/${CONTRACTOR_INVOICE_SHEET_TEMPLATE_ID}/copy`;
+}
+
 function renderPortalAccessSection() {
   const section = el('portalAccessSection');
   if (!section) return;
@@ -964,16 +980,21 @@ function renderPortalAccessSection() {
   const linkRow = el('portalAccessLinkRow');
   const generateBtn = el('generatePortalLinkBtn');
   const linkInput = el('portalAccessLinkInput');
+  const sheetRow = el('portalInvoiceSheetRow');
+  const sheetInput = el('portalInvoiceSheetLinkInput');
 
   if (member.contractorPortalToken) {
     note.style.display = 'none';
     linkRow.style.display = 'flex';
     generateBtn.style.display = 'none';
     linkInput.value = `${window.location.origin}/contractor-portal/index.html?t=${member.contractorPortalToken}`;
+    if (sheetRow) sheetRow.style.display = 'block';
+    if (sheetInput) sheetInput.value = contractorInvoiceSheetCopyUrl();
   } else {
     note.style.display = 'block';
     linkRow.style.display = 'none';
     generateBtn.style.display = '';
+    if (sheetRow) sheetRow.style.display = 'none';
   }
 }
 
@@ -2138,6 +2159,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
         await navigator.clipboard.writeText(input.value);
         if (window.parent.showBanner) window.parent.showBanner('success', 'Link copied.');
+      } catch (e) {
+        input.select();
+        if (window.parent.showBanner) window.parent.showBanner('error', "Couldn't copy automatically - link is selected, copy it manually.");
+      }
+    });
+  }
+
+  const copyInvoiceSheetLinkBtn = el('copyInvoiceSheetLinkBtn');
+  if (copyInvoiceSheetLinkBtn) {
+    copyInvoiceSheetLinkBtn.addEventListener('click', async () => {
+      const input = el('portalInvoiceSheetLinkInput');
+      try {
+        await navigator.clipboard.writeText(input.value);
+        if (window.parent.showBanner) window.parent.showBanner('success', 'Invoice sheet link copied.');
       } catch (e) {
         input.select();
         if (window.parent.showBanner) window.parent.showBanner('error', "Couldn't copy automatically - link is selected, copy it manually.");

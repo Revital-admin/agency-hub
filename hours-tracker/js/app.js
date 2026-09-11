@@ -377,6 +377,63 @@ function findEntry(id) {
   return entries.find(e => e.id === id);
 }
 
+// ── CSV export ──
+// Exports whatever's currently filtered/visible, not the whole
+// collection - so e.g. filtering the search box to one contractor's name
+// plus a date range and hitting Export gives exactly the rows needed to
+// cross-check that contractor's invoice against what they logged here.
+// Kept dependency-free (no CSV library) since this is a small, fixed set
+// of columns.
+function csvEscape(value) {
+  const str = String(value === null || value === undefined ? '' : value);
+  if (/[",\n]/.test(str)) {
+    return '"' + str.replace(/"/g, '""') + '"';
+  }
+  return str;
+}
+
+function exportVisibleRowsToCsv() {
+  const rows = entries
+    .filter(matchesFilters)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  if (!rows.length) {
+    if (isEmbedded && window.parent.showBanner) {
+      window.parent.showBanner('error', 'Nothing to export — no rows match the current search/date filters.');
+    }
+    return;
+  }
+
+  const header = ['Date', 'Team Member', 'Client', 'Project', 'Hours', 'Billable', 'Notes'];
+  const lines = [header.map(csvEscape).join(',')];
+  rows.forEach(e => {
+    lines.push([
+      e.date || '',
+      e.memberName || '',
+      e.clientName || '',
+      e.projectName || '',
+      (parseFloat(e.hours) || 0).toFixed(2).replace(/\.?0+$/, ''),
+      e.billable ? 'Yes' : 'No',
+      e.notes || ''
+    ].map(csvEscape).join(','));
+  });
+
+  const csvContent = lines.join('\r\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateFrom = el('filterDateFrom').value;
+  const dateTo = el('filterDateTo').value;
+  const stamp = todayStr();
+  const rangePart = (dateFrom || dateTo) ? `_${dateFrom || 'start'}_to_${dateTo || 'end'}` : '';
+  a.href = url;
+  a.download = `hours-log${rangePart}_exported-${stamp}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function wireRowListeners() {
   document.querySelectorAll('.notes-input').forEach(inp => {
     inp.addEventListener('change', async () => {
@@ -477,6 +534,7 @@ function initListeners() {
   el('filterSearchInput').addEventListener('input', renderTable);
   el('filterDateFrom').addEventListener('change', renderTable);
   el('filterDateTo').addEventListener('change', renderTable);
+  el('exportCsvBtn').addEventListener('click', exportVisibleRowsToCsv);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

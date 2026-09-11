@@ -241,6 +241,29 @@
 <button type="button" id="revokePortalLinkBtn" class="btn btn-secondary" style="padding:8px 14px; font-size:0.8rem; color:#ef4444;">Revoke</button>
 </div>
 <button type="button" id="generatePortalLinkBtn" class="btn btn-secondary" style="padding:8px 14px; font-size:0.8rem;">Generate Portal Link</button>
+
+<!-- Contractor Invoice Sheet - shown once a Portal link exists (same
+     "something to send them, together" moment as the link above).
+     Deliberately NOT a Drive-API-copied file: that integration
+     (createDriveFolder/copyDriveFile in _worker.js) is currently broken
+     in production - the Drive API isn't even enabled in the Google Cloud
+     project yet, on top of the domain-wide-delegation scope also being
+     unset - so it fails before ever reaching a real request. This uses
+     Google Sheets' own built-in "/copy" URL suffix instead: opening it
+     while signed into any Google account prompts "Make a copy" client-
+     side, no Drive API or server involvement at all. The copy keeps the
+     bound Apps Script (Contractor Tools > Pull My Hours from Portal)
+     automatically - Google Sheets carries a container-bound script
+     across File > Make a copy. See contractorInvoiceSheetCopyUrl in
+     js/app.js. -->
+<div id="portalInvoiceSheetRow" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid var(--color-border);">
+<label style="margin-bottom:6px;">Contractor Invoice Sheet</label>
+<p style="font-size:0.72rem; color:var(--text-muted); margin:0 0 8px;">A fresh copy of the invoice template - Rate/Show/Position pre-formatted, plus a "Pull My Hours from Portal" button that pulls straight from the Portal link above, instead of a blank spreadsheet.</p>
+<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+<input type="text" id="portalInvoiceSheetLinkInput" readonly style="flex:1; min-width:260px;">
+<button type="button" id="copyInvoiceSheetLinkBtn" class="btn btn-secondary" style="padding:8px 14px; font-size:0.8rem;">Copy Link</button>
+</div>
+</div>
 </div>
 
 <!-- Assigned Clients - which clients' creative brief/brand basics and
@@ -347,6 +370,6 @@
 </div>
 
 </main>
-<script src="js/app.js?v=16"></script>
+<script src="js/app.js?v=17"></script>
 </body>
 </html>
