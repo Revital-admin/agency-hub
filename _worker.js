@@ -5697,19 +5697,56 @@ function healthDigestReasons(row) {
   return reasons;
 }
 
+// Worker-side port of team-roster/js/app.js's complianceIssues() - kept
+// byte-for-byte equivalent in intent (any change to what counts as a
+// compliance issue there should be mirrored here, same convention as
+// buildHealthDigestRows above vs the dashboard's buildRows()). Can't
+// just call the client-side function directly since this runs in the
+// Worker's Cron Trigger with no DOM/browser globals, only plain data.
+function contractorComplianceIssues(member) {
+  if (!member || member.employmentType !== "Contractor") return [];
+  const issues = [];
+  if (!member.w9OnFile) issues.push("W-9 missing");
+  if (member.insuranceExpirationDate) {
+    const days = Math.round((new Date(member.insuranceExpirationDate) - new Date(new Date().toDateString())) / 86400000);
+    if (!Number.isNaN(days)) {
+      if (days < 0) issues.push("Insurance expired");
+      else if (days <= 30) issues.push(`Insurance expires in ${days}d`);
+    }
+  }
+  return issues;
+}
+
+// The nudge itself - a contractor-compliance section riding along on the
+// same weekly Cron Trigger as the client health digest above, rather
+// than a brand-new notification system. Previously this only showed as
+// a passive badge on Team Roster (see complianceIssues() there) that
+// nobody was proactively told about; this surfaces it in the same
+// inbox, on the same cadence, admin-side only (W-9/insurance status is
+// an internal record-keeping concern, not something to email a
+// contractor about automatically).
+function buildContractorComplianceRows(members) {
+  return (members || [])
+    .map(m => ({ name: m.memberName || "(unnamed)", issues: contractorComplianceIssues(m) }))
+    .filter(r => r.issues.length);
+}
+
 function escapeHtmlForDigest(s) {
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-function buildHealthDigestEmail(rows) {
+function buildHealthDigestEmail(rows, complianceRows) {
   const attention = rows.filter(r => r.needsAttention);
   const upsell = rows.filter(r => r.upsellOpportunity);
   const totalClients = rows.length;
+  const compliance = complianceRows || [];
 
   const subject = attention.length
     ? `Weekly Agency Health Digest — ${attention.length} client${attention.length === 1 ? "" : "s"} need attention`
-    : "Weekly Agency Health Digest — all clients on track";
+    : compliance.length
+      ? `Weekly Agency Health Digest — ${compliance.length} contractor compliance item${compliance.length === 1 ? "" : "s"}`
+      : "Weekly Agency Health Digest — all clients on track";
 
   const summaryLine = totalClients === 0
     ? "No clients in the Hub yet."
@@ -5723,13 +5760,19 @@ function buildHealthDigestEmail(rows) {
     ? `<p><strong>💡 Upsell opportunities (overspending, health not Red):</strong> ${upsell.map(r => escapeHtmlForDigest(r.name)).join(", ")}</p>`
     : "";
 
+  const complianceHtml = compliance.length
+    ? `<h3 style="margin-bottom:4px;">Contractor Compliance</h3>
+       <ul style="padding-left:20px;">${compliance.map(r => `<li style="margin-bottom:6px;"><strong>${escapeHtmlForDigest(r.name)}</strong> — ${r.issues.map(escapeHtmlForDigest).join("; ")}</li>`).join("")}</ul>`
+    : "";
+
   const html = `
     <div style="font-family: Arial, sans-serif; color:#1e293b; max-width:600px;">
       <h2 style="margin-bottom:4px;">Weekly Agency Health Digest</h2>
       <p style="color:#64748b; margin-top:0;">${escapeHtmlForDigest(summaryLine)}</p>
       <ul style="padding-left:20px;">${listItemsHtml}</ul>
       ${upsellHtml}
-      <p style="font-size:12px; color:#94a3b8; margin-top:24px;">Generated automatically from the same data as Agency Health Dashboard in the Hub. Open the Hub → Agency Health Dashboard for the full live view and to filter/search.</p>
+      ${complianceHtml}
+      <p style="font-size:12px; color:#94a3b8; margin-top:24px;">Generated automatically from the same data as Agency Health Dashboard in the Hub. Open the Hub → Agency Health Dashboard for the full live view and to filter/search. Contractor Compliance is pulled from Team Roster & Capacity.</p>
     </div>
   `;
 
@@ -5742,6 +5785,10 @@ function buildHealthDigestEmail(rows) {
   if (upsell.length) {
     textLines.push("");
     textLines.push("Upsell opportunities (overspending, health not Red): " + upsell.map(r => r.name).join(", "));
+  }
+  if (compliance.length) {
+    textLines.push("", "CONTRACTOR COMPLIANCE");
+    compliance.forEach(r => textLines.push(`- ${r.name}: ${r.issues.join("; ")}`));
   }
   textLines.push("", "Open the Hub -> Agency Health Dashboard for the full live view.");
 
@@ -5775,7 +5822,7 @@ async function runWeeklyHealthDigest(env) {
 
   try {
     const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
-    const [clients, revisionRecords, contractInvoiceRecords, lastQbrDatesByClient] = await Promise.all([
+    const [clients, revisionRecords, contractInvoiceRecords, lastQbrDatesByClient, teamRosterDoc] = await Promise.all([
       fetchAllClientsFromFirestore(accessToken, projectId),
       fetchRevisionRecords(accessToken, projectId),
       firestoreListCollection(accessToken, projectId, "contractInvoiceRecords").catch(e => {
@@ -5785,10 +5832,15 @@ async function runWeeklyHealthDigest(env) {
       fetchLastQbrDatesByClient(accessToken, projectId).catch(e => {
         console.warn("Digest: couldn't load adminActivityLog, skipping QBR-due signal:", e);
         return {};
+      }),
+      firestoreGetDoc(accessToken, projectId, "agency/teamRoster").catch(e => {
+        console.warn("Digest: couldn't load teamRoster, skipping contractor compliance signal:", e);
+        return null;
       })
     ]);
     const rows = buildHealthDigestRows(clients, revisionRecords, contractInvoiceRecords, lastQbrDatesByClient);
-    const { subject, html, text } = buildHealthDigestEmail(rows);
+    const complianceRows = buildContractorComplianceRows(teamRosterDoc && Array.isArray(teamRosterDoc.list) ? teamRosterDoc.list : []);
+    const { subject, html, text } = buildHealthDigestEmail(rows, complianceRows);
     await sendHealthDigestEmail(env, recipients, subject, html, text);
   } catch (e) {
     console.error("Weekly health digest failed:", e);
