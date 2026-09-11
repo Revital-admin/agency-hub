@@ -239,6 +239,8 @@ const btnEyedropperAccent = document.getElementById("btnEyedropperAccent");
 const syncFromBrandKitBtn = document.getElementById("syncFromBrandKitBtn");
 const showBillingInPortalInput = document.getElementById("showBillingInPortal");
 const engagementStageSelect = document.getElementById("engagementStageSelect");
+const onboardingStatusSelect = document.getElementById("onboardingStatusSelect");
+const objectiveInput = document.getElementById("objectiveInput");
 
 
 const inputs = {
@@ -300,6 +302,8 @@ function init() {
       accentColor: "#f59e0b",
       showBillingInPortal: false,
       engagementStage: "onboarding",
+      onboardingStatus: "Onboarding",
+      objective: "",
       magicToken: generateSecureToken()
     };
     if (parentSave) parentSave();
@@ -352,6 +356,51 @@ function init() {
       updateConfig("engagementStage", e.target.value);
       if (window.parent.logAdminActivity) {
         window.parent.logAdminActivity("Engagement stage changed", `${client.name || client.id}: ${e.target.value}`);
+      }
+    });
+  }
+
+  // CRM Status (Internal Only) - distinct from the client-facing
+  // Engagement Stage above. onboardingStatusSelect fires its HubSpot sync
+  // on 'change' (a dropdown only fires that on an actual new selection);
+  // objectiveInput fires on 'blur' rather than 'input' so a free-text
+  // field doesn't sync to HubSpot on every keystroke. Both fail silently
+  // (console.warn only) - most clients have no HubSpot deal yet, so a
+  // banner here would just be noise for the "no_deal" case that's
+  // currently the norm.
+  if (onboardingStatusSelect) {
+    onboardingStatusSelect.value = config.onboardingStatus || "Onboarding";
+    onboardingStatusSelect.addEventListener("change", (e) => {
+      updateConfig("onboardingStatus", e.target.value);
+      if (window.parent.logAdminActivity) {
+        window.parent.logAdminActivity("Onboarding status changed", `${client.name || client.id}: ${e.target.value}`);
+      }
+      if (window.parent.syncOnboardingDetailsToHubSpot) {
+        window.parent.syncOnboardingDetailsToHubSpot(client.name || client.id, e.target.value, config.objective)
+          .then(result => {
+            if (!result.ok && result.reason === "error") {
+              console.warn("HubSpot onboarding status sync failed:", result.error);
+            }
+          })
+          .catch(err => console.warn("HubSpot onboarding status sync failed:", err));
+      }
+    });
+  }
+
+  if (objectiveInput) {
+    objectiveInput.value = config.objective || "";
+    objectiveInput.addEventListener("input", (e) => {
+      updateConfig("objective", e.target.value);
+    });
+    objectiveInput.addEventListener("blur", (e) => {
+      if (window.parent.syncOnboardingDetailsToHubSpot) {
+        window.parent.syncOnboardingDetailsToHubSpot(client.name || client.id, config.onboardingStatus, e.target.value)
+          .then(result => {
+            if (!result.ok && result.reason === "error") {
+              console.warn("HubSpot objective sync failed:", result.error);
+            }
+          })
+          .catch(err => console.warn("HubSpot objective sync failed:", err));
       }
     });
   }

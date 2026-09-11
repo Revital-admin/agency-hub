@@ -3521,7 +3521,7 @@ async function handlePipelineSyncHubSpot(request, env) {
   } catch (e) {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
-  const { dealId, name, stage, contactEmail, source, notes, ownerEmail, clientHealth, billingStatus } = payload || {};
+  const { dealId, name, stage, contactEmail, source, notes, ownerEmail, clientHealth, billingStatus, onboardingStatus, objective } = payload || {};
   if (!name || !stage) return jsonResponse({ error: "name and stage are required" }, 400);
 
   try {
@@ -3549,6 +3549,15 @@ async function handlePipelineSyncHubSpot(request, env) {
     // above.
     if (clientHealth) properties.client_health = clientHealth;
     if (billingStatus) properties.billing_status = billingStatus;
+
+    // onboarding_status / objective are custom Deal properties (created
+    // Sept 2026) that mirror Client Portal Manager's own onboardingStatus/
+    // objective fields (see syncOnboardingDetailsToHubSpot in app.js, the
+    // only caller that passes these) - kept as real, admin-set fields on
+    // the client record rather than something only ever touched inside
+    // HubSpot, so they can't quietly drift from what the Hub says.
+    if (onboardingStatus) properties.onboarding_status = onboardingStatus;
+    if (objective) properties.objective = objective;
 
     const isNewDeal = !dealId;
     let resolvedDealId;
