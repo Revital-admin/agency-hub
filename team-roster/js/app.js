@@ -1818,6 +1818,8 @@ function resetForm() {
   el('bookableForCalls').checked = false;
   el('bookingTitle').value = '';
   el('specialtyKeywords').value = '';
+  el('handlesOutreach').checked = false;
+  el('handlesClosing').checked = false;
   el('formTitle').textContent = 'New Team Member';
   el('saveMemberBtn').textContent = 'Add Team Member';
   el('cancelEditBtn').style.display = 'none';
@@ -1852,6 +1854,8 @@ function gatherForm(base) {
   });
   entry.w9OnFile = el('w9OnFile').checked;
   entry.bookableForCalls = el('bookableForCalls').checked;
+  entry.handlesOutreach = el('handlesOutreach').checked;
+  entry.handlesClosing = el('handlesClosing').checked;
   return entry;
 }
 
@@ -1897,6 +1901,8 @@ function startEdit(id) {
   FORM_FIELDS.forEach(fieldId => { el(fieldId).value = entry[fieldId] || ''; });
   el('w9OnFile').checked = !!entry.w9OnFile;
   el('bookableForCalls').checked = !!entry.bookableForCalls;
+  el('handlesOutreach').checked = !!entry.handlesOutreach;
+  el('handlesClosing').checked = !!entry.handlesClosing;
   el('formTitle').textContent = 'Edit Team Member';
   el('saveMemberBtn').textContent = 'Update Team Member';
   el('cancelEditBtn').style.display = 'inline-block';

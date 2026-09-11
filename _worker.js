@@ -25,6 +25,7 @@ export default {
   async scheduled(event, env, ctx) {
     if (event.cron === "0 12 * * *") {
       ctx.waitUntil(runDailyComplianceCheck(env));
+      ctx.waitUntil(runStalePipelineCheck(env));
     } else {
       ctx.waitUntil(runWeeklyHealthDigest(env));
     }
@@ -5941,6 +5942,167 @@ async function runDailyComplianceCheck(env) {
     });
   } catch (e) {
     console.error("Daily contractor compliance check failed:", e);
+  }
+}
+
+// ── Daily Stale Pipeline Lead Check (Cron Trigger, see scheduled()
+// above) ──
+// Sales Pipeline Board has no per-lead "assignee" field and Team Roster
+// has no dedicated Sales/BD role, so routing here is stage-group ->
+// Team Roster flag rather than stage-group -> a specific hardcoded
+// person. That's deliberate: as soon as someone real is checked as
+// handling a group, alerts for that group start reaching them
+// automatically, with zero code changes - until then everything falls
+// back to admin@revitalproductions.com, which is the honest state of a
+// pre-revenue agency with no dedicated sales staff yet.
+//
+// Stage groups mirror Sales Pipeline Board's own STAGES list
+// (sales-pipeline-board/js/app.js) - keep in sync if stages are ever
+// renamed/added there:
+//   Outreach:  new lead, outreach sent, assessment in progress
+//   Discovery: discovery call scheduled, discovery complete
+//   Closing:   proposal sent, negotiation
+// closed won / closed lost are deliberately excluded - nothing to nudge
+// once a deal is decided.
+const STALE_LEAD_STATE_DOC_PATH = "agency/staleLeadAlertState";
+const STALE_LEAD_DAYS_THRESHOLD = 7;
+const STALE_LEAD_FALLBACK_RECIPIENT = "admin@revitalproductions.com";
+const STALE_LEAD_STAGE_GROUPS = [
+  { key: "outreach", label: "Outreach", stages: ["🆕 new lead", "📧 outreach sent", "📋 assessment in progress"], rosterFlag: "handlesOutreach" },
+  { key: "discovery", label: "Discovery", stages: ["discovery call scheduled", "🔍 discovery complete"], rosterFlag: "bookableForCalls" },
+  { key: "closing", label: "Closing", stages: ["📄 proposal sent", "🤝 negotiation"], rosterFlag: "handlesClosing" }
+];
+
+function stalePipelineStageGroup(stage) {
+  return STALE_LEAD_STAGE_GROUPS.find(g => g.stages.includes(stage)) || null;
+}
+
+// Emails for whoever's checked the given roster flag, falling back to
+// the admin address when nobody is (either the flag doesn't exist yet
+// on any member, or it's Sept 2026 and this agency simply has no
+// dedicated salesperson yet).
+function stalePipelineRecipients(members, rosterFlag) {
+  const emails = (members || [])
+    .filter(m => m && m[rosterFlag] && m.email)
+    .map(m => m.email.trim())
+    .filter(Boolean);
+  return emails.length ? emails : [STALE_LEAD_FALLBACK_RECIPIENT];
+}
+
+// One signature per lead - group + whether it's currently stale. Days
+// themselves are deliberately NOT part of the signature (unlike the
+// compliance check's "expires in Nd" countdown) - once a lead crosses
+// the threshold and gets alerted, it should stay quiet every subsequent
+// day it remains untouched, not re-alert as the day count keeps
+// climbing. Closed/unrecognized stages return no signature at all, so
+// a lead that closes simply drops out of tracking rather than counting
+// as a "resolved" stale item.
+function buildStaleLeadSignatures(leads) {
+  const today = healthDigestTodayStr();
+  const sig = {};
+  (leads || []).forEach(l => {
+    const group = stalePipelineStageGroup(l.stage);
+    if (!group || !l.id) return;
+    const days = l.updatedDate ? healthDigestDaysBetween(l.updatedDate, today) : 0;
+    sig[l.id] = {
+      group: group.key,
+      stale: days >= STALE_LEAD_DAYS_THRESHOLD,
+      days,
+      name: l.name || "(unnamed)",
+      source: l.source || "Unspecified",
+      stage: l.stage
+    };
+  });
+  return sig;
+}
+
+async function runStalePipelineCheck(env) {
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const [pipelineDoc, teamRosterDoc, alertStateDoc] = await Promise.all([
+      firestoreGetDoc(accessToken, projectId, "agency/salesPipeline"),
+      firestoreGetDoc(accessToken, projectId, "agency/teamRoster"),
+      firestoreGetDoc(accessToken, projectId, STALE_LEAD_STATE_DOC_PATH)
+    ]);
+    const leads = pipelineDoc && Array.isArray(pipelineDoc.list) ? pipelineDoc.list : [];
+    const members = teamRosterDoc && Array.isArray(teamRosterDoc.list) ? teamRosterDoc.list : [];
+
+    const currentSig = buildStaleLeadSignatures(leads);
+    const previousByLead = (alertStateDoc && alertStateDoc.byLead) || {};
+
+    const allLeadIds = new Set([...Object.keys(currentSig), ...Object.keys(previousByLead)]);
+    const changedLeadIds = [...allLeadIds].filter(id => {
+      const cur = currentSig[id] ? `${currentSig[id].group}|${currentSig[id].stale}` : null;
+      const prev = previousByLead[id] ? `${previousByLead[id].group}|${previousByLead[id].stale}` : null;
+      return cur !== prev;
+    });
+
+    // Merge groups by their actual recipient list rather than emailing
+    // once per group - right now every group falls back to the same
+    // admin address, so this collapses what would otherwise be up to 3
+    // separate emails into one. Once real people are assigned to
+    // different groups, this naturally splits back into separate emails
+    // per person with no code change needed.
+    const sections = []; // { group, rows, recipients }
+    STALE_LEAD_STAGE_GROUPS.forEach(g => {
+      const groupChanged = changedLeadIds.some(id => {
+        const curGroup = currentSig[id] && currentSig[id].group;
+        const prevGroup = previousByLead[id] && previousByLead[id].group;
+        return curGroup === g.key || prevGroup === g.key;
+      });
+      if (!groupChanged) return;
+      const rows = Object.values(currentSig)
+        .filter(v => v.group === g.key && v.stale)
+        .sort((a, b) => b.days - a.days);
+      sections.push({ group: g, rows, recipients: stalePipelineRecipients(members, g.rosterFlag) });
+    });
+
+    if (sections.length) {
+      const byRecipientKey = new Map(); // sorted-recipients-joined -> { recipients, sections }
+      sections.forEach(s => {
+        const key = s.recipients.slice().sort().join(",");
+        if (!byRecipientKey.has(key)) byRecipientKey.set(key, { recipients: s.recipients, sections: [] });
+        byRecipientKey.get(key).sections.push(s);
+      });
+
+      for (const { recipients, sections: sectionsForRecipient } of byRecipientKey.values()) {
+        const totalStale = sectionsForRecipient.reduce((sum, s) => sum + s.rows.length, 0);
+        const subject = totalStale
+          ? `Stale Lead Alert — ${totalStale} lead${totalStale === 1 ? "" : "s"} idle 7+ days`
+          : "Stale Lead Alert — all clear";
+
+        const sectionHtml = sectionsForRecipient.map(s => s.rows.length
+          ? `<h3 style="margin-bottom:4px;">${escapeHtmlForDigest(s.group.label)}</h3>
+             <ul style="padding-left:20px;">${s.rows.map(r => `<li style="margin-bottom:6px;"><strong>${escapeHtmlForDigest(r.name)}</strong> (${escapeHtmlForDigest(r.source)}) — ${r.days}d in "${escapeHtmlForDigest(r.stage)}"</li>`).join("")}</ul>`
+          : `<h3 style="margin-bottom:4px;">${escapeHtmlForDigest(s.group.label)}</h3><p style="color:#64748b;">All previously flagged ${escapeHtmlForDigest(s.group.label.toLowerCase())} leads have moved or been resolved.</p>`
+        ).join("");
+        const html = `<div style="font-family: Arial, sans-serif; color:#1e293b; max-width:600px;">
+             <h2 style="margin-bottom:4px;">Stale Lead Alert</h2>
+             <p style="color:#64748b; margin-top:0;">Something changed since yesterday's check.</p>
+             ${sectionHtml}
+             <p style="font-size:12px; color:#94a3b8; margin-top:24px;">Pulled from Sales Pipeline Board. This alert only fires when something changes, and is routed by who's checked for each stage group in Team Roster & Capacity (falls back to admin@revitalproductions.com until someone is).</p>
+           </div>`;
+        const textLines = ["STALE LEAD ALERT", "Something changed since yesterday's check.", ""];
+        sectionsForRecipient.forEach(s => {
+          textLines.push(s.group.label.toUpperCase());
+          if (s.rows.length) {
+            s.rows.forEach(r => textLines.push(`- ${r.name} (${r.source}) - ${r.days}d in "${r.stage}"`));
+          } else {
+            textLines.push(`All previously flagged ${s.group.label.toLowerCase()} leads have moved or been resolved.`);
+          }
+          textLines.push("");
+        });
+
+        await sendHealthDigestEmail(env, recipients, subject, html, textLines.join("\n"));
+      }
+    }
+
+    await firestoreSetDoc(accessToken, projectId, STALE_LEAD_STATE_DOC_PATH, {
+      byLead: currentSig,
+      lastCheckedAt: new Date().toISOString()
+    });
+  } catch (e) {
+    console.error("Daily stale pipeline lead check failed:", e);
   }
 }
 

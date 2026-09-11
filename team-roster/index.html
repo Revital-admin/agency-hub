@@ -189,6 +189,25 @@
 <p style="font-size:0.72rem; color:var(--text-muted); margin:4px 0 0;">Comma-separated. If a prospect's booking notes mention one of these words, they're routed to this person instead of round robin. Leave blank for a generic round-robin-only booker.</p>
 </div>
 
+<!-- Sales Pipeline nudge routing (Sept 2026) - who the Stale Lead Alert
+     emails for that stage go to (see runStalePipelineCheck in
+     _worker.js). Bookable for prospect discovery calls above already
+     covers the Discovery group; these two cover Outreach and Closing.
+     Nobody currently checked = alerts fall back to
+     admin@revitalproductions.com, so this is safe to leave unchecked
+     until there's a real dedicated salesperson - check it later and
+     routing picks it up automatically, no code change needed. -->
+<div class="form-group checkbox-form-group" style="display:flex; align-items:center; margin-top:10px;">
+<label for="handlesOutreach" style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+<input type="checkbox" id="handlesOutreach" style="width:auto;"> Handles lead outreach (Sales Pipeline nudges)
+</label>
+</div>
+<div class="form-group checkbox-form-group" style="display:flex; align-items:center; margin-top:10px;">
+<label for="handlesClosing" style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+<input type="checkbox" id="handlesClosing" style="width:auto;"> Handles deal closing (Sales Pipeline nudges)
+</label>
+</div>
+
 <div class="form-grid">
 <div class="form-group" id="currentClientCountGroup"><label for="currentClientCount">Current Client Load</label><input type="number" id="currentClientCount" min="0" step="1" placeholder="0"></div>
 <div class="form-group" id="liveLoadNote" style="display:none;"><label>Current Client Load</label><p style="font-size:0.78rem; color:var(--text-muted); margin:0; padding-top:8px;">Calculated automatically from clients whose account manager email matches this person - no manual entry needed.</p></div>
@@ -370,6 +389,6 @@
 </div>
 
 </main>
-<script src="js/app.js?v=17"></script>
+<script src="js/app.js?v=18"></script>
 </body>
 </html>
