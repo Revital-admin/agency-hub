@@ -14,12 +14,20 @@ const ADMIN_EMAIL_DOMAIN = "revitalproductions.com";
 
 export default {
   // Cron Trigger (see [triggers] in wrangler.toml) - runs the Weekly
-  // Agency Health Digest on a schedule with no request/user involved, so
-  // it's a separate entry point from fetch() above. Deploys automatically
-  // alongside the rest of this Worker; see runWeeklyHealthDigest below for
-  // what it actually does.
+  // Agency Health Digest and the Daily Contractor Compliance Check on
+  // their own schedules with no request/user involved, so this is a
+  // separate entry point from fetch() above. Deploys automatically
+  // alongside the rest of this Worker. Cloudflare invokes scheduled()
+  // once per matching cron expression and reports which one fired via
+  // event.cron, so with two crons configured this branches rather than
+  // always running the same job - see runWeeklyHealthDigest and
+  // runDailyComplianceCheck below for what each actually does.
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runWeeklyHealthDigest(env));
+    if (event.cron === "0 12 * * *") {
+      ctx.waitUntil(runDailyComplianceCheck(env));
+    } else {
+      ctx.waitUntil(runWeeklyHealthDigest(env));
+    }
   },
 
   async fetch(request, env, ctx) {
@@ -5858,6 +5866,81 @@ async function runWeeklyHealthDigest(env) {
     } catch (e2) {
       console.error("Also failed to send the digest-failure alert:", e2);
     }
+  }
+}
+
+// ── Daily Contractor Compliance Check (Cron Trigger, see scheduled()
+// above) ──
+// Same underlying signal as the Weekly Health Digest's own Contractor
+// Compliance section (contractorComplianceIssues/buildContractorComplianceRows
+// above), but daily and change-triggered rather than always-on, so a
+// missing W-9 or newly-expiring policy is caught same-day instead of
+// waiting up to a week for the digest. Only emails when something
+// actually changed since the last run - a new issue appearing, an
+// existing one resolving, or an existing one's text changing (e.g.
+// "Insurance expires in 10d" ticking down to "in 9d" the next day would
+// also count as changed, which is a deliberate choice: re-surfacing a
+// countdown as it ticks is more useful here than staying perfectly
+// silent) - otherwise a long-unresolved W-9 gap would re-email every
+// single day forever, which defeats the point of a nudge. Last-seen
+// state is persisted at agency/complianceAlertState since Workers keep
+// no memory between separate Cron Trigger invocations.
+const COMPLIANCE_ALERT_STATE_DOC_PATH = "agency/complianceAlertState";
+
+async function runDailyComplianceCheck(env) {
+  const recipients = (env.HEALTH_DIGEST_RECIPIENTS || "admin@revitalproductions.com")
+    .split(",").map(s => s.trim()).filter(Boolean);
+
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const [teamRosterDoc, alertStateDoc] = await Promise.all([
+      firestoreGetDoc(accessToken, projectId, "agency/teamRoster"),
+      firestoreGetDoc(accessToken, projectId, COMPLIANCE_ALERT_STATE_DOC_PATH)
+    ]);
+    const members = teamRosterDoc && Array.isArray(teamRosterDoc.list) ? teamRosterDoc.list : [];
+    const currentRows = buildContractorComplianceRows(members);
+
+    const currentByName = {};
+    currentRows.forEach(r => { currentByName[r.name] = r.issues.slice().sort(); });
+    const previousByName = (alertStateDoc && alertStateDoc.byMember) || {};
+
+    const allNames = new Set([...Object.keys(currentByName), ...Object.keys(previousByName)]);
+    const changed = [...allNames].filter(name => {
+      const cur = (currentByName[name] || []).join("|");
+      const prev = (previousByName[name] || []).join("|");
+      return cur !== prev;
+    });
+
+    if (changed.length) {
+      const subject = currentRows.length
+        ? `Contractor Compliance Alert — ${currentRows.length} item${currentRows.length === 1 ? "" : "s"} flagged`
+        : "Contractor Compliance Alert — all clear";
+
+      const bodyIntro = "Something changed since yesterday's check.";
+      const html = currentRows.length
+        ? `<div style="font-family: Arial, sans-serif; color:#1e293b; max-width:600px;">
+             <h2 style="margin-bottom:4px;">Contractor Compliance Alert</h2>
+             <p style="color:#64748b; margin-top:0;">${bodyIntro} Current status:</p>
+             <ul style="padding-left:20px;">${currentRows.map(r => `<li style="margin-bottom:6px;"><strong>${escapeHtmlForDigest(r.name)}</strong> — ${r.issues.map(escapeHtmlForDigest).join("; ")}</li>`).join("")}</ul>
+             <p style="font-size:12px; color:#94a3b8; margin-top:24px;">Pulled from Team Roster & Capacity. This alert only fires when something changes - see the Weekly Agency Health Digest for the standing weekly summary.</p>
+           </div>`
+        : `<div style="font-family: Arial, sans-serif; color:#1e293b; max-width:600px;">
+             <h2 style="margin-bottom:4px;">Contractor Compliance Alert</h2>
+             <p>${bodyIntro} All previously flagged contractor compliance items are now resolved.</p>
+           </div>`;
+      const text = currentRows.length
+        ? ["CONTRACTOR COMPLIANCE ALERT", `${bodyIntro} Current status:`, "", ...currentRows.map(r => `- ${r.name}: ${r.issues.join("; ")}`)].join("\n")
+        : `CONTRACTOR COMPLIANCE ALERT\n${bodyIntro} All previously flagged contractor compliance items are now resolved.`;
+
+      await sendHealthDigestEmail(env, recipients, subject, html, text);
+    }
+
+    await firestoreSetDoc(accessToken, projectId, COMPLIANCE_ALERT_STATE_DOC_PATH, {
+      byMember: currentByName,
+      lastCheckedAt: new Date().toISOString()
+    });
+  } catch (e) {
+    console.error("Daily contractor compliance check failed:", e);
   }
 }
 

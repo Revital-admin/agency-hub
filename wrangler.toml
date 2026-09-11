@@ -77,7 +77,13 @@ bucket_name = "revital-media"
 # admin@revitalproductions.com if unset:
 #   wrangler secret put HEALTH_DIGEST_RECIPIENTS
 [triggers]
-crons = ["0 13 * * 1"]
+# "0 13 * * 1" - Weekly Agency Health Digest, Mondays 1pm UTC.
+# "0 12 * * *" - Daily Contractor Compliance Check (Sept 2026) - same
+# underlying signal as the digest's own Contractor Compliance section,
+# but change-triggered and daily so a missing W-9 or newly-expiring
+# policy gets caught same-day instead of waiting up to a week. See
+# runDailyComplianceCheck in _worker.js.
+crons = ["0 13 * * 1", "0 12 * * *"]
 
 # Financial Center's QuickBooks Online sync (/api/quickbooks/* in
 # _worker.js). Unlike this file's other integrations, QuickBooks needs an
