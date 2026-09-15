@@ -12,11 +12,13 @@ Nobody has run a real test-restore against this project yet - the fixes below ar
 
 2. **App-level automatic backup.** Every successful client-database save also writes a full snapshot to `agency/clientsDbBackup-shard-0`, `-1`, etc. (plus `agency/clientsDbBackupShardMeta`, which has a `savedAt` timestamp). This is what saved the two client workspaces during the original incident. As of this session, it's fixed to only fire *after* the version-conflict check passes, so a rejected/stale save can no longer overwrite it with stale data (see the "Fix clientsDb safety-net backup firing before the version-conflict check" commit).
 
-3. **Firestore's own scheduled backups (Google-managed, independent of this app's code).** Recommended in the data-loss-prevention doc. **Status: not confirmed enabled** - this is the one item on this whole list that requires action, not just verification, if it hasn't been turned on. See Step 1.
+3. **Firestore's own scheduled backups (Google-managed, independent of this app's code).** Recommended in the data-loss-prevention doc. **Status: confirmed enabled (Sep 2026).** See Step 1.
 
 ---
 
 ## Step 1: Confirm Firestore scheduled backups are on (one-time, do this first if not already done)
+
+**Status: done, confirmed Sep 2026.**
 
 1. Google Cloud Console → Firestore → Databases.
 2. Find this project's database row → **Scheduled backups** column → **Edit settings**.
@@ -57,7 +59,7 @@ Nobody has done this yet. Do it once for real so this document reflects somethin
 
 ## Checklist
 
-- [ ] Firestore scheduled backups confirmed enabled (Step 1) - **do this first if not already done, everything else assumes it's on**
+- [x] Firestore scheduled backups confirmed enabled (Step 1) - confirmed Sep 2026
 - [ ] Monthly: `clientsDbBackupShardMeta.savedAt` checked for staleness
 - [ ] Monthly-ish: manual **Export Full Backup** saved somewhere outside Firestore
 - [ ] At least once, and quarterly going forward: a real test-restore performed (Step 3) and confirmed working end to end
