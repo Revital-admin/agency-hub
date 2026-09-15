@@ -215,14 +215,56 @@ function initAdminAuthGate() {
 // Access's own login flow takes over, rather than trying to fake a
 // re-auth client-side.
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+// How long before the real lock to show a heads-up so it's never a total
+// surprise mid-task (Sep 2026) - purely a warning, doesn't change when the
+// actual lock (and the real security boundary behind it) fires.
+const IDLE_WARNING_LEAD_MS = 60 * 1000; // warn 60s before locking
 const IDLE_ACTIVITY_EVENTS = ["mousemove", "mousedown", "keydown", "scroll", "touchstart", "wheel"];
 let idleTimer = null;
+let idleWarningTimer = null;
 let idleLocked = false;
+
+// Cross-device/cross-tab heartbeat (Sep 2026) - see the big comment on
+// handleIdleLockEngage in _worker.js for the full "why". Throttled hard
+// (real activity fires resetIdleTimer constantly - mousemove alone can be
+// dozens of times a second) so this stays a cheap, roughly-once-a-minute
+// ping rather than a Firestore write per mouse jiggle.
+const IDLE_HEARTBEAT_MIN_INTERVAL_MS = 60 * 1000;
+let lastIdleHeartbeatSentAt = 0;
+
+function sendIdleHeartbeat() {
+  const now = Date.now();
+  if (now - lastIdleHeartbeatSentAt < IDLE_HEARTBEAT_MIN_INTERVAL_MS) return;
+  lastIdleHeartbeatSentAt = now;
+  fetch("/api/idle-lock/heartbeat", { method: "POST", credentials: "include" }).catch((e) => {
+    console.warn("IdleSessionLock: heartbeat failed (non-fatal)", e);
+  });
+}
 
 function resetIdleTimer() {
   if (idleLocked) return;
   clearTimeout(idleTimer);
+  clearTimeout(idleWarningTimer);
+  hideIdleWarningToast();
+  sendIdleHeartbeat();
+  idleWarningTimer = setTimeout(showIdleWarningToast, IDLE_TIMEOUT_MS - IDLE_WARNING_LEAD_MS);
   idleTimer = setTimeout(showIdleLockOverlay, IDLE_TIMEOUT_MS);
+}
+
+// Non-blocking heads-up shown IDLE_WARNING_LEAD_MS before the real lock -
+// any of the same activity events that reset the idle timer also dismiss
+// this (via resetIdleTimer above), so as soon as someone moves the mouse
+// or presses a key it goes away and the clock resets like normal. Doesn't
+// exist in every tool iframe, only the top-level Hub chrome, so it's
+// looked up fresh each time rather than cached at load.
+function showIdleWarningToast() {
+  const toast = document.getElementById("idleWarningToast");
+  if (toast) toast.style.display = "flex";
+}
+
+function hideIdleWarningToast() {
+  const toast = document.getElementById("idleWarningToast");
+  if (toast) toast.style.display = "none";
 }
 
 // Attaches the idle-reset listeners to a given document. Safe to call
@@ -355,6 +397,29 @@ function checkIsHubAdmin() {
 // too, since this is a brand new page load with fresh JS state - the
 // server-side flag is what remembers, not this variable).
 async function showIdleLockOverlay() {
+  hideIdleWarningToast();
+
+  // Ask the server to actually engage the lock BEFORE committing to any
+  // of this tab's own local UI/sign-out state (Sep 2026). It may come
+  // back `skipped: true` - see the cross-device/cross-tab guard comment
+  // on handleIdleLockEngage in _worker.js - when someone signed in as
+  // this same person has a heartbeat fresher than one truly-idle tab
+  // could produce, meaning they're demonstrably still active elsewhere
+  // right now. In that case this was a false alarm for THIS identity as
+  // a whole: don't sign out, don't show the overlay, just quietly keep
+  // this tab running as if nothing happened.
+  try {
+    const engageRes = await fetch("/api/idle-lock/engage", { method: "POST", credentials: "include" });
+    const engageData = await engageRes.json().catch(() => null);
+    if (engageData && engageData.skipped) {
+      console.info("IdleSessionLock: lock skipped - recent activity elsewhere under this identity");
+      resetIdleTimer();
+      return;
+    }
+  } catch (e) {
+    console.warn("IdleSessionLock: engage call failed - locking locally anyway", e);
+  }
+
   idleLocked = true;
   const overlay = document.getElementById("idleLockOverlay");
   const errorEl = document.getElementById("idleLockError");
@@ -389,8 +454,7 @@ async function showIdleLockOverlay() {
   // the PIN form itself (see the status-check fail-open reasoning
   // below). Safe to call even if this browser never had a live Firebase
   // session (fresh-load-while-still-locked case) - signOut() on no user
-  // is a harmless no-op, and engage() re-stamping an already-set lockedAt
-  // just refreshes the timestamp.
+  // is a harmless no-op.
   try {
     if (window.firebase && firebase.auth && firebase.auth().currentUser) {
       await firebase.auth().signOut();
@@ -398,9 +462,6 @@ async function showIdleLockOverlay() {
   } catch (e) {
     console.warn("IdleSessionLock: sign-out failed", e);
   }
-  fetch("/api/idle-lock/engage", { method: "POST", credentials: "include" }).catch((e) => {
-    console.warn("IdleSessionLock: engage call failed (client-side sign-out above still applies)", e);
-  });
 
   let hasPin = true;
   let isHubAdmin = false;

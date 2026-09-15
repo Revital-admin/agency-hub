@@ -80,6 +80,16 @@
     <p id="idleLockError" style="display:none; color:#ef4444; max-width:380px; margin:0;"></p>
   </div>
 
+  <!-- Idle-lock warning toast (Sep 2026) - shown IDLE_WARNING_LEAD_MS
+       before the real lock above, so it's never a total surprise mid-task.
+       Any activity that resets the idle timer also hides this - see
+       resetIdleTimer/showIdleWarningToast/hideIdleWarningToast in app.js.
+       Purely a heads-up; doesn't change when the actual lock fires. -->
+  <div id="idleWarningToast" style="display:none; position:fixed; bottom:24px; right:24px; z-index:9999; background:#111827; color:#e5e7eb; border:1px solid #374151; border-radius:10px; padding:14px 18px; max-width:320px; align-items:center; gap:12px; font-family:inherit; font-size:13px; box-shadow:0 8px 24px rgba(0,0,0,0.35);">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+    <span>You've been idle a while - the Hub will lock in about a minute. Move your mouse or press a key to stay active.</span>
+  </div>
+
   <!-- Team PINs panel - Hub-Admin only, reachable any time from the
        sidebar key icon. Generates a per-person idle-lock PIN (never
        admin-typed) for each teammate to hand out during onboarding, or

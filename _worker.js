@@ -210,6 +210,10 @@ export default {
       return handleIdleLockEngage(request, env);
     }
 
+    if (url.pathname === "/api/idle-lock/heartbeat" && request.method === "POST") {
+      return handleIdleLockHeartbeat(request, env);
+    }
+
     if (url.pathname === "/api/billing/create-subscription-checkout" && request.method === "POST") {
       return handleCreateSubscriptionCheckout(request, env);
     }
@@ -4201,6 +4205,27 @@ async function handleIdleLockStatus(request, env) {
 // of Firebase Auth at the same moment (see app.js), but a client-side
 // sign-out alone is just as bypassable by reload as the old overlay-only
 // lock was. This server-side flag is what a reload can't erase.
+//
+// Cross-device/cross-tab guard (Sep 2026): a call here only ever means
+// "THIS ONE browser tab's own local idle timer just fired" (see
+// showIdleLockOverlay in app.js) - it has no idea whether a DIFFERENT
+// tab or device signed in as the same person is still being actively
+// used right now. Since the lock is keyed per-email, not per-tab/
+// session, that gap previously meant one idle tab (a second monitor, a
+// phone left in a bag, a shared login used by more than one teammate)
+// could yank the lock out from under someone genuinely mid-task
+// elsewhere - reported as "locked out while actively typing." Every
+// active tab now sends a lightweight heartbeat on real activity (see
+// handleIdleLockHeartbeat, called from resetIdleTimer in app.js),
+// throttled client-side to roughly once a minute. If we're about to
+// engage a brand-new lock (none set yet) and that heartbeat is fresher
+// than one truly-idle tab could have produced on its own, someone under
+// this identity is demonstrably still working, so skip locking this
+// time - the (small, bounded) delay until everyone's genuinely idle is
+// worth it to stop yanking an active session. An already-set lockedAt
+// is left alone either way (existing refresh-timestamp behavior,
+// unchanged) - this only ever affects the decision to create a new one.
+const IDLE_LOCK_RECENT_ACTIVITY_GRACE_MS = 90 * 1000;
 async function handleIdleLockEngage(request, env) {
   const accessEmail = idleLockRequireAccess(request);
   if (!accessEmail) return jsonResponse({ error: "Not authorized" }, 403);
@@ -4210,7 +4235,46 @@ async function handleIdleLockEngage(request, env) {
     const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
     const doc = (await firestoreGetDoc(accessToken, projectId, "agency/idleLockPins")) || {};
     const entry = doc[emailKey] || {};
+
+    const lastActivityMs = entry.lastActivityAt ? Date.parse(entry.lastActivityAt) : 0;
+    const recentlyActiveElsewhere = !entry.lockedAt && lastActivityMs &&
+      (Date.now() - lastActivityMs < IDLE_LOCK_RECENT_ACTIVITY_GRACE_MS);
+    if (recentlyActiveElsewhere) {
+      return jsonResponse({ ok: true, skipped: true, reason: "recent-activity-elsewhere" });
+    }
+
     doc[emailKey] = { ...entry, lockedAt: new Date().toISOString() };
+    await firestoreSetDoc(accessToken, projectId, "agency/idleLockPins", doc);
+    return jsonResponse({ ok: true });
+  } catch (e) {
+    return jsonResponse({ error: "Request failed: " + e.message }, 500);
+  }
+}
+
+// ── POST /api/idle-lock/heartbeat ──
+// Lightweight "someone signed in as this person is still actively using
+// a Hub tab right now" ping. Sent by every open tab/device on real
+// activity (mousemove/keydown/etc, throttled to roughly once a minute -
+// see sendIdleHeartbeat in app.js), independent of any single tab's own
+// idle timer. This is what lets handleIdleLockEngage tell "this identity
+// has genuinely gone idle everywhere" apart from "this one tab is idle,
+// but another tab/device signed in as the same person is still being
+// used" - without it, the per-email lock has no way to know the
+// difference, and can lock someone out of an actively-used tab just
+// because a different idle tab under their identity crossed 30 minutes
+// first. Deliberately does not touch lockedAt - only a correct PIN
+// (handleIdleLockVerifyPin) or a fresh, non-skipped engage sets/clears
+// that; this only ever updates the "still around" timestamp it reads.
+async function handleIdleLockHeartbeat(request, env) {
+  const accessEmail = idleLockRequireAccess(request);
+  if (!accessEmail) return jsonResponse({ error: "Not authorized" }, 403);
+  const emailKey = accessEmail.toLowerCase();
+
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const doc = (await firestoreGetDoc(accessToken, projectId, "agency/idleLockPins")) || {};
+    const entry = doc[emailKey] || {};
+    doc[emailKey] = { ...entry, lastActivityAt: new Date().toISOString() };
     await firestoreSetDoc(accessToken, projectId, "agency/idleLockPins", doc);
     return jsonResponse({ ok: true });
   } catch (e) {
