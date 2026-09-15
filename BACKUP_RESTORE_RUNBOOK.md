@@ -34,7 +34,9 @@ Monthly is reasonable given how small and low-traffic this database is.
 
 ## Step 3: Actually test a restore (recommended: quarterly, and after any change touching `commitDatabaseToCloud` in `app.js`)
 
-Nobody has done this yet. Do it once for real so this document reflects something verified, not just reasoned-through.
+**Status: performed Sep 2026** (Export/Import path, live session - see note below). Do it again quarterly so this document keeps reflecting something verified, not just reasoned-through.
+
+**What was actually done (Sep 15, 2026):** Clicked **Export Full Backup** on the live Hub, producing a JSON with all 6 clients (including Evry Intention LLC) and 12 agency docs. Re-imported that same file via **Import Backups** in the same live session (not an isolated incognito/test-project session as the "easiest path" below recommends - that's still worth doing for a deeper test). Both of the Hub's own confirm prompts (client overwrite, agency-doc overwrite) were accepted. Result, confirmed via the Activity Log ("Backup imported - 6 client(s)", "Agency data restored from backup - 12 docs", both logged "just now") and a spot-check of TheHightTable's data (Created On, Content Planning Blueprint %) matching pre-import state exactly: the Export -> download -> Import -> merge -> save round trip works end to end with no data loss. This confirms the *app-level* Export/Import mechanism (Recovery priority #1). The Firestore-native scheduled-backup restore path (Step 1's actual snapshots) has NOT been separately tested - that's the deeper, more thorough test still worth doing at some point (see "Firestore-native path" below).
 
 **Easiest path - the Hub's own Import, tested safely:**
 1. Click **Export Full Backup** to get a current, known-good JSON file.
@@ -62,4 +64,4 @@ Nobody has done this yet. Do it once for real so this document reflects somethin
 - [x] Firestore scheduled backups confirmed enabled (Step 1) - confirmed Sep 2026
 - [ ] Monthly: `clientsDbBackupShardMeta.savedAt` checked for staleness
 - [ ] Monthly-ish: manual **Export Full Backup** saved somewhere outside Firestore
-- [ ] At least once, and quarterly going forward: a real test-restore performed (Step 3) and confirmed working end to end
+- [x] At least once, and quarterly going forward: a real test-restore performed (Step 3) and confirmed working end to end - Export/Import path confirmed Sep 2026; Firestore-native scheduled-backup restore still untested
