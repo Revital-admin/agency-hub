@@ -6326,6 +6326,31 @@ function getLegacyClientsDbDocRef() {
   return window.firebaseDoc(window.firebaseDb, "agency", "clientsDb");
 }
 
+// ── Phase 1 of the clientsDb per-document refactor (see
+// CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md) ──
+// One Firestore document per client, written in PARALLEL with the real
+// clientsDb-shard-N save below - nothing reads from this collection yet,
+// this just lets the new storage shape get verified against real
+// production data over a real stretch of time before anything actually
+// depends on it (that verification period is the whole point; see the
+// plan doc's "parallel-write period" step).
+//
+// Deliberately named "clientWorkspaces", NOT "clients" - a "clients"
+// collection already exists for the public, unauthenticated client
+// portal (see ensureClientPortalListeners below and firestore.rules'
+// `match /clients/{clientId}`), keyed by magic token with `allow get: if
+// true` - anyone holding a token can read that one doc, by design. Reusing
+// that collection here, even keyed by client name instead of token, would
+// put every client's private full data (proposals, contracts, notes,
+// pricing) somewhere readable by anyone who could guess or enumerate a
+// client name, which is far less random than a magic token. This is a
+// separate, admin-only collection - see firestore.rules' own
+// `match /clientWorkspaces/{clientName}` block.
+function getClientWorkspaceDocRef(clientName) {
+  if (!window.firebaseDb || !window.firebaseDoc) return null;
+  return window.firebaseDoc(window.firebaseDb, "clientWorkspaces", clientName);
+}
+
 // Greedily bin-packs clientsDb's entries into shard-sized chunks, each
 // kept under CLIENTS_DB_MAX_SHARD_BYTES when serialized the same way
 // it's actually saved.
@@ -6919,6 +6944,27 @@ function commitDatabaseToCloud() {
         // a confirmed successful save - cleanDb shouldn't be pushed out to
         // the public portal on a skipped/failed save, since it may not
         // reflect the true current state.
+        // Phase 1 of the clientsDb per-document refactor (see
+        // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md and
+        // getClientWorkspaceDocRef above) - parallel-write every client's
+        // current data to its own clientWorkspaces/{name} doc, alongside
+        // the real shard save above. Deliberately writes the FULL roster
+        // every time, not just whichever client this save actually
+        // touched - tracking "which client(s) changed" precisely enough
+        // to trust (bulk operations and nudge checks can touch clients
+        // other than the active one) is exactly the kind of subtle-bug
+        // risk this parallel-write period exists to avoid running into
+        // for real; a full-roster write is a few more Firestore writes per
+        // save, but is correct by construction instead of correct-if-the-
+        // tracking-logic-is-right. Fire-and-forget and purely additive:
+        // nothing reads from clientWorkspaces yet, so a failure here has
+        // zero effect on the real save this function just completed.
+        Promise.all(
+          Object.entries(cleanDb).map(([name, data]) =>
+            window.firebaseSetDoc(getClientWorkspaceDocRef(name), data)
+          )
+        ).catch(err => console.error("clientWorkspaces parallel-write failed (Phase 1 refactor, non-blocking):", err));
+
         syncPublicPortalDocs(cleanDb).catch(err => {
           console.error("Public portal sync failed:", err);
         });

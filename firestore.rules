@@ -252,6 +252,25 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // clientsDb per-document refactor, Phase 1 (Sep 2026) - see
+    // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md. Parallel-write only for
+    // now: app.js writes each client's data here alongside the real
+    // clientsDb-shard-N save, but nothing reads from this collection yet
+    // - it's purely so the new one-doc-per-client storage can be verified
+    // against real production data before anything actually depends on
+    // it. Admin-only, same coarse gate as clientsDb itself today; no
+    // per-client Team Access filtering yet (that's a later phase, and
+    // genuinely new territory for this ruleset - see the plan doc).
+    //
+    // NOT the same collection as `clients` below - that one is the
+    // public, unauthenticated client portal, keyed by magic token with
+    // `allow get: if true`. This is a deliberately different, admin-only
+    // collection ("clientWorkspaces") so private full client data never
+    // ends up readable by anyone who can guess a client name.
+    match /clientWorkspaces/{clientName} {
+      allow read, write: if isAdmin();
+    }
+
     match /hub/settings {
       allow read, write: if isAdmin();
     }
