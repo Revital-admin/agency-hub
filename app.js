@@ -4097,6 +4097,110 @@ function showBanner(type, message) {
   }, 4000);
 }
 
+// ── Preserve in-progress typing across a conflict-triggered reload ──
+// "Reload Now" (see errorBannerReloadBtn below) does a real, full
+// window.location.reload() on purpose - that's the one guaranteed way
+// every open tool's own local form state ends up consistent with the
+// fresh clientsDb, not just the top-level object (see the comment on
+// that listener). The tradeoff: whatever field the person had focused
+// and was actively typing into at that moment got wiped by the reload,
+// forcing a manual retype. This capture/restore pair fixes just that
+// UX gap - it does NOT change commitDatabaseToCloud's version check,
+// the "hard-block-and-ask" conflict behavior, or the shard listeners in
+// any way; the reload itself is untouched.
+//
+// Scope note: this only covers fields rendered directly in this
+// document (client core info, SWOT, notes, checklists, onboarding,
+// etc.). The three iframe-embedded tools (Competitor Analysis,
+// Copywriting Assistant, Contract & Invoice Tracker) run their own
+// separate document, so the parent page's activeElement would just be
+// the <iframe> itself - we skip those rather than guess at their
+// internal state.
+const UNSAVED_DRAFT_KEY = "REVITAL_HUB_UNSAVED_DRAFT";
+
+function describeFocusedFieldForDraftCapture() {
+  const el = document.activeElement;
+  if (!el || el === document.body) return null;
+  const tag = el.tagName;
+  if (tag === "IFRAME") return null;
+  const isTextField = (tag === "TEXTAREA" || tag === "INPUT" || el.isContentEditable);
+  if (!isTextField) return null;
+
+  const value = el.isContentEditable ? el.textContent : el.value;
+  if (value == null || value === "") return null;
+
+  // Build a selector that can relocate this same field after reload:
+  // prefer a real id, otherwise fall back to tag+class plus its index
+  // among identical matches on the page (covers repeated-field cases
+  // like the four SWOT quadrant textareas, which share a class and have
+  // no id).
+  let selector, index = 0;
+  if (el.id) {
+    selector = "#" + el.id;
+  } else {
+    const cls = el.className ? "." + el.className.trim().split(/\s+/).join(".") : "";
+    selector = tag.toLowerCase() + cls;
+    const matches = Array.from(document.querySelectorAll(selector));
+    index = matches.indexOf(el);
+  }
+
+  return { clientName: activeClientName, selector, index, value, savedAt: Date.now() };
+}
+
+function captureUnsavedDraftBeforeReload() {
+  try {
+    const draft = describeFocusedFieldForDraftCapture();
+    if (draft) {
+      sessionStorage.setItem(UNSAVED_DRAFT_KEY, JSON.stringify(draft));
+    } else {
+      sessionStorage.removeItem(UNSAVED_DRAFT_KEY);
+    }
+  } catch (e) {
+    console.warn("captureUnsavedDraftBeforeReload failed:", e);
+  }
+}
+
+function restoreUnsavedDraftIfAny() {
+  let draft;
+  try {
+    const raw = sessionStorage.getItem(UNSAVED_DRAFT_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(UNSAVED_DRAFT_KEY); // one-shot - never resurrected by a later plain refresh
+    draft = JSON.parse(raw);
+  } catch (e) {
+    return;
+  }
+  if (!draft || !draft.selector) return;
+  // Don't resurrect a stale/abandoned draft from hours-old session state.
+  if (!draft.savedAt || (Date.now() - draft.savedAt) > 10 * 60 * 1000) return;
+  // Only reapply into the same client's workspace it came from -
+  // loadDatabase() already re-opens that same client via
+  // REVITAL_HUB_ACTIVE_CLIENT, so this should normally already match.
+  if (draft.clientName !== activeClientName) return;
+
+  try {
+    const matches = Array.from(document.querySelectorAll(draft.selector));
+    const el = matches[draft.index] || matches[0];
+    if (!el) return;
+    if (el.isContentEditable) {
+      el.textContent = draft.value;
+    } else {
+      el.value = draft.value;
+    }
+    // Reuse each field's own existing "input" handler (state update +
+    // saveDatabase()) instead of duplicating it here - every field in
+    // the Hub already wires that up itself.
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.focus();
+    if (typeof el.setSelectionRange === "function") {
+      const len = draft.value.length;
+      el.setSelectionRange(len, len);
+    }
+  } catch (e) {
+    console.warn("restoreUnsavedDraftIfAny failed:", e);
+  }
+}
+
 // Same errorBanner element as showBanner("error", ...) above, but for the
 // one case where the standard 4-second auto-vanish is actively harmful:
 // commitDatabaseToCloud's save-conflict rejection (see its own comment
@@ -5347,9 +5451,16 @@ function initParentEventListeners() {
   // programmatically resync in place, since that's the one guaranteed
   // way every open tool's own local form state ends up consistent with
   // the fresh clientsDb, not just the top-level object itself.
+  // captureUnsavedDraftBeforeReload() snapshots whatever field was
+  // focused right before that reload wipes it, so restoreUnsavedDraftIfAny()
+  // (called from loadDatabase() on the next load) can put it back - see
+  // the comment above that pair for the full explanation.
   const errorBannerReloadBtn = document.getElementById("errorBannerReloadBtn");
   if (errorBannerReloadBtn) {
-    errorBannerReloadBtn.addEventListener("click", () => window.location.reload());
+    errorBannerReloadBtn.addEventListener("click", () => {
+      captureUnsavedDraftBeforeReload();
+      window.location.reload();
+    });
   }
   const errorBannerDismissBtn = document.getElementById("errorBannerDismissBtn");
   if (errorBannerDismissBtn) {
@@ -8774,6 +8885,14 @@ function loadDatabase() {
   buildClientDropdown();
   refreshAllViews();
   renderDashboard();
+
+  // If this load was triggered by the save-conflict banner's "Reload
+  // Now" button, put back whatever the person was mid-typing when it
+  // fired (see captureUnsavedDraftBeforeReload/restoreUnsavedDraftIfAny
+  // above). Deferred one tick so it runs after the synchronous render
+  // calls just above have actually put the active client's fields into
+  // the DOM.
+  setTimeout(restoreUnsavedDraftIfAny, 50);
 
     // 2. Determine clientsDb sync strategy. Unrestricted admins keep the
   // existing real-time Firestore shard listeners (startUnrestrictedClientsDbSync,
