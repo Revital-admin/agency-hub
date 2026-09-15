@@ -4170,20 +4170,42 @@ function showBanner(type, message) {
 // the "hard-block-and-ask" conflict behavior, or the shard listeners in
 // any way; the reload itself is untouched.
 //
-// Scope note: this only covers fields rendered directly in this
+// Sep 2026: originally only covered fields rendered directly in this
 // document (client core info, SWOT, notes, checklists, onboarding,
-// etc.). The three iframe-embedded tools (Competitor Analysis,
-// Copywriting Assistant, Contract & Invoice Tracker) run their own
-// separate document, so the parent page's activeElement would just be
-// the <iframe> itself - we skip those rather than guess at their
-// internal state.
+// etc.) - every tool iframe (Content Planning Blueprint, Competitor
+// Analysis, Copywriting Assistant, Contract & Invoice Tracker, and
+// every other one) was skipped, since document.activeElement there is
+// just the <iframe> element itself, not whatever's actually focused
+// inside it. Every tool iframe on the Hub is same-origin though (see
+// attachIdleListeners' own comment making the same point for idle-lock),
+// so contentDocument.activeElement is reachable - describeFocusedField-
+// ForDraftCapture below now reaches in one level. Restoring is the
+// harder half: unlike the parent document (every tab-section's markup
+// already exists in the DOM, just CSS-hidden, so its fields are always
+// queryable regardless of which tab is active), a tool iframe's src is
+// lazy-loaded on first visit per tab (iframeNeedsReload) and resets to
+// "not yet visited" on every fresh page load - so after the reload the
+// person lands back on whatever the default tab is, not the tool tab
+// they were just using, and that iframe may not even have loaded yet.
+// restoreUnsavedDraftIntoIframeTool below closes that gap by clicking
+// the same nav button a person would (reusing all of its existing
+// lazy-load wiring) and waiting for that iframe's 'load' before
+// reapplying the value - so the fix is "you land right back in the tool
+// you were using, with your typing intact," not just "the data exists
+// somewhere, go find it."
 const UNSAVED_DRAFT_KEY = "REVITAL_HUB_UNSAVED_DRAFT";
 
-function describeFocusedFieldForDraftCapture() {
-  const el = document.activeElement;
-  if (!el || el === document.body) return null;
+// Shared by both the top-level document and same-origin tool iframes -
+// given a document and (optionally) its already-known focused element,
+// returns {selector, index, value} for whatever text field/textarea/
+// contenteditable is currently focused in it, or null if nothing
+// capturable is focused. Doesn't know or care about clientName/tabId -
+// callers attach that context afterward.
+function describeFocusedFieldWithinDocument(doc, knownActiveEl) {
+  const el = knownActiveEl || (doc && doc.activeElement);
+  if (!doc || !el || el === doc.body) return null;
   const tag = el.tagName;
-  if (tag === "IFRAME") return null;
+  if (tag === "IFRAME") return null; // no nested-iframe-within-iframe support
   const isTextField = (tag === "TEXTAREA" || tag === "INPUT" || el.isContentEditable);
   if (!isTextField) return null;
 
@@ -4192,20 +4214,44 @@ function describeFocusedFieldForDraftCapture() {
 
   // Build a selector that can relocate this same field after reload:
   // prefer a real id, otherwise fall back to tag+class plus its index
-  // among identical matches on the page (covers repeated-field cases
-  // like the four SWOT quadrant textareas, which share a class and have
-  // no id).
+  // among identical matches (covers repeated-field cases like the four
+  // SWOT quadrant textareas, which share a class and have no id).
   let selector, index = 0;
   if (el.id) {
     selector = "#" + el.id;
   } else {
     const cls = el.className ? "." + el.className.trim().split(/\s+/).join(".") : "";
     selector = tag.toLowerCase() + cls;
-    const matches = Array.from(document.querySelectorAll(selector));
+    const matches = Array.from(doc.querySelectorAll(selector));
     index = matches.indexOf(el);
   }
 
-  return { clientName: activeClientName, selector, index, value, savedAt: Date.now() };
+  return { selector, index, value };
+}
+
+function describeFocusedFieldForDraftCapture() {
+  const el = document.activeElement;
+  if (!el || el === document.body) return null;
+
+  if (el.tagName === "IFRAME") {
+    const tabSection = el.closest(".tab-section");
+    // No stable, reloadable way to know which tool tab this iframe
+    // belongs to - skip rather than guess (shouldn't happen in
+    // practice, every tool iframe lives inside a #tab-* section).
+    if (!tabSection || !tabSection.id) return null;
+    let innerField = null;
+    try {
+      innerField = describeFocusedFieldWithinDocument(el.contentDocument);
+    } catch (e) {
+      return null; // cross-origin or otherwise inaccessible
+    }
+    if (!innerField) return null;
+    return { clientName: activeClientName, tabId: tabSection.id, ...innerField, savedAt: Date.now() };
+  }
+
+  const field = describeFocusedFieldWithinDocument(document, el);
+  if (!field) return null;
+  return { clientName: activeClientName, tabId: null, ...field, savedAt: Date.now() };
 }
 
 function captureUnsavedDraftBeforeReload() {
@@ -4218,6 +4264,69 @@ function captureUnsavedDraftBeforeReload() {
     }
   } catch (e) {
     console.warn("captureUnsavedDraftBeforeReload failed:", e);
+  }
+}
+
+// Applies a captured draft value to a located field and reuses that
+// field's own existing "input" handler (state update + saveDatabase())
+// instead of duplicating it here - every field in the Hub, parent
+// document or tool iframe alike, already wires that up itself.
+function applyDraftValueToField(el, value) {
+  if (el.isContentEditable) {
+    el.textContent = value;
+  } else {
+    el.value = value;
+  }
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.focus();
+  if (typeof el.setSelectionRange === "function") {
+    const len = value.length;
+    el.setSelectionRange(len, len);
+  }
+}
+
+function restoreUnsavedDraftIntoTopDocument(draft) {
+  try {
+    const matches = Array.from(document.querySelectorAll(draft.selector));
+    const el = matches[draft.index] || matches[0];
+    if (!el) return;
+    applyDraftValueToField(el, draft.value);
+  } catch (e) {
+    console.warn("restoreUnsavedDraftIfAny (top document) failed:", e);
+  }
+}
+
+// Navigates to the same tool tab the draft was captured from - clicking
+// its real nav button, same as a person would, so this reuses all of
+// that button's existing behavior (expanding a collapsed section, and
+// crucially, the lazy-load-on-first-visit path via iframeNeedsReload,
+// which resets to "not yet visited" on every fresh page load, so this
+// always forces a real load exactly like a person's own first click
+// would). Once that iframe finishes loading, reapplies the captured
+// value inside it. Without this, an iframe-tool draft would just sit in
+// sessionStorage unused unless the person happened to click back into
+// that exact tab themselves within the 10-minute window.
+function restoreUnsavedDraftIntoIframeTool(draft) {
+  try {
+    const navBtn = document.querySelector('.nav-item-btn[data-tab="' + draft.tabId + '"]');
+    const tabSection = document.getElementById(draft.tabId);
+    const iframe = tabSection ? tabSection.querySelector("iframe") : null;
+    if (!navBtn || !iframe) return;
+
+    iframe.addEventListener("load", () => {
+      try {
+        const doc = iframe.contentDocument;
+        const matches = Array.from(doc.querySelectorAll(draft.selector));
+        const el = matches[draft.index] || matches[0];
+        if (el) applyDraftValueToField(el, draft.value);
+      } catch (e) {
+        console.warn("restoreUnsavedDraftIfAny (iframe tool) failed:", e);
+      }
+    }, { once: true });
+
+    navBtn.click();
+  } catch (e) {
+    console.warn("restoreUnsavedDraftIntoIframeTool failed:", e);
   }
 }
 
@@ -4239,26 +4348,10 @@ function restoreUnsavedDraftIfAny() {
   // REVITAL_HUB_ACTIVE_CLIENT, so this should normally already match.
   if (draft.clientName !== activeClientName) return;
 
-  try {
-    const matches = Array.from(document.querySelectorAll(draft.selector));
-    const el = matches[draft.index] || matches[0];
-    if (!el) return;
-    if (el.isContentEditable) {
-      el.textContent = draft.value;
-    } else {
-      el.value = draft.value;
-    }
-    // Reuse each field's own existing "input" handler (state update +
-    // saveDatabase()) instead of duplicating it here - every field in
-    // the Hub already wires that up itself.
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-    el.focus();
-    if (typeof el.setSelectionRange === "function") {
-      const len = draft.value.length;
-      el.setSelectionRange(len, len);
-    }
-  } catch (e) {
-    console.warn("restoreUnsavedDraftIfAny failed:", e);
+  if (draft.tabId) {
+    restoreUnsavedDraftIntoIframeTool(draft);
+  } else {
+    restoreUnsavedDraftIntoTopDocument(draft);
   }
 }
 
@@ -4273,7 +4366,13 @@ function restoreUnsavedDraftIfAny() {
 // they actually act on it, and "Reload Now" does the recovery step for
 // them instead of just telling them to go do it.
 let _conflictBannerHideTimer = null;
-function showSaveConflictBanner(message) {
+// showReloadAction (Sep 2026): defaults to true for every existing
+// caller (a stale/conflicting clientsDb, where reloading is the actual
+// fix). Pass false for a hard-block that reloading wouldn't solve (e.g.
+// a client record too large to save - see commitDatabaseToCloud's
+// oversized-shard guard), so the banner doesn't offer a button that
+// would just be misleading in that case.
+function showSaveConflictBanner(message, showReloadAction = true) {
   const banner = document.getElementById("errorBanner");
   const msgSpan = document.getElementById("errorBannerMsg");
   const actions = document.getElementById("errorBannerActions");
@@ -4285,7 +4384,7 @@ function showSaveConflictBanner(message) {
 
   msgSpan.textContent = message;
   banner.style.display = "flex";
-  if (actions) actions.style.display = "flex";
+  if (actions) actions.style.display = showReloadAction ? "flex" : "none";
 }
 
 function hideSaveConflictBanner() {
@@ -6121,6 +6220,19 @@ function saveDatabase() {
 // exist at all.
 const CLIENTS_DB_SHARD_PREFIX = "clientsDb-shard-";
 const CLIENTS_DB_MAX_SHARD_BYTES = 700000;
+// Firestore's real per-document ceiling is 1,048,576 bytes (1 MiB),
+// including field-name/encoding overhead this size check doesn't
+// account for exactly - kept a conservative margin under it so this
+// still catches a shard before it actually reaches Firestore's own
+// limit, not after. Only ever relevant for the edge case
+// packClientsDbIntoShards can't protect against on its own: a SINGLE
+// client's own serialized data already exceeding CLIENTS_DB_MAX_SHARD_
+// BYTES by itself. The packer's split check only fires when the
+// CURRENT shard already has at least one entry (`currentCount > 0`) -
+// a lone oversized entry starting a fresh shard rides through
+// unsplit, producing a shard bigger than the soft cap was ever meant
+// to allow. See findOversizedShards / commitDatabaseToCloud's use of it.
+const CLIENTS_DB_HARD_LIMIT_BYTES = 950000;
 
 let clientsDbShardData = {};          // { [shardIndex]: { clientName: state, ... } }
 let clientsDbShardUnsubscribers = [];
@@ -6236,6 +6348,25 @@ function packClientsDbIntoShards(fullDb) {
   }
   if (currentCount > 0 || shards.length === 0) shards.push(current);
   return shards;
+}
+
+// Sep 2026: proactive guard for the one failure mode packClientsDbInto-
+// Shards can't prevent on its own (see CLIENTS_DB_HARD_LIMIT_BYTES's
+// comment) - a shard that's actually grown past a size Firestore is
+// likely to reject outright. Returns [] when every shard is fine.
+// Otherwise returns [{ index, bytes, clientNames }, ...] so the caller
+// can name the responsible client(s) in a real, actionable message
+// instead of just surfacing whatever raw error Firestore happens to
+// return for an oversized write.
+function findOversizedShards(shards) {
+  const oversized = [];
+  shards.forEach((shard, index) => {
+    const bytes = new Blob([JSON.stringify(shard)]).size;
+    if (bytes > CLIENTS_DB_HARD_LIMIT_BYTES) {
+      oversized.push({ index, bytes, clientNames: Object.keys(shard) });
+    }
+  });
+  return oversized;
 }
 
 function rebuildClientsDbFromShards() {
@@ -6575,6 +6706,43 @@ function commitDatabaseToCloud() {
 
   const cleanDb = JSON.parse(JSON.stringify(clientsDb));
   const shards = packClientsDbIntoShards(cleanDb);
+
+  // Sep 2026: hard-block a write that's actually grown too large for
+  // Firestore to accept, rather than letting it fail there and surface
+  // as a generic, easy-to-miss "Cloud Error ❌" (see the .catch() at the
+  // bottom of this function's own comment on how quietly that already
+  // gets missed). This is the one case packClientsDbIntoShards can't
+  // prevent on its own - see CLIENTS_DB_HARD_LIMIT_BYTES/
+  // findOversizedShards. The local save already happened regardless (see
+  // saveDatabase()), so nothing is lost by refusing the cloud write here
+  // - same "local is safe, cloud write just doesn't happen yet" shape as
+  // the shard-not-loaded-yet guard just above. No "Reload Now" action on
+  // this one (unlike the version-conflict banner below) - reloading
+  // doesn't fix an oversized client record, so offering it here would
+  // just be misleading.
+  const oversizedShards = findOversizedShards(shards);
+  if (oversizedShards.length > 0) {
+    const namedClients = Array.from(new Set(oversizedShards.flatMap(s => s.clientNames))).join('", "');
+    console.error("commitDatabaseToCloud: skipped - shard(s) over the size limit:", oversizedShards);
+    if (indicator) indicator.innerHTML = "Save Skipped ⚠️";
+    showSaveConflictBanner(
+      `The client record for "${namedClients}" has grown too large to save to the cloud (Firestore's own size limit). Your change is saved locally in this browser for now, but won't sync until that client's data is trimmed down - contact an admin to reduce stored files/notes for that client.`,
+      false
+    );
+    return;
+  }
+
+  // Softer, non-blocking heads-up when a shard is trending large but
+  // hasn't actually hit the hard limit above yet - console-only for now
+  // (an admin actively looking will see it), so there's some lead time
+  // before this becomes the hard block above instead of a surprise.
+  shards.forEach((shard, i) => {
+    const bytes = new Blob([JSON.stringify(shard)]).size;
+    if (bytes > CLIENTS_DB_HARD_LIMIT_BYTES * 0.85) {
+      console.warn(`commitDatabaseToCloud: shard ${i} is at ${bytes} bytes, approaching the ${CLIENTS_DB_HARD_LIMIT_BYTES}-byte hard limit (clients: ${Object.keys(shard).join(", ")}).`);
+    }
+  });
+
   // Snapshot which clients are pending as of THIS write (see
   // pendingLocalClientEdits above rebuildClientsDbFromShards) - only these
   // are guaranteed to be included in cleanDb above. Clearing the whole set
