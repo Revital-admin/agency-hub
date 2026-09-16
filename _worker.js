@@ -5520,6 +5520,31 @@ async function handleRestrictedClientDataWrite(request, env) {
       version: currentVersion + 1
     });
 
+    // Cutover (Sep 2026 - see CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md):
+    // unrestricted admin tabs no longer listen to agency/clientsDbShardMeta
+    // at all (see startClientWorkspacesSync in app.js) - they listen to
+    // agency/clientWorkspacesMeta instead. Without this SAME bump applied
+    // there too, this is the exact bug the comment above was written to
+    // prevent, reintroduced: an admin's next full-roster save would read a
+    // clientWorkspacesMeta version that never moved, see no conflict, and
+    // silently overwrite whatever this restricted teammate just saved to
+    // clientWorkspaces/{clientName} above - even though the shard-side
+    // bump above would correctly protect the now-dormant shard write.
+    // Re-fetched fresh for the same reason as the shard-meta bump above:
+    // a write landing on a different client while this one was in flight
+    // still gets its bump counted, not silently overwritten. Deliberately
+    // NOT wrapped in its own try/catch, matching the shard-meta bump right
+    // above - if this fails, the whole request should surface as an error
+    // to the caller (via this function's own outer catch below) rather
+    // than silently reporting success while leaving admin tabs unprotected
+    // against overwriting what was just saved.
+    const freshWorkspacesMeta = await firestoreGetDoc(accessToken, projectId, "agency/clientWorkspacesMeta");
+    const currentWorkspacesVersion = freshWorkspacesMeta && typeof freshWorkspacesMeta.version === "number"
+      ? freshWorkspacesMeta.version : 0;
+    await firestoreSetDoc(accessToken, projectId, "agency/clientWorkspacesMeta", {
+      version: currentWorkspacesVersion + 1
+    });
+
     // Bug fix (Aug 2026 - "Monthly Reports aren't reaching the Client
     // Portal", later widened to cover onboardingChecklist/clientChecklist/
     // notifications/pendingApprovals/approvalHistory too): the internal

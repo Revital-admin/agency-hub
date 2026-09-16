@@ -6351,6 +6351,75 @@ function getClientWorkspaceDocRef(clientName) {
   return window.firebaseDoc(window.firebaseDb, "clientWorkspaces", clientName);
 }
 
+function getClientWorkspacesMetaDocRef() {
+  if (!window.firebaseDb || !window.firebaseDoc) return null;
+  return window.firebaseDoc(window.firebaseDb, "agency", "clientWorkspacesMeta");
+}
+
+// SAFETY GUARD (cutover, Sep 2026) - mirrors the old per-shard
+// clientsDbAllShardsLoaded guard's role in commitDatabaseToCloud, adapted
+// to the new one-document-per-client model. Stays false until
+// startClientWorkspacesSync's collection listener has delivered a real
+// first snapshot, so a save can never fire using only the instant-boot
+// localStorage cache before cloud data has actually been confirmed.
+let clientWorkspacesSyncReady = false;
+
+// ── Cutover (Sep 2026) of clientsDb's real-time sync onto the new
+// one-document-per-client clientWorkspaces collection - see
+// CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md. This is what loadDatabase()
+// actually calls now for unrestricted admins, in place of
+// startUnrestrictedClientsDbSync (left fully intact and unused below -
+// swapping the one call site in loadDatabase() back is the entire
+// rollback if anything looks wrong here).
+//
+// A single onSnapshot on the whole collection is simpler AND safer than
+// the per-shard-listener setup it replaces: a collection snapshot's FIRST
+// callback always contains every currently-existing document at once, so
+// there's no equivalent of the old "some shards loaded, some didn't yet"
+// partial-picture race to guard against - lastKnownClientsDbShardCount /
+// clientsDbAllShardsLoaded / clientsDbShardsLoadedIndices simply don't
+// have an analog here.
+function startClientWorkspacesSync() {
+  // Explicit, not just "leave it at its default false" - same defensive
+  // reasoning as startUnrestrictedClientsDbSync's identical line.
+  isRestrictedClientsDbSync = false;
+  if (!(window.firebaseOnSnapshot && window.firebaseCollection && window.firebaseDb && window.firebaseDoc)) return;
+
+  const metaRef = getClientWorkspacesMetaDocRef();
+  window.firebaseOnSnapshot(metaRef, (metaSnap) => {
+    clientsDbDocVersion = (metaSnap.exists && typeof metaSnap.data().version === "number")
+      ? metaSnap.data().version : 0;
+  });
+
+  const collRef = window.firebaseCollection(window.firebaseDb, "clientWorkspaces");
+  window.firebaseOnSnapshot(collRef, (snap) => {
+    // Never silently show/save an empty roster on the very first
+    // snapshot - see this function's own header comment on why that
+    // would be exactly the "Reginald White"/"Evry Intention LLC" failure
+    // mode this whole subsystem exists to prevent. A genuinely empty
+    // collection AFTER a real first snapshot already landed (e.g. every
+    // client eventually deleted one by one) is a legitimate later state
+    // and is let through normally - this only guards the very first one.
+    if (snap.empty && !clientWorkspacesSyncReady) {
+      console.error("startClientWorkspacesSync: clientWorkspaces came back EMPTY on first load - NOT overwriting clientsDb with nothing. Check Firestore directly before doing anything else (this should not happen given Phase 1/2's backfill-on-save already populated it).");
+      return;
+    }
+
+    const fresh = {};
+    snap.forEach(doc => { fresh[doc.id] = doc.data(); });
+    clientsDb = fresh;
+    clientWorkspacesSyncReady = true;
+
+    if (!clientsDb[activeClientName]) {
+      activeClientName = Object.keys(clientsDb)[0] || "";
+    }
+
+    buildClientDropdown();
+    refreshAllViews();
+    renderDashboard();
+  });
+}
+
 // Greedily bin-packs clientsDb's entries into shard-sized chunks, each
 // kept under CLIENTS_DB_MAX_SHARD_BYTES when serialized the same way
 // it's actually saved.
@@ -6699,7 +6768,7 @@ function commitDatabaseToCloud() {
 
   const indicator = document.getElementById("autosaveIndicator");
 
-  if (!(window.firebaseSetDoc && window.firebaseDoc && window.firebaseDb)) {
+  if (!(window.firebaseSetDoc && window.firebaseDoc && window.firebaseDb && window.firebaseGetDoc && window.firebaseCollection && window.firebaseGetDocs && window.firebaseDeleteDoc)) {
     // Firebase is not loaded!
     if (indicator) {
       indicator.innerHTML = "Firebase Not Loaded ❌";
@@ -6708,20 +6777,19 @@ function commitDatabaseToCloud() {
     return;
   }
 
-  // SAFETY GUARD: if we're supposed to be listening to cloud shards
-  // (lastKnownClientsDbShardCount > 0) but haven't yet received a first
-  // snapshot from every one of them, clientsDb in memory is only a
-  // partial picture assembled from whichever shards have loaded so far.
-  // Writing it back to Firestore now would re-shard that partial picture
-  // and blank out whichever clients live in a shard we haven't heard
-  // from yet - this is how "Reginald White" and "Evry Intention LLC"
-  // silently disappeared. Skip the cloud write until every shard has
-  // reported in at least once; the local save above already protects
-  // this session's edits in the meantime, and this function gets called
-  // again on the next debounced save.
-  if (lastKnownClientsDbShardCount > 0 && !clientsDbAllShardsLoaded) {
-    console.warn("commitDatabaseToCloud: skipped - not all clientsDb shards have loaded yet (" +
-      clientsDbShardsLoadedIndices.size + "/" + lastKnownClientsDbShardCount + ")");
+  // SAFETY GUARD (cutover, Sep 2026 - see CLIENTSDB_PER_DOCUMENT_REFACTOR_
+  // PLAN.md and clientWorkspacesSyncReady's own comment): mirrors the old
+  // per-shard "don't write back a partial picture" guard it replaces. A
+  // single onSnapshot on the clientWorkspaces collection means there's no
+  // more "some shards loaded, some didn't" partial-state risk - but
+  // there's still a narrow window between calling startClientWorkspacesSync()
+  // and that first snapshot actually landing where clientsDb only
+  // reflects the instant-boot localStorage cache, not confirmed cloud
+  // data. Writing during that window would re-save whatever's in the
+  // local cache as if it were authoritative. Same "local edits are safe
+  // either way, cloud write just waits" shape as the guard it replaces.
+  if (!clientWorkspacesSyncReady) {
+    console.warn("commitDatabaseToCloud: skipped - clientWorkspaces hasn't finished its first sync yet.");
     if (indicator) {
       indicator.innerHTML = "Waiting for cloud sync… ⏳";
       setTimeout(() => { indicator.style.opacity = "0"; }, 3000);
@@ -6730,25 +6798,23 @@ function commitDatabaseToCloud() {
   }
 
   const cleanDb = JSON.parse(JSON.stringify(clientsDb));
-  const shards = packClientsDbIntoShards(cleanDb);
 
-  // Sep 2026: hard-block a write that's actually grown too large for
-  // Firestore to accept, rather than letting it fail there and surface
-  // as a generic, easy-to-miss "Cloud Error ❌" (see the .catch() at the
-  // bottom of this function's own comment on how quietly that already
-  // gets missed). This is the one case packClientsDbIntoShards can't
-  // prevent on its own - see CLIENTS_DB_HARD_LIMIT_BYTES/
-  // findOversizedShards. The local save already happened regardless (see
-  // saveDatabase()), so nothing is lost by refusing the cloud write here
-  // - same "local is safe, cloud write just doesn't happen yet" shape as
-  // the shard-not-loaded-yet guard just above. No "Reload Now" action on
-  // this one (unlike the version-conflict banner below) - reloading
-  // doesn't fix an oversized client record, so offering it here would
-  // just be misleading.
-  const oversizedShards = findOversizedShards(shards);
-  if (oversizedShards.length > 0) {
-    const namedClients = Array.from(new Set(oversizedShards.flatMap(s => s.clientNames))).join('", "');
-    console.error("commitDatabaseToCloud: skipped - shard(s) over the size limit:", oversizedShards);
+  // Per-client size guard (cutover, Sep 2026) - replaces the old
+  // per-shard findOversizedShards check now that each client is its own
+  // Firestore document instead of sharing a bin-packed pool with others.
+  // Reuses CLIENTS_DB_HARD_LIMIT_BYTES as-is (see its own comment for why
+  // that exact byte threshold) - it was always really "safe bytes for one
+  // Firestore document," just applied per-shard before. The shared-pool
+  // crowding that made this a real risk pre-cutover is gone now that no
+  // client competes with any other for space; this only fires if one
+  // client's OWN data alone approaches Firestore's real ~1MiB ceiling.
+  const oversizedClients = Object.entries(cleanDb).filter(([name, data]) =>
+    new Blob([JSON.stringify(data)]).size > CLIENTS_DB_HARD_LIMIT_BYTES
+  );
+  if (oversizedClients.length > 0) {
+    const namedClients = oversizedClients.map(([name]) => name).join('", "');
+    console.error("commitDatabaseToCloud: skipped - client(s) over the size limit:",
+      oversizedClients.map(([name, data]) => ({ name, bytes: new Blob([JSON.stringify(data)]).size })));
     if (indicator) indicator.innerHTML = "Save Skipped ⚠️";
     showSaveConflictBanner(
       `The client record for "${namedClients}" has grown too large to save to the cloud (Firestore's own size limit). Your change is saved locally in this browser for now, but won't sync until that client's data is trimmed down - contact an admin to reduce stored files/notes for that client.`,
@@ -6756,17 +6822,6 @@ function commitDatabaseToCloud() {
     );
     return;
   }
-
-  // Softer, non-blocking heads-up when a shard is trending large but
-  // hasn't actually hit the hard limit above yet - console-only for now
-  // (an admin actively looking will see it), so there's some lead time
-  // before this becomes the hard block above instead of a surprise.
-  shards.forEach((shard, i) => {
-    const bytes = new Blob([JSON.stringify(shard)]).size;
-    if (bytes > CLIENTS_DB_HARD_LIMIT_BYTES * 0.85) {
-      console.warn(`commitDatabaseToCloud: shard ${i} is at ${bytes} bytes, approaching the ${CLIENTS_DB_HARD_LIMIT_BYTES}-byte hard limit (clients: ${Object.keys(shard).join(", ")}).`);
-    }
-  });
 
   // Snapshot which clients are pending as of THIS write (see
   // pendingLocalClientEdits above rebuildClientsDbFromShards) - only these
@@ -6785,7 +6840,7 @@ function commitDatabaseToCloud() {
   // Fixed by only firing it once the version check below confirms this
   // tab's data is actually the one being accepted.
 
-  const metaRef = getClientsDbShardMetaDocRef();
+  const metaRef = getClientWorkspacesMetaDocRef();
 
   // Add a manual timeout to detect hanging - covers the version check
   // below too, not just the writes, since both are part of one save cycle.
@@ -6810,6 +6865,23 @@ function commitDatabaseToCloud() {
   // tool already uses (rather than inventing a different, more complex
   // behavior just for this one doc) keeps the "someone else saved, reload
   // and redo" mental model the same everywhere an admin might see it.
+  //
+  // Cutover note (Sep 2026): still one GLOBAL version shared across every
+  // client, not yet a true per-client check, even though each client now
+  // has its own document - see CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md's
+  // "Safer cutover now" decision. A real per-client version check needs
+  // comprehensive tracking of which client(s) a given save actually
+  // touched, and pendingLocalClientEdits (the one candidate mechanism
+  // already in this codebase) is confirmed NOT comprehensive - see its
+  // own comment above and the notification-pile-up bug it was patched
+  // for. Getting per-client tracking wrong risks a WORSE failure mode
+  // than today's false-positive conflicts (a real edit to a non-active
+  // client silently never reaching the cloud at all), so this keeps
+  // today's exact conflict granularity - what changes with cutover is
+  // WHERE the data lives (one document per client, fixing the Firestore
+  // size-limit problem immediately), not yet how finely conflicts are
+  // detected. The cross-client false-conflict fix is deferred to a
+  // separate, carefully-audited pass.
   window.firebaseGetDoc(metaRef).then((freshMetaSnap) => {
     const freshVersion = (freshMetaSnap.exists && typeof freshMetaSnap.data().version === "number")
       ? freshMetaSnap.data().version : 0;
@@ -6831,38 +6903,32 @@ function commitDatabaseToCloud() {
     }
 
     // SECOND SAFETY NET (Aug 2026, after Evry Intention LLC vanished a
-    // second time with a matching version number): the check above only
-    // catches a STALE VERSION NUMBER, which assumes clientsDbDocVersion
-    // and clientsDb's actual CONTENT always move together. They don't
-    // always - clientsDbDocVersion is kept fresh by a separate listener on
-    // the tiny meta doc (see startUnrestrictedClientsDbSync), while
-    // clientsDb's real content comes from the per-shard listeners
-    // (listenToClientsDbShard). A backgrounded/throttled tab can keep the
-    // cheap meta listener alive (so its version number looks current)
-    // while a shard listener silently stalls (so its actual client list is
-    // stale) - version match, content mismatch, and the check above waves
-    // it through. Catch that here with an actual content comparison: fetch
-    // the real shard documents fresh (not just their tiny meta counter)
-    // and refuse to save if the cloud currently has ANY client this tab
-    // doesn't - that's the fingerprint of a stale tab about to blank out a
-    // client it never knew existed, same failure mode that lost Evry
-    // Intention LLC. A deliberate deletion never trips this, since
-    // deleteActiveClient() runs in a tab that just loaded that client and
-    // is removing a key IT knows about, not one it's silently unaware of.
-    const freshShardCount = (freshMetaSnap.exists && typeof freshMetaSnap.data().count === "number")
-      ? freshMetaSnap.data().count : lastKnownClientsDbShardCount;
-    const cloudKeyCheck = Promise.all(
-      Array.from({ length: freshShardCount }, (_, i) => window.firebaseGetDoc(getClientsDbShardDocRef(i)))
-    ).then((freshShardSnaps) => {
-      const cloudKeys = new Set();
-      freshShardSnaps.forEach(snap => {
-        if (snap.exists) Object.keys(snap.data() || {}).forEach(k => cloudKeys.add(k));
-      });
+    // second time with a matching version number; adapted for cutover Sep
+    // 2026): the check above only catches a STALE VERSION NUMBER, which
+    // assumes clientsDbDocVersion and clientsDb's actual CONTENT always
+    // move together. A single collection-wide onSnapshot listener
+    // (startClientWorkspacesSync) is far less prone to this than the old
+    // per-shard-listener setup - one listener, one consistent view,
+    // rather than N independent ones that could individually stall - but
+    // a backgrounded/throttled tab could still in principle have a stale
+    // local copy while its separate meta listener reports a current
+    // version, so this stays as real, cheap insurance rather than
+    // assuming the new architecture makes it impossible. Fetches the
+    // current client NAMES fresh from the cloud collection (not full
+    // shard documents - just the id list) and refuses to save if the
+    // cloud currently has ANY client this tab doesn't - that's the
+    // fingerprint of a stale tab about to blank out a client it never
+    // knew existed, same failure mode that lost Evry Intention LLC. A
+    // deliberate deletion never trips this, since deleteActiveClient()
+    // runs in a tab that just loaded that client and is removing a key IT
+    // knows about, not one it's silently unaware of.
+    const cloudKeyCheck = window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb, "clientWorkspaces")).then((cloudDocs) => {
+      const cloudKeys = cloudDocs.map(d => d.id);
       const localKeys = new Set(Object.keys(cleanDb));
       // Exclude anything this tab itself deliberately deleted/renamed away
       // this session (see intentionallyRemovedClientNames above) - those
       // are legitimate, not a sign of stale data.
-      return Array.from(cloudKeys).filter(k => !localKeys.has(k) && !intentionallyRemovedClientNames.has(k));
+      return cloudKeys.filter(k => !localKeys.has(k) && !intentionallyRemovedClientNames.has(k));
     });
 
     return cloudKeyCheck.then((missingLocally) => {
@@ -6879,19 +6945,17 @@ function commitDatabaseToCloud() {
       }
 
       // Safety-net backup: a "last known good" full snapshot, written
-      // alongside the real shards now that both checks above have
+      // alongside the real per-client docs now that both checks above have
       // confirmed this tab's data is fresh and about to be accepted (moved
       // here, after those checks, so a rejected save never overwrites the
       // backup with stale data - see the comment where this used to live).
-      // If the live shards ever get corrupted again for any reason, this is
-      // always a recent, complete copy to recover from - see
-      // agency/clientsDbBackup-shard-0, -1, etc. and
-      // agency/clientsDbBackupShardMeta. Sharded the exact same way as the
-      // live data (reusing the `shards` array above) so it can't hit
-      // Firestore's ~1MB per-document limit as the client roster grows.
-      // Fire-and-forget: a backup failure shouldn't block or alarm the user
-      // about the actual save below. (agency/clientsDbBackup, the old
-      // single-document location, is no longer written to.)
+      // Unchanged by cutover - still sharded the same way (reusing
+      // packClientsDbIntoShards below purely for this backup's own
+      // bin-packing, not as anything authoritative), still just as valid
+      // a recovery source regardless of how the live data is stored. Fire-
+      // and-forget: a backup failure shouldn't block or alarm the user
+      // about the actual save below.
+      const shards = packClientsDbIntoShards(cleanDb);
       const backupMetaRef = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackupShardMeta");
       window.firebaseGetDoc(backupMetaRef).then((backupMetaSnap) => {
         const prevBackupShardCount = (backupMetaSnap.exists && typeof backupMetaSnap.data().count === 'number')
@@ -6902,7 +6966,7 @@ function commitDatabaseToCloud() {
           return window.firebaseSetDoc(ref, shardObj);
         });
         // Blank out any trailing backup shards left over from a larger
-        // previous backup, same reasoning as the live-shard cleanup below.
+        // previous backup, same reasoning as before cutover.
         for (let i = shards.length; i < prevBackupShardCount; i++) {
           const ref = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackup-shard-" + i);
           backupWrites.push(window.firebaseSetDoc(ref, {}));
@@ -6912,21 +6976,41 @@ function commitDatabaseToCloud() {
         return Promise.all(backupWrites);
       }).catch(err => console.error("clientsDb backup write failed:", err));
 
-      const writes = shards.map((shardObj, i) => {
-        const docRef = getClientsDbShardDocRef(i);
-        return window.firebaseSetDoc(docRef, shardObj);
+      // Dormant shard safety-net write (cutover, Sep 2026 - see
+      // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md's migration path) - no
+      // longer authoritative and no longer version-checked now that
+      // clientWorkspaces (below) is the real source of truth. Kept
+      // running, cheaply, as an easy rollback source for a stretch after
+      // cutover; purely best-effort, same fire-and-forget shape as the
+      // backup write above. Safe to remove once clientWorkspaces has a
+      // real track record post-cutover - see startUnrestrictedClientsDbSync,
+      // left intact and unused, for what reading it back would look like.
+      Promise.all(shards.map((shardObj, i) => window.firebaseSetDoc(getClientsDbShardDocRef(i), shardObj)))
+        .catch(err => console.error("Dormant shard safety-net write failed (non-blocking, no longer authoritative):", err));
+
+      // THE REAL, AUTHORITATIVE WRITE (post-cutover, Sep 2026): one
+      // Firestore document per client, replacing the bin-packed shards
+      // above (now dormant). Still writes the full roster on every save,
+      // same conflict-check granularity as before cutover - see this
+      // function's own comment above the version check for why.
+      const writes = Object.entries(cleanDb).map(([name, data]) =>
+        window.firebaseSetDoc(getClientWorkspaceDocRef(name), data)
+      );
+
+      // Collection-based storage needs an explicit delete for a removed
+      // client - unlike the old shard model, where a deleted client
+      // simply stopped appearing in the next full-shard rewrite. Only
+      // ever deletes a name THIS tab itself just renamed/deleted (see
+      // intentionallyRemovedClientNames above), never anything it merely
+      // doesn't happen to have loaded.
+      intentionallyRemovedClientNames.forEach(name => {
+        writes.push(window.firebaseDeleteDoc(getClientWorkspaceDocRef(name)).catch(err =>
+          console.error(`Failed to delete stale clientWorkspaces doc for "${name}":`, err)
+        ));
       });
 
-      // If the client list just got shorter (client deleted) and now needs
-      // fewer shards than last time, blank out the now-unused trailing shard
-      // documents instead of leaving stale client data sitting in them.
-      for (let i = shards.length; i < lastKnownClientsDbShardCount; i++) {
-        const docRef = getClientsDbShardDocRef(i);
-        writes.push(window.firebaseSetDoc(docRef, {}));
-      }
-
       const nextVersion = freshVersion + 1;
-      writes.push(window.firebaseSetDoc(metaRef, { count: shards.length, version: nextVersion }));
+      writes.push(window.firebaseSetDoc(metaRef, { version: nextVersion }));
 
       return Promise.all(writes).then(() => {
         resolved = true;
@@ -6943,28 +7027,7 @@ function commitDatabaseToCloud() {
         // unauthenticated client portal is allowed to read. Only runs after
         // a confirmed successful save - cleanDb shouldn't be pushed out to
         // the public portal on a skipped/failed save, since it may not
-        // reflect the true current state.
-        // Phase 1 of the clientsDb per-document refactor (see
-        // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md and
-        // getClientWorkspaceDocRef above) - parallel-write every client's
-        // current data to its own clientWorkspaces/{name} doc, alongside
-        // the real shard save above. Deliberately writes the FULL roster
-        // every time, not just whichever client this save actually
-        // touched - tracking "which client(s) changed" precisely enough
-        // to trust (bulk operations and nudge checks can touch clients
-        // other than the active one) is exactly the kind of subtle-bug
-        // risk this parallel-write period exists to avoid running into
-        // for real; a full-roster write is a few more Firestore writes per
-        // save, but is correct by construction instead of correct-if-the-
-        // tracking-logic-is-right. Fire-and-forget and purely additive:
-        // nothing reads from clientWorkspaces yet, so a failure here has
-        // zero effect on the real save this function just completed.
-        Promise.all(
-          Object.entries(cleanDb).map(([name, data]) =>
-            window.firebaseSetDoc(getClientWorkspaceDocRef(name), data)
-          )
-        ).catch(err => console.error("clientWorkspaces parallel-write failed (Phase 1 refactor, non-blocking):", err));
-
+        // reflect the true current state. Unchanged by cutover.
         syncPublicPortalDocs(cleanDb).catch(err => {
           console.error("Public portal sync failed:", err);
         });
@@ -9169,19 +9232,22 @@ function loadDatabase() {
   // the DOM.
   setTimeout(restoreUnsavedDraftIfAny, 50);
 
-    // 2. Determine clientsDb sync strategy. Unrestricted admins keep the
-  // existing real-time Firestore shard listeners (startUnrestrictedClientsDbSync,
-  // unchanged from before). Team-Access-restricted teammates instead go
-  // through the filtered REST endpoint (startRestrictedClientsDbSync - see
-  // /api/restricted-client-data in _worker.js), because clientsDb's own
-  // Firestore rules gate is all-or-nothing per document (see
-  // hasAccountDataAccess in firestore.rules) - it can't slice one shard
-  // down to just a restricted teammate's granted sections, only the
-  // server-side endpoint can. A fresh, one-time read of agency/teamAccess
-  // decides which path to take, rather than waiting on
-  // initTeamAccessGate's own separate listener to resolve first - that
-  // would race with starting the (unfiltered) Firestore shard listeners
-  // below, which is exactly the gap this whole change exists to close.
+    // 2. Determine clientsDb sync strategy. Unrestricted admins now use
+  // the cutover-era clientWorkspaces collection sync (startClientWorkspacesSync
+  // - see CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md; startUnrestrictedClientsDbSync
+  // is left intact and unused just below as the one-line rollback if
+  // anything looks wrong post-cutover). Team-Access-restricted teammates
+  // still go through the filtered REST endpoint (startRestrictedClientsDbSync
+  // - see /api/restricted-client-data in _worker.js), because clientsDb's
+  // own Firestore rules gate is all-or-nothing per document (see
+  // hasAccountDataAccess in firestore.rules) - it can't slice one client's
+  // document down to just a restricted teammate's granted sections, only
+  // the server-side endpoint can (that per-document rules gating is a
+  // later, still-optional phase - see the plan doc). A fresh, one-time
+  // read of agency/teamAccess decides which path to take, rather than
+  // waiting on initTeamAccessGate's own separate listener to resolve
+  // first - that would race with starting the (unfiltered) sync below,
+  // which is exactly the gap this whole change exists to close.
   if (window.firebaseDoc && window.firebaseDb && window.firebaseGetDoc) {
     const teamAccessRef = window.firebaseDoc(window.firebaseDb, "agency", "teamAccess");
     window.firebaseGetDoc(teamAccessRef).then((snap) => {
@@ -9192,11 +9258,11 @@ function loadDatabase() {
       if (restricted) {
         startRestrictedClientsDbSync();
       } else {
-        startUnrestrictedClientsDbSync();
+        startClientWorkspacesSync();
       }
     }).catch((err) => {
       console.error("Couldn't resolve Team Access restriction status, defaulting to unrestricted sync:", err);
-      startUnrestrictedClientsDbSync();
+      startClientWorkspacesSync();
     });
   }
 }

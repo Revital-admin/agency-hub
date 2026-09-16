@@ -194,7 +194,14 @@ service cloud.firestore {
         // matching what the UI itself promises.
         (document == 'adminActivityLog' || document == 'businessInsurance' || document == 'servicePricing' || document == 'subscriptionTracker') ? true :
         // clientsDb and its shards/backups - see hasAccountDataAccess.
-        (document == 'clientsDb' || document.matches('clientsDb-shard-.*') || document.matches('clientsDbBackup-shard-.*') || document == 'clientsDbShardMeta' || document == 'clientsDbBackupShardMeta') ? hasAccountDataAccess() :
+        // clientWorkspacesMeta added at cutover (Sep 2026) - the browser
+        // SDK reads/writes this doc directly from commitDatabaseToCloud's
+        // version check (see startClientWorkspacesSync/app.js), unlike
+        // the Worker's own bump of the same doc (handleRestrictedClientDataWrite),
+        // which runs under a service-account token and bypasses these
+        // rules entirely. Without this, an unrestricted admin's browser
+        // tab would 403 on every single save.
+        (document == 'clientsDb' || document.matches('clientsDb-shard-.*') || document.matches('clientsDbBackup-shard-.*') || document == 'clientsDbShardMeta' || document == 'clientsDbBackupShardMeta' || document == 'clientWorkspacesMeta') ? hasAccountDataAccess() :
         // Agency Globals' own documents (SOP & Wiki Library, Email
         // Template Library) - genuinely separable, so a real gate.
         (document.matches('sops-shard-.*') || document == 'sopShardMeta' || document == 'sopChecklistRuns' || document == 'emailTemplates') ? hasSection('agency-globals') :
