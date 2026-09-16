@@ -6458,8 +6458,23 @@ let pendingEditBaseline = {};
   const originalAdd = pendingLocalClientEdits.add.bind(pendingLocalClientEdits);
   const originalDelete = pendingLocalClientEdits.delete.bind(pendingLocalClientEdits);
   pendingLocalClientEdits.add = function(name) {
-    if (!pendingLocalClientEdits.has(name)) {
-      pendingEditBaseline[name] = JSON.parse(JSON.stringify(lastKnownServerState[name] || {}));
+    // Only freeze a baseline from lastKnownServerState if it actually HAS
+    // one yet. A client can become pending before its very first real
+    // snapshot lands - e.g. backfillMissingClientChecklists mutating the
+    // instant-boot localStorage cache during loadDatabase(), which runs
+    // before startClientWorkspacesSync's collection listener has delivered
+    // anything - in which case lastKnownServerState[name] is still
+    // undefined here. Freezing an empty {} in that case would wrongly lock
+    // in "nothing existed" as this streak's baseline, making every real
+    // field look like a brand-new conflict once the actual first snapshot
+    // arrives. Leave pendingEditBaseline[name] unset instead - the
+    // snapshot handler below backfills it, exactly once, the moment real
+    // data actually shows up for a name that's pending but still missing
+    // one; commitDatabaseToCloud's own `|| {}` fallback covers the
+    // genuinely-brand-new-client case where no server data will ever
+    // exist to backfill from.
+    if (!pendingLocalClientEdits.has(name) && lastKnownServerState[name] !== undefined) {
+      pendingEditBaseline[name] = JSON.parse(JSON.stringify(lastKnownServerState[name]));
     }
     return originalAdd(name);
   };
@@ -6607,6 +6622,18 @@ function startClientWorkspacesSync() {
       // so a later in-place mutation of a client's fields elsewhere in the
       // app can never silently drag this baseline along with it.
       lastKnownServerState[doc.id] = JSON.parse(JSON.stringify(stripped));
+      // Phase 4 bug fix (Sep 2026, see pendingEditBaseline's own comment
+      // above pendingLocalClientEdits): back-fill the frozen diff baseline
+      // for a client that became pending BEFORE this, its first real
+      // snapshot, ever arrived - .add()'s own guard deliberately left
+      // pendingEditBaseline[doc.id] unset in that case rather than
+      // freezing an empty one. Only fires the very first time real data
+      // shows up while still pending (the `undefined` check) - once set,
+      // this must stay frozen at its true pre-edit value for the rest of
+      // the streak, not keep tracking every later snapshot.
+      if (pendingLocalClientEdits.has(doc.id) && pendingEditBaseline[doc.id] === undefined) {
+        pendingEditBaseline[doc.id] = JSON.parse(JSON.stringify(stripped));
+      }
     });
 
     // REGRESSION FIX (Sep 2026, caught during the true-per-client-conflict-
