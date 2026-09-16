@@ -6420,6 +6420,55 @@ let isRestrictedClientsDbSync = false;
 // version-conflict banner, nothing to tip anyone off.
 let pendingLocalClientEdits = new Set();
 
+// Phase 4 bug fix (Sep 2026, caught during Phase 4's own live verification,
+// not in production): commitDatabaseToCloud's field-level diff used to
+// compare a client's CURRENT local data against the CURRENT (live-updated)
+// lastKnownServerState. That's wrong while a client has been pending for
+// more than one snapshot cycle: startClientWorkspacesSync's merge-back
+// above freezes this tab's local copy of the WHOLE client the instant it
+// has any pending edit (so an incoming snapshot can't clobber the in-
+// progress field) - but lastKnownServerState keeps updating live from every
+// snapshot regardless. If a DIFFERENT field got saved by someone else in
+// the meantime, that field goes stale in local (frozen) while
+// lastKnownServerState moves on to the new value - so at save time it
+// LOOKS "changed" (local != live baseline) but not "conflicting" (server
+// still matches the live baseline), and the stale local value silently
+// overwrites the other save. Caught in testing: tab A editing the
+// checklist, tab B saving a different field (ROI) in between, tab A's save
+// afterward silently reverted ROI back to its pre-tab-B value with no
+// conflict banner at all - the exact silent-clobber failure mode this
+// whole subsystem exists to prevent, just narrowed to one field.
+//
+// Fix: freeze a PER-CLIENT copy of lastKnownServerState the instant a name
+// first becomes pending, and diff against THAT frozen copy instead of the
+// live one for the rest of this pending streak - any field this tab hasn't
+// touched stays byte-identical between the frozen snapshot and (frozen)
+// local, so it's correctly never flagged as "changed" no matter how much
+// lastKnownServerState moves on elsewhere; a field this tab HAS touched is
+// still correctly diffed against the true pre-edit value, and a real
+// server-side change to that same field since then is still correctly
+// caught as a genuine conflict (see commitDatabaseToCloud's fieldCheck).
+// Implemented by overriding .add/.delete on the existing Set object rather
+// than touching any of pendingLocalClientEdits' own ~30 call sites - every
+// one of them keeps working unchanged, since they only ever call
+// pendingLocalClientEdits.add(name)/.delete(name)/.has(name) on this same
+// object reference.
+let pendingEditBaseline = {};
+(function() {
+  const originalAdd = pendingLocalClientEdits.add.bind(pendingLocalClientEdits);
+  const originalDelete = pendingLocalClientEdits.delete.bind(pendingLocalClientEdits);
+  pendingLocalClientEdits.add = function(name) {
+    if (!pendingLocalClientEdits.has(name)) {
+      pendingEditBaseline[name] = JSON.parse(JSON.stringify(lastKnownServerState[name] || {}));
+    }
+    return originalAdd(name);
+  };
+  pendingLocalClientEdits.delete = function(name) {
+    delete pendingEditBaseline[name];
+    return originalDelete(name);
+  };
+})();
+
 function getClientsDbShardMetaDocRef() {
   if (!window.firebaseDb || !window.firebaseDoc) return null;
   return window.firebaseDoc(window.firebaseDb, "agency", "clientsDbShardMeta");
@@ -7099,7 +7148,15 @@ function commitDatabaseToCloud() {
   // this check - still sent unconditionally, matching pre-Phase-4
   // behavior (same deliberate scoping decision Stage 3 made).
   const fieldCheck = Promise.all(namesToWrite.map(name => {
-    const baseline = lastKnownServerState[name] || {};
+    // Bug fix (Sep 2026, see pendingEditBaseline's own comment above): use
+    // the FROZEN per-client snapshot taken when this name first became
+    // pending, not the live-updated lastKnownServerState, so a field this
+    // tab never touched can't look "changed" just because someone else
+    // saved it in the meantime. Falls back to the live value for a name
+    // somehow missing a frozen snapshot (shouldn't happen given .add's
+    // override above, but matches this file's habit of never assuming a
+    // map lookup can't come back empty).
+    const baseline = pendingEditBaseline[name] || lastKnownServerState[name] || {};
     const local = cleanDb[name];
     const changedFields = Object.keys(local).filter(key =>
       JSON.stringify(local[key]) !== JSON.stringify(baseline[key])
