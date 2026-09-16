@@ -1100,6 +1100,12 @@ function boot() {
       const sandboxName = "Quick Sandbox (One-Offs)";
       if (!confirm("Are you sure you want to clear all data in the Quick Sandbox? This will reset all checklist audits and competitor sheets back to blank templates.")) return;
       clientsDb[sandboxName] = createClientBlankState(sandboxName);
+      // Stage 1 of true per-client conflict detection (Sep 2026 - see
+      // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md's audit) - this button
+      // resets the sandbox regardless of whether it's the currently
+      // active client, but saveDatabase() only stamps activeClientName
+      // into pendingLocalClientEdits. Explicit stamp closes that gap.
+      pendingLocalClientEdits.add(sandboxName);
       saveDatabase();
       refreshAllViews();
       showBanner("success", "Quick Sandbox data cleared and reset successfully!");
@@ -1647,6 +1653,13 @@ function createNewClient() {
   }
 
   clientsDb[name] = createClientBlankState(name);
+  // Stage 1 of true per-client conflict detection (Sep 2026 - see
+  // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md's audit) - saveDatabase()
+  // below fires one line before activeClientName is reassigned to this
+  // new client, so it would otherwise stamp whatever was active BEFORE
+  // this, not the new client actually being created. Explicit stamp
+  // closes that gap.
+  pendingLocalClientEdits.add(name);
   saveDatabase();
   activeClientName = name;
   localStorage.setItem("REVITAL_HUB_ACTIVE_CLIENT", activeClientName);
@@ -6128,7 +6141,7 @@ function backfillMissingClientChecklists() {
   // explanation. Backfill here so every client gets the starter checklist
   // regardless of whether Client Portal Manager has been opened for them.
   let changed = false;
-  Object.values(clientsDb).forEach(client => {
+  Object.entries(clientsDb).forEach(([name, client]) => {
     if (client && !Array.isArray(client.clientChecklist)) {
       client.clientChecklist = DEFAULT_CLIENT_CHECKLIST.map(item => ({
         id: item.id,
@@ -6136,6 +6149,12 @@ function backfillMissingClientChecklists() {
         checked: false
       }));
       changed = true;
+      // Stage 1 of true per-client conflict detection (Sep 2026 - see
+      // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md's audit) - this runs on
+      // EVERY saveDatabase() call and can silently backfill a client
+      // other than activeClientName, which saveDatabase() alone would
+      // never stamp. Explicit stamp closes that gap.
+      pendingLocalClientEdits.add(name);
     }
   });
   return changed;
@@ -6406,7 +6425,41 @@ function startClientWorkspacesSync() {
     }
 
     const fresh = {};
-    snap.forEach(doc => { fresh[doc.id] = doc.data(); });
+    snap.forEach(doc => {
+      // Skip echoes of our own unconfirmed writes for this client - if the
+      // admin is actively editing (every keystroke triggers a debounced
+      // save), a later keystroke can update clientsDb in memory before an
+      // earlier keystroke's own write echo arrives here, and applying
+      // that stale echo would clobber the newer edit. Mirrors the
+      // pre-cutover per-shard listener's identical guard (see
+      // listenToClientsDbShard).
+      if (doc.metadata && doc.metadata.hasPendingWrites) {
+        fresh[doc.id] = clientsDb[doc.id] !== undefined ? clientsDb[doc.id] : doc.data();
+        return;
+      }
+      fresh[doc.id] = doc.data();
+    });
+
+    // REGRESSION FIX (Sep 2026, caught during the true-per-client-conflict-
+    // detection audit, not in production): this guard was missing entirely
+    // when startClientWorkspacesSync was first written for the cutover.
+    // Without it, this listener - which fires on ANY document in the whole
+    // collection changing, not just ones related to a given tab's own
+    // in-progress edits - would silently overwrite clientsDb wholesale,
+    // discarding any client with an unconfirmed local edit still in
+    // flight. That meant any admin or restricted teammate saving ANYTHING,
+    // anywhere, could clobber a different tab's still-typing, not-yet-
+    // saved edit to a completely unrelated client - the exact failure
+    // mode behind this subsystem's two real prior data-loss incidents
+    // (Reginald White, Evry Intention LLC). Mirrors
+    // rebuildClientsDbFromShards' identical, already-proven guard on the
+    // pre-cutover path.
+    pendingLocalClientEdits.forEach(name => {
+      if (clientsDb[name]) fresh[name] = clientsDb[name];
+    });
+
+    const freshStr = JSON.stringify(fresh);
+    const localStr = JSON.stringify(clientsDb);
     clientsDb = fresh;
     clientWorkspacesSyncReady = true;
 
@@ -6415,7 +6468,19 @@ function startClientWorkspacesSync() {
     }
 
     buildClientDropdown();
-    refreshAllViews();
+    // Skip a no-op re-render/reload when nothing actually changed for this
+    // tab's own view of the data (e.g. this snapshot fired only because
+    // an echo/no-op landed, or the merge above restored exactly what was
+    // already here).
+    if (freshStr === localStr) return;
+    // Same reasoning as rebuildClientsDbFromShards' identical fix (the Aug
+    // 2026 "mood board reload glitch," Ronald passively viewing a board
+    // while Juan actively built one for the same client) - never force a
+    // disruptive hard iframe reload onto someone actively working in a
+    // tab just because a remote change (to any client, not necessarily
+    // theirs) came in through this listener. REGRESSION FIX (Sep 2026):
+    // this option was missing here too.
+    refreshAllViews({ skipActiveIframeReload: true });
     renderDashboard();
   });
 }
