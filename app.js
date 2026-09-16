@@ -6954,6 +6954,25 @@ function commitDatabaseToCloud() {
 
   const cleanDb = JSON.parse(JSON.stringify(clientsDb));
 
+  // Snapshot which clients are pending as of THIS write (see
+  // pendingLocalClientEdits above rebuildClientsDbFromShards) - only these
+  // are guaranteed to be included in cleanDb above. Clearing the whole set
+  // once this write confirms would incorrectly mark any edit made during
+  // the round-trip below as safe, even though it wasn't part of this
+  // write (it'll ride along on the next debounced save instead). Moved
+  // above the size guard below (Stage 3, Sep 2026) so that guard can be
+  // scoped to only the clients this write actually touches.
+  const namesPendingAsOfThisWrite = new Set(pendingLocalClientEdits);
+
+  // Stage 3 of true per-client conflict detection (Sep 2026 - see
+  // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md's Stage 3 design note): the
+  // actual list of clients this write will SET data for. A pending name
+  // whose client no longer exists in cleanDb (deleteActiveClient stamps
+  // the deleted name into pendingLocalClientEdits too, same as any other
+  // edit - see the audit above) is excluded here and handled separately
+  // via intentionallyRemovedClientNames below, not written as data.
+  const namesToWrite = Array.from(namesPendingAsOfThisWrite).filter(name => cleanDb[name]);
+
   // Per-client size guard (cutover, Sep 2026) - replaces the old
   // per-shard findOversizedShards check now that each client is its own
   // Firestore document instead of sharing a bin-packed pool with others.
@@ -6963,9 +6982,13 @@ function commitDatabaseToCloud() {
   // crowding that made this a real risk pre-cutover is gone now that no
   // client competes with any other for space; this only fires if one
   // client's OWN data alone approaches Firestore's real ~1MiB ceiling.
-  const oversizedClients = Object.entries(cleanDb).filter(([name, data]) =>
-    new Blob([JSON.stringify(data)]).size > CLIENTS_DB_HARD_LIMIT_BYTES
-  );
+  //
+  // Stage 3 (Sep 2026): scoped to namesToWrite only, not every client in
+  // cleanDb - an already-oversized client this write isn't even touching
+  // shouldn't block an unrelated save.
+  const oversizedClients = namesToWrite
+    .map(name => [name, cleanDb[name]])
+    .filter(([name, data]) => new Blob([JSON.stringify(data)]).size > CLIENTS_DB_HARD_LIMIT_BYTES);
   if (oversizedClients.length > 0) {
     const namedClients = oversizedClients.map(([name]) => name).join('", "');
     console.error("commitDatabaseToCloud: skipped - client(s) over the size limit:",
@@ -6978,13 +7001,14 @@ function commitDatabaseToCloud() {
     return;
   }
 
-  // Snapshot which clients are pending as of THIS write (see
-  // pendingLocalClientEdits above rebuildClientsDbFromShards) - only these
-  // are guaranteed to be included in cleanDb above. Clearing the whole set
-  // once this write confirms would incorrectly mark any edit made during
-  // the round-trip below as safe, even though it wasn't part of this
-  // write (it'll ride along on the next debounced save instead).
-  const namesPendingAsOfThisWrite = new Set(pendingLocalClientEdits);
+  // Stage 3 (Sep 2026): nothing to actually write - can happen if
+  // saveDatabase() fires with no active client and no deletion has ever
+  // happened this session. Clean no-op rather than proceeding through an
+  // empty version check and an empty write batch.
+  if (namesToWrite.length === 0 && intentionallyRemovedClientNames.size === 0) {
+    if (indicator) indicator.style.opacity = "0";
+    return;
+  }
 
   // Safety-net backup write moved below (see comment there) - it used to
   // fire here, unconditionally, before the version-conflict check further
@@ -7007,44 +7031,46 @@ function commitDatabaseToCloud() {
     }
   }, 10000);
 
-  // Optimistic-concurrency guard, same version-field pattern as every
-  // other agency/* doc (see saveVersionedAgencyDoc) - re-read the meta
-  // doc's version fresh right before writing, and refuse the ENTIRE save
-  // (not just the meta doc) if it moved since this tab last synced,
-  // rather than silently overwriting whatever another admin just saved
-  // elsewhere in the client roster. This is deliberately the same
-  // hard-block-and-ask behavior as everywhere else, not a softer
-  // auto-merge - clientsDb fires this on nearly every edit across the
-  // whole Hub, so a rejected save is expected to be rare in practice for
-  // a team this size, and staying consistent with the pattern every other
-  // tool already uses (rather than inventing a different, more complex
-  // behavior just for this one doc) keeps the "someone else saved, reload
-  // and redo" mental model the same everywhere an admin might see it.
+  // Stage 3 of true per-client conflict detection (Sep 2026 - see
+  // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md): replaces the single GLOBAL
+  // clientsDbDocVersion gate that every save used to check (kept, see
+  // below, but no longer gating - an instant one-line rollback if this
+  // needs reverting). Fetches each PENDING client's own document fresh
+  // and compares its CLIENT_DOC_VERSION_FIELD against this tab's own
+  // last-known value for that client (clientWorkspaceVersions, Stage 2).
+  // This is the actual fix for the original complaint: editing Client A
+  // no longer gets blocked just because someone else saved Client B -
+  // only a real conflict on a client THIS save is actually about to
+  // write triggers the banner now, and the banner names exactly which
+  // client(s) conflicted instead of vaguely blaming "the client
+  // database." Still deliberately hard-block-and-ask, not a softer
+  // auto-merge, and still all-or-nothing across this write's batch (if
+  // ANY pending client conflicts, the whole save is rejected together,
+  // same simple "someone else saved, reload and redo" mental model as
+  // before) - a partial save would complicate the mental model for
+  // limited benefit, since a save batch spanning multiple clients at
+  // once is the unusual case, not the common one.
   //
-  // Cutover note (Sep 2026): still one GLOBAL version shared across every
-  // client, not yet a true per-client check, even though each client now
-  // has its own document - see CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md's
-  // "Safer cutover now" decision. A real per-client version check needs
-  // comprehensive tracking of which client(s) a given save actually
-  // touched, and pendingLocalClientEdits (the one candidate mechanism
-  // already in this codebase) is confirmed NOT comprehensive - see its
-  // own comment above and the notification-pile-up bug it was patched
-  // for. Getting per-client tracking wrong risks a WORSE failure mode
-  // than today's false-positive conflicts (a real edit to a non-active
-  // client silently never reaching the cloud at all), so this keeps
-  // today's exact conflict granularity - what changes with cutover is
-  // WHERE the data lives (one document per client, fixing the Firestore
-  // size-limit problem immediately), not yet how finely conflicts are
-  // detected. The cross-client false-conflict fix is deferred to a
-  // separate, carefully-audited pass.
-  window.firebaseGetDoc(metaRef).then((freshMetaSnap) => {
-    const freshVersion = (freshMetaSnap.exists && typeof freshMetaSnap.data().version === "number")
-      ? freshMetaSnap.data().version : 0;
+  // Deletions (intentionallyRemovedClientNames) are NOT yet included in
+  // this check - still sent unconditionally, matching pre-Stage-3
+  // behavior. A per-client version check before deleting (protecting
+  // against deleting a client someone else just edited) is a reasonable
+  // follow-up, deliberately left out of this pass to keep Stage 3 scoped
+  // to exactly what was described before implementing it.
+  const versionCheck = Promise.all(namesToWrite.map(name =>
+    window.firebaseGetDoc(getClientWorkspaceDocRef(name)).then(snap => {
+      const cloudVersion = (snap.exists && typeof snap.data()[CLIENT_DOC_VERSION_FIELD] === "number")
+        ? snap.data()[CLIENT_DOC_VERSION_FIELD] : 0;
+      return { name, cloudVersion, localVersion: clientWorkspaceVersions[name] || 0 };
+    })
+  ));
 
-    if (freshVersion !== clientsDbDocVersion) {
+  return versionCheck.then((results) => {
+    const conflicts = results.filter(r => r.cloudVersion !== r.localVersion);
+    if (conflicts.length > 0) {
       resolved = true;
-      console.warn("commitDatabaseToCloud: skipped - clientsDb changed elsewhere since this tab last synced (local v" +
-        clientsDbDocVersion + " vs cloud v" + freshVersion + ").");
+      const conflictNames = conflicts.map(c => c.name);
+      console.warn("commitDatabaseToCloud: skipped - client(s) changed elsewhere since this tab last synced:", conflicts);
       if (indicator) {
         indicator.innerHTML = "Save Skipped ⚠️";
         // No auto-fade-out here (unlike the normal 2s/3s/5s cases just
@@ -7053,30 +7079,28 @@ function commitDatabaseToCloud() {
         // the banner instead of quietly reverting to normal while the
         // real problem (banner still up, edit still unsaved) persists.
       }
-      showSaveConflictBanner("Someone else just saved changes to the client database while you had this open, so your last change wasn't saved - saving it now would have overwritten theirs. Click Reload Now to pick up their update (the Hub already reflects it live in the background), then redo your last edit.");
+      showSaveConflictBanner(
+        `Someone else just saved changes to "${conflictNames.join('", "')}" while you had ${conflictNames.length > 1 ? "them" : "it"} open, so your last change wasn't saved - saving it now would have overwritten theirs. Click Reload Now to pick up their update (the Hub already reflects it live in the background), then redo your last edit.`
+      );
       return;
     }
 
     // SECOND SAFETY NET (Aug 2026, after Evry Intention LLC vanished a
-    // second time with a matching version number; adapted for cutover Sep
-    // 2026): the check above only catches a STALE VERSION NUMBER, which
-    // assumes clientsDbDocVersion and clientsDb's actual CONTENT always
-    // move together. A single collection-wide onSnapshot listener
-    // (startClientWorkspacesSync) is far less prone to this than the old
-    // per-shard-listener setup - one listener, one consistent view,
-    // rather than N independent ones that could individually stall - but
-    // a backgrounded/throttled tab could still in principle have a stale
-    // local copy while its separate meta listener reports a current
-    // version, so this stays as real, cheap insurance rather than
-    // assuming the new architecture makes it impossible. Fetches the
-    // current client NAMES fresh from the cloud collection (not full
-    // shard documents - just the id list) and refuses to save if the
-    // cloud currently has ANY client this tab doesn't - that's the
+    // second time with a matching version number; downgraded from
+    // blocking to log-only in Stage 3, Sep 2026). Originally: fetches the
+    // current client NAMES fresh from the cloud collection and refuses to
+    // save if the cloud currently has ANY client this tab doesn't - the
     // fingerprint of a stale tab about to blank out a client it never
-    // knew existed, same failure mode that lost Evry Intention LLC. A
-    // deliberate deletion never trips this, since deleteActiveClient()
-    // runs in a tab that just loaded that client and is removing a key IT
-    // knows about, not one it's silently unaware of.
+    // knew existed, same failure mode that lost Evry Intention LLC under
+    // the old full-roster-write model, where saving ANYTHING re-wrote
+    // EVERY client from this tab's own in-memory copy, so an unknown
+    // client would have simply vanished from that rewrite. Stage 3 scopes
+    // writes to namesToWrite only (see above) - an unknown client is
+    // never touched at all by this save, so that specific failure mode
+    // can no longer happen. Kept as a log-only signal for a verification
+    // stretch rather than removed outright in the same change that
+    // altered write scope, in case something about that reasoning turns
+    // out to be wrong in practice.
     const cloudKeyCheck = window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb, "clientWorkspaces")).then((cloudDocs) => {
       const cloudKeys = cloudDocs.map(d => d.id);
       const localKeys = new Set(Object.keys(cleanDb));
@@ -7088,28 +7112,24 @@ function commitDatabaseToCloud() {
 
     return cloudKeyCheck.then((missingLocally) => {
       if (missingLocally.length > 0) {
-        resolved = true;
-        console.warn("commitDatabaseToCloud: skipped - cloud has client(s) this tab doesn't know about (stale tab guard):", missingLocally);
-        if (indicator) {
-          indicator.innerHTML = "Save Skipped ⚠️";
-        }
-        showSaveConflictBanner(
-          `This tab's client list is out of date - the cloud currently has a client ("${missingLocally.join('", "')}") this tab never loaded, likely because this tab has been open a while. Saving now would have erased ${missingLocally.length > 1 ? "them" : "it"}, so nothing was saved. Click Reload Now to pick up the current data, then redo your last edit.`
-        );
-        return;
+        console.warn("commitDatabaseToCloud: cloud has client(s) this tab doesn't know about (stale-tab signal, no longer blocking - see Stage 3 note):", missingLocally);
       }
 
       // Safety-net backup: a "last known good" full snapshot, written
-      // alongside the real per-client docs now that both checks above have
+      // alongside the real per-client docs now that the check above has
       // confirmed this tab's data is fresh and about to be accepted (moved
-      // here, after those checks, so a rejected save never overwrites the
+      // here, after that check, so a rejected save never overwrites the
       // backup with stale data - see the comment where this used to live).
-      // Unchanged by cutover - still sharded the same way (reusing
-      // packClientsDbIntoShards below purely for this backup's own
-      // bin-packing, not as anything authoritative), still just as valid
-      // a recovery source regardless of how the live data is stored. Fire-
-      // and-forget: a backup failure shouldn't block or alarm the user
-      // about the actual save below.
+      // Unchanged by cutover or Stage 3 - still the FULL cleanDb, not
+      // scoped to namesToWrite, since this tab's in-memory roster (kept
+      // current by the live collection listener) is still a valid full
+      // snapshot regardless of what this particular save's write touches,
+      // and a backup scoped down to just the pending client(s) would be
+      // far less useful as a "restore everything" safety net. Still
+      // sharded the same way (reusing packClientsDbIntoShards below purely
+      // for this backup's own bin-packing, not as anything authoritative).
+      // Fire-and-forget: a backup failure shouldn't block or alarm the
+      // user about the actual save below.
       const shards = packClientsDbIntoShards(cleanDb);
       const backupMetaRef = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackupShardMeta");
       window.firebaseGetDoc(backupMetaRef).then((backupMetaSnap) => {
@@ -7134,35 +7154,39 @@ function commitDatabaseToCloud() {
       // Dormant shard safety-net write (cutover, Sep 2026 - see
       // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md's migration path) - no
       // longer authoritative and no longer version-checked now that
-      // clientWorkspaces (below) is the real source of truth. Kept
-      // running, cheaply, as an easy rollback source for a stretch after
-      // cutover; purely best-effort, same fire-and-forget shape as the
-      // backup write above. Safe to remove once clientWorkspaces has a
-      // real track record post-cutover - see startUnrestrictedClientsDbSync,
-      // left intact and unused, for what reading it back would look like.
+      // clientWorkspaces (below) is the real source of truth. Still the
+      // FULL cleanDb (unchanged by Stage 3), same reasoning as the backup
+      // write just above. Kept running, cheaply, as an easy rollback
+      // source for a stretch after cutover; purely best-effort, same
+      // fire-and-forget shape as the backup write above. Safe to remove
+      // once clientWorkspaces has a real track record post-cutover - see
+      // startUnrestrictedClientsDbSync, left intact and unused, for what
+      // reading it back would look like.
       Promise.all(shards.map((shardObj, i) => window.firebaseSetDoc(getClientsDbShardDocRef(i), shardObj)))
         .catch(err => console.error("Dormant shard safety-net write failed (non-blocking, no longer authoritative):", err));
 
       // THE REAL, AUTHORITATIVE WRITE (post-cutover, Sep 2026): one
       // Firestore document per client, replacing the bin-packed shards
-      // above (now dormant). Still writes the full roster on every save,
-      // same conflict-check granularity as before cutover - see this
-      // function's own comment above the version check for why.
+      // above (now dormant).
       //
-      // Stage 2 of true per-client conflict detection (Sep 2026): each
-      // client's document now also carries CLIENT_DOC_VERSION_FIELD,
-      // bumped from this tab's last-known value for that client. Not yet
-      // used for any conflict decision (still the global freshVersion
-      // check above) - this stage only gets real per-client version
-      // numbers flowing and verified live, same "parallel period" as
-      // clientWorkspaces itself had before its own cutover.
+      // Stage 3 of true per-client conflict detection (Sep 2026): now
+      // scoped to namesToWrite only - the actual fix for the Firestore
+      // write side of the original false-conflict complaint. Before this
+      // stage, every save re-wrote every client's document regardless of
+      // whether it had actually changed in this tab; that's what made the
+      // global version check necessary in the first place (this tab's own
+      // stale copy of an unrelated, unedited client could otherwise
+      // silently clobber someone else's fresher edit to it). Now that
+      // writes only ever touch clients this tab actually has a pending
+      // edit for, that risk is gone, and the version check above only
+      // needs to (and does) cover the same scoped set.
       const nextClientVersions = {};
-      const writes = Object.entries(cleanDb).map(([name, data]) => {
+      const writes = namesToWrite.map(name => {
         const nextClientVersion = (clientWorkspaceVersions[name] || 0) + 1;
         nextClientVersions[name] = nextClientVersion;
         return window.firebaseSetDoc(
           getClientWorkspaceDocRef(name),
-          Object.assign({}, data, { [CLIENT_DOC_VERSION_FIELD]: nextClientVersion })
+          Object.assign({}, cleanDb[name], { [CLIENT_DOC_VERSION_FIELD]: nextClientVersion })
         );
       });
 
@@ -7171,14 +7195,23 @@ function commitDatabaseToCloud() {
       // simply stopped appearing in the next full-shard rewrite. Only
       // ever deletes a name THIS tab itself just renamed/deleted (see
       // intentionallyRemovedClientNames above), never anything it merely
-      // doesn't happen to have loaded.
+      // doesn't happen to have loaded. Unchanged by Stage 3 - still
+      // unconditional, not yet version-checked (see this function's
+      // version-check comment above).
       intentionallyRemovedClientNames.forEach(name => {
         writes.push(window.firebaseDeleteDoc(getClientWorkspaceDocRef(name)).catch(err =>
           console.error(`Failed to delete stale clientWorkspaces doc for "${name}":`, err)
         ));
       });
 
-      const nextVersion = freshVersion + 1;
+      // Stage 3 (Sep 2026): clientsDbDocVersion/clientWorkspacesMeta is no
+      // longer read fresh or used to gate this save (see the per-client
+      // version check above) - but still bumped here, cheaply, from this
+      // tab's own last-known value. Deliberately NOT removed: costs
+      // nothing, and keeps a one-line rollback available (point the gate
+      // back at a fresh read-and-compare of this same field) if Stage 3
+      // ever needs reverting.
+      const nextVersion = clientsDbDocVersion + 1;
       writes.push(window.firebaseSetDoc(metaRef, { version: nextVersion }));
 
       return Promise.all(writes).then(() => {
@@ -7201,7 +7234,8 @@ function commitDatabaseToCloud() {
         // unauthenticated client portal is allowed to read. Only runs after
         // a confirmed successful save - cleanDb shouldn't be pushed out to
         // the public portal on a skipped/failed save, since it may not
-        // reflect the true current state. Unchanged by cutover.
+        // reflect the true current state. Still the FULL cleanDb, not
+        // scoped to namesToWrite - unchanged by cutover or Stage 3.
         syncPublicPortalDocs(cleanDb).catch(err => {
           console.error("Public portal sync failed:", err);
         });
