@@ -7021,6 +7021,54 @@ function commitRestrictedClientEditsNow() {
   });
 }
 
+// Phase 4 bug fix (Sep 2026, caught live-testing the two fixes above, not
+// in production, on a real client's real checklist data): commitDatabase
+// ToCloud's field-level diff originally compared values via
+// JSON.stringify(a) !== JSON.stringify(b). That looked equivalent to a
+// real equality check, but Firestore does NOT guarantee stable key order
+// for a map/object value across different read paths - a value delivered
+// through the onSnapshot collection listener (what lastKnownServerState/
+// pendingEditBaseline are built from) can come back with its object keys
+// in a different order than the SAME, unchanged, underlying document read
+// moments later via a fresh getDoc() (what commitDatabaseToCloud's own
+// fieldCheck calls serverNow) - confirmed live: a clientChecklist array
+// nobody had touched came back as {label, checked, id} from one read path
+// and {id, label, checked} from the other, same values throughout.
+// JSON.stringify serializes keys in whatever order the object holds them,
+// so two structurally-identical values with different key order produce
+// DIFFERENT strings - which meant an untouched array/object field could
+// look "changed" (against baseline) or "conflicting" (against serverNow)
+// literally at random, for no real edit at all. Given how many of
+// CLIENT_FIELD_SECTIONS_MIRROR's ~47 fields are arrays-of-objects or
+// nested objects (checklists, audits, brand vault, pricing tables), this
+// would have made false hard-blocks a routine, not rare, occurrence.
+//
+// Fix: a real recursive equality check instead of string comparison -
+// order-INsensitive for object keys (the actual bug), but still order-
+// SENSITIVE for array elements (reordering a checklist's items IS a real
+// change worth catching, unlike which order its own keys serialize in).
+function clientFieldValuesEqual(a, b) {
+  if (a === b) return true;
+  if (a === null || b === null || a === undefined || b === undefined) return a === b;
+  if (typeof a !== "object" || typeof b !== "object") return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!clientFieldValuesEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const key of aKeys) {
+    if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
+    if (!clientFieldValuesEqual(a[key], b[key])) return false;
+  }
+  return true;
+}
+
 function commitDatabaseToCloud() {
   if (isRestrictedClientsDbSync) {
     commitRestrictedClientEdits();
@@ -7185,13 +7233,15 @@ function commitDatabaseToCloud() {
     // map lookup can't come back empty).
     const baseline = pendingEditBaseline[name] || lastKnownServerState[name] || {};
     const local = cleanDb[name];
+    // Bug fix (Sep 2026, see clientFieldValuesEqual's own comment above) -
+    // order-insensitive equality, not a JSON.stringify string compare.
     const changedFields = Object.keys(local).filter(key =>
-      JSON.stringify(local[key]) !== JSON.stringify(baseline[key])
+      !clientFieldValuesEqual(local[key], baseline[key])
     );
     return window.firebaseGetDoc(getClientWorkspaceDocRef(name)).then(snap => {
       const serverNow = snap.exists ? snap.data() : {};
       const conflictFields = changedFields.filter(key =>
-        JSON.stringify(serverNow[key]) !== JSON.stringify(baseline[key])
+        !clientFieldValuesEqual(serverNow[key], baseline[key])
       );
       return { name, changedFields, conflictFields };
     });
