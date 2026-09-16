@@ -1506,35 +1506,48 @@ copywriting: {
 let isFirestoreLoaded = false;
 
 function migrateSchemaAndDefaults() {
+  // Stage 1 of true per-client conflict detection (Sep 2026) - lets
+  // loadDatabase() know whether anything here actually needs to reach the
+  // cloud, same reasoning as backfillMissingClientChecklists' own return
+  // value.
+  let anyChanged = false;
+
   // If database is empty, seed a default client workspace
   if (Object.keys(clientsDb).length === 0) {
     const defaultName = "Nexus Productions";
     clientsDb[defaultName] = createClientBlankState(defaultName);
+    pendingLocalClientEdits.add(defaultName);
+    anyChanged = true;
   }
 
   // Ensure Quick Sandbox workspace is seeded
   const sandboxName = "Quick Sandbox (One-Offs)";
   if (!clientsDb[sandboxName]) {
     clientsDb[sandboxName] = createClientBlankState(sandboxName);
+    pendingLocalClientEdits.add(sandboxName);
+    anyChanged = true;
   }
 
   // Schema migration and verification loop to protect against legacy data
   Object.keys(clientsDb).forEach(name => {
     const client = clientsDb[name];
     const blank = createClientBlankState(name);
+    let changedThisClient = false;
 
     // Verify top-level keys
     Object.keys(blank).forEach(key => {
       if (client[key] === undefined) {
         client[key] = blank[key];
+        changedThisClient = true;
       }
     });
 
-    if (client.clickupUrl === undefined) client.clickupUrl = "";
+    if (client.clickupUrl === undefined) { client.clickupUrl = ""; changedThisClient = true; }
 
     // Migrate onboarding list format (backward compat)
     if (client.onboarding && client.onboarding.length > 0 && !client.onboarding[0].category) {
       client.onboarding = blank.onboarding;
+      changedThisClient = true;
     }
 
     // Migrate or verify copywriting object structure
@@ -1545,15 +1558,31 @@ function migrateSchemaAndDefaults() {
         inputs: { product: "", audience: "", benefit: "", cta: "", tone: "persuasive" },
         targetUrl: ""
       };
+      changedThisClient = true;
     } else {
       if (!client.copywriting.inputs) {
         client.copywriting.inputs = { product: "", audience: "", benefit: "", cta: "", tone: "persuasive" };
+        changedThisClient = true;
       }
-      if (client.copywriting.activeFramework === undefined) client.copywriting.activeFramework = "aida";
-      if (client.copywriting.notes === undefined) client.copywriting.notes = "";
-      if (client.copywriting.targetUrl === undefined) client.copywriting.targetUrl = "";
+      if (client.copywriting.activeFramework === undefined) { client.copywriting.activeFramework = "aida"; changedThisClient = true; }
+      if (client.copywriting.notes === undefined) { client.copywriting.notes = ""; changedThisClient = true; }
+      if (client.copywriting.targetUrl === undefined) { client.copywriting.targetUrl = ""; changedThisClient = true; }
+    }
+
+    // Stage 1 of true per-client conflict detection (Sep 2026 - see
+    // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md's audit) - this runs once at
+    // boot, for every client, and never calls saveDatabase() itself, so
+    // without this stamp a migrated client had ZERO protection: nothing
+    // guaranteed its backfilled fields would survive the next incoming
+    // clientWorkspaces snapshot (or reach the cloud at all) until some
+    // unrelated save happened to cover it.
+    if (changedThisClient) {
+      pendingLocalClientEdits.add(name);
+      anyChanged = true;
     }
   });
+
+  return anyChanged;
 }
 
 function getActiveClient() {
@@ -4907,6 +4936,13 @@ async function syncContractRenewalDateToRenewalTracker(clientName, renewalDate) 
     return { ok: true, reason: "not_tracked_in_renewal_tracker" };
   }
   clientsDb[trimmedName].renewal.renewalDate = renewalDate;
+  // Stage 1 of true per-client conflict detection (Sep 2026 - see
+  // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md's audit) - trimmedName here is
+  // whichever client's renewal date Contract & Invoice Tracker just edited,
+  // which is not necessarily the admin's currently active client (this is
+  // explicitly a cross-tool bridge). saveDatabase() alone only stamps
+  // activeClientName.
+  pendingLocalClientEdits.add(trimmedName);
   saveDatabase();
   return { ok: true };
 }
@@ -5806,6 +5842,19 @@ function initParentEventListeners() {
           }
 
           clientsDb = { ...clientsDb, ...importedClients };
+          // Stage 1 of true per-client conflict detection (Sep 2026 - see
+          // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md's audit) - this can
+          // touch every client in the file (potentially the whole
+          // roster), but saveDatabase() below fires before
+          // activeClientName is reassigned, and even that reassignment
+          // only ever covers ONE of potentially many imported clients on
+          // the NEXT save. Stamp every imported name explicitly so none
+          // of them can get silently dropped or clobbered by an incoming
+          // clientWorkspaces snapshot before they've actually reached the
+          // cloud. Highest-impact of the audit's findings - this is the
+          // same Import Backups flow exercised live during this session's
+          // Step 3 test-restore.
+          Object.keys(importedClients).forEach(name => pendingLocalClientEdits.add(name));
           saveDatabase();
 
           activeClientName = Object.keys(importedClients)[0];
@@ -7663,6 +7712,13 @@ async function createClientDriveFolder(name) {
   if (!client.portalConfig) client.portalConfig = {};
   client.portalConfig.driveFolderUrl = data.folderUrl;
   client.portalConfig.driveFolderId = data.folderId || "";
+  // Stage 1 of true per-client conflict detection (Sep 2026 - see
+  // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md's audit) - this is async and
+  // fire-and-forget (only caller: setUpNewClientFolders, itself
+  // fire-and-forget from createNewClient). If the admin switches active
+  // client while the fetch above was in flight, saveDatabase() below
+  // would otherwise stamp whatever's active NOW instead of `name`.
+  pendingLocalClientEdits.add(name);
   saveDatabase();
   refreshAllViews({ skipActiveIframeReload: true });
   pushAdminNotification('client_drive_folder', `Google Drive folder created for ${name}.`, name, null);
@@ -7688,6 +7744,10 @@ async function createClientClickUpFolder(name) {
   if (!client) return; // renamed/deleted before this resolved
   client.clickupUrl = data.folderUrl;
   client.clickupFolderId = data.folderId || "";
+  // Stage 1 of true per-client conflict detection (Sep 2026 - see
+  // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md's audit) - same async race as
+  // createClientDriveFolder above.
+  pendingLocalClientEdits.add(name);
   saveDatabase();
   refreshAllViews({ skipActiveIframeReload: true });
   pushAdminNotification('client_clickup_folder', `ClickUp folder created for ${name}.`, name, null);
@@ -9259,7 +9319,18 @@ function loadDatabase() {
   // formats) were never backfilled. Every write inside it is guarded to
   // only fill in genuinely missing/undefined data, so it's safe to run
   // on every load.
-  migrateSchemaAndDefaults();
+  //
+  // Stage 1 of true per-client conflict detection (Sep 2026 - see
+  // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md's audit) - this runs on the
+  // instant localStorage-cache boot state, before the real cloud sync
+  // below has confirmed anything, and previously never triggered a save
+  // of its own. Now stamps every client it touches into
+  // pendingLocalClientEdits itself (so it can't be clobbered by the
+  // incoming clientWorkspaces snapshot the moment it arrives), and its
+  // return value lets this push out to the cloud right away too, same as
+  // backfillMissingClientChecklists just below - rather than sitting
+  // unsynced until some unrelated save happens to cover it.
+  const migratedSomething = migrateSchemaAndDefaults();
 
   // Set active client
   const storedActive = localStorage.getItem("REVITAL_HUB_ACTIVE_CLIENT");
@@ -9276,8 +9347,10 @@ function loadDatabase() {
 
   // Self-heal any client missing a clientChecklist (see
   // backfillMissingClientChecklists) and push the fix out immediately so
-  // it doesn't sit unsynced until the next unrelated edit.
-  if (backfillMissingClientChecklists()) {
+  // it doesn't sit unsynced until the next unrelated edit. Also covers
+  // migrateSchemaAndDefaults above now (migratedSomething) - same
+  // reasoning, one save covers both self-heal passes.
+  if (backfillMissingClientChecklists() || migratedSomething) {
     saveDatabase();
   }
 
