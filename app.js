@@ -7280,9 +7280,11 @@ function commitDatabaseToCloud() {
   // common one, so this keeps the same simple mental model rather than
   // partial-saving some clients and not others.
   //
-  // Deletions (intentionallyRemovedClientNames) are NOT yet included in
-  // this check - still sent unconditionally, matching pre-Phase-4
-  // behavior (same deliberate scoping decision Stage 3 made).
+  // Deletions (intentionallyRemovedClientNames) get their OWN conflict
+  // check right below (deletionCheck) rather than being folded into this
+  // one - a delete discards the WHOLE document, not just fields this tab
+  // touched, so it needs to compare EVERY field against baseline, not
+  // just changedFields.
   const fieldCheck = Promise.all(namesToWrite.map(name => {
     // Bug fix (Sep 2026, see pendingEditBaseline's own comment above): use
     // the FROZEN per-client snapshot taken when this name first became
@@ -7304,13 +7306,50 @@ function commitDatabaseToCloud() {
       const conflictFields = changedFields.filter(key =>
         !clientFieldValuesEqual(serverNow[key], baseline[key])
       );
-      return { name, changedFields, conflictFields };
+      // serverNow kept on the result (not just conflictFields) for the
+      // post-merge size guard further down, which needs the server's
+      // actual current document to estimate the real merged size - see
+      // that guard's own comment for why cleanDb[name] alone isn't
+      // reliable anymore under field-level merge writes.
+      return { name, changedFields, conflictFields, serverNow };
     });
   }));
 
-  return fieldCheck.then((results) => {
+  // Deletion conflict check (Sep 2026 - closes the last named gap from
+  // Phase 4's own note above: "deletions still unconditional"). Deleting
+  // a client discards its ENTIRE document, so unlike fieldCheck above
+  // (which only cares about fields THIS tab touched), any field at all
+  // differing from baseline means someone changed this client after this
+  // tab decided to delete it - silently deleting it anyway would destroy
+  // their new data with no warning, the exact failure mode this whole
+  // subsystem exists to prevent. deleteActiveClient/renameActiveClient
+  // both stamp the deleted name into pendingLocalClientEdits (see the
+  // Stage 1 audit), so it already has a real pendingEditBaseline snapshot
+  // from the same .add() override fieldCheck's baseline above relies on -
+  // no separate bookkeeping needed to get one here.
+  const deletionCheck = Promise.all(Array.from(intentionallyRemovedClientNames).map(name => {
+    const baseline = pendingEditBaseline[name] || lastKnownServerState[name] || {};
+    return window.firebaseGetDoc(getClientWorkspaceDocRef(name)).then(snap => {
+      if (!snap.exists) {
+        // Already gone (a previous delete for this name already
+        // succeeded, or it never made it to the cloud at all) - nothing
+        // left to conflict with.
+        return { name, deletionConflictFields: [] };
+      }
+      const serverNow = snap.data();
+      const allKeys = new Set(Object.keys(serverNow).concat(Object.keys(baseline)));
+      allKeys.delete(CLIENT_DOC_VERSION_FIELD); // bookkeeping only, never a real conflict signal
+      const deletionConflictFields = Array.from(allKeys).filter(key =>
+        !clientFieldValuesEqual(serverNow[key], baseline[key])
+      );
+      return { name, deletionConflictFields };
+    });
+  }));
+
+  return Promise.all([fieldCheck, deletionCheck]).then(([results, deletionResults]) => {
     const conflicts = results.filter(r => r.conflictFields.length > 0);
-    if (conflicts.length > 0) {
+    const deletionConflicts = deletionResults.filter(r => r.deletionConflictFields.length > 0);
+    if (conflicts.length > 0 || deletionConflicts.length > 0) {
       resolved = true;
       // Name the SECTION each conflicting field belongs to where known
       // (matches the language a teammate actually sees in the sidebar/
@@ -7322,7 +7361,11 @@ function commitDatabaseToCloud() {
         fields.map(f => CLIENT_FIELD_SECTIONS_MIRROR[f] || f)
       )).join(", ");
       const conflictDescriptions = conflicts.map(c => `"${c.name}" (${describeFields(c.conflictFields)})`);
-      console.warn("commitDatabaseToCloud: skipped - real field-level conflict:", conflicts);
+      const deletionConflictDescriptions = deletionConflicts.map(c =>
+        `"${c.name}" (you tried to delete it, but ${describeFields(c.deletionConflictFields)} changed first, so the delete was skipped)`
+      );
+      const allDescriptions = conflictDescriptions.concat(deletionConflictDescriptions);
+      console.warn("commitDatabaseToCloud: skipped - real field-level conflict:", conflicts, deletionConflicts);
       if (indicator) {
         indicator.innerHTML = "Save Skipped ⚠️";
         // No auto-fade-out here (unlike the normal 2s/3s/5s cases just
@@ -7332,7 +7375,39 @@ function commitDatabaseToCloud() {
         // real problem (banner still up, edit still unsaved) persists.
       }
       showSaveConflictBanner(
-        `Someone else just saved changes to ${conflictDescriptions.join(", ")} while you had it open, so your last change wasn't saved - saving it now would have overwritten theirs. Click Reload Now to pick up their update (the Hub already reflects it live in the background), then redo your last edit.`
+        `Someone else just saved changes to ${allDescriptions.join(", ")} while you had it open, so your last change wasn't saved - saving it now would have overwritten theirs. Click Reload Now to pick up their update (the Hub already reflects it live in the background), then redo your last edit.`
+      );
+      return;
+    }
+
+    // Second, more accurate size guard (Sep 2026 - closes the other named
+    // gap from Phase 4's own note: the early oversizedClients check above
+    // only sees THIS tab's own possibly-stale cleanDb[name], which under
+    // field-level merge writes is no longer a reliable proxy for the real
+    // resulting document size - another tab could have concurrently added
+    // real weight to a field this tab hasn't picked up yet. Kept as a
+    // SECOND check rather than replacing the early one: that one is cheap
+    // and catches the common case before any network round-trip; this one
+    // is the accurate one, built from the server's ACTUAL current
+    // document (serverNow, already fetched above) merged with just this
+    // tab's own changedFields - the same shape the real write below is
+    // about to send.
+    const postMergeOversized = results
+      .map(r => {
+        const merged = Object.assign({}, r.serverNow);
+        r.changedFields.forEach(key => { merged[key] = cleanDb[r.name][key]; });
+        return [r.name, merged];
+      })
+      .filter(([, merged]) => new Blob([JSON.stringify(merged)]).size > CLIENTS_DB_HARD_LIMIT_BYTES);
+    if (postMergeOversized.length > 0) {
+      resolved = true;
+      const namedClients = postMergeOversized.map(([name]) => name).join('", "');
+      console.error("commitDatabaseToCloud: skipped - client(s) over the size limit after merging with the server's current data:",
+        postMergeOversized.map(([name, merged]) => ({ name, bytes: new Blob([JSON.stringify(merged)]).size })));
+      if (indicator) indicator.innerHTML = "Save Skipped ⚠️";
+      showSaveConflictBanner(
+        `The client record for "${namedClients}" would grow too large to save to the cloud once merged with what's already there (Firestore's own size limit). Your change is saved locally in this browser for now, but won't sync until that client's data is trimmed down - contact an admin to reduce stored files/notes for that client.`,
+        false
       );
       return;
     }
@@ -7451,9 +7526,10 @@ function commitDatabaseToCloud() {
       // simply stopped appearing in the next full-shard rewrite. Only
       // ever deletes a name THIS tab itself just renamed/deleted (see
       // intentionallyRemovedClientNames above), never anything it merely
-      // doesn't happen to have loaded. Unchanged by Stage 3 or Phase 4 -
-      // still unconditional, not yet conflict-checked at all (see this
-      // function's field-check comment above).
+      // doesn't happen to have loaded. Safe to run unconditionally here
+      // (Sep 2026 - see deletionCheck above): reaching this point already
+      // means every name in this set passed its own conflict check with
+      // nothing else on the server having changed first.
       intentionallyRemovedClientNames.forEach(name => {
         writes.push(window.firebaseDeleteDoc(getClientWorkspaceDocRef(name)).catch(err =>
           console.error(`Failed to delete stale clientWorkspaces doc for "${name}":`, err)
