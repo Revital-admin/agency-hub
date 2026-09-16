@@ -6326,6 +6326,28 @@ let clientsDbAllShardsLoaded = false;
 // just never closed here specifically.
 let clientsDbDocVersion = 0;
 
+// Stage 2 of true per-client conflict detection (Sep 2026 - see
+// CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md) - per-client counterpart to
+// clientsDbDocVersion above. Each clientWorkspaces/{clientName} document
+// now carries its own CLIENT_DOC_VERSION_FIELD, bumped on every write to
+// that specific document (by both app.js here and _worker.js's
+// restricted-write path). Tracked in this SEPARATE map rather than as a
+// field inside clientsDb[name] itself - clientsDb's in-memory shape is
+// read by ~260 call sites across app.js and every tool iframe (exports,
+// restricted-field-diffing, schema migration, etc.), none of which
+// should ever see or round-trip an internal bookkeeping field. Kept in
+// sync by startClientWorkspacesSync's snapshot handler below (stripped
+// out of `fresh[name]` there, recorded here instead) and by
+// commitDatabaseToCloud's write (bumped locally right after a confirmed
+// successful write, not just from the next snapshot echo).
+//
+// Deliberately NOT yet used for any conflict-check decision - that's
+// Stage 3. This stage only gets real version numbers flowing and
+// verified live first, same "parallel period before cutover" discipline
+// already used for clientWorkspaces itself.
+let clientWorkspaceVersions = {};
+const CLIENT_DOC_VERSION_FIELD = "_clientDocVersion";
+
 // Names this tab has itself, deliberately, removed from clientsDb this
 // session (via deleteActiveClient or the delete-half of renameActiveClient)
 // - see the stale-tab content check in commitDatabaseToCloud below. Only
@@ -6482,11 +6504,30 @@ function startClientWorkspacesSync() {
       // that stale echo would clobber the newer edit. Mirrors the
       // pre-cutover per-shard listener's identical guard (see
       // listenToClientsDbShard).
+      //
+      // Stage 2 of true per-client conflict detection (Sep 2026): also
+      // skip updating clientWorkspaceVersions from a pending/unconfirmed
+      // echo - trust only a server-confirmed snapshot for the version
+      // number. commitDatabaseToCloud already bumps this tab's own copy
+      // locally right after a confirmed successful write, so there's
+      // nothing to catch up on here for our own writes anyway.
       if (doc.metadata && doc.metadata.hasPendingWrites) {
         fresh[doc.id] = clientsDb[doc.id] !== undefined ? clientsDb[doc.id] : doc.data();
         return;
       }
-      fresh[doc.id] = doc.data();
+      const data = doc.data() || {};
+      const version = data[CLIENT_DOC_VERSION_FIELD];
+      clientWorkspaceVersions[doc.id] = typeof version === "number" ? version : 0;
+      // Strip the version bookkeeping field before it ever reaches
+      // clientsDb - see clientWorkspaceVersions' own comment above for
+      // why this must never round-trip through the ~260 call sites that
+      // read clientsDb as if every field in it were real client data.
+      if (Object.prototype.hasOwnProperty.call(data, CLIENT_DOC_VERSION_FIELD)) {
+        const { [CLIENT_DOC_VERSION_FIELD]: _omit, ...rest } = data;
+        fresh[doc.id] = rest;
+      } else {
+        fresh[doc.id] = data;
+      }
     });
 
     // REGRESSION FIX (Sep 2026, caught during the true-per-client-conflict-
@@ -7107,9 +7148,23 @@ function commitDatabaseToCloud() {
       // above (now dormant). Still writes the full roster on every save,
       // same conflict-check granularity as before cutover - see this
       // function's own comment above the version check for why.
-      const writes = Object.entries(cleanDb).map(([name, data]) =>
-        window.firebaseSetDoc(getClientWorkspaceDocRef(name), data)
-      );
+      //
+      // Stage 2 of true per-client conflict detection (Sep 2026): each
+      // client's document now also carries CLIENT_DOC_VERSION_FIELD,
+      // bumped from this tab's last-known value for that client. Not yet
+      // used for any conflict decision (still the global freshVersion
+      // check above) - this stage only gets real per-client version
+      // numbers flowing and verified live, same "parallel period" as
+      // clientWorkspaces itself had before its own cutover.
+      const nextClientVersions = {};
+      const writes = Object.entries(cleanDb).map(([name, data]) => {
+        const nextClientVersion = (clientWorkspaceVersions[name] || 0) + 1;
+        nextClientVersions[name] = nextClientVersion;
+        return window.firebaseSetDoc(
+          getClientWorkspaceDocRef(name),
+          Object.assign({}, data, { [CLIENT_DOC_VERSION_FIELD]: nextClientVersion })
+        );
+      });
 
       // Collection-based storage needs an explicit delete for a removed
       // client - unlike the old shard model, where a deleted client
@@ -7129,6 +7184,11 @@ function commitDatabaseToCloud() {
       return Promise.all(writes).then(() => {
         resolved = true;
         clientsDbDocVersion = nextVersion;
+        // Update this tab's own per-client version tracking right away,
+        // rather than waiting for this write's own snapshot echo - mirrors
+        // clientsDbDocVersion's identical treatment just above.
+        Object.assign(clientWorkspaceVersions, nextClientVersions);
+        intentionallyRemovedClientNames.forEach(name => { delete clientWorkspaceVersions[name]; });
         namesPendingAsOfThisWrite.forEach(name => pendingLocalClientEdits.delete(name));
         if (indicator) {
           indicator.innerHTML = "Saved to Cloud ✅";

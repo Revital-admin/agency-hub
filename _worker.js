@@ -12,6 +12,14 @@
 // every employee except that one account.
 const ADMIN_EMAIL_DOMAIN = "revitalproductions.com";
 
+// Stage 2 of true per-client conflict detection (Sep 2026 - see
+// CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md) - must match app.js's own
+// CLIENT_DOC_VERSION_FIELD constant exactly, since both sides read and
+// write this same field on the same clientWorkspaces/{clientName}
+// documents. Internal bookkeeping only - always stripped back out before
+// any client data reaches a browser (see fetchAllClientsFromFirestore).
+const CLIENT_DOC_VERSION_FIELD = "_clientDocVersion";
+
 export default {
   // Cron Trigger (see [triggers] in wrangler.toml) - runs the Weekly
   // Agency Health Digest and the Daily Contractor Compliance Check on
@@ -5169,7 +5177,20 @@ async function fetchAllClientsFromFirestore(accessToken, projectId) {
     return fetchAllClientsFromShardsFallback(accessToken, projectId);
   }
   const merged = {};
-  docs.forEach(({ id, ...data }) => { merged[id] = data; });
+  docs.forEach(({ id, ...data }) => {
+    // Stage 2 of true per-client conflict detection (Sep 2026) - strip
+    // the internal CLIENT_DOC_VERSION_FIELD bookkeeping field before it
+    // reaches ANY caller of this function. This is shared by 5 call
+    // sites, including the restricted-data GET endpoint (whose response
+    // goes straight to a teammate's browser and gets assigned wholesale
+    // into that tab's clientsDb via applyRestrictedClientsDbSnapshot,
+    // with no stripping on that side) and the Stripe/health-digest/
+    // account-manager/team-workload readers, none of which should ever
+    // see or round-trip an internal version counter as if it were real
+    // client data.
+    delete data[CLIENT_DOC_VERSION_FIELD];
+    merged[id] = data;
+  });
   return merged;
 }
 
@@ -5497,28 +5518,41 @@ async function handleRestrictedClientDataWrite(request, env) {
     targetShardData[clientName] = Object.assign({}, targetShardData[clientName], fields);
     await firestoreSetDoc(accessToken, projectId, `agency/clientsDb-shard-${targetShardIndex}`, targetShardData);
 
-    // Phase 2 of the clientsDb per-document refactor (see
-    // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md) - the server-side twin of
-    // app.js's Phase 1 parallel-write (getClientWorkspaceDocRef /
-    // commitDatabaseToCloud). Writes this one client's full merged data to
-    // its own clientWorkspaces/{clientName} doc, alongside the real shard
-    // write above. Nothing reads from clientWorkspaces yet on either the
-    // browser or Worker side - same verification-period reasoning as
-    // Phase 1, just covering the other save path (restricted teammates)
-    // that Phase 1 alone didn't touch. Unlike commitDatabaseToCloud, there
-    // is no "which client(s) changed" ambiguity to worry about here - this
-    // endpoint is already scoped to exactly one client per call, so
-    // writing just that one client's merged record is the complete,
-    // correct mirror of what just got saved above, not a partial slice of
-    // it. clientName is a free-text client name (can contain spaces,
-    // parentheses, etc. - e.g. "Quick Sandbox (One-Offs)"), so it has to
-    // be encodeURIComponent'd here, unlike app.js's version of this same
-    // write which goes through the Firestore client SDK's own doc() call
-    // and never touches a raw URL at all. Awaited (not fire-and-forget)
-    // so a failure is caught and logged below, but a failure here never
-    // undoes or blocks the real save above, which already succeeded.
+    // Originally written as a Phase 2 parallel-write (see
+    // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md) alongside the "real" shard
+    // write above, back when nothing read from clientWorkspaces yet.
+    // STALE as of the Sep 2026 cutover: fetchAllClientsFromFirestore (used
+    // by this endpoint's own GET twin, the account-manager lookup, the
+    // Stripe handler, the team workload view, and the health digest) and
+    // app.js's admin sync/save both moved to clientWorkspaces as the real
+    // source of truth - the shard write above is now the dormant one,
+    // kept only as a rollback source. This write is therefore the one
+    // that actually matters for correctness on this endpoint, even though
+    // it's still architecturally organized "second" and wrapped in a
+    // swallow-the-error try/catch that lets the request report success
+    // even if this specific write fails. Not fixed here (out of scope for
+    // Stage 2 - only adding the version field below); flagged as a real
+    // gap worth closing in Stage 4, when this function gets its own
+    // proper conflict check anyway. clientName is a free-text client name
+    // (can contain spaces, parentheses, etc. - e.g. "Quick Sandbox
+    // (One-Offs)"), so it has to be encodeURIComponent'd here, unlike
+    // app.js's version of this same write which goes through the
+    // Firestore client SDK's own doc() call and never touches a raw URL
+    // at all.
     try {
-      await firestoreSetDoc(accessToken, projectId, `clientWorkspaces/${encodeURIComponent(clientName)}`, targetShardData[clientName]);
+      // Stage 2 of true per-client conflict detection (Sep 2026): bump
+      // this client's own CLIENT_DOC_VERSION_FIELD, read fresh right
+      // before writing (not reused from anywhere earlier in this
+      // function - the shard data above has no equivalent field to draw
+      // from) so a write that landed on this SAME client via the other
+      // save path (app.js's commitDatabaseToCloud) while this request was
+      // in flight still gets counted, not silently overwritten. Not yet
+      // used for any conflict decision on this endpoint - that's Stage 4.
+      const currentWorkspaceDoc = await firestoreGetDoc(accessToken, projectId, `clientWorkspaces/${encodeURIComponent(clientName)}`);
+      const currentClientDocVersion = currentWorkspaceDoc && typeof currentWorkspaceDoc[CLIENT_DOC_VERSION_FIELD] === "number"
+        ? currentWorkspaceDoc[CLIENT_DOC_VERSION_FIELD] : 0;
+      await firestoreSetDoc(accessToken, projectId, `clientWorkspaces/${encodeURIComponent(clientName)}`,
+        Object.assign({}, targetShardData[clientName], { [CLIENT_DOC_VERSION_FIELD]: currentClientDocVersion + 1 }));
     } catch (parallelWriteErr) {
       console.error("clientWorkspaces parallel-write failed (Phase 2 refactor, non-blocking):", parallelWriteErr);
     }
