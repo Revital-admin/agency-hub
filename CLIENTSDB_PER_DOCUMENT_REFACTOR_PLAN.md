@@ -173,6 +173,15 @@ Live-verified via direct requests to `/api/restricted-client-data` (no-conflict 
 
 This closes out every item on the true-per-client-conflict-detection list.
 
+**Deletion conflict check + accurate size guard — DONE (implemented and live-verified), Sep 2026, `a09cc49`, `app.js?v=155`.** Closed the last two named-but-not-fixed gaps from Stage 3/Phase 4.
+
+Live-verified both, using disposable `ZZZ Stage4 *` test clients (never real data), cleaned up afterward:
+
+- **Deletion conflict:** created a test client, marked it pending-deleted with a frozen baseline, then wrote a genuine change to it directly (simulating another tab/tool saving first). The delete was correctly skipped, the banner named the client and what changed, and the document still existed afterward with the other write's data intact. A second run with no conflicting change confirmed the delete goes through normally and the document is actually gone from Firestore afterward.
+- **Size guard:** created a test client with a small local pending edit to one field, then externally grew a different field on the server past `CLIENTS_DB_HARD_LIMIT_BYTES` (simulating another tab's concurrent growth this tab hadn't synced). The early `cleanDb`-based check correctly let it through (it only sees ~100 bytes locally), but the new post-merge check - built from the freshly-fetched server document - correctly caught the true merged size and blocked the save with the right message, rather than sending an oversized write.
+
+**Related finding, not fixed in this pass (flagged for awareness, not a regression from this change):** while testing the deletion conflict case, a snapshot arriving during the narrow window between `deleteActiveClient()`'s local `delete clientsDb[name]` and the debounced save actually completing can "resurrect" the deleted client back into `clientsDb` - `startClientWorkspacesSync`'s merge-back guard (`if (clientsDb[name]) fresh[name] = clientsDb[name]`) only protects a name that's still truthy in `clientsDb`, so a name that's been locally deleted but is still pending falls through unprotected and gets repopulated from whatever the snapshot just delivered. Observed effect: the deleted name can end up in `namesToWrite` too (since `cleanDb[name]` becomes truthy again), so `commitDatabaseToCloud`'s conflict banner can end up describing the same client twice (once from the field-level check, once from the deletion check) in that specific timing window - a confusing but not unsafe outcome, since either check independently still blocks the delete correctly. Root cause pre-dates this change (the same merge-back guard shape Stage 1 already relies on elsewhere); a real fix would need a third state distinct from "actively being edited" vs "hasn't loaded yet" for the merge-back guard to check. Not fixed here to keep this pass reviewable.
+
 ## Risk notes specific to this codebase
 
 Two real client-data-loss incidents (Reginald White, Evry Intention LLC) are the reason this subsystem gets extra caution. Recommend:
