@@ -6473,8 +6473,17 @@ let pendingEditBaseline = {};
     // one; commitDatabaseToCloud's own `|| {}` fallback covers the
     // genuinely-brand-new-client case where no server data will ever
     // exist to backfill from.
-    if (!pendingLocalClientEdits.has(name) && lastKnownServerState[name] !== undefined) {
-      pendingEditBaseline[name] = JSON.parse(JSON.stringify(lastKnownServerState[name]));
+    //
+    // Stage 4 (Sep 2026): a restricted teammate has its own, separate
+    // "last confirmed server state" tracking (restrictedLastServerClientState,
+    // below applyRestrictedClientsDbSnapshot) instead of lastKnownServerState
+    // - isRestrictedClientsDbSync picks the right one, same routing
+    // decision commitDatabaseToCloud itself already makes at its own top.
+    if (!pendingLocalClientEdits.has(name)) {
+      const source = isRestrictedClientsDbSync ? restrictedLastServerClientState[name] : lastKnownServerState[name];
+      if (source !== undefined) {
+        pendingEditBaseline[name] = JSON.parse(JSON.stringify(source));
+      }
     }
     return originalAdd(name);
   };
@@ -6933,18 +6942,38 @@ function commitRestrictedClientEditsNow() {
   const writes = names.map(name => {
     const client = clientsDb[name];
     if (!client) return Promise.resolve({ ok: true, name });
-    const serverClient = restrictedLastServerClientState[name] || {};
+    // Stage 4 bug fix (Sep 2026, see pendingEditBaseline's own comment
+    // above pendingLocalClientEdits): diff against the FROZEN baseline for
+    // this pending streak, not the live-updated restrictedLastServerClientState -
+    // the same stale-field-clobber risk the admin path's Phase 4 fix
+    // closed (see that fix's own comment there), just discovered here
+    // while designing Stage 4 rather than caught live. Falls back to the
+    // live value if somehow missing one, matching commitDatabaseToCloud's
+    // identical fallback (shouldn't happen given .add()'s override and
+    // applyRestrictedClientsDbSnapshot's backfill, both above).
+    const baseline = pendingEditBaseline[name] || restrictedLastServerClientState[name] || {};
     const fields = {};
+    const baselineFields = {};
     Object.keys(client).forEach(key => {
       if (RESTRICTED_WRITE_IDENTITY_FIELDS.indexOf(key) !== -1) return;
       const section = CLIENT_FIELD_SECTIONS_MIRROR[key];
       if (!section || !allowedSet.has(section)) return;
-      // Only send fields that actually differ from the last
-      // server-confirmed state for this client - see
-      // restrictedLastServerClientState's own comment above for why this
-      // matters more than it might look like it should.
-      if (JSON.stringify(client[key]) !== JSON.stringify(serverClient[key])) {
+      // Order-insensitive equality (see clientFieldValuesEqual's own
+      // comment) - a plain JSON.stringify compare here would have the
+      // identical false-positive risk Phase 4's admin-path fix closed.
+      if (!clientFieldValuesEqual(client[key], baseline[key])) {
         fields[key] = client[key];
+        // Stage 4 (Sep 2026): send this field's baseline value too, so the
+        // Worker can tell whether the server's CURRENT value still
+        // matches what this tab thought it started from - a real,
+        // narrow same-field conflict check, mirroring the admin path's
+        // Phase 4 fieldCheck (done server-side here, since a restricted
+        // teammate has no direct Firestore read-before-write access the
+        // way an admin tab does). Normalize undefined to null - JSON.
+        // stringify silently DROPS an object key whose value is
+        // undefined, which would make this field invisible to the
+        // Worker's conflict check instead of "baseline was empty."
+        baselineFields[key] = baseline[key] !== undefined ? baseline[key] : null;
       }
     });
     sentFieldsByName.set(name, fields);
@@ -6953,8 +6982,8 @@ function commitRestrictedClientEditsNow() {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientName: name, fields })
-    }).then(res => res.json().catch(() => ({})).then(data => ({ ok: res.ok, data, name })));
+      body: JSON.stringify({ clientName: name, fields, baselineFields })
+    }).then(res => res.json().catch(() => ({})).then(data => ({ ok: res.ok, data, name, conflict: res.status === 409 })));
   });
 
   Promise.all(writes).then(results => {
@@ -6975,35 +7004,67 @@ function commitRestrictedClientEditsNow() {
     // when this happens means the next debounced save (already scheduled
     // by that very click) picks it up for real instead of a false "all
     // clear".
+    // Stage 4 bug fix (Sep 2026): only clear a name's pending protection if
+    // its write actually SUCCEEDED. This previously cleared it whenever
+    // the local data still matched what was sent, regardless of whether
+    // the server accepted it - a failed or rejected save (a permission
+    // error, or the new 409 conflict below) left that edit silently
+    // unprotected from the next incoming snapshot even though it was
+    // never actually saved.
+    const resultByName = new Map(results.filter(r => r && r.name).map(r => [r.name, r]));
     names.forEach(name => {
+      const result = resultByName.get(name);
+      const wasSuccessful = !result || result.ok !== false;
+      if (!wasSuccessful) return;
       const sentFields = sentFieldsByName.get(name);
       const client = clientsDb[name];
       const stillMatches = !sentFields || !client || Object.keys(sentFields).every(
-        key => JSON.stringify(client[key]) === JSON.stringify(sentFields[key])
+        key => clientFieldValuesEqual(client[key], sentFields[key])
       );
       if (stillMatches) pendingLocalClientEdits.delete(name);
     });
     const failed = results.filter(r => r && r.ok === false);
+    const conflicts = failed.filter(r => r.conflict);
+    const otherFailures = failed.filter(r => !r.conflict);
 
     if (indicator) {
-      indicator.innerHTML = failed.length ? "Save Failed ❌" : "Saved to Cloud ✅";
-      setTimeout(() => { indicator.style.opacity = "0"; }, failed.length ? 4000 : 2000);
+      indicator.innerHTML = failed.length ? "Save Skipped ⚠️" : "Saved to Cloud ✅";
+      if (!failed.length) setTimeout(() => { indicator.style.opacity = "0"; }, 2000);
     }
 
-    if (failed.length) {
-      console.error("commitRestrictedClientEdits: server rejected some fields:", failed);
-      const firstError = (failed[0].data && failed[0].data.error) || "not permitted.";
+    if (conflicts.length) {
+      // Stage 4 (Sep 2026): a genuine same-field conflict, mirroring the
+      // admin path's Phase 4 banner - names the specific client(s)/
+      // field(s) a teammate just ran into. No "Reload Now" action (unlike
+      // the admin banner) since fetchRestrictedClientsDbSnapshot below
+      // already refreshes this view automatically.
+      console.warn("commitRestrictedClientEdits: skipped - real field-level conflict:", conflicts);
+      const describeFields = (conflictFields) => Array.from(new Set(
+        conflictFields.map(f => CLIENT_FIELD_SECTIONS_MIRROR[f] || f)
+      )).join(", ");
+      const conflictDescriptions = conflicts.map(r => {
+        const conflictFields = (r.data && r.data.conflictFields) || [];
+        return `"${r.name}" (${describeFields(conflictFields)})`;
+      });
+      showSaveConflictBanner(
+        `Someone else just saved changes to ${conflictDescriptions.join(", ")} while you had it open, so your last change wasn't saved - saving it now would have overwritten theirs. This view will refresh automatically with their update in a moment; redo your last edit after it does.`,
+        false
+      );
+    } else if (otherFailures.length) {
+      console.error("commitRestrictedClientEdits: server rejected some fields:", otherFailures);
+      const firstError = (otherFailures[0].data && otherFailures[0].data.error) || "not permitted.";
       showBanner("error", "Couldn't save some changes: " + firstError);
-    } else {
-      // Refetch so this restricted view reflects the confirmed cloud
-      // state right away, rather than waiting up to a minute for the
-      // next poll (see startRestrictedClientsDbSync). Safe even for a
-      // name left in pendingLocalClientEdits above (a newer, still-unsent
-      // edit) - applyRestrictedClientsDbSnapshot's own guard re-layers
-      // clientsDb[name] back over whatever this fetch returns for any
-      // name still in that set.
-      fetchRestrictedClientsDbSnapshot();
     }
+
+    // Refetch regardless of outcome (previously only on full success) - a
+    // conflict or failure means this tab's view of the server is stale
+    // exactly where it matters most; refreshing lets the teammate see the
+    // real current state instead of silently trusting an outdated one.
+    // Safe even for a name left in pendingLocalClientEdits above (a newer,
+    // still-unsent edit, or one just rejected above) -
+    // applyRestrictedClientsDbSnapshot's own guard re-layers clientsDb[name]
+    // back over whatever this fetch returns for any name still in that set.
+    fetchRestrictedClientsDbSnapshot();
   }).catch(async err => {
     console.error("commitRestrictedClientEdits failed:", err);
     // See handlePossibleIdleLockSaveError - shows the real lock+PIN
@@ -9816,6 +9877,19 @@ function applyRestrictedClientsDbSnapshot(data) {
   // commitRestrictedClientEdits uses, so it has to be what the server
   // actually confirmed, not whatever ends up in clientsDb next.
   restrictedLastServerClientState = JSON.parse(JSON.stringify(incoming));
+
+  // Stage 4 bug fix (Sep 2026, parity with startClientWorkspacesSync's
+  // identical backfill on the admin path - see pendingEditBaseline's own
+  // comment above pendingLocalClientEdits): a client can become pending
+  // before this function has ever run once this session, in which case
+  // .add()'s own guard deliberately left pendingEditBaseline[name] unset
+  // rather than freezing an empty one. Fill it in now, exactly once, with
+  // this first real server-confirmed value.
+  Object.keys(incoming).forEach(name => {
+    if (pendingLocalClientEdits.has(name) && pendingEditBaseline[name] === undefined) {
+      pendingEditBaseline[name] = JSON.parse(JSON.stringify(incoming[name]));
+    }
+  });
 
   pendingLocalClientEdits.forEach(name => {
     if (clientsDb[name]) incoming[name] = clientsDb[name];

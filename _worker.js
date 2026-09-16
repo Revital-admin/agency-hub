@@ -5300,6 +5300,41 @@ const CLIENT_FIELD_SECTIONS = {
   referralSummary: "retention-social-proof"
 };
 
+// Stage 4 of true per-client conflict detection (Sep 2026 - see
+// CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md). Duplicated from app.js's
+// clientFieldValuesEqual (own comment there has the full story) rather
+// than shared - same already-established pattern as CLIENT_FIELD_SECTIONS/
+// CLIENT_DOC_VERSION_FIELD above, which are also hand-duplicated between
+// this file and app.js. Needed here for the exact same reason: Firestore
+// does not guarantee stable object-key order across different read paths,
+// so a plain JSON.stringify equality check between a field's baseline
+// value (sent by the client) and this endpoint's own fresh read of the
+// same, unchanged field could report a false conflict purely from key
+// order, not any real edit. Order-insensitive for object keys; still
+// order-sensitive for array elements (reordering a checklist's actual
+// items is still a real change).
+function clientFieldValuesEqual(a, b) {
+  if (a === b) return true;
+  if (a === null || b === null || a === undefined || b === undefined) return a === b;
+  if (typeof a !== "object" || typeof b !== "object") return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!clientFieldValuesEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  for (const key of aKeys) {
+    if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
+    if (!clientFieldValuesEqual(a[key], b[key])) return false;
+  }
+  return true;
+}
+
 // Mirrors effectiveSections() in team-access-manager/js/app.js and
 // firestore.rules' own copy of the same logic - see the comment on
 // agency/teamAccess there for the shape of the doc this reads.
@@ -5457,7 +5492,7 @@ async function handleRestrictedClientDataWrite(request, env) {
   } catch (e) {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
-  const { clientName, fields } = payload || {};
+  const { clientName, fields, baselineFields } = payload || {};
   if (!clientName || !fields || typeof fields !== "object" || Array.isArray(fields)) {
     return jsonResponse({ error: "clientName and fields (object) are required" }, 400);
   }
@@ -5486,6 +5521,55 @@ async function handleRestrictedClientDataWrite(request, env) {
     });
     if (disallowed.length) {
       return jsonResponse({ error: "Not permitted to write: " + disallowed.join(", ") }, 403);
+    }
+
+    // Stage 4 of true per-client conflict detection (Sep 2026 - see
+    // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md). Mirrors the admin path's
+    // Phase 4 fieldCheck (app.js's commitDatabaseToCloud), just done here
+    // server-side since a restricted teammate has no direct Firestore
+    // access to read-before-write with the way an admin tab does. The
+    // client sends, alongside each changed field's new value, the value
+    // it THOUGHT that field had before editing (baselineFields - see
+    // commitRestrictedClientEditsNow's own comment in app.js). If the
+    // field this endpoint reads fresh right now still matches that
+    // baseline, nothing else has touched it since this tab last synced -
+    // safe to write. If it doesn't match, someone else (another
+    // restricted teammate, an admin, or this same person in another tab)
+    // saved that exact field in the meantime - a real conflict, rejected
+    // with 409 rather than silently overwritten (this endpoint's previous
+    // behavior: whichever save landed last simply won, with no warning at
+    // all - the same silent-clobber failure mode Phase 4 closed on the
+    // admin path, just not yet closed here until now).
+    //
+    // baselineFields is optional and backward-compatible on purpose: a
+    // browser tab still running an OLDER cached app.js build (from before
+    // this field existed) won't send it at all, and this endpoint treats
+    // that exactly like today's pre-Stage-4 behavior (no conflict check,
+    // proceed as before) rather than rejecting a request it doesn't
+    // recognize - avoids forcing a synchronized deploy between this file
+    // and app.js, same tolerance this whole refactor has shown elsewhere
+    // for old cached builds during a rollout.
+    if (baselineFields && typeof baselineFields === "object" && !Array.isArray(baselineFields)) {
+      const currentDocForConflictCheck = await firestoreGetDoc(accessToken, projectId, `clientWorkspaces/${encodeURIComponent(clientName)}`);
+      const conflictFields = Object.keys(baselineFields).filter(key => {
+        if (!Object.prototype.hasOwnProperty.call(fields, key)) return false; // only check fields actually being written
+        const currentValue = currentDocForConflictCheck ? currentDocForConflictCheck[key] : undefined;
+        const baselineValue = baselineFields[key];
+        // The client normalizes an unset baseline to null before sending
+        // (see commitRestrictedClientEditsNow) - treat a currently-absent
+        // field the same way here so "never existed, still doesn't" isn't
+        // mistaken for a conflict.
+        const normalizedCurrent = currentValue === undefined ? null : currentValue;
+        const normalizedBaseline = baselineValue === undefined ? null : baselineValue;
+        return !clientFieldValuesEqual(normalizedCurrent, normalizedBaseline);
+      });
+      if (conflictFields.length) {
+        return jsonResponse({
+          error: "Someone else already saved changes to: " + conflictFields.join(", "),
+          conflict: true,
+          conflictFields
+        }, 409);
+      }
     }
 
     // Locate which shard this client lives in, read that ONE shard fresh,
