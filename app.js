@@ -6660,7 +6660,29 @@ function startClientWorkspacesSync() {
     // rebuildClientsDbFromShards' identical, already-proven guard on the
     // pre-cutover path.
     pendingLocalClientEdits.forEach(name => {
-      if (clientsDb[name]) fresh[name] = clientsDb[name];
+      if (clientsDb[name]) {
+        fresh[name] = clientsDb[name];
+      } else if (intentionallyRemovedClientNames.has(name)) {
+        // Bug fix (Sep 2026, found live-testing the new deletion conflict
+        // check above - see CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md):
+        // deleteActiveClient/renameActiveClient delete clientsDb[name]
+        // locally and mark it pending in the SAME synchronous call, so
+        // clientsDb[name] is already falsy by the time this listener can
+        // ever see it - the `if` branch above never protects a pending
+        // deletion at all. Without this branch, a snapshot arriving in
+        // the narrow window before this tab's own delete write actually
+        // lands would resurrect the doc from whatever it still is on the
+        // server (stripped, set unconditionally in the per-doc loop
+        // above), silently undoing the local delete and - if paired with
+        // a genuine external change - getting the same client
+        // double-processed by both this function's fieldCheck and the
+        // deletionCheck at save time. commitDatabaseToCloud's own
+        // deletionCheck already re-reads Firestore fresh at save time
+        // regardless, so this isn't a data-safety fix (that was already
+        // covered) - just closes the confusing "resurrected mid-delete"
+        // window itself.
+        delete fresh[name];
+      }
     });
 
     const freshStr = JSON.stringify(fresh);
