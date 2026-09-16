@@ -5144,15 +5144,43 @@ async function migrateContractInvoicesIfNeeded(accessToken, projectId) {
   }
 }
 
-// Mirrors app.js's rebuildClientsDbFromShards: clientsDb is bin-packed
-// across agency/clientsDb-shard-0, -1, ... (however many
-// agency/clientsDbShardMeta's count says exist) to stay under Firestore's
-// per-document size limit. Falls back to the pre-sharding single
-// agency/clientsDb document if the meta doc doesn't exist yet (shouldn't
-// happen given the migration already ran client-side, but this endpoint
-// has no way to trigger that migration itself, so staying defensive here
-// costs nothing).
+// Cutover (Sep 2026 - see CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md):
+// clientsDb now lives as one document per client under
+// clientWorkspaces/{clientName} (app.js's commitDatabaseToCloud is the
+// authoritative writer; handleRestrictedClientDataWrite below writes here
+// too). Reads every document in that collection in one call via
+// firestoreListCollection - no more shard count / per-shard fetch loop.
+// Used by every caller of this function: the restricted-data GET
+// endpoint below, the account-manager lookup, the Stripe subscription-
+// deleted handler, the team workload view, and the health digest - none
+// of them care how the roster is stored, only that this returns
+// { [clientName]: clientData, ... }, which is unchanged.
+//
+// Falls back to fetchAllClientsFromShardsFallback (the old, pre-cutover
+// implementation, kept fully intact below - swapping which one this
+// calls is the entire rollback) if clientWorkspaces somehow comes back
+// completely empty. Defensive only: every client already has a
+// clientWorkspaces doc as of this session's Phase 1 backfill-on-save, so
+// this should never actually trigger in practice.
 async function fetchAllClientsFromFirestore(accessToken, projectId) {
+  const docs = await firestoreListCollection(accessToken, projectId, "clientWorkspaces");
+  if (docs.length === 0) {
+    console.error("fetchAllClientsFromFirestore: clientWorkspaces came back EMPTY - falling back to shards. This should not happen given Phase 1/2's backfill-on-save already populated it - check Firestore directly.");
+    return fetchAllClientsFromShardsFallback(accessToken, projectId);
+  }
+  const merged = {};
+  docs.forEach(({ id, ...data }) => { merged[id] = data; });
+  return merged;
+}
+
+// Pre-cutover implementation of fetchAllClientsFromFirestore, kept
+// intact and only used as its empty-collection fallback above. Mirrors
+// app.js's old (also-retained) rebuildClientsDbFromShards: clientsDb was
+// bin-packed across agency/clientsDb-shard-0, -1, ... (however many
+// agency/clientsDbShardMeta's count says exist) to stay under Firestore's
+// per-document size limit. Falls back further to the pre-sharding single
+// agency/clientsDb document if even the shard meta doc doesn't exist.
+async function fetchAllClientsFromShardsFallback(accessToken, projectId) {
   const meta = await firestoreGetDoc(accessToken, projectId, "agency/clientsDbShardMeta");
   if (!meta) {
     const legacy = await firestoreGetDoc(accessToken, projectId, "agency/clientsDb");
