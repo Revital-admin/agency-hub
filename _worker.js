@@ -5469,6 +5469,32 @@ async function handleRestrictedClientDataWrite(request, env) {
     targetShardData[clientName] = Object.assign({}, targetShardData[clientName], fields);
     await firestoreSetDoc(accessToken, projectId, `agency/clientsDb-shard-${targetShardIndex}`, targetShardData);
 
+    // Phase 2 of the clientsDb per-document refactor (see
+    // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md) - the server-side twin of
+    // app.js's Phase 1 parallel-write (getClientWorkspaceDocRef /
+    // commitDatabaseToCloud). Writes this one client's full merged data to
+    // its own clientWorkspaces/{clientName} doc, alongside the real shard
+    // write above. Nothing reads from clientWorkspaces yet on either the
+    // browser or Worker side - same verification-period reasoning as
+    // Phase 1, just covering the other save path (restricted teammates)
+    // that Phase 1 alone didn't touch. Unlike commitDatabaseToCloud, there
+    // is no "which client(s) changed" ambiguity to worry about here - this
+    // endpoint is already scoped to exactly one client per call, so
+    // writing just that one client's merged record is the complete,
+    // correct mirror of what just got saved above, not a partial slice of
+    // it. clientName is a free-text client name (can contain spaces,
+    // parentheses, etc. - e.g. "Quick Sandbox (One-Offs)"), so it has to
+    // be encodeURIComponent'd here, unlike app.js's version of this same
+    // write which goes through the Firestore client SDK's own doc() call
+    // and never touches a raw URL at all. Awaited (not fire-and-forget)
+    // so a failure is caught and logged below, but a failure here never
+    // undoes or blocks the real save above, which already succeeded.
+    try {
+      await firestoreSetDoc(accessToken, projectId, `clientWorkspaces/${encodeURIComponent(clientName)}`, targetShardData[clientName]);
+    } catch (parallelWriteErr) {
+      console.error("clientWorkspaces parallel-write failed (Phase 2 refactor, non-blocking):", parallelWriteErr);
+    }
+
     // Bump the shared version counter (agency/clientsDbShardMeta.version)
     // that commitDatabaseToCloud's optimistic-concurrency check reads (see
     // its own comment in app.js) - closing the gap where this endpoint's
