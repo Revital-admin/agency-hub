@@ -6348,6 +6348,27 @@ let clientsDbDocVersion = 0;
 let clientWorkspaceVersions = {};
 const CLIENT_DOC_VERSION_FIELD = "_clientDocVersion";
 
+// Phase 4 of the clientsDb per-document refactor (Sep 2026 - see
+// CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md's Phase 4 design note) - the
+// admin-path counterpart to restrictedLastServerClientState, which the
+// Team-Access-restricted save path has used successfully for months to
+// diff-and-merge only the fields a teammate actually changed instead of
+// overwriting a client's whole document. Snapshot of what this tab last
+// saw CONFIRMED from the server for each client, keyed by name - kept
+// separate from clientsDb itself (which may have local, not-yet-saved
+// edits layered on top). commitDatabaseToCloud diffs cleanDb[name]
+// against this to find which fields THIS tab actually changed, and diffs
+// a fresh server read against this same baseline to find which fields
+// changed ELSEWHERE - the two diffs together are what let two different
+// tools editing the same client's different fields stop hard-blocking
+// each other, while still catching a genuine same-field conflict.
+// Captured in startClientWorkspacesSync's snapshot handler BEFORE the
+// pendingLocalClientEdits merge-back layers local edits on top - has to
+// be what the server actually confirmed, not whatever ends up in
+// clientsDb next (same ordering applyRestrictedClientsDbSnapshot already
+// uses for restrictedLastServerClientState, for the identical reason).
+let lastKnownServerState = {};
+
 // Names this tab has itself, deliberately, removed from clientsDb this
 // session (via deleteActiveClient or the delete-half of renameActiveClient)
 // - see the stale-tab content check in commitDatabaseToCloud below. Only
@@ -6522,12 +6543,21 @@ function startClientWorkspacesSync() {
       // clientsDb - see clientWorkspaceVersions' own comment above for
       // why this must never round-trip through the ~260 call sites that
       // read clientsDb as if every field in it were real client data.
+      let stripped;
       if (Object.prototype.hasOwnProperty.call(data, CLIENT_DOC_VERSION_FIELD)) {
         const { [CLIENT_DOC_VERSION_FIELD]: _omit, ...rest } = data;
-        fresh[doc.id] = rest;
+        stripped = rest;
       } else {
-        fresh[doc.id] = data;
+        stripped = data;
       }
+      fresh[doc.id] = stripped;
+      // Phase 4 (Sep 2026) - record this SERVER-CONFIRMED value as the new
+      // diff baseline for this client, same "only trust a non-pending
+      // snapshot" reasoning as clientWorkspaceVersions just above. Cloned
+      // (not the same object reference as fresh[doc.id]/clientsDb[doc.id])
+      // so a later in-place mutation of a client's fields elsewhere in the
+      // app can never silently drag this baseline along with it.
+      lastKnownServerState[doc.id] = JSON.parse(JSON.stringify(stripped));
     });
 
     // REGRESSION FIX (Sep 2026, caught during the true-per-client-conflict-
@@ -7031,46 +7061,73 @@ function commitDatabaseToCloud() {
     }
   }, 10000);
 
-  // Stage 3 of true per-client conflict detection (Sep 2026 - see
-  // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md): replaces the single GLOBAL
-  // clientsDbDocVersion gate that every save used to check (kept, see
-  // below, but no longer gating - an instant one-line rollback if this
-  // needs reverting). Fetches each PENDING client's own document fresh
-  // and compares its CLIENT_DOC_VERSION_FIELD against this tab's own
-  // last-known value for that client (clientWorkspaceVersions, Stage 2).
-  // This is the actual fix for the original complaint: editing Client A
-  // no longer gets blocked just because someone else saved Client B -
-  // only a real conflict on a client THIS save is actually about to
-  // write triggers the banner now, and the banner names exactly which
-  // client(s) conflicted instead of vaguely blaming "the client
-  // database." Still deliberately hard-block-and-ask, not a softer
-  // auto-merge, and still all-or-nothing across this write's batch (if
-  // ANY pending client conflicts, the whole save is rejected together,
-  // same simple "someone else saved, reload and redo" mental model as
-  // before) - a partial save would complicate the mental model for
-  // limited benefit, since a save batch spanning multiple clients at
-  // once is the unusual case, not the common one.
+  // Phase 4 of true per-client conflict detection (Sep 2026 - see
+  // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md's Phase 4 design note):
+  // replaces Stage 3's per-DOCUMENT version check with a per-FIELD diff,
+  // mirroring the pattern commitRestrictedClientEditsNow has used
+  // successfully for months on the restricted-teammate path (diff
+  // against a last-confirmed baseline, send/merge only what actually
+  // changed, instead of overwriting the whole document). For each
+  // pending client: changedFields is whichever top-level keys differ
+  // from lastKnownServerState (Phase 4's new per-client baseline,
+  // Stage 2/3's per-DOCUMENT clientWorkspaceVersions check no longer
+  // gates - kept running, unused, same rollback treatment Stage 3 gave
+  // the old global check it replaced). Then fetches that client's
+  // document fresh and finds which of those SAME fields ALSO changed on
+  // the server since that baseline - a genuine overlap. This is the
+  // actual fix for two different tools editing the same client at once:
+  // Client A's SEO Audit and its Onboarding Checklist are different
+  // fields, so editing one no longer blocks on the other having been
+  // saved moments ago by someone else - only a real same-field conflict
+  // still hard-blocks-and-asks, same as always, now naming the specific
+  // field/section instead of the whole client.
+  //
+  // Deliberately NOT a softer silent-merge-on-overlap - unlike the
+  // restricted-teammate path this mirrors (which has no conflict
+  // detection at all on a genuine same-field race, by design, given that
+  // path's own lower stakes), the admin path keeps this codebase's
+  // established hard-block-and-ask philosophy for a REAL conflict, just
+  // now scoped to the field(s) that actually overlap rather than the
+  // whole client. Still all-or-nothing ACROSS a save batch spanning
+  // multiple clients (if ANY pending client has a real field-level
+  // conflict, the whole batch is rejected together) - a save batch
+  // spanning multiple clients at once is the unusual case, not the
+  // common one, so this keeps the same simple mental model rather than
+  // partial-saving some clients and not others.
   //
   // Deletions (intentionallyRemovedClientNames) are NOT yet included in
-  // this check - still sent unconditionally, matching pre-Stage-3
-  // behavior. A per-client version check before deleting (protecting
-  // against deleting a client someone else just edited) is a reasonable
-  // follow-up, deliberately left out of this pass to keep Stage 3 scoped
-  // to exactly what was described before implementing it.
-  const versionCheck = Promise.all(namesToWrite.map(name =>
-    window.firebaseGetDoc(getClientWorkspaceDocRef(name)).then(snap => {
-      const cloudVersion = (snap.exists && typeof snap.data()[CLIENT_DOC_VERSION_FIELD] === "number")
-        ? snap.data()[CLIENT_DOC_VERSION_FIELD] : 0;
-      return { name, cloudVersion, localVersion: clientWorkspaceVersions[name] || 0 };
-    })
-  ));
+  // this check - still sent unconditionally, matching pre-Phase-4
+  // behavior (same deliberate scoping decision Stage 3 made).
+  const fieldCheck = Promise.all(namesToWrite.map(name => {
+    const baseline = lastKnownServerState[name] || {};
+    const local = cleanDb[name];
+    const changedFields = Object.keys(local).filter(key =>
+      JSON.stringify(local[key]) !== JSON.stringify(baseline[key])
+    );
+    return window.firebaseGetDoc(getClientWorkspaceDocRef(name)).then(snap => {
+      const serverNow = snap.exists ? snap.data() : {};
+      const conflictFields = changedFields.filter(key =>
+        JSON.stringify(serverNow[key]) !== JSON.stringify(baseline[key])
+      );
+      return { name, changedFields, conflictFields };
+    });
+  }));
 
-  return versionCheck.then((results) => {
-    const conflicts = results.filter(r => r.cloudVersion !== r.localVersion);
+  return fieldCheck.then((results) => {
+    const conflicts = results.filter(r => r.conflictFields.length > 0);
     if (conflicts.length > 0) {
       resolved = true;
-      const conflictNames = conflicts.map(c => c.name);
-      console.warn("commitDatabaseToCloud: skipped - client(s) changed elsewhere since this tab last synced:", conflicts);
+      // Name the SECTION each conflicting field belongs to where known
+      // (matches the language a teammate actually sees in the sidebar/
+      // Team Access UI), falling back to the raw field key for anything
+      // unclassified (see CLIENT_FIELD_SECTIONS_MIRROR's own comment -
+      // a couple of fields, like clientPulseFeedback and welcomeGuide,
+      // aren't in that map at all).
+      const describeFields = (fields) => Array.from(new Set(
+        fields.map(f => CLIENT_FIELD_SECTIONS_MIRROR[f] || f)
+      )).join(", ");
+      const conflictDescriptions = conflicts.map(c => `"${c.name}" (${describeFields(c.conflictFields)})`);
+      console.warn("commitDatabaseToCloud: skipped - real field-level conflict:", conflicts);
       if (indicator) {
         indicator.innerHTML = "Save Skipped ⚠️";
         // No auto-fade-out here (unlike the normal 2s/3s/5s cases just
@@ -7080,7 +7137,7 @@ function commitDatabaseToCloud() {
         // real problem (banner still up, edit still unsaved) persists.
       }
       showSaveConflictBanner(
-        `Someone else just saved changes to "${conflictNames.join('", "')}" while you had ${conflictNames.length > 1 ? "them" : "it"} open, so your last change wasn't saved - saving it now would have overwritten theirs. Click Reload Now to pick up their update (the Hub already reflects it live in the background), then redo your last edit.`
+        `Someone else just saved changes to ${conflictDescriptions.join(", ")} while you had it open, so your last change wasn't saved - saving it now would have overwritten theirs. Click Reload Now to pick up their update (the Hub already reflects it live in the background), then redo your last edit.`
       );
       return;
     }
@@ -7169,25 +7226,29 @@ function commitDatabaseToCloud() {
       // Firestore document per client, replacing the bin-packed shards
       // above (now dormant).
       //
-      // Stage 3 of true per-client conflict detection (Sep 2026): now
-      // scoped to namesToWrite only - the actual fix for the Firestore
-      // write side of the original false-conflict complaint. Before this
-      // stage, every save re-wrote every client's document regardless of
-      // whether it had actually changed in this tab; that's what made the
-      // global version check necessary in the first place (this tab's own
-      // stale copy of an unrelated, unedited client could otherwise
-      // silently clobber someone else's fresher edit to it). Now that
-      // writes only ever touch clients this tab actually has a pending
-      // edit for, that risk is gone, and the version check above only
-      // needs to (and does) cover the same scoped set.
+      // Phase 4 of true per-client conflict detection (Sep 2026): now a
+      // MERGE write of only each client's changedFields (from the field
+      // check above), not the whole document - the actual fix for the
+      // Firestore write side of the same-client-different-tools problem.
+      // Before this phase, every save re-wrote a client's ENTIRE document
+      // regardless of which fields had actually changed in this tab;
+      // that's what made two different tools editing the same client's
+      // different fields hard-block each other, even though their edits
+      // never actually overlapped. Now a save only ever touches the
+      // specific field(s) this tab changed, merged on top of whatever's
+      // currently on the server for every other field - safe precisely
+      // because the field check above already confirmed none of THOSE
+      // fields changed elsewhere since this tab's last sync.
+      const changedFieldsByName = {};
+      results.forEach(r => { changedFieldsByName[r.name] = r.changedFields; });
+
       const nextClientVersions = {};
       const writes = namesToWrite.map(name => {
         const nextClientVersion = (clientWorkspaceVersions[name] || 0) + 1;
         nextClientVersions[name] = nextClientVersion;
-        return window.firebaseSetDoc(
-          getClientWorkspaceDocRef(name),
-          Object.assign({}, cleanDb[name], { [CLIENT_DOC_VERSION_FIELD]: nextClientVersion })
-        );
+        const payload = { [CLIENT_DOC_VERSION_FIELD]: nextClientVersion };
+        changedFieldsByName[name].forEach(key => { payload[key] = cleanDb[name][key]; });
+        return window.firebaseSetDoc(getClientWorkspaceDocRef(name), payload, { merge: true });
       });
 
       // Collection-based storage needs an explicit delete for a removed
@@ -7195,22 +7256,24 @@ function commitDatabaseToCloud() {
       // simply stopped appearing in the next full-shard rewrite. Only
       // ever deletes a name THIS tab itself just renamed/deleted (see
       // intentionallyRemovedClientNames above), never anything it merely
-      // doesn't happen to have loaded. Unchanged by Stage 3 - still
-      // unconditional, not yet version-checked (see this function's
-      // version-check comment above).
+      // doesn't happen to have loaded. Unchanged by Stage 3 or Phase 4 -
+      // still unconditional, not yet conflict-checked at all (see this
+      // function's field-check comment above).
       intentionallyRemovedClientNames.forEach(name => {
         writes.push(window.firebaseDeleteDoc(getClientWorkspaceDocRef(name)).catch(err =>
           console.error(`Failed to delete stale clientWorkspaces doc for "${name}":`, err)
         ));
       });
 
-      // Stage 3 (Sep 2026): clientsDbDocVersion/clientWorkspacesMeta is no
-      // longer read fresh or used to gate this save (see the per-client
-      // version check above) - but still bumped here, cheaply, from this
-      // tab's own last-known value. Deliberately NOT removed: costs
-      // nothing, and keeps a one-line rollback available (point the gate
-      // back at a fresh read-and-compare of this same field) if Stage 3
-      // ever needs reverting.
+      // Stage 3/Phase 4 (Sep 2026): clientsDbDocVersion/clientWorkspacesMeta
+      // is no longer read fresh or used to gate this save (see the
+      // field-level check above, which superseded Stage 3's per-document
+      // version check the same way this comment's own history shows) -
+      // but still bumped here, cheaply, from this tab's own last-known
+      // value. Deliberately NOT removed: costs nothing, and keeps a
+      // one-line rollback available (point the gate back at a fresh
+      // read-and-compare of this same field) if either stage ever needs
+      // reverting.
       const nextVersion = clientsDbDocVersion + 1;
       writes.push(window.firebaseSetDoc(metaRef, { version: nextVersion }));
 
@@ -7222,6 +7285,19 @@ function commitDatabaseToCloud() {
         // clientsDbDocVersion's identical treatment just above.
         Object.assign(clientWorkspaceVersions, nextClientVersions);
         intentionallyRemovedClientNames.forEach(name => { delete clientWorkspaceVersions[name]; });
+        // Phase 4 (Sep 2026): fold this write's own just-confirmed fields
+        // into lastKnownServerState right away too, for the same reason -
+        // without this, a SECOND rapid save to the same client (before
+        // this write's own snapshot echo arrives) would diff against a
+        // stale pre-write baseline and could see its OWN just-written
+        // field as "changed on the server since baseline," a false
+        // self-conflict against nothing but its own prior save.
+        namesToWrite.forEach(name => {
+          if (!lastKnownServerState[name]) lastKnownServerState[name] = {};
+          changedFieldsByName[name].forEach(key => {
+            lastKnownServerState[name][key] = JSON.parse(JSON.stringify(cleanDb[name][key]));
+          });
+        });
         namesPendingAsOfThisWrite.forEach(name => pendingLocalClientEdits.delete(name));
         if (indicator) {
           indicator.innerHTML = "Saved to Cloud ✅";
