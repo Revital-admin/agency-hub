@@ -5300,6 +5300,17 @@ const CLIENT_FIELD_SECTIONS = {
   referralSummary: "retention-social-proof"
 };
 
+// Bug fix (Sep 2026) - keep in sync with ATTRIBUTION_ONLY_FIELDS in
+// app.js (that copy's own comment has the full story): app.js's client
+// already omits these from baselineFields so this endpoint's
+// conflictFields check below never sees them for a current build, but an
+// older cached tab that hasn't picked up that fix yet could still send a
+// baseline for them - this second exclusion (belt-and-suspenders, same
+// "duplicated on purpose" pattern as CLIENT_FIELD_SECTIONS above) makes
+// sure a stale client can't reintroduce the "every save conflicts with
+// every other save" bug from the server side even so.
+const ATTRIBUTION_ONLY_FIELDS = ["lastEditedBy", "lastEditedByEmail", "lastEditedAt"];
+
 // Stage 4 of true per-client conflict detection (Sep 2026 - see
 // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md). Duplicated from app.js's
 // clientFieldValuesEqual (own comment there has the full story) rather
@@ -5552,6 +5563,7 @@ async function handleRestrictedClientDataWrite(request, env) {
     if (baselineFields && typeof baselineFields === "object" && !Array.isArray(baselineFields)) {
       const currentDocForConflictCheck = await firestoreGetDoc(accessToken, projectId, `clientWorkspaces/${encodeURIComponent(clientName)}`);
       const conflictFields = Object.keys(baselineFields).filter(key => {
+        if (ATTRIBUTION_ONLY_FIELDS.includes(key)) return false; // bug fix (Sep 2026) - see that constant's own comment
         if (!Object.prototype.hasOwnProperty.call(fields, key)) return false; // only check fields actually being written
         const currentValue = currentDocForConflictCheck ? currentDocForConflictCheck[key] : undefined;
         const baselineValue = baselineFields[key];

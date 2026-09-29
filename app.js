@@ -6895,6 +6895,21 @@ const CLIENT_FIELD_SECTIONS_MIRROR = {
 // section - see handleRestrictedClientDataWrite in _worker.js.
 const RESTRICTED_WRITE_IDENTITY_FIELDS = ["name", "createdDate", "targetUrl", "clickupUrl", "onboardingDate"];
 
+// Bug fix (Sep 2026): saveDatabase's attribution stamp (see its own
+// comment, "Attribution stamp for the ambient 'who last edited this
+// client' note") sets these 3 fields on EVERY save of the active client,
+// unconditionally, regardless of what the user actually edited. Left in
+// changedFields/conflictFields like any other field, that made two people
+// editing the SAME client around the same time conflict on nearly every
+// single save - not because their real edits overlapped, but because
+// each save's attribution stamp (a different name/timestamp each time)
+// always differs from the other's, every time. These fields still get
+// WRITTEN normally (so the "last edited by" note itself stays accurate) -
+// this constant only excludes them from COUNTING as a conflict, since
+// overwriting a stale attribution note loses nothing a user actually
+// typed. Keep in sync with ATTRIBUTION_ONLY_FIELDS in _worker.js.
+const ATTRIBUTION_ONLY_FIELDS = ["lastEditedBy", "lastEditedByEmail", "lastEditedAt"];
+
 // Save path for Team-Access-restricted teammates - takes over from
 // commitDatabaseToCloud below for that case. Instead of resharding and
 // rewriting the ENTIRE clientsDb the way commitDatabaseToCloud does (which
@@ -6995,7 +7010,18 @@ function commitRestrictedClientEditsNow() {
         // stringify silently DROPS an object key whose value is
         // undefined, which would make this field invisible to the
         // Worker's conflict check instead of "baseline was empty."
-        baselineFields[key] = baseline[key] !== undefined ? baseline[key] : null;
+        //
+        // Bug fix (Sep 2026): EXCEPT for attribution-only fields (see
+        // ATTRIBUTION_ONLY_FIELDS's own comment) - fields[key] above still
+        // sends the new stamp value so it still gets written, but omitting
+        // it from baselineFields here means the Worker's conflictFields
+        // check (which only checks keys baselineFields actually names)
+        // simply never looks at it, so two people saving the same client
+        // around the same time stop conflicting purely over whose name/
+        // timestamp landed last.
+        if (ATTRIBUTION_ONLY_FIELDS.indexOf(key) === -1) {
+          baselineFields[key] = baseline[key] !== undefined ? baseline[key] : null;
+        }
       }
     });
     sentFieldsByName.set(name, fields);
@@ -7325,7 +7351,13 @@ function commitDatabaseToCloud() {
     );
     return window.firebaseGetDoc(getClientWorkspaceDocRef(name)).then(snap => {
       const serverNow = snap.exists ? snap.data() : {};
+      // Bug fix (Sep 2026): exclude pure attribution-stamp fields from
+      // COUNTING as a conflict (see ATTRIBUTION_ONLY_FIELDS's own comment) -
+      // they're still in changedFields above (and so still get written/
+      // merged normally below), just never flagged as the reason a save
+      // was rejected.
       const conflictFields = changedFields.filter(key =>
+        ATTRIBUTION_ONLY_FIELDS.indexOf(key) === -1 &&
         !clientFieldValuesEqual(serverNow[key], baseline[key])
       );
       // serverNow kept on the result (not just conflictFields) for the
@@ -7361,6 +7393,9 @@ function commitDatabaseToCloud() {
       const serverNow = snap.data();
       const allKeys = new Set(Object.keys(serverNow).concat(Object.keys(baseline)));
       allKeys.delete(CLIENT_DOC_VERSION_FIELD); // bookkeeping only, never a real conflict signal
+      // Bug fix (Sep 2026): same exclusion as the fieldCheck above - an
+      // attribution-stamp-only difference shouldn't block a delete either.
+      ATTRIBUTION_ONLY_FIELDS.forEach(key => allKeys.delete(key));
       const deletionConflictFields = Array.from(allKeys).filter(key =>
         !clientFieldValuesEqual(serverNow[key], baseline[key])
       );
