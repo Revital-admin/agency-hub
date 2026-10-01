@@ -16,7 +16,7 @@ const TABLE_ROWS = [
   { key: 'features',      label: 'Key Site Features',       placeholder: 'e.g. Booking, portal, blog, search...' },
   { key: 'cta-funnel',    label: 'Primary CTA & Funnel',    placeholder: 'e.g. Inquire button, lead magnet...' },
   { key: 'seo',           label: 'SEO & Organic Keywords',  placeholder: 'e.g. Ranks #1 for "X production", backlinks...' },
-  { key: 'load-speed',    label: 'Load Speed & Perf',       placeholder: 'e.g. Lighthouse score, desktop vs mobile...' },
+  { key: 'load-speed',    label: 'Load Speed & Performance', placeholder: 'e.g. Lighthouse score, desktop vs mobile...' },
   { key: 'tech-stack',    label: 'Technology Stack',        placeholder: 'e.g. Webflow, WordPress, Shopify...' },
   { key: 'social-proof',  label: 'Social Proof & Trust',    placeholder: 'e.g. Testimonials, logos, case studies...' },
   { key: 'navigation',    label: 'Navigation & Structure',  placeholder: 'e.g. Simple, intuitive menu, internal links...' }
