@@ -7033,16 +7033,15 @@ const CLIENT_FIELD_SECTIONS_MIRROR = {
   // teammate granted only "finance" won't see this field even though it's
   // in that nav group too - known limitation of the single-section design.
   budgetPacingList: "ad-accounts-access",
-  adAccountSetup: "ad-accounts-access" // Ad Account Setup
+  adAccountSetup: "ad-accounts-access", // Ad Account Setup
 
-  // Note: clientPulseFeedback (client-submitted satisfaction history, read
-  // by Agency Health Dashboard - see that tool's own comment) deliberately
-  // left out of this map for now - unlike everything else here, it's
-  // written by the unauthenticated public client portal, not a teammate,
-  // and it wasn't obvious during this audit whether any restricted
-  // teammate role is actually meant to see it. Flagged rather than
-  // guessed; add it here (with the right section) if that turns out to
-  // be a real gap too.
+  // clientPulseFeedback: client-submitted satisfaction history, written
+  // from the client's own portal (see submitPulseFeedback in
+  // portal/js/app.js) and read by Agency Health Dashboard as a check
+  // against the account manager's own Weekly Check-In read. Mapped to
+  // account-ops per Ronald (Oct 2026) so AMs/account-ops teammates can see
+  // what a client actually said, not just the rolled-up health score.
+  clientPulseFeedback: "account-ops"
 };
 // Never writable through /api/restricted-client-data regardless of
 // section - see handleRestrictedClientDataWrite in _worker.js.

@@ -5333,15 +5333,17 @@ const CLIENT_FIELD_SECTIONS = {
   // teammate granted only "finance" won't see this field even though it's
   // in that nav group too - known limitation of the single-section design.
   budgetPacingList: "ad-accounts-access",
-  adAccountSetup: "ad-accounts-access" // Ad Account Setup
+  adAccountSetup: "ad-accounts-access", // Ad Account Setup
 
-  // Note: clientPulseFeedback (client-submitted satisfaction history, read
-  // by Agency Health Dashboard) deliberately left out of this map for now -
-  // unlike everything else here, it's written by the unauthenticated public
-  // client portal, not a teammate, and it wasn't obvious during this audit
-  // whether any restricted teammate role is actually meant to see it.
-  // Flagged rather than guessed; add it here (with the right section) if
-  // that turns out to be a real gap too.
+  // clientPulseFeedback: client-submitted satisfaction history, written
+  // from the client's own portal and read by Agency Health Dashboard as a
+  // check against the account manager's own Weekly Check-In read. Mapped
+  // to account-ops per Ronald (Oct 2026) so AMs/account-ops teammates can
+  // see what a client actually said, not just the rolled-up health score.
+  // Read-only for restricted teammates in practice - no Hub tool lets them
+  // edit it, only the public portal writes it - so this only affects what
+  // their GET response includes, not the write-merge path noted above.
+  clientPulseFeedback: "account-ops"
 };
 
 // Bug fix (Sep 2026) - keep in sync with ATTRIBUTION_ONLY_FIELDS in
