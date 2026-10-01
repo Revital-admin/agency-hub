@@ -7025,14 +7025,14 @@ const CLIENT_FIELD_SECTIONS_MIRROR = {
   timeline: "account-ops", timelines: "account-ops", timelinesInitialized: "account-ops", // Timeline Scheduler (3 keys, same tool)
   qcLog: "account-ops", // QC Checklist
   caseStudies: "retention-social-proof", // Case Study Builder
-  // Budget Pacing Tracker's nav button is deliberately listed under BOTH
-  // "Ad Accounts & Access" and "Finance" in the sidebar, but this map only
-  // supports one section per field - a teammate granted only
-  // ad-accounts-access (and not finance) won't see this field even though
-  // the sidebar suggests they should be able to. Picked "finance" as the
-  // more specific home; flagging this as a known limitation of the
-  // single-section design rather than silently guessing it's fine.
-  budgetPacingList: "finance",
+  // Budget Pacing Tracker's nav button is listed under both "Ad Accounts &
+  // Access" and "Finance" in the sidebar, but this map only supports one
+  // section per field. Mapped to ad-accounts-access per Ronald (Oct 2026):
+  // this tracks client ad spend and belongs with the team that manages
+  // client ad accounts, not Revital's own internal sales/finance staff. A
+  // teammate granted only "finance" won't see this field even though it's
+  // in that nav group too - known limitation of the single-section design.
+  budgetPacingList: "ad-accounts-access",
   adAccountSetup: "ad-accounts-access" // Ad Account Setup
 
   // Note: clientPulseFeedback (client-submitted satisfaction history, read
