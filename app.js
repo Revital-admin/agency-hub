@@ -6952,16 +6952,36 @@ function setClientsDbShardListenerCount(count) {
 // that copy (same "keep both in sync" pattern as effectiveSections()
 // already uses between app.js, team-access-manager/js/app.js, and
 // firestore.rules).
+// Bug fix (Oct 2026): the brandGuideline audit below turned up six more
+// field keys with the exact same gap - a real tool stores client data
+// under this key, but it was never added to this map, so
+// filterClientBySections in _worker.js silently drops it for every
+// restricted teammate regardless of granted sections. Section for each
+// taken from that tool's own nav-item-btn's enclosing nav-section in
+// index.html (data-section="..."), same source of truth Team Access
+// itself uses to decide what a section even grants.
 const CLIENT_FIELD_SECTIONS_MIRROR = {
   onboardingChecklist: "core", clientChecklist: "core", brandVault: "core",
   portalConfig: "core", pendingApprovals: "core", approvalHistory: "core",
   notifications: "core", lastVisitedAt: "core", portalLastVisitedAt: "core",
   lastEditedBy: "core", lastEditedByEmail: "core", lastEditedAt: "core",
+  redFlagChecklist: "core", // Red Flag Checklist - lives under CORE in the sidebar
 
   paidAdsTracker: "ad-accounts-access",
 
   reportArchive: "reporting-health", report: "reporting-health",
 
+  // Bug fix (Oct 2026 - "my teammate opens this client and the Brand
+  // Guidelines I filled in just aren't there"): brandGuideline (Brand
+  // Guidelines Builder's storage key - see that tool's own app.js header
+  // comment - deliberately separate from brandKit/Brand Asset Kit Lite's
+  // storage) was never added here. filterClientBySections in _worker.js
+  // only keeps a field if CLIENT_FIELD_SECTIONS has an entry for it -
+  // with no entry at all, it silently dropped brandGuideline for EVERY
+  // restricted teammate regardless of which sections they'd been
+  // granted, while an admin (reading unfiltered) never noticed anything
+  // missing. Same section as every other Content Creation tool below.
+  brandGuideline: "content-creation",
   brandKit: "content-creation", moodBoards: "content-creation",
   productionBoard: "content-creation",
   productionBoardCompleted: "content-creation",
@@ -6970,6 +6990,7 @@ const CLIENT_FIELD_SECTIONS_MIRROR = {
   moodBoardAnnotations: "content-creation", brandRoadmap: "content-creation",
   copywriting: "content-creation", creativeBrief: "content-creation",
   contentStrategy: "content-creation", creativeStrategy: "content-creation",
+  adCampaignBrief: "content-creation", // Ad Campaign Brief - same sidebar group as Creative Brief Generator
 
   campaignLaunch: "account-ops", meetingNotes: "account-ops",
 
@@ -6979,11 +7000,28 @@ const CLIENT_FIELD_SECTIONS_MIRROR = {
 
   competitorAnalysis: "strategy-competition", strategyBuilder: "strategy-competition",
   webComp: "strategy-competition", socialComp: "strategy-competition",
+  personalBranding: "strategy-competition", // Personal Branding Builder
 
   proposal: "sales-pipeline", roi: "sales-pipeline", signature: "sales-pipeline",
   billingSummary: "sales-pipeline",
+  intakeQualifier: "sales-pipeline", // Client Intake Pre-Qualifier
+  discoveryCall: "sales-pipeline", // Discovery Call Script
+  packageRecommendation: "sales-pipeline", // Package Recommendation Engine
 
-  testimonialSubmission: "retention-social-proof", referralSummary: "retention-social-proof"
+  testimonialSubmission: "retention-social-proof", referralSummary: "retention-social-proof",
+  testimonialRequest: "retention-social-proof", // Testimonial Tracker
+
+  kickoffPrep: "sales-pipeline", deliveryHandoff: "sales-pipeline", // Kickoff Prep (same tool, two keys)
+  welcomeGuide: "agency-globals" // Client Welcome Guide
+
+  // Note: clientPulseFeedback (client-submitted satisfaction history, read
+  // by Agency Health Dashboard - see that tool's own comment) deliberately
+  // left out of this map for now - unlike everything else here, it's
+  // written by the unauthenticated public client portal, not a teammate,
+  // and it wasn't obvious during this audit whether any restricted
+  // teammate role is actually meant to see it. Flagged rather than
+  // guessed; add it here (with the right section) if that turns out to
+  // be a real gap too.
 };
 // Never writable through /api/restricted-client-data regardless of
 // section - see handleRestrictedClientDataWrite in _worker.js.
