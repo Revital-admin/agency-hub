@@ -6587,6 +6587,70 @@ let pendingEditBaseline = {};
   };
 })();
 
+// Bug fix (Oct 2026 - "when typing, entries silently disappear", reported
+// live against Social Competitor List by a restricted teammate, and
+// reproduced against Website Competitor Analysis during an unrelated
+// automation session). Root cause: every tool's iframe (see e.g.
+// social-competitor-analysis/js/app.js and website-competitor-analysis/
+// js/app.js) calls window.parent.getActiveClient() exactly ONCE when it
+// first loads, caches that object as `parentClient`, and - for tools with
+// a big nested blob of their own data - caches a SECOND reference one
+// level down (`socialComp = parentClient.socialComp`, `webComp =
+// parentClient.webComp`, etc.). Every keystroke after that writes directly
+// into those cached object references, not through a fresh
+// getActiveClient() call.
+//
+// That was fine as long as clientsDb[name] kept pointing at the exact same
+// object for the lifetime of the tab. It doesn't: rebuildClientsDbFromShards
+// (admin path) and applyRestrictedClientsDbSnapshot (restricted path) both
+// used to do `clientsDb[name] = <freshly parsed incoming object>` for any
+// client not CURRENTLY mid-save (i.e. not in pendingLocalClientEdits) -
+// which is the normal state between edits, not a rare one. The instant that
+// reassignment happens - which for a restricted teammate is almost
+// immediately after their very first successful save, since
+// commitRestrictedClientEditsNow explicitly refetches right after writing -
+// the open tool's cached parentClient/webComp/socialComp reference becomes
+// an orphan: still a live, mutable JS object the tool keeps typing into,
+// but no longer reachable from clientsDb at all. saveDatabase() still runs,
+// still reports "Saved to Cloud", but commitRestrictedClientEditsNow reads
+// clientsDb[name] (the NEW object) to build its diff - which never saw the
+// edit, since the edit landed on the orphaned copy - so the field is judged
+// unchanged and silently never sent. No error, no conflict banner: the text
+// just sits in the DOM until the next reload, which pulls the real
+// (edit-less) server copy and makes it look like it "disappeared".
+//
+// Fix: never swap in a brand-new object for a client that already exists
+// locally. Merge the incoming snapshot's data INTO the existing object,
+// recursively, so every nested object (webComp, socialComp, ...) keeps its
+// original identity too - any iframe's cached reference, at any depth,
+// keeps pointing at live, continuously-updated data for as long as the tab
+// stays open, exactly matching what skipActiveIframeReload already assumes
+// is true about the open tool's data (see its own comment on both
+// rebuildClientsDbFromShards and applyRestrictedClientsDbSnapshot).
+function deepMergeInPlace(target, source) {
+  if (Array.isArray(source)) {
+    if (Array.isArray(target)) {
+      target.length = 0;
+      source.forEach(item => target.push(item));
+      return target;
+    }
+    return source.slice();
+  }
+  if (source && typeof source === "object") {
+    if (!target || typeof target !== "object" || Array.isArray(target)) {
+      target = {};
+    }
+    Object.keys(target).forEach(key => {
+      if (!Object.prototype.hasOwnProperty.call(source, key)) delete target[key];
+    });
+    Object.keys(source).forEach(key => {
+      target[key] = deepMergeInPlace(target[key], source[key]);
+    });
+    return target;
+  }
+  return source;
+}
+
 function getClientsDbShardMetaDocRef() {
   if (!window.firebaseDb || !window.firebaseDoc) return null;
   return window.firebaseDoc(window.firebaseDb, "agency", "clientsDbShardMeta");
@@ -6882,6 +6946,16 @@ function rebuildClientsDbFromShards() {
   const cloudStr = JSON.stringify(merged);
   const localStr = JSON.stringify(clientsDb);
   if (cloudStr === localStr) return;
+
+  // See deepMergeInPlace's own comment (above pendingLocalClientEdits'
+  // override block) - preserve every existing client's object identity so
+  // an open tool iframe's cached parentClient/webComp/socialComp reference
+  // never gets silently orphaned by this merge.
+  Object.keys(merged).forEach(name => {
+    if (clientsDb[name] && typeof clientsDb[name] === "object" && !pendingLocalClientEdits.has(name)) {
+      merged[name] = deepMergeInPlace(clientsDb[name], merged[name]);
+    }
+  });
 
   clientsDb = merged;
   localStorage.setItem("REVITAL_HUB_CLIENTS", JSON.stringify(clientsDb));
@@ -10200,6 +10274,17 @@ function applyRestrictedClientsDbSnapshot(data) {
   pendingLocalClientEdits.forEach(name => {
     if (clientsDb[name]) incoming[name] = clientsDb[name];
   });
+
+  // See deepMergeInPlace's own comment (above pendingLocalClientEdits'
+  // override block) - preserve every other existing client's object
+  // identity too, so an open tool iframe's cached parentClient/webComp/
+  // socialComp reference never gets silently orphaned by this snapshot.
+  Object.keys(incoming).forEach(name => {
+    if (clientsDb[name] && typeof clientsDb[name] === "object" && !pendingLocalClientEdits.has(name)) {
+      incoming[name] = deepMergeInPlace(clientsDb[name], incoming[name]);
+    }
+  });
+
   clientsDb = incoming;
 
   // No shard concept on this path - nothing for commitDatabaseToCloud's
