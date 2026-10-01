@@ -4243,62 +4243,122 @@ const UNSAVED_DRAFT_KEY = "REVITAL_HUB_UNSAVED_DRAFT";
 // contenteditable is currently focused in it, or null if nothing
 // capturable is focused. Doesn't know or care about clientName/tabId -
 // callers attach that context afterward.
-function describeFocusedFieldWithinDocument(doc, knownActiveEl) {
-  const el = knownActiveEl || (doc && doc.activeElement);
-  if (!doc || !el || el === doc.body) return null;
-  const tag = el.tagName;
-  if (tag === "IFRAME") return null; // no nested-iframe-within-iframe support
-  const isTextField = (tag === "TEXTAREA" || tag === "INPUT" || el.isContentEditable);
-  if (!isTextField) return null;
-
-  const value = el.isContentEditable ? el.textContent : el.value;
-  if (value == null || value === "") return null;
-
-  // Build a selector that can relocate this same field after reload:
-  // prefer a real id, otherwise fall back to tag+class plus its index
-  // among identical matches (covers repeated-field cases like the four
-  // SWOT quadrant textareas, which share a class and have no id).
-  let selector, index = 0;
-  if (el.id) {
-    selector = "#" + el.id;
-  } else {
-    const cls = el.className ? "." + el.className.trim().split(/\s+/).join(".") : "";
-    selector = tag.toLowerCase() + cls;
-    const matches = Array.from(doc.querySelectorAll(selector));
-    index = matches.indexOf(el);
+// Bug fix (Oct 2026 - "I filled in Design & UX Quality, tabbed into
+// Prepared By, a conflict-triggered reload fired, and Design & UX
+// Quality came back blank"): this used to only ever capture
+// document.activeElement - whatever ONE field had focus at the exact
+// moment "Reload Now" was clicked. But saveDatabase() debounces on a
+// shared ~500ms timer per client (see its own comment), so a field
+// edited just before the user moved on to a different field can still
+// be sitting in that same unsent debounce batch when a conflict rejects
+// it. The single-field capture below dropped every OTHER field in that
+// batch, even though the user watched themselves type it in moments
+// earlier - a real, silent loss of typed work, not just a cursor-focus
+// inconvenience. Now captures every non-empty text field currently
+// visible in the active tab, not just the focused one - re-applying a
+// field that had actually already saved successfully is a harmless
+// no-op (same value going back in, see applyDraftValueToField's reuse
+// of each field's own input handler below), so capturing more than
+// strictly necessary costs nothing; capturing too little is what loses
+// real work.
+function describeAllFieldsWithinDocument(doc, scopeEl, focusedEl) {
+  if (!doc) return [];
+  const selectorList = 'textarea, input[type=text], input[type=url], ' +
+    'input[type=email], input[type=tel], input[type=number], input[type=date], ' +
+    '[contenteditable="true"]';
+  let candidates;
+  try {
+    candidates = Array.from((scopeEl || doc).querySelectorAll(selectorList));
+  } catch (e) {
+    return [];
   }
+  const indexQueryCache = new Map(); // selector -> full-document match list, so index lines up with how restore re-queries later
+  const results = [];
+  candidates.forEach(el => {
+    if (el.tagName === "IFRAME") return; // no nested-iframe-within-iframe support
+    const value = el.isContentEditable ? el.textContent : el.value;
+    if (value == null || value === "") return;
 
-  return { selector, index, value };
+    // Build a selector that can relocate this same field after reload:
+    // prefer a real id, otherwise fall back to tag+class plus its index
+    // among identical matches (covers repeated-field cases like the four
+    // SWOT quadrant textareas, which share a class and have no id).
+    let selector;
+    if (el.id) {
+      selector = "#" + el.id;
+    } else {
+      const cls = el.className ? "." + String(el.className).trim().split(/\s+/).join(".") : "";
+      selector = el.tagName.toLowerCase() + cls;
+    }
+    if (!indexQueryCache.has(selector)) {
+      indexQueryCache.set(selector, Array.from(doc.querySelectorAll(selector)));
+    }
+    const index = indexQueryCache.get(selector).indexOf(el);
+    results.push({ selector, index, value, focused: el === focusedEl });
+  });
+  return results;
 }
 
-function describeFocusedFieldForDraftCapture() {
+function describeFieldsForDraftCapture() {
   const el = document.activeElement;
-  if (!el || el === document.body) return null;
 
-  if (el.tagName === "IFRAME") {
+  if (el && el.tagName === "IFRAME") {
     const tabSection = el.closest(".tab-section");
     // No stable, reloadable way to know which tool tab this iframe
     // belongs to - skip rather than guess (shouldn't happen in
     // practice, every tool iframe lives inside a #tab-* section).
     if (!tabSection || !tabSection.id) return null;
-    let innerField = null;
+    let doc = null;
     try {
-      innerField = describeFocusedFieldWithinDocument(el.contentDocument);
+      doc = el.contentDocument;
     } catch (e) {
       return null; // cross-origin or otherwise inaccessible
     }
-    if (!innerField) return null;
-    return { clientName: activeClientName, tabId: tabSection.id, ...innerField, savedAt: Date.now() };
+    const fields = describeAllFieldsWithinDocument(doc, doc, doc ? doc.activeElement : null);
+    if (!fields.length) return null;
+    return { clientName: activeClientName, tabId: tabSection.id, fields, savedAt: Date.now() };
   }
 
-  const field = describeFocusedFieldWithinDocument(document, el);
-  if (!field) return null;
-  return { clientName: activeClientName, tabId: null, ...field, savedAt: Date.now() };
+  // Not focused inside an iframe directly - but the active tab itself
+  // might still BE an iframe-based tool (focus could be on the nav
+  // button, or nothing at all, e.g. right after a click). Covering this
+  // case too, not just the directly-focused-iframe branch above, is what
+  // actually closes the original bug: Ronald's own repro had focus
+  // freshly moved to a top-document-adjacent field while the iframe tool
+  // itself held the stale unsaved data.
+  const activeTabBtn = document.querySelector(".nav-item-btn.active");
+  const tabId = activeTabBtn ? activeTabBtn.getAttribute("data-tab") : null;
+  const tabSection = tabId ? document.getElementById(tabId) : null;
+  if (!tabSection) return null;
+
+  const iframeInSection = tabSection.querySelector("iframe");
+  if (iframeInSection) {
+    let doc = null;
+    try {
+      doc = iframeInSection.contentDocument;
+    } catch (e) {
+      doc = null;
+    }
+    if (!doc) return null;
+    const fields = describeAllFieldsWithinDocument(doc, doc, doc.activeElement);
+    if (!fields.length) return null;
+    return { clientName: activeClientName, tabId: tabSection.id, fields, savedAt: Date.now() };
+  }
+
+  // Plain top-document tab-section (no iframe) - scope element discovery
+  // to just this section (hidden sections' fields are old news, not what
+  // the user was just looking at), but index against the WHOLE document
+  // via describeAllFieldsWithinDocument's own full-document query cache,
+  // matching exactly what restoreUnsavedDraftIntoTopDocument queries
+  // against later.
+  const fields = describeAllFieldsWithinDocument(document, tabSection, el);
+  if (!fields.length) return null;
+  return { clientName: activeClientName, tabId: tabSection.id, fields, savedAt: Date.now() };
 }
 
 function captureUnsavedDraftBeforeReload() {
   try {
-    const draft = describeFocusedFieldForDraftCapture();
+    const draft = describeFieldsForDraftCapture();
     if (draft) {
       sessionStorage.setItem(UNSAVED_DRAFT_KEY, JSON.stringify(draft));
     } else {
@@ -4327,12 +4387,42 @@ function applyDraftValueToField(el, value) {
   }
 }
 
+// Reapplies every captured field (not just one) into a given document,
+// focusing whichever one was actually focused at capture time (falls
+// back to the first field if, for some reason, none was marked focused -
+// shouldn't happen given describeAllFieldsWithinDocument always tags the
+// doc's own activeElement, but matches this file's habit of not assuming
+// a "should always be there" marker actually is).
+function applyDraftFieldsToDocument(doc, fields) {
+  let focusedApplied = false;
+  fields.forEach(field => {
+    try {
+      const matches = Array.from(doc.querySelectorAll(field.selector));
+      const el = matches[field.index] || matches[0];
+      if (!el) return;
+      applyDraftValueToField(el, field.value);
+      if (field.focused) focusedApplied = true;
+    } catch (e) {
+      console.warn("applyDraftFieldsToDocument: failed to restore one field:", e);
+    }
+  });
+  // If nothing marked `focused` actually got applied (its selector/index
+  // no longer resolves, say), fall back to focusing the first field that
+  // did restore successfully, so the user isn't left with no cursor
+  // anywhere at all.
+  if (!focusedApplied && fields.length) {
+    try {
+      const first = fields[0];
+      const matches = Array.from(doc.querySelectorAll(first.selector));
+      const el = matches[first.index] || matches[0];
+      if (el) el.focus();
+    } catch (e) { /* best-effort only */ }
+  }
+}
+
 function restoreUnsavedDraftIntoTopDocument(draft) {
   try {
-    const matches = Array.from(document.querySelectorAll(draft.selector));
-    const el = matches[draft.index] || matches[0];
-    if (!el) return;
-    applyDraftValueToField(el, draft.value);
+    applyDraftFieldsToDocument(document, draft.fields);
   } catch (e) {
     console.warn("restoreUnsavedDraftIfAny (top document) failed:", e);
   }
@@ -4344,8 +4434,8 @@ function restoreUnsavedDraftIntoTopDocument(draft) {
 // crucially, the lazy-load-on-first-visit path via iframeNeedsReload,
 // which resets to "not yet visited" on every fresh page load, so this
 // always forces a real load exactly like a person's own first click
-// would). Once that iframe finishes loading, reapplies the captured
-// value inside it. Without this, an iframe-tool draft would just sit in
+// would). Once that iframe finishes loading, reapplies every captured
+// field inside it. Without this, an iframe-tool draft would just sit in
 // sessionStorage unused unless the person happened to click back into
 // that exact tab themselves within the 10-minute window.
 function restoreUnsavedDraftIntoIframeTool(draft) {
@@ -4357,10 +4447,7 @@ function restoreUnsavedDraftIntoIframeTool(draft) {
 
     iframe.addEventListener("load", () => {
       try {
-        const doc = iframe.contentDocument;
-        const matches = Array.from(doc.querySelectorAll(draft.selector));
-        const el = matches[draft.index] || matches[0];
-        if (el) applyDraftValueToField(el, draft.value);
+        applyDraftFieldsToDocument(iframe.contentDocument, draft.fields);
       } catch (e) {
         console.warn("restoreUnsavedDraftIfAny (iframe tool) failed:", e);
       }
@@ -4382,7 +4469,7 @@ function restoreUnsavedDraftIfAny() {
   } catch (e) {
     return;
   }
-  if (!draft || !draft.selector) return;
+  if (!draft || !Array.isArray(draft.fields) || !draft.fields.length) return;
   // Don't resurrect a stale/abandoned draft from hours-old session state.
   if (!draft.savedAt || (Date.now() - draft.savedAt) > 10 * 60 * 1000) return;
   // Only reapply into the same client's workspace it came from -
@@ -4390,7 +4477,14 @@ function restoreUnsavedDraftIfAny() {
   // REVITAL_HUB_ACTIVE_CLIENT, so this should normally already match.
   if (draft.clientName !== activeClientName) return;
 
-  if (draft.tabId) {
+  // tabId is now always set (see describeFieldsForDraftCapture) - whether
+  // this routes through the iframe path or applies directly to the top
+  // document depends on whether that tab actually renders via an iframe,
+  // not on tabId's presence/absence the way the old single-field version
+  // branched.
+  const tabSection = draft.tabId ? document.getElementById(draft.tabId) : null;
+  const isIframeTab = !!(tabSection && tabSection.querySelector("iframe"));
+  if (isIframeTab) {
     restoreUnsavedDraftIntoIframeTool(draft);
   } else {
     restoreUnsavedDraftIntoTopDocument(draft);
