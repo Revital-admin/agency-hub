@@ -5573,7 +5573,23 @@ async function handleRestrictedClientDataWrite(request, env) {
         // mistaken for a conflict.
         const normalizedCurrent = currentValue === undefined ? null : currentValue;
         const normalizedBaseline = baselineValue === undefined ? null : baselineValue;
-        return !clientFieldValuesEqual(normalizedCurrent, normalizedBaseline);
+        if (clientFieldValuesEqual(normalizedCurrent, normalizedBaseline)) return false;
+        // Bug fix (Sep 2026 - same family as ATTRIBUTION_ONLY_FIELDS above,
+        // discovered live against a real two-admin-tab collision): fields[key]
+        // here isn't necessarily something this teammate typed - it's
+        // whatever commitRestrictedClientEditsNow found differing from
+        // THEIR baseline, which includes a field that only changed locally
+        // because this tab's realtime listener synced in someone ELSE's
+        // concurrent write to a different field. When that happens,
+        // fields[key] already equals the server's current value (both
+        // reflect that same remote write) - writing it back is a no-op,
+        // not a real conflict, even though it differs from this tab's own
+        // stale baseline. Only reject when what's about to be WRITTEN
+        // would actually change the server's current value.
+        const incomingValue = fields[key];
+        const normalizedIncoming = incomingValue === undefined ? null : incomingValue;
+        if (clientFieldValuesEqual(normalizedCurrent, normalizedIncoming)) return false;
+        return true;
       });
       if (conflictFields.length) {
         return jsonResponse({

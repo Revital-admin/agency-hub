@@ -7356,9 +7356,30 @@ function commitDatabaseToCloud() {
       // they're still in changedFields above (and so still get written/
       // merged normally below), just never flagged as the reason a save
       // was rejected.
+      //
+      // Bug fix (Sep 2026 - "conflict banner fires on a field I never
+      // touched, while someone else is editing a DIFFERENT field in the
+      // same section"): changedFields above is computed from `local`
+      // (cleanDb[name]), which reflects whatever this tab's live Firestore
+      // listener has synced in - including another admin tab's concurrent
+      // writes to completely different fields. The moment that listener
+      // updates local[key] to match a remote write, local[key] no longer
+      // equals this tab's frozen baseline[key], so that key lands in
+      // changedFields even though nobody typed into it on THIS tab. The
+      // old check then compared serverNow[key] to baseline[key] - which
+      // also differs, since serverNow already reflects that same remote
+      // write - so the field got flagged as a conflict. But at that point
+      // local[key] and serverNow[key] actually AGREE (both reflect the
+      // other tab's write); saving would just write back the same value
+      // already on the server, not clobber anything. Added this second
+      // check so a key only counts as conflicting when this tab's local
+      // value would genuinely overwrite a server value it doesn't already
+      // match - a stale baseline alone (with local and server in
+      // agreement) is not a real conflict.
       const conflictFields = changedFields.filter(key =>
         ATTRIBUTION_ONLY_FIELDS.indexOf(key) === -1 &&
-        !clientFieldValuesEqual(serverNow[key], baseline[key])
+        !clientFieldValuesEqual(serverNow[key], baseline[key]) &&
+        !clientFieldValuesEqual(serverNow[key], local[key])
       );
       // serverNow kept on the result (not just conflictFields) for the
       // post-merge size guard further down, which needs the server's
