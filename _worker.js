@@ -5312,7 +5312,28 @@ const CLIENT_FIELD_SECTIONS = {
   testimonialRequest: "retention-social-proof", // Testimonial Tracker
 
   kickoffPrep: "sales-pipeline", deliveryHandoff: "sales-pipeline", // Kickoff Prep (same tool, two keys)
-  welcomeGuide: "agency-globals" // Client Welcome Guide
+  welcomeGuide: "agency-globals", // Client Welcome Guide
+
+  // Second audit pass (Oct 2026) - same bug class, found by grepping every
+  // tool's app.js for `client.X =` / `parentClient.X =` and cross-checking
+  // against this map, rather than relying on the first pass's narrower
+  // search.
+  ninetyDayPlan: "agency-globals", // 90-Day Plan Builder
+  weeklyCheckins: "reporting-health", lastTestimonialAskSentAt: "reporting-health", // Weekly Account Check-in (both keys, same tool)
+  seoRankTracker: "reporting-health", // SEO Rank Tracker
+  contentCalendar: "content-creation", emailCampaigns: "content-creation", // Content Calendar / Email Campaign Tracker
+  timeline: "account-ops", timelines: "account-ops", timelinesInitialized: "account-ops", // Timeline Scheduler (3 keys, same tool)
+  qcLog: "account-ops", // QC Checklist
+  caseStudies: "retention-social-proof", // Case Study Builder
+  // Budget Pacing Tracker's nav button is deliberately listed under BOTH
+  // "Ad Accounts & Access" and "Finance" in the sidebar, but this map only
+  // supports one section per field - a teammate granted only
+  // ad-accounts-access (and not finance) won't see this field even though
+  // the sidebar suggests they should be able to. Picked "finance" as the
+  // more specific home; flagging this as a known limitation of the
+  // single-section design rather than silently guessing it's fine.
+  budgetPacingList: "finance",
+  adAccountSetup: "ad-accounts-access" // Ad Account Setup
 
   // Note: clientPulseFeedback (client-submitted satisfaction history, read
   // by Agency Health Dashboard) deliberately left out of this map for now -
