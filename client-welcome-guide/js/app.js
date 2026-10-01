@@ -251,7 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Same fix as Intake Request, but this template has TWO .pdf-page
       // divs stacked (page-1 and page-2), so the forced height is two
       // full pages tall (816x2112 CSS px at 96dpi) instead of one.
-      html2canvas:  { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 },
+      html2canvas:  { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
       jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
       // pagebreak avoid-all forces page-break-inside:avoid onto every
       // single element in the container, which turned out to conflict
@@ -523,7 +523,7 @@ document.addEventListener('DOMContentLoaded', () => {
         margin: 0,
         filename: `Welcome_Guide_${clientNameForFile}.pdf`,
         image: { type: 'jpeg', quality: 0.92 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
         jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
       };
 
@@ -553,7 +553,7 @@ document.addEventListener('DOMContentLoaded', () => {
               margin: 0,
               filename: `90_Day_Plan_${planClientName.replace(/\s+/g, '_')}.pdf`,
               image: { type: 'jpeg', quality: 0.92 },
-              html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 },
+              html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
               jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
             };
             const planDataUri = await html2pdf().set(planOpt).from(planContainer).outputPdf('datauristring');

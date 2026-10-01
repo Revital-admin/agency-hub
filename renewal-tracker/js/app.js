@@ -486,7 +486,7 @@ if (emailToClientSendBtn) {
       margin: 0,
       filename: `Renewal_Notice_${clientName.replace(/\s+/g, '_')}.pdf`,
       image: { type: 'jpeg', quality: 0.92 },
-      html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0 },
+      html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
       jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
     };
 

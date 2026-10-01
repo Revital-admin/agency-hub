@@ -218,7 +218,7 @@ function buildChangeOrderPdfPayload(entry) {
     margin: 0,
     filename: `${entry.clientName.replace(/\s+/g, '_')}_Change_Order_${entry.dateCreated || todayStr()}.pdf`,
     image: { type: 'jpeg', quality: 0.95 },
-    html2canvas: { scale: 2, letterRendering: true, useCORS: true },
+    html2canvas: { scale: 2, letterRendering: true, useCORS: true, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
     jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
   };
 

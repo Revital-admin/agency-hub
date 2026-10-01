@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
       margin:       0.5,
       filename:     `Marketing_Budget_${cName.replace(/\s+/g, '_')}.pdf`,
       image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2 },
+      html2canvas:  { scale: 2, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
       jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
     };
     if (typeof html2pdf === 'undefined') {

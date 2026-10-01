@@ -414,6 +414,21 @@ function downloadPDF() {
     span.style.fontSize = 'inherit';
     span.style.display = 'inline-block';
     span.style.width = '100%';
+    // Bug fix (Oct 2026 - "words become unreadable because of colors on
+    // different backgrounds in PDF downloads"): this span used to only
+    // copy font-family/size from the replaced input/textarea, never its
+    // actual text color or background. Most inputs here get their
+    // readable color from sitting on an opaque input background
+    // (--bg-input) or the dark page body behind a transparent card -
+    // neither of which this bare span had, so once html2canvas flattened
+    // everything onto its own plain canvas, user-typed text (exactly the
+    // content this swap exists to preserve) was the most likely thing to
+    // end up unreadable. Copy the real computed values across instead of
+    // relying on inheritance.
+    const computedInputStyle = getComputedStyle(el);
+    span.style.color = computedInputStyle.color;
+    span.style.backgroundColor = computedInputStyle.backgroundColor;
+    span.style.padding = computedInputStyle.padding;
     let val = (el.value || '').trim();
     if (!val) {
       span.innerHTML = '<span style="color: #94a3b8; font-style: italic;">N/A</span>';
@@ -435,7 +450,7 @@ function downloadPDF() {
     margin:       0.5,
     filename:     'Competitor_Analysis.pdf',
     image:        { type: 'jpeg', quality: 0.92 },
-    html2canvas:  { scale: 2, letterRendering: true, useCORS: true },
+    html2canvas:  { scale: 2, letterRendering: true, useCORS: true, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
     jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' }
   };
   
