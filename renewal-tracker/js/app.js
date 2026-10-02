@@ -304,49 +304,48 @@ function formatDateNice(dateStr) {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function buildRenewalNoticeHtml(clientName, rec, config) {
+// Oct 2026 rebuild: switched from building an HTML string for
+// html2canvas/html2pdf to screenshot, to the shared RevitalPDF module -
+// see ../shared/pdf-report.js for the full rationale. Returns the `r`
+// wrapper (not a saved/downloaded file) so the "Email to Client" send flow
+// below can pull a base64 data URI out of it via r.doc.output(...).
+function buildRenewalNoticeReport(clientName, rec, config) {
+  if (typeof window.RevitalPDF === 'undefined') {
+    throw new Error('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
+  }
   const daysUntil = daysBetween(todayStr(), rec.renewalDate);
   const daysLabel = daysUntil >= 0 ? `${daysUntil} day${daysUntil === 1 ? '' : 's'}` : `${Math.abs(daysUntil)} day${Math.abs(daysUntil) === 1 ? '' : 's'} overdue`;
   const amName = config.accountManagerName || 'Your Revital Productions Account Manager';
   const amEmail = config.accountManagerEmail || '';
 
-  return `
-    <div class="pdf-page" id="renewal-pdf-page">
-      <img src="../logo.png" class="pdf-logo" alt="Revital Hub">
-      <div class="pdf-title">Renewal Notice</div>
-      <div class="pdf-subtitle">${clientName} &mdash; Contract Renewal Summary</div>
+  const r = RevitalPDF.create({ reportTitle: 'RENEWAL NOTICE', companyName: clientName });
 
-      <div class="pdf-h2">Renewal Details</div>
-      <div class="renewal-info-grid">
-        <div class="renewal-info-item">
-          <div class="label">Renewal Date</div>
-          <div class="value">${formatDateNice(rec.renewalDate)}</div>
-        </div>
-        <div class="renewal-info-item">
-          <div class="label">Days Until Renewal</div>
-          <div class="value">${daysLabel}</div>
-        </div>
-        <div class="renewal-info-item">
-          <div class="label">Contract Length</div>
-          <div class="value">${rec.contractLengthMonths || 12} months</div>
-        </div>
-        <div class="renewal-info-item">
-          <div class="label">Status</div>
-          <div class="value">${rec.status || 'On Track'}</div>
-        </div>
-      </div>
+  r.coverPage({
+    title: 'Renewal Notice',
+    subLine: 'Contract Renewal Summary',
+  });
 
-      ${rec.notes ? `
-      <div class="pdf-h2">Notes</div>
-      <div class="renewal-notes-box">${escapeHtmlLocal(rec.notes)}</div>
-      ` : ''}
+  r.newPage();
+  r.sectionHeader('Renewal Details');
+  r.tableBlock(
+    ['Item', 'Detail'],
+    [
+      ['Renewal Date', formatDateNice(rec.renewalDate)],
+      ['Days Until Renewal', daysLabel],
+      ['Contract Length', `${rec.contractLengthMonths || 12} months`],
+      ['Status', rec.status || 'On Track'],
+    ],
+    [r.CONTENT_W * 0.4, r.CONTENT_W * 0.6]
+  );
 
-      <div class="renewal-am-card">
-        Questions about your renewal? Reach out to your account manager,<br>
-        <strong>${escapeHtmlLocal(amName)}</strong>${amEmail ? ` &middot; ${escapeHtmlLocal(amEmail)}` : ''}
-      </div>
-    </div>
-  `;
+  if (rec.notes) {
+    r.paragraph('Notes', { bold: true, size: 10.5, spaceAfter: 6 });
+    r.paragraph(rec.notes, { spaceAfter: 16 });
+  }
+
+  r.calloutBox('Questions about your renewal?', `Reach out to your account manager, ${amName}${amEmail ? ' (' + amEmail + ')' : ''}.`);
+
+  return r;
 }
 
 function escapeHtmlLocal(str) {
@@ -470,31 +469,19 @@ async function openEmailToClientPanel(clientName) {
 if (emailToClientSendBtn) {
   emailToClientSendBtn.addEventListener('click', async () => {
     if (!currentEmailContext || !currentEmailContext.from) return;
-    if (typeof html2pdf === 'undefined') {
-      alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
-      return;
-    }
 
     emailToClientSendBtn.disabled = true;
     emailToClientSendBtn.textContent = 'Generating PDF...';
     if (emailToClientStatus) emailToClientStatus.textContent = '';
 
     const { clientName, rec, config } = currentEmailContext;
-    pdfContainer.innerHTML = buildRenewalNoticeHtml(clientName, rec, config);
-
-    const opt = {
-      margin: 0,
-      filename: `Renewal_Notice_${clientName.replace(/\s+/g, '_')}.pdf`,
-      image: { type: 'jpeg', quality: 0.92 },
-      html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-
-    const exportContainer = document.createElement('div');
-    exportContainer.innerHTML = pdfContainer.innerHTML;
+    const filename = `Renewal_Notice_${clientName.replace(/\s+/g, '_')}.pdf`;
 
     try {
-      const dataUri = await html2pdf().set(opt).from(exportContainer).outputPdf('datauristring');
+      const r = buildRenewalNoticeReport(clientName, rec, config);
+      // jsPDF's own datauristring output (replaces html2pdf's
+      // outputPdf('datauristring') - same base64-after-the-comma shape).
+      const dataUri = r.doc.output('datauristring');
       const base64 = dataUri.slice(dataUri.indexOf(',') + 1);
       if (!base64) throw new Error('PDF generation produced no data');
 
@@ -508,7 +495,7 @@ if (emailToClientSendBtn) {
           subject: emailToClientSubject.value,
           body: emailToClientBody.value,
           from: currentEmailContext.from,
-          attachments: [{ filename: opt.filename, content: base64 }]
+          attachments: [{ filename: filename, content: base64 }]
         })
       });
       const data = await res.json().catch(() => ({}));
