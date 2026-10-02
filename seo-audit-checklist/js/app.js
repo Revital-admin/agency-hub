@@ -389,105 +389,46 @@ function attachEvents() {
   }
 
   // Download PDF report button
-  
+  // Oct 2026 rebuild: switched from html2canvas/html2pdf to the shared
+  // RevitalChecklistPDF module (../shared/checklist-pdf.js, built on top of
+  // ../shared/pdf-report.js). Same rationale as the competitor-analysis
+  // tools: html2canvas's backgroundColor option was silently ignored and
+  // its page-slicing cut content mid-sentence at page breaks. This also
+  // fixes a latent bug in the old renderer - it read `sub.text`, which
+  // doesn't exist on this data model (it's `sub.label`), so every task row
+  // in the old PDF printed "undefined".
   const downloadBtn = document.getElementById('downloadPdfBtn');
   if (downloadBtn) {
-    downloadBtn.addEventListener('click', async () => {
+    downloadBtn.addEventListener('click', () => {
+      if (typeof window.RevitalChecklistPDF === 'undefined') {
+        alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
+        return;
+      }
       downloadBtn.disabled = true;
       const origText = downloadBtn.innerHTML;
       downloadBtn.innerHTML = "⏳ Generating...";
 
-      const stats = getStats();
-      const targetTitle = state.targetUrl ? state.targetUrl : "Client Website / Project";
-
-      let stepsHtml = '';
-      STEPS.forEach((step, idx) => {
-        let tasksHtml = '';
-        step.subs.forEach(sub => {
-          const isChecked = state.checked[sub.id];
-          const note = state.notes[sub.id];
-          
-          let statusHtml = isChecked 
-            ? '<span style="color:#10b981; font-weight:bold;">[PASS]</span>' 
-            : '<span style="color:#f68d5f; font-weight:bold;">[ACTION REQUIRED]</span>';
-            
-          let noteHtml = note ? `<div style="background:#f1f5f9; padding:10px; margin-top:5px; border-left:3px solid #3b82f6; font-size:12px; color:#475569;"><strong>Notes:</strong> ${note}</div>` : '';
-
-          tasksHtml += `
-            <div style="border-bottom:1px solid #e2e8f0; padding:12px 0;">
-              <div style="display:flex; justify-content:space-between;">
-                <div style="font-size:14px; font-weight:500; color:#1e293b;">${sub.text}</div>
-                <div style="font-size:12px;">${statusHtml}</div>
-              </div>
-              ${noteHtml}
-            </div>
-          `;
-        });
-
-        stepsHtml += `
-          <div style="margin-bottom:30px;">
-            <h2 style="font-size:18px; color:#0f172a; border-bottom:2px solid #e2e8f0; padding-bottom:8px; margin-bottom:10px;">Step ${idx+1}: ${step.title}</h2>
-            ${tasksHtml}
-          </div>
-        `;
-      });
-
-      const container = document.createElement('div');
-      container.style.fontFamily = "'Inter', sans-serif, Arial";
-      container.style.color = "#1e293b";
-      container.style.fontSize = "14px";
-      container.style.lineHeight = "1.6";
-      container.style.width = "100%";
-
-      const style = `
-        <style>
-          .box, .col, .score-box, tr, td, h2, h3 { page-break-inside: avoid; }
-
-          .page { padding: 40px; box-sizing: border-box; background: white; page-break-after: always; position: relative; }
-          .page:last-child { page-break-after: auto; }
-          h1 { font-size: 28px; font-weight: 700; margin-bottom: 5px; color: #0f172a; border-bottom: 4px solid #f59e0b; padding-bottom: 20px;}
-          p { margin-bottom: 15px; color:#475569; }
-          .logo { height: 50px; width: 144px; object-fit: contain; margin-bottom: 40px;  }
-          .score-box { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:20px; margin-bottom:30px; text-align:center;}
-          .score-val { font-size:36px; font-weight:bold; color:#3b82f6; }
-        </style>
-      `;
-
-      container.innerHTML = `
-        ${style}
-        <div class="page">
-          <img src="assets/logo.png" onerror="this.src='../logo.png'" alt="Revital Hub" class="logo">
-          <h1>Audit Report: ${document.title.split('—')[0].trim() || 'Checklist'}</h1>
-          <p><strong>Target:</strong> ${targetTitle}</p>
-          <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
-          
-          <div class="score-box">
-            <div style="font-size:14px; text-transform:uppercase; font-weight:600; color:#64748b; margin-bottom:5px;">Overall Score</div>
-            <div class="score-val">${stats.pct}%</div>
-            <div style="font-size:13px; color:#475569; margin-top:5px;">${stats.doneTasks} of ${stats.totalTasks} items completed</div>
-          </div>
-
-          ${stepsHtml}
-        </div>
-      `;
-
       try {
-        const opt = {
-          margin:       0,
-          filename:     `Audit_Report_${new Date().toISOString().split('T')[0]}.pdf`,
-          image:        { type: 'jpeg', quality: 0.92 },
-          html2canvas:  { scale: 2, letterRendering: true, useCORS: true, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-          jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-        };
-        
-        if (typeof html2pdf !== 'undefined') {
-          await html2pdf().set(opt).from(container).save();
-        } else {
-          alert("PDF library failed to load.");
-        }
-      } catch(e) {
-        console.error("PDF Error:", e);
-        alert("An error occurred generating the PDF.");
+        const stats = getStats();
+        const companyName = (isEmbedded && parentClient && parentClient.name) ? parentClient.name : 'Client';
+        const targetValue = state.targetUrl ? state.targetUrl : 'Client Website / Project';
+
+        window.RevitalChecklistPDF.build({
+          reportTitle: 'SEO AUDIT',
+          companyName: companyName,
+          title: 'SEO Audit Checklist',
+          targetLabel: 'Website',
+          targetValue: targetValue,
+          dateVal: new Date().toLocaleDateString(),
+          stats: { pct: stats.pct, doneTasks: stats.doneTasks, totalTasks: stats.totalTasks },
+          STEPS: STEPS,
+          checked: state.checked,
+          notes: state.notes,
+          filename: `SEO_Audit_${(companyName || 'Client').replace(/[^a-z0-9]+/gi, '_')}.pdf`,
+        });
+      } catch (err) {
+        console.error('PDF generation failed:', err);
+        alert('PDF generation failed: ' + (err && err.message ? err.message : err));
       }
 
       downloadBtn.disabled = false;

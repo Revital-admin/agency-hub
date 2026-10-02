@@ -65,6 +65,37 @@
     const reportTitle = (opts.reportTitle || 'REPORT').toUpperCase();
     const companyName = opts.companyName || 'Client';
 
+    // jsPDF's standard fonts (Helvetica etc.) use WinAnsiEncoding (cp1252),
+    // which happens to special-case common "smart" punctuation - em/en
+    // dashes, curly quotes, the bullet, ellipsis - so those render fine.
+    // Arrows, checkmarks, emoji, and most other symbols outside Latin-1 are
+    // NOT in that encoding and silently render as garbage characters (found
+    // Oct 2026 via a real content-audit item containing "→", which rendered
+    // as "!'" in the PDF). Replace the common offenders with ASCII
+    // equivalents and strip anything else outside the supported range
+    // before it ever reaches doc.text()/splitTextToSize().
+    const ARROW_MAP = {
+      '→': '->', '←': '<-', '↔': '<->',
+      '⇒': '=>', '⇐': '<=', '⇔': '<=>',
+      '✓': 'v', '✔': 'v', '✗': 'x', '✘': 'x',
+    };
+    function sanitizeText(s) {
+      if (s === null || s === undefined) return s;
+      if (Array.isArray(s)) return s.map(sanitizeText);
+      // NOTE: astral-plane emoji (outside the Basic Multilingual Plane, e.g.
+      // U+1F300+) aren't stripped here - matching them correctly requires
+      // the regex /u flag with \u{...} syntax, and a plain 4-digit \uXXXX
+      // escape for a 5-digit code point silently misparses into a stray
+      // literal character plus a huge unintended range (this broke the
+      // first version of this function - it deleted almost all ASCII text).
+      // Arrows/checkmarks (the actual bug this was written for) and BMP
+      // dingbats/misc-technical symbols are covered; that's the known
+      // real-world case so far.
+      return String(s)
+        .replace(/[←-⇿✓✔✗✘]/g, function (ch) { return ARROW_MAP[ch] || ''; })
+        .replace(/[⌀-➿]/g, ''); // misc technical / dingbats (BMP only)
+    }
+
     function footer() {
       doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor.apply(doc, GRAY);
       doc.text(companyName.toUpperCase() + '   |   ' + pageNum, PAGE_W - MARGIN, PAGE_H - 30, { align: 'right' });
@@ -83,6 +114,7 @@
       if (y + h > PAGE_H - MARGIN - 16) newPage();
     }
     function sectionHeader(title) {
+      title = sanitizeText(title);
       ensureSpace(70);
       doc.setFillColor.apply(doc, DARK);
       doc.rect(MARGIN, y, CONTENT_W * 0.62, 24, 'F');
@@ -102,6 +134,7 @@
       y += 26;
     }
     function paragraph(text, o) {
+      text = sanitizeText(text);
       o = o || {};
       const size = o.size || 10;
       doc.setFont('helvetica', o.bold ? 'bold' : (o.italic ? 'italic' : 'normal'));
@@ -116,6 +149,7 @@
       y += lines.length * lh + (o.spaceAfter !== undefined ? o.spaceAfter : 10);
     }
     function calloutBox(label, text, accent) {
+      label = sanitizeText(label); text = sanitizeText(text);
       accent = accent || ACCENT;
       doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
       const bodyLines = doc.splitTextToSize(text, CONTENT_W - 30);
@@ -134,6 +168,7 @@
       y += boxH + 16;
     }
     function bulletList(items, o) {
+      items = (items || []).map(sanitizeText);
       o = o || {};
       doc.setFont('helvetica', 'normal'); doc.setFontSize(o.size || 10);
       // Lookahead: reserve space for the whole list where reasonably possible
@@ -157,6 +192,8 @@
       y += 6;
     }
     function tableBlock(headers, rowsArr, colWidths) {
+      headers = (headers || []).map(sanitizeText);
+      rowsArr = (rowsArr || []).map(function (row) { return row.map(sanitizeText); });
       ensureSpace(26);
       doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
       doc.setFillColor.apply(doc, DARK);
@@ -184,6 +221,7 @@
     // Generic bordered box (SWOT quadrant, positioning cell, etc.) - caller
     // supplies x/width so these can be laid out in a 2-up (or N-up) grid.
     function quadrantBox(x, w, title, text, accent) {
+      title = sanitizeText(title); text = sanitizeText(text);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
       const bodyLines = doc.splitTextToSize(text || 'Not yet filled in.', w - 24);
       const boxH = 34 + bodyLines.length * 13;
@@ -219,11 +257,11 @@
       doc.setFillColor.apply(doc, DARK);
       doc.rect(MARGIN, 100, CONTENT_W, 92, 'F');
       doc.setFont('helvetica', 'bold'); doc.setFontSize(25); doc.setTextColor.apply(doc, WHITE);
-      doc.text(doc.splitTextToSize(companyName.toUpperCase(), CONTENT_W - 40), MARGIN + 20, 100 + 38);
+      doc.text(doc.splitTextToSize(sanitizeText(companyName.toUpperCase()), CONTENT_W - 40), MARGIN + 20, 100 + 38);
       doc.setFontSize(14); doc.setTextColor.apply(doc, ACCENT);
-      doc.text((o.title || reportTitle).toUpperCase(), MARGIN + 20, 100 + 62);
+      doc.text(sanitizeText((o.title || reportTitle).toUpperCase()), MARGIN + 20, 100 + 62);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor.apply(doc, LIGHT);
-      if (o.subLine) doc.text(o.subLine, MARGIN + 20, 100 + 80);
+      if (o.subLine) doc.text(sanitizeText(o.subLine), MARGIN + 20, 100 + 80);
 
       y = 100 + 92 + 50;
       if (o.objective) calloutBox('Objective', o.objective, ACCENT);
@@ -231,13 +269,13 @@
         doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor.apply(doc, DARK);
         doc.text('PREPARED FROM:', MARGIN, y);
         doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
-        const lines = doc.splitTextToSize(o.preparedFrom, CONTENT_W - 100);
+        const lines = doc.splitTextToSize(sanitizeText(o.preparedFrom), CONTENT_W - 100);
         doc.text(lines, MARGIN + 92, y);
         y += lines.length * 13 + 10;
       }
       if (o.note) {
         doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5); doc.setTextColor.apply(doc, GRAY);
-        doc.text(doc.splitTextToSize(o.note, CONTENT_W), MARGIN, y);
+        doc.text(doc.splitTextToSize(sanitizeText(o.note), CONTENT_W), MARGIN, y);
       }
     }
     function save(filename) {
@@ -261,6 +299,7 @@
       quadrantRow: quadrantRow,
       coverPage: coverPage,
       save: save,
+      sanitizeText: sanitizeText,
     };
   }
 
