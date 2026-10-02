@@ -11,7 +11,7 @@ let socialComp = null;
 if (isEmbedded) {
   parentClient = window.parent.getActiveClient();
   if (parentClient) {
-    if (!parentClient.socialComp) { parentClient.socialComp = { stars: [0,0,0], names: ["","",""], rows: {}, swot: {}, insight: "" }; }
+    if (!parentClient.socialComp) { parentClient.socialComp = { stars: [0,0,0], names: ["","",""], rows: {}, swot: {}, insight: "", objective: "", priorities: "", conclusion: "" }; }
     socialComp = parentClient.socialComp;
     if (!socialComp.stars) {
       socialComp.stars = [0, 0, 0];
@@ -314,107 +314,159 @@ if (isEmbedded) {
   }
 })();
 
-/* ── Download as PDF ── */
+/* ── Objective / Priorities / Bottom Line sync (client-presentable PDF
+   report, Oct 2026) — plain textareas bound via .value, not contenteditable.
+   See website-competitor-analysis/js/app.js for why contenteditable spans
+   are unsafe for this: a placeholder sentence got literally concatenated
+   into real saved data earlier this session. ── */
+(function initReportFields() {
+  const fields = [
+    { id: 'objectiveField', key: 'objective' },
+    { id: 'prioritiesField', key: 'priorities' },
+    { id: 'conclusionField', key: 'conclusion' },
+  ];
+  fields.forEach(function(f) {
+    const el = document.getElementById(f.id);
+    if (!el) return;
+    if (isEmbedded && socialComp) {
+      el.value = socialComp[f.key] || '';
+      el.addEventListener('input', function() {
+        socialComp[f.key] = el.value;
+        window.parent.saveDatabase();
+      });
+    }
+  });
+})();
+
+/* ── Download as PDF ──
+   Oct 2026 rebuild: switched from html2canvas/html2pdf (a screenshot of the
+   on-screen tool) to the shared native-jsPDF report builder
+   (../shared/pdf-report.js), same rationale as website-competitor-analysis:
+   html2canvas's backgroundColor option was silently ignored (white-on-white
+   text) and its page-slicing cut content mid-sentence at page breaks. jsPDF
+   draws real text with real pagination, and restructures the export into an
+   actual client-presentable report instead of a screenshot of the editing UI. */
 function downloadPDF() {
-  const container = document.querySelector('main.container') || document.querySelector('.page');
-  if (!container) {
-    window.print();
+  if (typeof window.RevitalPDF === 'undefined') {
+    alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
     return;
   }
 
   const pdfBtn = document.querySelector('.download-pdf-btn');
   const origText = pdfBtn ? pdfBtn.innerHTML : '';
-  if (pdfBtn) {
-    pdfBtn.disabled = true;
-    pdfBtn.innerHTML = "⏳ Generating...";
-  }
+  if (pdfBtn) { pdfBtn.disabled = true; pdfBtn.innerHTML = '⏳ Generating...'; }
 
-  // Hide UI elements
-  const hides = container.querySelectorAll('.action-row, .controls-row, .prompt-toggle, .prompt-panel, button');
-  hides.forEach(el => el.style.display = 'none');
+  try {
+    const companyName = (document.getElementById('company') && document.getElementById('company').value.trim()) || 'Client';
+    const dateVal = (document.getElementById('date') && document.getElementById('date').value.trim()) || '';
+    const nicheVal = (document.getElementById('niche') && document.getElementById('niche').value.trim()) || '';
 
-  // The on-screen nav branding is a generic "REVITAL HUB" icon+wordmark
-  // (see logo.js), not the actual client-facing logo used on every other
-  // exported PDF in the Hub. Swap in the real logo just for the capture,
-  // then restore the nav version afterward so the live tool is unaffected.
-  const logoContainer = container.querySelector('.brand-logo-container');
-  const origLogoHTML = logoContainer ? logoContainer.innerHTML : null;
-  if (logoContainer) {
-    logoContainer.innerHTML = '<img src="../logo.png" alt="Revital Hub" style="height: 40px; width: 115px; object-fit: contain;">';
-  }
+    const names = (socialComp && socialComp.names) ? socialComp.names.map(function(n, i) { return (n || '').trim() || ('Competitor ' + String.fromCharCode(65 + i)); }) : ['Competitor A', 'Competitor B', 'Competitor C'];
+    const tiers = ['Top Competitor', 'Mid Competitor', 'Low Competitor'];
+    const stars = (socialComp && socialComp.stars) ? socialComp.stars : [0, 0, 0];
 
-  // Replace inputs/textareas with their text values temporarily
-  const inputs = container.querySelectorAll('input, textarea');
-  const replacements = [];
-  inputs.forEach(el => {
-    const span = document.createElement('span');
-    span.style.whiteSpace = 'pre-wrap';
-    span.style.fontFamily = 'inherit';
-    span.style.fontSize = 'inherit';
-    span.style.display = 'inline-block';
-    span.style.width = '100%';
-    // Bug fix (Oct 2026 - "words become unreadable because of colors on
-    // different backgrounds in PDF downloads"): this span used to only
-    // copy font-family/size from the replaced input/textarea, never its
-    // actual text color or background. Most inputs here get their
-    // readable color from sitting on an opaque input background
-    // (--bg-input) or the dark page body behind a transparent card -
-    // neither of which this bare span had, so once html2canvas flattened
-    // everything onto its own plain canvas, user-typed text (exactly the
-    // content this swap exists to preserve) was the most likely thing to
-    // end up unreadable. Copy the real computed values across instead of
-    // relying on inheritance.
-    const computedInputStyle = getComputedStyle(el);
-    span.style.color = computedInputStyle.color;
-    span.style.backgroundColor = computedInputStyle.backgroundColor;
-    span.style.padding = computedInputStyle.padding;
-    let val = (el.value || '').trim();
-    if (!val) {
-      span.innerHTML = '<span style="color: #94a3b8; font-style: italic;">N/A</span>';
-    } else {
-      span.innerHTML = val.replace(/\\n/g, '<br>');
-    }
-    
-    // For date or company inputs at top
-    if (el.type === 'date' || el.id === 'company') {
-      span.style.fontWeight = 'bold';
-    }
+    const objective = (socialComp && socialComp.objective) ? socialComp.objective.trim() : '';
+    const prioritiesRaw = (socialComp && socialComp.priorities) ? socialComp.priorities.trim() : '';
+    const priorities = prioritiesRaw ? prioritiesRaw.split('\n').map(function(s) { return s.trim(); }).filter(Boolean) : [];
+    const conclusion = (socialComp && socialComp.conclusion) ? socialComp.conclusion.trim() : '';
+    const insightText = (socialComp && socialComp.insight) ? socialComp.insight.trim() : '';
+    const swot = (socialComp && socialComp.swot) || {};
+    const rowsData = (socialComp && socialComp.rows) || {};
+    function rowText(key, idx) { return (rowsData[key] && rowsData[key][idx]) ? rowsData[key][idx].trim() : ''; }
 
-    el.parentNode.insertBefore(span, el);
-    el.style.display = 'none';
-    replacements.push({ el, span });
-  });
+    const r = RevitalPDF.create({ reportTitle: 'SOCIAL MEDIA COMPETITOR ANALYSIS', companyName: companyName });
+    const doc = r.doc; const C = r.colors;
 
-  const opt = {
-    margin:       0.5,
-    filename:     'Competitor_Analysis.pdf',
-    image:        { type: 'jpeg', quality: 0.92 },
-    html2canvas:  { scale: 2, letterRendering: true, useCORS: true, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-    jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' }
-  };
-  
-  // Wait a tick for DOM to update
-  setTimeout(() => {
-    if (typeof html2pdf === 'undefined') {
-      alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
-      if (pdfBtn) { pdfBtn.disabled = false; pdfBtn.innerHTML = origText || 'Download PDF'; }
-      if (generateBtn) { generateBtn.disabled = false; generateBtn.innerHTML = 'Download PDF'; }
-      return;
-    }
-    html2pdf().set(opt).from(container).save().then(() => {
-      // Restore UI
-      hides.forEach(el => el.style.display = '');
-      replacements.forEach(r => {
-        r.span.remove();
-        r.el.style.display = '';
-      });
-      if (logoContainer) logoContainer.innerHTML = origLogoHTML;
-      if (pdfBtn) {
-        pdfBtn.disabled = false;
-        pdfBtn.innerHTML = origText;
-      }
+    // COVER
+    r.coverPage({
+      title: 'Social Media Competitor Analysis',
+      subLine: [nicheVal, dateVal].filter(Boolean).join('   |   '),
+      objective: objective || ('Identify the strongest social-media practices in the competitive set and translate them into a focused, ownable strategy for ' + companyName + '.'),
+      preparedFrom: 'Social media competitor research for ' + companyName + ' against ' + names.filter(Boolean).join(', ') + '.',
+      note: 'Note: this is a qualitative social-presence audit synthesized from manual review, not an automated analytics report.',
     });
-  }, 200);
+
+    // EXECUTIVE OVERVIEW
+    r.newPage();
+    r.sectionHeader('Executive Overview');
+    r.paragraph('What the competitive set reveals about ' + companyName + "'s social media opportunity", { bold: true, size: 11, spaceAfter: 8 });
+    if (insightText) r.calloutBox('Core Finding', insightText);
+    r.paragraph('Competitive lessons', { bold: true, size: 10.5, spaceAfter: 6 });
+    const lessonsRows = names.map(function(name, i) {
+      return [name, rowText('style', i) || rowText('top-content', i), rowText('takeaway', i)];
+    });
+    r.tableBlock(['Brand', 'What it does especially well', 'Lesson for ' + companyName], lessonsRows, [r.CONTENT_W * 0.22, r.CONTENT_W * 0.4, r.CONTENT_W * 0.38]);
+    if (priorities.length) {
+      r.paragraph('Immediate priorities', { bold: true, size: 10.5, spaceAfter: 6 });
+      r.bulletList(priorities);
+    }
+
+    // COMPETITOR FINDINGS (one section per competitor)
+    r.newPage();
+    r.sectionHeader('Competitor Findings');
+    names.forEach(function(name, i) {
+      r.ensureSpace(60);
+      doc.setFillColor.apply(doc, C.DARK);
+      doc.rect(r.MARGIN, r.y, r.CONTENT_W, 22, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor.apply(doc, C.WHITE);
+      doc.text(name, r.MARGIN + 10, r.y + 15);
+      const starLabel = stars[i] ? (stars[i] + ' / 5') : '';
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+      doc.text([tiers[i], starLabel].filter(Boolean).join('   |   '), r.MARGIN + r.CONTENT_W - 10, r.y + 15, { align: 'right' });
+      r.y = r.y + 22 + 10;
+
+      const highlightRows = ['followers', 'frequency', 'engagement', 'top-content', 'identity'];
+      const bullets = highlightRows.map(function(key) {
+        const row = TABLE_ROWS.find(function(rr) { return rr.key === key; });
+        const label = row ? row.label : key;
+        const text = rowText(key, i);
+        return text ? (label + ': ' + text) : null;
+      }).filter(Boolean);
+      r.bulletList(bullets);
+
+      const takeaway = rowText('takeaway', i);
+      if (takeaway) r.calloutBox(name.toUpperCase() + ' TAKEAWAY', takeaway);
+      r.y = r.y + 6;
+    });
+
+    // SWOT / POSITIONING
+    r.newPage();
+    r.sectionHeader('SWOT — Gaps & Opportunities');
+    r.ensureSpace(140);
+    r.quadrantRow([
+      { title: 'Strengths (You vs. Them)', text: swot.s, accent: C.GREEN },
+      { title: 'Weaknesses (To Address)', text: swot.w, accent: C.RED },
+    ]);
+    r.y += 14;
+    r.ensureSpace(140);
+    r.quadrantRow([
+      { title: 'Opportunities (Market Gaps)', text: swot.o, accent: C.BLUE },
+      { title: 'Threats (To Watch)', text: swot.t, accent: C.PINK },
+    ]);
+    r.y += 24;
+
+    // APPENDIX: FULL CATEGORY COMPARISON
+    r.newPage();
+    r.sectionHeader('Appendix: Full Category Comparison');
+    const appendixRows = TABLE_ROWS.filter(function(rr) { return rr.key !== 'takeaway'; })
+      .map(function(rr) { return [rr.label, rowText(rr.key, 0), rowText(rr.key, 1), rowText(rr.key, 2)]; });
+    r.tableBlock(['Category', names[0], names[1], names[2]], appendixRows, [r.CONTENT_W * 0.22, r.CONTENT_W * 0.26, r.CONTENT_W * 0.26, r.CONTENT_W * 0.26]);
+
+    // CONCLUSION
+    r.newPage();
+    r.sectionHeader('Conclusion');
+    const borrowRows = names.map(function(name, i) { return [rowText('takeaway', i) || '—', name]; });
+    r.tableBlock(['Borrow', 'From'], borrowRows, [r.CONTENT_W * 0.68, r.CONTENT_W * 0.32]);
+    if (conclusion) r.calloutBox('Bottom Line', conclusion);
+    r.paragraph('Prepared for internal strategy discussion.', { italic: true, size: 9, color: C.GRAY });
+
+    r.save((companyName.replace(/[^a-z0-9]+/gi, '_') || 'Social') + '_Competitor_Analysis.pdf');
+  } catch (err) {
+    console.error('PDF generation failed:', err);
+    alert('PDF generation failed: ' + (err && err.message ? err.message : err));
+  } finally {
+    if (pdfBtn) { pdfBtn.disabled = false; pdfBtn.innerHTML = origText; }
+  }
 }
 
 
@@ -456,6 +508,9 @@ function clearAll() {
     socialComp.date = today;
     socialComp.names = ["Competitor A", "Competitor B", "Competitor C"];
     socialComp.insight = "";
+    socialComp.objective = "";
+    socialComp.priorities = "";
+    socialComp.conclusion = "";
     socialComp.swot = { s: "", w: "", o: "", t: "" };
     socialComp.stars = [0, 0, 0];
     

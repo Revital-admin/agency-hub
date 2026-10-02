@@ -41,6 +41,16 @@
       </button>
     </div>
 
+    <!-- ── Objective (client-presentable PDF report, Oct 2026) ──
+         One-line framing sentence that opens the report's cover page. Plain
+         textarea (not contenteditable) - see website-competitor-analysis for
+         why: a contenteditable span's placeholder text got literally
+         concatenated into saved data earlier this session. -->
+    <div class="insight-box" style="margin-bottom: 1.5rem;">
+      <strong>Objective (opens the PDF report):</strong>
+      <textarea id="objectiveField" class="swot-ta" rows="2" placeholder="e.g. Identify the strongest social-media practices in the local competitive set and translate them into a focused, ownable strategy for [Company]."></textarea>
+    </div>
+
     <!-- ── Meta row ── -->
     <div class="meta-row">
       <div class="meta-card">
@@ -101,6 +111,12 @@
 
     <div class="swot-grid" id="swotGrid"></div>
 
+    <!-- ── Immediate Priorities (client-presentable PDF report, Oct 2026) ── -->
+    <div class="insight-box" style="margin-bottom: 1.5rem;">
+      <strong>Immediate Priorities (one per line, PDF report):</strong>
+      <textarea id="prioritiesField" class="swot-ta" rows="4" placeholder="e.g.&#10;Publish on the platform competitors are ignoring.&#10;Fix the posting-frequency gap before the next campaign.&#10;Build 3 proof-of-results clips before competing on followers."></textarea>
+    </div>
+
     <!-- ── Key Takeaway ── -->
     <div class="section-label">Key Takeaway</div>
 
@@ -109,11 +125,23 @@
       <span class="insight-text" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Strategic insight">Write your main conclusion — where to position your company, who to target, and what to do next.</span>
     </div>
 
+    <!-- ── Conclusion / Bottom Line (client-presentable PDF report, Oct 2026) ── -->
+    <div class="insight-box" style="margin-bottom: 1.5rem;">
+      <strong>Bottom Line (closes the PDF report):</strong>
+      <textarea id="conclusionField" class="swot-ta" rows="3" placeholder="e.g. Turn the social presence from scattered posting into one recognizable, consistent voice."></textarea>
+    </div>
+
   </main>
 
-  <script src="js/data.js?v=1"></script>
+  <script src="js/data.js?v=2"></script>
   <script src="js/logo.js?v=1"></script>
-  <script src="js/app.js?v=2"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <!-- Shared PDF report builder (Oct 2026) - see
+       website-competitor-analysis/shared/pdf-report.js for full history. -->
+  <script src="../shared/pdf-report.js?v=1"></script>
+  <script src="js/app.js?v=3"></script>
+  <!-- Oct 2026 rebuild: PDF export switched from html2canvas/html2pdf to
+       native jsPDF vector text, same rationale as website-competitor-analysis
+       (see that tool's index.html comment for the full bug history). -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </body>
 </html>

@@ -20,6 +20,14 @@ const TABLE_ROWS = [
   { key: 'pricing',      label: 'Pricing Model',          placeholder: 'Retainer / project / hourly' },
   { key: 'identity',     label: 'Brand Identity',         placeholder: 'Tone, aesthetic, positioning…' },
   { key: 'target',       label: 'Target Clients',         placeholder: 'SMBs, lifestyle brands…' },
+  // Added for the client-presentable PDF report (Oct 2026) - mirrors the
+  // same row added to website-competitor-analysis. This is the one row
+  // that's an actual conclusion rather than raw audit data: what to borrow
+  // or avoid from each competitor's social presence. Feeds the Executive
+  // Overview "competitive lessons" table, the per-competitor takeaway
+  // callouts, and the Conclusion "Borrow This / From" table in
+  // downloadPDF(), instead of handing the client a wall of comparison cells.
+  { key: 'takeaway',     label: 'Key Takeaway for Us',    placeholder: 'e.g. What should we borrow or avoid from this competitor\'s social presence?' },
 ];
 
 const COMPETITOR_COLORS = {
