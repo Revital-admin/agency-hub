@@ -374,11 +374,16 @@ function downloadPDF() {
     let y = MARGIN;
     let pageNum = 1;
 
-    const DARK = [23, 22, 19];
-    const GOLD = [184, 150, 46];
-    const CREAM = [250, 246, 235];
+    // Revital brand palette (matches the live Hub's own dark theme: --bg-sidebar
+    // #1a1a17, --primary #f68d5f - see root style.css :root). GOLD is kept as
+    // the variable name since every call site below (calloutBox, sectionHeader,
+    // etc. - all written for a dark/accent pairing) refers to it that way, but
+    // it now holds Revital's orange, not a client-brand gold.
+    const DARK = [26, 26, 23];
+    const GOLD = [246, 141, 95];
+    const CREAM = [250, 243, 237];
     const GRAY = [110, 108, 100];
-    const LIGHT = [222, 217, 199];
+    const LIGHT = [240, 219, 204];
     const WHITE = [255, 255, 255];
     const GREEN = [62, 122, 76], RED = [176, 69, 59], BLUE = [59, 111, 160], PINK = [163, 76, 116];
 
