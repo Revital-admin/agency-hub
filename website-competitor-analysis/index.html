@@ -41,6 +41,19 @@
       </button>
     </div>
 
+    <!-- ── Objective (client-presentable PDF report, Oct 2026) ──
+         One-line framing sentence that opens the report's cover page, same
+         role as the "Objective" callout on the reference client report this
+         was built to match. Plain textarea (not contenteditable) - the
+         Strategic Insight box below used to be contenteditable and that's
+         exactly where a placeholder-concatenation data-corruption bug came
+         from this session; textareas with a real .value don't have that
+         failure mode. -->
+    <div class="insight-box" style="margin-bottom: 1.5rem;">
+      <strong>Objective (opens the PDF report):</strong>
+      <textarea id="objectiveField" class="swot-ta" rows="2" placeholder="e.g. Identify the strongest website practices in the local competitive set and translate them into a focused, ownable strategy for [Company]."></textarea>
+    </div>
+
     <!-- ── Meta row ── -->
     <div class="meta-row">
       <div class="meta-card">
@@ -101,6 +114,15 @@
 
     <div class="swot-grid" id="swotGrid"></div>
 
+    <!-- ── Immediate Priorities (client-presentable PDF report, Oct 2026) ──
+         One line per priority - rendered as a bulleted list on the PDF's
+         Executive Overview page, same role as "Immediate priorities" on the
+         reference client report. -->
+    <div class="insight-box" style="margin-bottom: 1.5rem;">
+      <strong>Immediate Priorities (one per line, PDF report):</strong>
+      <textarea id="prioritiesField" class="swot-ta" rows="4" placeholder="e.g.&#10;Clarify the value prop in seconds.&#10;Fix the mobile load-speed gap before launch.&#10;Get 3 real reviews live before competing on trust."></textarea>
+    </div>
+
     <!-- ── Key Takeaway ── -->
     <div class="section-label">Key Takeaway</div>
 
@@ -109,11 +131,34 @@
       <span class="insight-text" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Strategic insight">Write your main conclusion — where to position your website, how to improve conversion, and key features to implement.</span>
     </div>
 
+    <!-- ── Conclusion / Bottom Line (client-presentable PDF report, Oct 2026) ──
+         Closing statement - rendered as the "Bottom Line" callout on the
+         PDF's final page, same role as "Bottom Line" on the reference
+         client report. -->
+    <div class="insight-box" style="margin-bottom: 1.5rem;">
+      <strong>Bottom Line (closes the PDF report):</strong>
+      <textarea id="conclusionField" class="swot-ta" rows="3" placeholder="e.g. Transform the website from a list of services into a single, easy-to-trust booking decision."></textarea>
+    </div>
+
   </main>
 
-  <script src="js/data.js?v=2"></script>
+  <script src="js/data.js?v=3"></script>
   <script src="js/logo.js?v=1"></script>
-  <script src="js/app.js?v=3"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="js/app.js?v=4"></script>
+  <!-- Oct 2026 rebuild: PDF export switched from html2canvas/html2pdf (a
+       screenshot of the on-screen tool) to native jsPDF vector text. Two
+       independent, confirmed bugs in the screenshot approach are structurally
+       impossible with vector text: (1) html2canvas's backgroundColor config
+       option was silently ignored by this bundle, so anything without its own
+       opaque CSS background rendered white-on-white; (2) html2canvas split
+       one long captured image across PDF pages with no awareness of content
+       boundaries, so paragraphs and table cells got sliced mid-sentence at
+       page breaks. jsPDF draws real text with real pagination logic instead
+       of screenshotting pixels, so neither failure mode exists. This also
+       lets the export restructure the content into an actual client-
+       presentable report (cover page, executive overview, per-competitor
+       findings, positioning, conclusion) instead of a screenshot of the
+       editing UI. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </body>
 </html>

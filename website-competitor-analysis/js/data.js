@@ -19,7 +19,14 @@ const TABLE_ROWS = [
   { key: 'load-speed',    label: 'Load Speed & Performance', placeholder: 'e.g. Lighthouse score, desktop vs mobile...' },
   { key: 'tech-stack',    label: 'Technology Stack',        placeholder: 'e.g. Webflow, WordPress, Shopify...' },
   { key: 'social-proof',  label: 'Social Proof & Trust',    placeholder: 'e.g. Testimonials, logos, case studies...' },
-  { key: 'navigation',    label: 'Navigation & Structure',  placeholder: 'e.g. Simple, intuitive menu, internal links...' }
+  { key: 'navigation',    label: 'Navigation & Structure',  placeholder: 'e.g. Simple, intuitive menu, internal links...' },
+  // Added for the client-presentable PDF report (Oct 2026): this is the one
+  // row that's an actual conclusion rather than raw audit data - what to
+  // borrow or avoid from each competitor. Feeds the "Competitor Findings"
+  // takeaway callouts and the Conclusion "Borrow This / From" table in
+  // downloadPDF(), instead of handing the client a wall of undigested
+  // comparison cells.
+  { key: 'takeaway',      label: 'Key Takeaway for Us',     placeholder: 'e.g. What should we borrow or avoid from this competitor?' }
 ];
 
 const COMPETITOR_COLORS = {
