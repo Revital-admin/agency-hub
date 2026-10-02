@@ -230,81 +230,118 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Oct 2026 rebuild: switched from html2canvas/html2pdf screenshotting
+  // the HTML preview (still built above for on-screen display) to the
+  // shared RevitalPDF module, building the PDF directly from the form
+  // fields instead. Factored into a function so the Download PDF button
+  // and the Email to Client send flow below (which needs a data-uri, not
+  // a browser download) share one implementation.
+  function buildWelcomeGuidePdf(clientName) {
+    const portalLink = document.getElementById('portalLink').value || 'https://hub.revitalproductions.com/portal/...';
+    const amName = document.getElementById('amName').value || 'Jane Doe';
+    const amEmail = document.getElementById('amEmail').value || 'jane@revitalproductions.com';
+    const welcomeNote = document.getElementById('welcomeNote').value || `We are thrilled to partner with ${clientName} and can't wait to get started!`;
+    const loomLink = document.getElementById('loomLink').value.trim();
+    const services = Array.from(document.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+
+    const r = RevitalPDF.create({ reportTitle: 'CLIENT WELCOME GUIDE', companyName: clientName });
+    const C = r.colors;
+
+    r.coverPage({
+      title: `Welcome to Revital Hub, ${clientName}!`,
+      subLine: 'Your Official Onboarding Guide',
+      objective: `Hi there! ${welcomeNote}`,
+    });
+
+    if (loomLink) {
+      r.calloutBox('Start Here - Watch Your Portal Walkthrough', 'Before your kick-off call, take a few minutes to watch this short video: ' + loomLink, C.BLUE);
+    }
+
+    r.sectionHeader('Your Dedicated Account Manager');
+    r.paragraph(amName, { bold: true, size: 11, spaceAfter: 2 });
+    r.paragraph(amEmail, { size: 9.5, color: C.GRAY, spaceAfter: 16 });
+
+    r.paragraph("What We're Building For You", { bold: true, size: 10.5, spaceAfter: 6 });
+    if (services.length) {
+      r.bulletList(services);
+    } else {
+      r.bulletList(['Custom Strategy & Execution']);
+    }
+
+    r.paragraph('Access your client portal: ' + portalLink, { size: 9.5, color: C.BLUE, spaceAfter: 10 });
+
+    r.newPage();
+    r.sectionHeader('The First 30 Days');
+    r.calloutBox('Week 1: Kickoff & Intake', 'You fill out our intake form, we grant access to our secure client portal, and we hold our official Kickoff Call to align on goals.');
+    r.calloutBox('Week 2: Strategy & Audits', 'Our team runs comprehensive audits on your existing assets and builds your bespoke Content Strategy Builder.');
+    r.calloutBox('Week 3: Production & Approvals', 'We begin executing the strategy. You will receive the first batch of deliverables in your portal for review and approval.');
+    r.calloutBox('Week 4: Campaign Launch', 'Assets go live. We monitor performance closely and schedule our first Monthly Strategy check-in call.');
+
+    r.sectionHeader('Agency Policies & Boundaries');
+    r.paragraph('Communication', { bold: true, size: 10, spaceAfter: 4 });
+    r.paragraph('All revision requests and feedback must be submitted through your secure Client Portal. This ensures nothing gets lost in email threads or text messages.', { spaceAfter: 12 });
+    r.paragraph('Approvals', { bold: true, size: 10, spaceAfter: 4 });
+    r.paragraph('We require explicit written approval via the portal before any content is published or launched. Verbal approvals are not accepted.', { spaceAfter: 12 });
+    r.paragraph('Response Times', { bold: true, size: 10, spaceAfter: 4 });
+    r.paragraph('Our team works Monday through Friday. You can expect a response to all portal inquiries within 24 business hours.', { spaceAfter: 12 });
+
+    return r;
+  }
+
+  // Shared with the "Also attach 90-Day Plan" option below - mirrors
+  // ninety-day-plan/js/app.js's own buildNinetyDayPlanPdf (that tool's
+  // own PDF rebuild, same Oct 2026 pass) since this is a separate iframe
+  // and can't import that file's function directly. Built from the plain
+  // plan data object (client.ninetyDayPlan) rather than re-parsing HTML.
+  function buildNinetyDayPlanPdfForAttachment(clientName, plan) {
+    const p = plan || {};
+    const name = clientName || 'Client';
+    const r = RevitalPDF.create({ reportTitle: '90-DAY MARKETING ROADMAP', companyName: name });
+    r.coverPage({
+      title: '90-Day Marketing Roadmap',
+      subLine: `${name} — Your First Quarter Plan`,
+      objective: p.planIntro || undefined,
+    });
+    r.newPage();
+    r.sectionHeader('The Roadmap');
+    r.calloutBox('Month 1', p.month1 || 'Priorities to be defined.');
+    r.calloutBox('Month 2', p.month2 || 'Priorities to be defined.');
+    r.calloutBox('Month 3', p.month3 || 'Priorities to be defined.');
+    r.sectionHeader('Channels & Budget');
+    r.paragraph('Recommended Channels', { bold: true, size: 10.5, spaceAfter: 6 });
+    r.paragraph(p.channelRecommendations || 'To be defined.', { spaceAfter: 14 });
+    r.paragraph('Budget Allocation', { bold: true, size: 10.5, spaceAfter: 6 });
+    r.paragraph(p.budgetAllocation || 'To be defined.', { spaceAfter: 14 });
+    r.sectionHeader('Success Criteria');
+    r.tableBlock(['Timeframe', 'What success looks like'], [
+      ['At 3 Months', p.success3mo || 'To be defined.'],
+      ['At 6 Months', p.success6mo || 'To be defined.'],
+      ['At 12 Months', p.success12mo || 'To be defined.'],
+    ], [r.CONTENT_W * 0.25, r.CONTENT_W * 0.75]);
+    return r;
+  }
+
   generateBtn.addEventListener('click', () => {
     const clientName = document.getElementById('clientName').value || 'Client';
-    const opt = {
-      margin:       0,
-      filename:     `Welcome_Guide_${clientName.replace(/\s+/g, '_')}.pdf`,
-      // Same fix as the Intake Request generator: JPEG instead of PNG (no
-      // alpha layer), scale 2 instead of 4, and an explicit pagebreak mode
-      // so html2pdf breaks at the two .pdf-page divs instead of silently
-      // slicing in a mostly-blank extra page whenever content ran a hair
-      // past 11in. Old settings were producing 100MB+ files.
-      image:        { type: 'jpeg', quality: 0.92 },
-      // html2canvas defaults to using the page's current scroll offset
-      // (window.pageYOffset) as the capture origin even for a detached,
-      // never-visible element - forcing scrollX/scrollY to 0 makes it
-      // render as if the page were unscrolled, which is what a detached
-      // capture should always want. Omitting this was the actual cause
-      // of the blank-space-then-offset-content pattern that persisted
-      // through the container/overflow fixes.
-      // Same fix as Intake Request, but this template has TWO .pdf-page
-      // divs stacked (page-1 and page-2), so the forced height is two
-      // full pages tall (816x2112 CSS px at 96dpi) instead of one.
-      html2canvas:  { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
-      // pagebreak avoid-all forces page-break-inside:avoid onto every
-      // single element in the container, which turned out to conflict
-      // with jsPDF's page-slicing math and was actively pushing this to
-      // 3 pages instead of fixing it (this was a 2-page bug before
-      // avoid-all was added). Now that .pdf-page has overflow:hidden
-      // guaranteeing it measures as exactly one true page, the default
-      // slicing behavior (no explicit pagebreak option) should have
-      // nothing left to slice.
-    };
-    
-    generateBtn.innerHTML = 'Generating...';
-    generateBtn.disabled = true;
 
-    if (typeof html2pdf === 'undefined') {
-      // pdfBtn/origText were never declared anywhere in this file (only
-      // generateBtn is) - referencing them threw a ReferenceError before
-      // ever reaching the generateBtn reset below, which meant the button
-      // stayed stuck on "Generating..." (disabled, from just above)
-      // whenever html2pdf failed to load, instead of resetting itself.
+    if (typeof window.RevitalPDF === 'undefined') {
       alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
-      generateBtn.disabled = false;
-      generateBtn.innerHTML = 'Download PDF';
       return;
     }
 
-    // Capture from a detached copy of the preview content (never
-    // attached to the page) instead of the live pdfContainer sitting
-    // inside the sticky/scrollable preview panel. Appending it to
-    // document.body (even off-screen) was tried and made things worse -
-    // it produced a genuinely empty capture, so reverted to this simpler
-    // in-memory-only approach, which does reliably capture real content.
-    const exportContainer = document.createElement('div');
-    exportContainer.innerHTML = pdfContainer.innerHTML;
+    generateBtn.innerHTML = 'Generating...';
+    generateBtn.disabled = true;
 
-    // NOTE: an earlier attempt intercepted the chain via
-    // .toPdf().get('pdf').then(pdf => { ...trim pages...; pdf.save(...) })
-    // to manually strip a leading blank page via jsPDF's own page API.
-    // That produced a consistently EMPTY (3289-byte, zero-content) PDF -
-    // .get('pdf') appears to resolve before the canvas image is actually
-    // attached to the page, so calling pdf.save() on it directly skips
-    // content that the built-in .save() step normally attaches. Reverted
-    // to the plain, built-in .save() chain, which reliably captures full,
-    // correct content (confirmed via multiple rendered test files).
-    html2pdf().set(opt).from(exportContainer).save().then(() => {
+    try {
+      const r = buildWelcomeGuidePdf(clientName);
+      r.save(`Welcome_Guide_${clientName.replace(/\s+/g, '_')}.pdf`);
       generateBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download PDF';
-      generateBtn.disabled = false;
-    }).catch((err) => {
+    } catch (err) {
       console.error('PDF generation failed:', err);
-      alert('PDF generation failed - check the browser console for details.');
+      alert('PDF generation failed: ' + (err && err.message ? err.message : err));
       generateBtn.innerHTML = 'Download PDF';
-      generateBtn.disabled = false;
-    });
+    }
+    generateBtn.disabled = false;
   });
 
   // Wait a tiny bit for the parent to fully inject its globals if this
@@ -504,7 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (emailToClientSendBtn) {
     emailToClientSendBtn.addEventListener('click', async () => {
       if (!currentEmailToClientFrom) return;
-      if (typeof html2pdf === 'undefined') {
+      if (typeof window.RevitalPDF === 'undefined') {
         alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
         return;
       }
@@ -518,48 +555,30 @@ document.addEventListener('DOMContentLoaded', () => {
       emailToClientSendBtn.textContent = 'Generating PDF...';
       if (emailToClientStatus) emailToClientStatus.textContent = '';
 
-      const clientNameForFile = ((document.getElementById('clientName').value || 'Client')).replace(/\s+/g, '_');
-      const opt = {
-        margin: 0,
-        filename: `Welcome_Guide_${clientNameForFile}.pdf`,
-        image: { type: 'jpeg', quality: 0.92 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-      };
-
-      const exportContainer = document.createElement('div');
-      exportContainer.innerHTML = pdfContainer.innerHTML;
+      const clientName = (document.getElementById('clientName').value || 'Client');
+      const filename = `Welcome_Guide_${clientName.replace(/\s+/g, '_')}.pdf`;
 
       try {
-        const dataUri = await html2pdf().set(opt).from(exportContainer).outputPdf('datauristring');
+        const r = buildWelcomeGuidePdf(clientName);
+        const dataUri = r.doc.output('datauristring');
         const base64 = dataUri.slice(dataUri.indexOf(',') + 1);
         if (!base64) throw new Error('PDF generation produced no data');
 
-        const attachments = [{ filename: opt.filename, content: base64 }];
+        const attachments = [{ filename: filename, content: base64 }];
 
-        // Optional second PDF: built from the SAME shared
-        // window.parent.build90DayPlanHtml() the 90-Day Plan Gen tool
-        // itself uses (see that tool's app.js and root app.js), rendered
-        // into its own detached container and captured with the identical
-        // tuned html2pdf options - not the live pdfContainer above, which
-        // only ever holds Welcome Guide content.
+        // Optional second PDF: built by buildNinetyDayPlanPdfForAttachment
+        // above (mirrors ninety-day-plan/js/app.js's own RevitalPDF
+        // rebuild) from the plan data straight off the client record.
         if (attach90DayPlanCheckbox && attach90DayPlanCheckbox.checked) {
           const client = activeClient;
-          if (client && client.ninetyDayPlan && window.parent.build90DayPlanHtml) {
+          if (client && client.ninetyDayPlan) {
             const planClientName = (document.getElementById('clientName').value || '').trim() || client.name || 'Client';
-            const planContainer = document.createElement('div');
-            planContainer.innerHTML = window.parent.build90DayPlanHtml(planClientName, client.ninetyDayPlan);
-            const planOpt = {
-              margin: 0,
-              filename: `90_Day_Plan_${planClientName.replace(/\s+/g, '_')}.pdf`,
-              image: { type: 'jpeg', quality: 0.92 },
-              html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-              jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-            };
-            const planDataUri = await html2pdf().set(planOpt).from(planContainer).outputPdf('datauristring');
+            const planR = buildNinetyDayPlanPdfForAttachment(planClientName, client.ninetyDayPlan);
+            const planFilename = `90_Day_Plan_${planClientName.replace(/\s+/g, '_')}.pdf`;
+            const planDataUri = planR.doc.output('datauristring');
             const planBase64 = planDataUri.slice(planDataUri.indexOf(',') + 1);
             if (planBase64) {
-              attachments.push({ filename: planOpt.filename, content: planBase64 });
+              attachments.push({ filename: planFilename, content: planBase64 });
             }
           }
         }

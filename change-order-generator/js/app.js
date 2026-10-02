@@ -181,60 +181,71 @@ function removeEntry(id) {
 }
 
 // ── PDF Generation ──
-// Pulled the container/opt building out of generateChangeOrderPdf so the
-// Email to Client send flow below can produce the exact same signable
-// document (as a data URI instead of a browser download) without
-// duplicating this markup.
-function buildChangeOrderPdfPayload(entry) {
-  const container = document.createElement('div');
-  container.style.cssText = 'width: 8.5in; padding: 0.6in; font-family: Helvetica, Arial, sans-serif; color: #1a1a1a; background: #fff;';
-  container.innerHTML = `
-    <div style="border-bottom: 3px solid #6366f1; padding-bottom: 16px; margin-bottom: 24px;">
-      <div style="font-size: 11px; letter-spacing: 1.5px; color: #6366f1; font-weight: 700; text-transform: uppercase;">Revital Productions</div>
-      <h1 style="font-size: 26px; margin: 6px 0 0;">Change Order</h1>
-    </div>
-    <table style="width:100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px;">
-      <tr><td style="padding:6px 0; font-weight:700; width:180px;">Client</td><td style="padding:6px 0;">${entry.clientName}</td></tr>
-      <tr><td style="padding:6px 0; font-weight:700;">Deliverable / Project</td><td style="padding:6px 0;">${entry.deliverableName}</td></tr>
-      <tr><td style="padding:6px 0; font-weight:700;">Date</td><td style="padding:6px 0;">${entry.dateCreated || todayStr()}</td></tr>
-    </table>
-    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px; margin-bottom: 8px;">Original Scope</h3>
-    <p style="font-size: 13px; line-height: 1.6; margin-bottom: 18px;">${entry.originalScope || '—'}</p>
-    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px; margin-bottom: 8px;">Requested Change</h3>
-    <p style="font-size: 13px; line-height: 1.6; margin-bottom: 18px;">${entry.requestedChange || '—'}</p>
-    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px; margin-bottom: 8px;">Why This Falls Outside the Signed SOW</h3>
-    <p style="font-size: 13px; line-height: 1.6; margin-bottom: 18px;">${entry.reasonOutOfScope || '—'}</p>
-    <table style="width:100%; border-collapse: collapse; margin: 24px 0; font-size: 13px;">
-      <tr><td style="padding:8px 12px; background:#f4f4f8; font-weight:700; width:50%;">Additional Cost</td><td style="padding:8px 12px; background:#f4f4f8;">${entry.additionalCost ? '$' + parseFormattedNumber(entry.additionalCost).toLocaleString() : '$0'}</td></tr>
-      <tr><td style="padding:8px 12px; font-weight:700;">Additional Timeline</td><td style="padding:8px 12px;">${entry.additionalTimelineDays ? entry.additionalTimelineDays + ' day(s)' : '0 days'}</td></tr>
-    </table>
-    <div style="margin-top: 60px; display:flex; gap:40px;">
-      <div style="flex:1; border-top: 1px solid #1a1a1a; padding-top: 6px; font-size: 12px;">Client Signature &amp; Date</div>
-      <div style="flex:1; border-top: 1px solid #1a1a1a; padding-top: 6px; font-size: 12px;">Revital Productions &amp; Date</div>
-    </div>
-  `;
+// Oct 2026 rebuild: switched from html2canvas/html2pdf screenshotting an
+// HTML mockup to the shared RevitalPDF module. Pulled the document-
+// building out of generateChangeOrderPdf so the Email to Client send flow
+// below can produce the exact same signable document (as a data URI
+// instead of a browser download) without duplicating this layout. This
+// is a one-page signable document rather than a multi-section report, so
+// it skips r.coverPage()/r.newPage() and just draws straight onto the
+// first page via r.sectionHeader(), then hand-draws the two signature
+// lines at the bottom (shared/pdf-report.js has no signature-line
+// primitive - this is the first tool in the rollout that's needed one).
+function buildChangeOrderPdf(entry) {
+  const r = RevitalPDF.create({ reportTitle: 'CHANGE ORDER', companyName: entry.clientName || 'Client' });
+  const doc = r.doc;
+  const C = r.colors;
 
-  const opt = {
-    margin: 0,
-    filename: `${entry.clientName.replace(/\s+/g, '_')}_Change_Order_${entry.dateCreated || todayStr()}.pdf`,
-    image: { type: 'jpeg', quality: 0.95 },
-    html2canvas: { scale: 2, letterRendering: true, useCORS: true, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-  };
+  r.sectionHeader('Change Order');
 
-  return { container, opt };
+  r.tableBlock(['Field', 'Detail'], [
+    ['Client', entry.clientName || '—'],
+    ['Deliverable / Project', entry.deliverableName || '—'],
+    ['Date', entry.dateCreated || todayStr()],
+  ], [r.CONTENT_W * 0.3, r.CONTENT_W * 0.7]);
+
+  r.paragraph('Original Scope', { bold: true, size: 10.5, spaceAfter: 6 });
+  r.paragraph(entry.originalScope || '—', { spaceAfter: 16 });
+
+  r.paragraph('Requested Change', { bold: true, size: 10.5, spaceAfter: 6 });
+  r.paragraph(entry.requestedChange || '—', { spaceAfter: 16 });
+
+  r.paragraph('Why This Falls Outside the Signed SOW', { bold: true, size: 10.5, spaceAfter: 6 });
+  r.paragraph(entry.reasonOutOfScope || '—', { spaceAfter: 16 });
+
+  r.tableBlock(['Item', 'Detail'], [
+    ['Additional Cost', entry.additionalCost ? '$' + parseFormattedNumber(entry.additionalCost).toLocaleString() : '$0'],
+    ['Additional Timeline', entry.additionalTimelineDays ? entry.additionalTimelineDays + ' day(s)' : '0 days'],
+  ], [r.CONTENT_W * 0.5, r.CONTENT_W * 0.5]);
+
+  r.ensureSpace(80);
+  r.y += 40;
+  const colW = (r.CONTENT_W - 40) / 2;
+  doc.setDrawColor.apply(doc, C.DARK);
+  doc.setLineWidth(1);
+  doc.line(r.MARGIN, r.y, r.MARGIN + colW, r.y);
+  doc.line(r.MARGIN + colW + 40, r.y, r.MARGIN + colW + 40 + colW, r.y);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor.apply(doc, C.DARK);
+  doc.text('Client Signature & Date', r.MARGIN, r.y + 14);
+  doc.text('Revital Productions & Date', r.MARGIN + colW + 40, r.y + 14);
+
+  return { r, filename: `${(entry.clientName || 'Client').replace(/\s+/g, '_')}_Change_Order_${entry.dateCreated || todayStr()}.pdf` };
 }
 
-async function generateChangeOrderPdf(id) {
+function generateChangeOrderPdf(id) {
   const entry = entries.find(e => e.id === id);
   if (!entry) return;
 
-  const { container, opt } = buildChangeOrderPdfPayload(entry);
-
-  if (typeof html2pdf !== 'undefined') {
-    await html2pdf().set(opt).from(container).save();
-  } else if (window.parent.showBanner) {
-    window.parent.showBanner('error', 'PDF library failed to load.');
+  if (typeof window.RevitalPDF === 'undefined') {
+    if (window.parent.showBanner) window.parent.showBanner('error', 'PDF library failed to load.');
+    return;
+  }
+  try {
+    const { r, filename } = buildChangeOrderPdf(entry);
+    r.save(filename);
+  } catch (e) {
+    console.error('Change order PDF error:', e);
+    if (window.parent.showBanner) window.parent.showBanner('error', 'Could not generate PDF: ' + (e && e.message ? e.message : e));
   }
 }
 
@@ -350,7 +361,7 @@ function openEmailToClientPanel(id) {
 if (emailToClientSendBtn) {
   emailToClientSendBtn.addEventListener('click', async () => {
     if (!currentEmailContext || !currentEmailContext.from) return;
-    if (typeof html2pdf === 'undefined') {
+    if (typeof window.RevitalPDF === 'undefined') {
       alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
       return;
     }
@@ -362,8 +373,8 @@ if (emailToClientSendBtn) {
     const { entry } = currentEmailContext;
 
     try {
-      const { container, opt } = buildChangeOrderPdfPayload(entry);
-      const dataUri = await html2pdf().set(opt).from(container).outputPdf('datauristring');
+      const { r, filename } = buildChangeOrderPdf(entry);
+      const dataUri = r.doc.output('datauristring');
       const base64 = dataUri.slice(dataUri.indexOf(',') + 1);
       if (!base64) throw new Error('PDF generation produced no data');
 
@@ -377,7 +388,7 @@ if (emailToClientSendBtn) {
           subject: emailToClientSubject.value,
           body: emailToClientBody.value,
           from: currentEmailContext.from,
-          attachments: [{ filename: opt.filename, content: base64 }]
+          attachments: [{ filename: filename, content: base64 }]
         })
       });
       const data = await res.json().catch(() => ({}));
