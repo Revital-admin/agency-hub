@@ -114,20 +114,60 @@ document.addEventListener('DOMContentLoaded', () => {
 
   calculate();
 
+  // Oct 2026 rebuild: switched from html2canvas/html2pdf to the shared
+  // RevitalPDF module (../shared/pdf-report.js) - see that file for the
+  // full rationale. Built straight from the already-calculated numbers
+  // (recommended budget plus the channel split table) rather than
+  // screenshotting the on-screen report panel.
   document.getElementById('downloadPdfBtn').addEventListener('click', () => {
-    const element = document.getElementById('budgetReport');
-    const cName = clientNameIn.value || 'Client';
-    const opt = {
-      margin:       0.5,
-      filename:     `Marketing_Budget_${cName.replace(/\s+/g, '_')}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-    if (typeof html2pdf === 'undefined') {
+    if (typeof window.RevitalPDF === 'undefined') {
       alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
       return;
     }
-    html2pdf().set(opt).from(element).save();
+    const cName = clientNameIn.value || 'Client';
+
+    try {
+      const r = RevitalPDF.create({ reportTitle: 'MARKETING BUDGET CALCULATOR', companyName: cName });
+
+      r.coverPage({
+        title: 'Marketing Budget Recommendation',
+        subLine: [el('outIndustryLabel').innerText, el('outStageLabel').innerText, new Date().toLocaleDateString()].filter(Boolean).join('   |   '),
+        objective: `Recommended annual and monthly marketing budget for ${cName}, based on industry benchmark spend and growth stage.`,
+        preparedFrom: `Annual revenue input, ${el('outIndustryLabel').innerText} industry benchmark (${el('outBenchmarkPct').innerText} of revenue), adjusted for ${el('outStageLabel').innerText}.`,
+        note: 'Note: these are directional planning figures based on published industry benchmark surveys, not a guarantee of performance.',
+      });
+
+      r.newPage();
+      r.sectionHeader('Recommended Budget');
+      r.tableBlock(
+        ['Metric', 'Value'],
+        [
+          ['Recommended % of Revenue', el('outRecPct').innerText],
+          ['Recommended Annual Budget', el('outAnnualBudget').innerText],
+          ['Recommended Monthly Budget', el('outMonthlyBudget').innerText],
+          ['Reasonable Range (Annual)', el('outRange').innerText],
+        ],
+        [r.CONTENT_W * 0.6, r.CONTENT_W * 0.4]
+      );
+      r.calloutBox('Benchmark Note', el('industryBenchmarkNote').innerText);
+
+      const rows = Array.from(document.querySelectorAll('#channelTableBody tr')).map(tr =>
+        Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim())
+      );
+      if (rows.length) {
+        r.paragraph('Recommended Channel Split', { bold: true, size: 10.5, spaceAfter: 6 });
+        r.tableBlock(
+          ['Channel', '% of Budget', 'Monthly', 'Annual'],
+          rows,
+          [r.CONTENT_W * 0.4, r.CONTENT_W * 0.18, r.CONTENT_W * 0.21, r.CONTENT_W * 0.21]
+        );
+        r.paragraph(el('channelTotalNote').innerText, { italic: true, size: 8.5, color: r.colors.GRAY });
+      }
+
+      r.save(`Marketing_Budget_${cName.replace(/\s+/g, '_')}.pdf`);
+    } catch (err) {
+      console.error('PDF generation failed:', err);
+      alert('PDF generation failed: ' + (err && err.message ? err.message : err));
+    }
   });
 });

@@ -117,20 +117,51 @@ document.addEventListener('DOMContentLoaded', () => {
 
   calculate();
 
+  // Oct 2026 rebuild: switched from html2canvas/html2pdf to the shared
+  // RevitalPDF module (../shared/pdf-report.js) - see that file for the
+  // full rationale. Built straight from the already-calculated numbers
+  // (headline payback figure plus the 12-month cash flow table) rather
+  // than screenshotting the on-screen report panel.
   document.getElementById('downloadPdfBtn').addEventListener('click', () => {
-    const element = document.getElementById('paybackReport');
-    const cName = clientNameIn.value || 'Client';
-    const opt = {
-      margin:       0.5,
-      filename:     `Payback_Period_${cName.replace(/\s+/g, '_')}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-    if (typeof html2pdf === 'undefined') {
+    if (typeof window.RevitalPDF === 'undefined') {
       alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
       return;
     }
-    html2pdf().set(opt).from(element).save();
+    const cName = clientNameIn.value || 'Client';
+
+    try {
+      const r = RevitalPDF.create({ reportTitle: 'PAYBACK PERIOD CALCULATOR', companyName: cName });
+
+      r.coverPage({
+        title: 'Payback Period Analysis',
+        subLine: new Date().toLocaleDateString(),
+        objective: `How long it takes ${cName} to recoup the setup cost and ongoing fee against the projected monthly value.`,
+        preparedFrom: `Setup cost of ${el('outSetupCost').innerText}, monthly fee of ${el('outMonthlyFee').innerText}, and projected monthly value of ${el('outMonthlyValue').innerText} (${el('outRampLabel').innerText}).`,
+        note: 'Note: this is a planning projection based on the inputs provided, not a guaranteed outcome.',
+      });
+
+      r.newPage();
+      r.sectionHeader('Payback Summary');
+      r.calloutBox('Payback Period', `${el('outPayback').innerText} — total invested by that point: ${el('outTotalInvested').innerText}.`);
+
+      const rows = Array.from(document.querySelectorAll('#cashFlowTableBody tr')).map(tr =>
+        Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim())
+      );
+      if (rows.length && rows[0].length === 5) {
+        r.paragraph('Month-by-month cash flow (first 12 months)', { bold: true, size: 10.5, spaceAfter: 6 });
+        r.tableBlock(
+          ['Month', 'Value', 'Fee', 'Net', 'Cumulative'],
+          rows,
+          [r.CONTENT_W * 0.12, r.CONTENT_W * 0.22, r.CONTENT_W * 0.22, r.CONTENT_W * 0.22, r.CONTENT_W * 0.22]
+        );
+      } else {
+        r.paragraph(rows.length ? rows[0].join(' ') : 'No cash-flow data available at these inputs.', { italic: true });
+      }
+
+      r.save(`Payback_Period_${cName.replace(/\s+/g, '_')}.pdf`);
+    } catch (err) {
+      console.error('PDF generation failed:', err);
+      alert('PDF generation failed: ' + (err && err.message ? err.message : err));
+    }
   });
 });

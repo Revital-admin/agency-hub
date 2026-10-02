@@ -112,36 +112,62 @@ document.addEventListener('DOMContentLoaded', () => {
   calculate();
 
   // Export PDF
+  // Oct 2026 rebuild: this tool's PDF export was completely non-functional
+  // (see the removed comments below for why - wrong element id, a regex
+  // that never matched, and a crash-on-missing-library fallback that
+  // referenced variables that don't exist in this file). Replaced with the
+  // shared RevitalPDF module (../shared/pdf-report.js) used by every other
+  // rebuilt tool in the Hub: native jsPDF vector text instead of
+  // html2canvas/html2pdf, built straight from the already-calculated
+  // numbers rather than screenshotting the on-screen report panel.
   document.getElementById('downloadPdfBtn').addEventListener('click', () => {
-    // Was 'reportDocument' - no element in this tool has ever had that id
-    // (the live preview panel is #proposalReport, see index.html). That
-    // meant this always resolved to null, so html2pdf().from(null) either
-    // silently failed or threw depending on library version - Export PDF
-    // has been non-functional the whole time with no visible error.
-    const element = document.getElementById('proposalReport');
-    const cName = clientNameIn.value || 'Client';
-    const opt = {
-      margin:       0.5,
-      // Was /\\s+/g (an escaped-backslash-then-"s+" pattern, which only
-      // matches a literal backslash character - client names never
-      // contain one, so this never actually matched anything). Fixed to
-      // /\s+/g so spaces really do collapse to underscores, matching
-      // every other PDF-export tool's filename convention.
-      filename:     `ROI_Projection_${cName.replace(/\s+/g, '_')}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-    if (typeof html2pdf === 'undefined') {
-      // pdfBtn/generateBtn/origText below were never declared anywhere in
-      // this file (leftover from copy-pasting this fallback block from a
-      // different tool) - referencing them would throw a ReferenceError
-      // right after the alert. The only real button here is
-      // downloadPdfBtn, which was never disabled in the first place, so
-      // there's nothing to re-enable.
+    if (typeof window.RevitalPDF === 'undefined') {
       alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
       return;
     }
-    html2pdf().set(opt).from(element).save();
+    const cName = clientNameIn.value || 'Client';
+
+    try {
+      const r = RevitalPDF.create({ reportTitle: 'MARKETING ROI PROJECTOR', companyName: cName });
+      const C = r.colors;
+
+      r.coverPage({
+        title: 'Growth Projection Report',
+        subLine: new Date().toLocaleDateString(),
+        objective: `Projected revenue impact of a +${projTrafficIncIn.value}% traffic lift and a +${parseFloat(projConvIncIn.value).toFixed(1)}pt conversion-rate improvement for ${cName}.`,
+        preparedFrom: `Baseline traffic, conversion rate, and average order value entered for ${cName}.`,
+        note: 'Note: this is a planning projection based on the inputs provided, not a guaranteed outcome.',
+      });
+
+      r.newPage();
+      r.sectionHeader('Current vs. Projected Performance');
+      r.tableBlock(
+        ['Metric', 'Current', 'Projected'],
+        [
+          ['Monthly Traffic', outCurrentTraffic.innerText, outProjTraffic.innerText],
+          ['Conversion Rate', outCurrentConv.innerText + '%', outProjConv.innerText + '%'],
+          ['Avg Order Value', '$' + outCurrentAOV.innerText, '$' + outProjAOV.innerText],
+          ['Monthly Revenue', outCurrentRev.innerText, outProjRev.innerText],
+        ],
+        [r.CONTENT_W * 0.4, r.CONTENT_W * 0.3, r.CONTENT_W * 0.3]
+      );
+
+      r.paragraph('Return on Investment', { bold: true, size: 10.5, spaceAfter: 6 });
+      r.tableBlock(
+        ['Line Item', 'Value'],
+        [
+          ['Gross Monthly Revenue Lift', outGrossLift.innerText],
+          ['Monthly Service Fee', outFee.innerText],
+          ['Net ROI', outNetROI.innerText],
+        ],
+        [r.CONTENT_W * 0.6, r.CONTENT_W * 0.4]
+      );
+      r.calloutBox('Bottom Line', `At these inputs, ${cName} is projected to see a net ROI of ${outNetROI.innerText} on the monthly fee of ${outFee.innerText.replace('-', '')}.`);
+
+      r.save(`ROI_Projection_${cName.replace(/\s+/g, '_')}.pdf`);
+    } catch (err) {
+      console.error('PDF generation failed:', err);
+      alert('PDF generation failed: ' + (err && err.message ? err.message : err));
+    }
   });
 });
