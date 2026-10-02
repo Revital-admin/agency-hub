@@ -355,7 +355,7 @@ if (isEmbedded) {
    and a conclusion - modeled directly on the client-facing report format
    Ronald asked this to match. */
 function downloadPDF() {
-  if (typeof window.jspdf === 'undefined' || !window.jspdf.jsPDF) {
+  if (typeof window.RevitalPDF === 'undefined') {
     alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
     return;
   }
@@ -365,28 +365,6 @@ function downloadPDF() {
   if (pdfBtn) { pdfBtn.disabled = true; pdfBtn.innerHTML = '⏳ Generating...'; }
 
   try {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit: 'pt', format: 'letter' });
-
-    const PAGE_W = 612, PAGE_H = 792;
-    const MARGIN = 54;
-    const CONTENT_W = PAGE_W - MARGIN * 2;
-    let y = MARGIN;
-    let pageNum = 1;
-
-    // Revital brand palette (matches the live Hub's own dark theme: --bg-sidebar
-    // #1a1a17, --primary #f68d5f - see root style.css :root). GOLD is kept as
-    // the variable name since every call site below (calloutBox, sectionHeader,
-    // etc. - all written for a dark/accent pairing) refers to it that way, but
-    // it now holds Revital's orange, not a client-brand gold.
-    const DARK = [26, 26, 23];
-    const GOLD = [246, 141, 95];
-    const CREAM = [250, 243, 237];
-    const GRAY = [110, 108, 100];
-    const LIGHT = [240, 219, 204];
-    const WHITE = [255, 255, 255];
-    const GREEN = [62, 122, 76], RED = [176, 69, 59], BLUE = [59, 111, 160], PINK = [163, 76, 116];
-
     const companyName = (document.getElementById('company') && document.getElementById('company').value.trim()) || 'Client';
     const dateVal = (document.getElementById('date') && document.getElementById('date').value.trim()) || '';
     const marketVal = (document.getElementById('niche') && document.getElementById('niche').value.trim()) || '';
@@ -404,231 +382,100 @@ function downloadPDF() {
       return (rowsData[key] && rowsData[key][idx]) ? rowsData[key][idx].trim() : '';
     }
 
-    // ---------- low-level helpers ----------
-    function footer() {
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor.apply(doc, GRAY);
-      doc.text(companyName.toUpperCase() + '   |   ' + pageNum, PAGE_W - MARGIN, PAGE_H - 30, { align: 'right' });
-      doc.text('WEBSITE COMPETITOR ANALYSIS', MARGIN, PAGE_H - 30);
-    }
-    function newPage() {
-      footer();
-      doc.addPage();
-      pageNum++;
-      y = MARGIN;
-    }
-    function ensureSpace(h) {
-      if (y + h > PAGE_H - MARGIN - 16) newPage();
-    }
-    function sectionHeader(title) {
-      ensureSpace(70);
-      doc.setFillColor.apply(doc, DARK);
-      doc.rect(MARGIN, y, CONTENT_W * 0.62, 24, 'F');
-      doc.setFillColor.apply(doc, GOLD);
-      doc.rect(MARGIN + CONTENT_W * 0.62, y, CONTENT_W * 0.38, 24, 'F');
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
-      doc.setTextColor.apply(doc, WHITE);
-      doc.text('WEBSITE COMPETITOR ANALYSIS', MARGIN + 10, y + 15.5);
-      doc.setTextColor.apply(doc, DARK);
-      doc.text(('PREPARED FOR ' + companyName).toUpperCase().slice(0, 48), MARGIN + CONTENT_W * 0.62 + 10, y + 15.5);
-      y += 24 + 20;
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(21); doc.setTextColor.apply(doc, DARK);
-      doc.text(title, MARGIN, y);
-      y += 6;
-      doc.setDrawColor.apply(doc, GOLD); doc.setLineWidth(1.5);
-      doc.line(MARGIN, y + 6, MARGIN + CONTENT_W, y + 6);
-      y += 26;
-    }
-    function paragraph(text, opts) {
-      opts = opts || {};
-      const size = opts.size || 10;
-      doc.setFont('helvetica', opts.bold ? 'bold' : (opts.italic ? 'italic' : 'normal'));
-      doc.setFontSize(size);
-      doc.setTextColor.apply(doc, opts.color || DARK);
-      const width = opts.width || CONTENT_W;
-      const x = opts.x || MARGIN;
-      const lines = doc.splitTextToSize(text, width);
-      const lh = size * 1.42;
-      ensureSpace(lines.length * lh + 6);
-      doc.text(lines, x, y);
-      y += lines.length * lh + (opts.spaceAfter !== undefined ? opts.spaceAfter : 10);
-    }
-    function calloutBox(label, text, accent) {
-      accent = accent || GOLD;
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-      const bodyLines = doc.splitTextToSize(text, CONTENT_W - 30);
-      const boxH = 30 + bodyLines.length * 13.5 + 8;
-      ensureSpace(boxH + 14);
-      doc.setFillColor.apply(doc, CREAM);
-      doc.rect(MARGIN, y, CONTENT_W, boxH, 'F');
-      doc.setFillColor.apply(doc, accent);
-      doc.rect(MARGIN, y, 3.5, boxH, 'F');
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
-      doc.setTextColor.apply(doc, accent);
-      doc.text(label.toUpperCase(), MARGIN + 14, y + 17);
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-      doc.setTextColor.apply(doc, DARK);
-      doc.text(bodyLines, MARGIN + 14, y + 33);
-      y += boxH + 16;
-    }
-    function bulletList(items) {
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-      items.forEach(function(item) {
-        const lines = doc.splitTextToSize(item, CONTENT_W - 16);
-        const lh = 14;
-        ensureSpace(lines.length * lh + 4);
-        doc.setTextColor.apply(doc, GOLD);
-        doc.text('•', MARGIN, y);
-        doc.setTextColor.apply(doc, DARK);
-        doc.text(lines, MARGIN + 14, y);
-        y += lines.length * lh + 5;
-      });
-      y += 6;
-    }
-    function tableBlock(headers, rowsArr, colWidths) {
-      ensureSpace(26);
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
-      doc.setFillColor.apply(doc, DARK);
-      doc.rect(MARGIN, y, CONTENT_W, 22, 'F');
-      doc.setTextColor.apply(doc, WHITE);
-      let cx = MARGIN + 8;
-      headers.forEach(function(h, i) { doc.text(h.toUpperCase(), cx, y + 14); cx += colWidths[i]; });
-      y += 22;
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
-      rowsArr.forEach(function(r, ri) {
-        const wrapped = r.map(function(cell, ci) { return doc.splitTextToSize(cell || '—', colWidths[ci] - 14); });
-        const maxLines = Math.max.apply(null, wrapped.map(function(w) { return w.length; }));
-        const rowH = Math.max(24, maxLines * 12.5 + 12);
-        ensureSpace(rowH);
-        if (ri % 2 === 1) { doc.setFillColor.apply(doc, CREAM); doc.rect(MARGIN, y, CONTENT_W, rowH, 'F'); }
-        doc.setTextColor.apply(doc, DARK);
-        cx = MARGIN + 8;
-        wrapped.forEach(function(w, ci) { doc.text(w, cx, y + 14); cx += colWidths[ci]; });
-        doc.setDrawColor.apply(doc, LIGHT); doc.setLineWidth(0.5);
-        doc.line(MARGIN, y + rowH, MARGIN + CONTENT_W, y + rowH);
-        y += rowH;
-      });
-      y += 16;
-    }
-    function swotQuadrant(x, w, title, text, accent) {
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
-      const bodyLines = doc.splitTextToSize(text || 'Not yet filled in.', w - 24);
-      const boxH = 34 + bodyLines.length * 13;
-      doc.setDrawColor.apply(doc, accent); doc.setLineWidth(1.2);
-      doc.rect(x, y, w, boxH);
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5);
-      doc.setTextColor.apply(doc, accent);
-      doc.text(doc.splitTextToSize(title.toUpperCase(), w - 24), x + 12, y + 18);
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
-      doc.setTextColor.apply(doc, DARK);
-      doc.text(bodyLines, x + 12, y + 34);
-      return boxH;
-    }
+    const r = RevitalPDF.create({ reportTitle: 'WEBSITE COMPETITOR ANALYSIS', companyName: companyName });
+    const doc = r.doc;
+    const C = r.colors;
 
-    // ================= PAGE 1: COVER =================
-    doc.setFillColor.apply(doc, DARK);
-    doc.rect(MARGIN, 100, CONTENT_W, 92, 'F');
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(25); doc.setTextColor.apply(doc, WHITE);
-    doc.text(doc.splitTextToSize(companyName.toUpperCase(), CONTENT_W - 40), MARGIN + 20, 100 + 38);
-    doc.setFontSize(14); doc.setTextColor.apply(doc, GOLD);
-    doc.text('WEBSITE COMPETITOR ANALYSIS', MARGIN + 20, 100 + 62);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor.apply(doc, LIGHT);
-    const subLine = [marketVal, dateVal].filter(Boolean).join('   |   ');
-    if (subLine) doc.text(subLine, MARGIN + 20, 100 + 80);
+    // ================= COVER =================
+    r.coverPage({
+      title: 'Website Competitor Analysis',
+      subLine: [marketVal, dateVal].filter(Boolean).join('   |   '),
+      objective: objective || ('Identify the strongest website practices in the local competitive set and translate them into a focused, ownable strategy for ' + companyName + '.'),
+      preparedFrom: 'Website competitor research for ' + companyName + ' against ' + names.filter(Boolean).join(', ') + '.',
+      note: 'Note: this is a qualitative website audit synthesized from manual review, not an automated analytics report.',
+    });
 
-    y = 100 + 92 + 50;
-    calloutBox('Objective', objective || ('Identify the strongest website practices in the local competitive set and translate them into a focused, ownable strategy for ' + companyName + '.'), GOLD);
+    // ================= EXECUTIVE OVERVIEW =================
+    r.newPage();
+    r.sectionHeader('Executive Overview');
+    r.paragraph('What the competitive set reveals about ' + companyName + "'s website opportunity", { size: 10.5, italic: true, color: C.GRAY, spaceAfter: 12 });
+    if (insightText) r.calloutBox('Core Finding', insightText);
 
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor.apply(doc, DARK);
-    doc.text('PREPARED FROM:', MARGIN, y);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
-    const preparedText = 'Website competitor research for ' + companyName + ' against ' + names.filter(Boolean).join(', ') + '.';
-    const preparedLines = doc.splitTextToSize(preparedText, CONTENT_W - 100);
-    doc.text(preparedLines, MARGIN + 92, y);
-    y += preparedLines.length * 13 + 10;
-    doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5); doc.setTextColor.apply(doc, GRAY);
-    doc.text(doc.splitTextToSize('Note: this is a qualitative website audit synthesized from manual review, not an automated analytics report.', CONTENT_W), MARGIN, y);
-
-    // ================= PAGE 2: EXECUTIVE OVERVIEW =================
-    newPage();
-    sectionHeader('Executive Overview');
-    paragraph('What the competitive set reveals about ' + companyName + "'s website opportunity", { size: 10.5, italic: true, color: GRAY, spaceAfter: 12 });
-    if (insightText) calloutBox('Core Finding', insightText, GOLD);
-
-    paragraph('Competitive lessons', { size: 13, bold: true, spaceAfter: 8 });
+    r.paragraph('Competitive lessons', { size: 13, bold: true, spaceAfter: 8 });
     const lessonsRows = names.map(function(name, i) {
       return [name, rowText('value-prop', i) || rowText('tech-stack', i), rowText('takeaway', i)];
     });
-    tableBlock(['Brand', 'What it does especially well', 'Lesson for ' + companyName], lessonsRows, [CONTENT_W * 0.2, CONTENT_W * 0.42, CONTENT_W * 0.38]);
+    r.tableBlock(['Brand', 'What it does especially well', 'Lesson for ' + companyName], lessonsRows, [r.CONTENT_W * 0.2, r.CONTENT_W * 0.42, r.CONTENT_W * 0.38]);
 
     if (priorities.length) {
-      paragraph('Immediate priorities', { size: 13, bold: true, spaceAfter: 8 });
-      bulletList(priorities);
+      r.paragraph('Immediate priorities', { size: 13, bold: true, spaceAfter: 8 });
+      r.bulletList(priorities);
     }
 
     // ================= COMPETITOR FINDINGS (one section per competitor) =================
-    newPage();
-    sectionHeader('Competitor Findings');
-    paragraph(names.length + ' competitors, ' + names.length + ' different lessons', { size: 10.5, italic: true, color: GRAY, spaceAfter: 10 });
+    r.newPage();
+    r.sectionHeader('Competitor Findings');
+    r.paragraph(names.length + ' competitors, ' + names.length + ' different lessons', { size: 10.5, italic: true, color: C.GRAY, spaceAfter: 10 });
 
     names.forEach(function(name, i) {
-      ensureSpace(60);
+      r.ensureSpace(60);
       const barH = 22;
-      doc.setFillColor.apply(doc, DARK);
-      doc.rect(MARGIN, y, CONTENT_W, barH, 'F');
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor.apply(doc, WHITE);
-      doc.text(name, MARGIN + 10, y + 15);
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor.apply(doc, GOLD);
-      doc.text((tiers[i] || '').toUpperCase(), MARGIN + CONTENT_W - 10, y + 15, { align: 'right' });
-      y += barH + 10;
+      doc.setFillColor.apply(doc, C.DARK);
+      doc.rect(r.MARGIN, r.y, r.CONTENT_W, barH, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor.apply(doc, C.WHITE);
+      doc.text(name, r.MARGIN + 10, r.y + 15);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor.apply(doc, C.ACCENT);
+      doc.text((tiers[i] || '').toUpperCase(), r.MARGIN + r.CONTENT_W - 10, r.y + 15, { align: 'right' });
+      r.y = r.y + barH + 10;
 
       const highlightRows = ['value-prop', 'tech-stack', 'social-proof', 'load-speed'];
       const bullets = highlightRows.map(function(key) {
-        const label = (TABLE_ROWS.find(function(r) { return r.key === key; }) || {}).label || key;
+        const label = (TABLE_ROWS.find(function(rr) { return rr.key === key; }) || {}).label || key;
         const text = rowText(key, i);
         return text ? (label + ': ' + text) : null;
       }).filter(Boolean);
-      bulletList(bullets);
+      r.bulletList(bullets);
 
       const takeaway = rowText('takeaway', i);
-      if (takeaway) calloutBox(name.toUpperCase() + ' TAKEAWAY', takeaway, GOLD);
-      y += 6;
+      if (takeaway) r.calloutBox(name.toUpperCase() + ' TAKEAWAY', takeaway);
+      r.y = r.y + 6;
     });
 
     // ================= SWOT / POSITIONING =================
-    newPage();
-    sectionHeader('SWOT — Gaps & Opportunities');
-    const colW = (CONTENT_W - 14) / 2;
-    ensureSpace(140);
-    let rowTop = y;
-    const hS = swotQuadrant(MARGIN, colW, 'Strengths (You vs. Them)', swot.s, GREEN);
-    const hW = swotQuadrant(MARGIN + colW + 14, colW, 'Weaknesses (To Address)', swot.w, RED);
-    y = rowTop + Math.max(hS, hW) + 14;
-    ensureSpace(140);
-    rowTop = y;
-    const hO = swotQuadrant(MARGIN, colW, 'Opportunities (Market Gaps)', swot.o, BLUE);
-    const hT = swotQuadrant(MARGIN + colW + 14, colW, 'Threats (To Watch)', swot.t, PINK);
-    y = rowTop + Math.max(hO, hT) + 24;
+    r.newPage();
+    r.sectionHeader('SWOT — Gaps & Opportunities');
+    r.ensureSpace(140);
+    r.quadrantRow([
+      { title: 'Strengths (You vs. Them)', text: swot.s, accent: C.GREEN },
+      { title: 'Weaknesses (To Address)', text: swot.w, accent: C.RED },
+    ]);
+    r.y = r.y + 14;
+    r.ensureSpace(140);
+    r.quadrantRow([
+      { title: 'Opportunities (Market Gaps)', text: swot.o, accent: C.BLUE },
+      { title: 'Threats (To Watch)', text: swot.t, accent: C.PINK },
+    ]);
+    r.y = r.y + 24;
 
     // ================= APPENDIX: FULL CATEGORY COMPARISON =================
-    newPage();
-    sectionHeader('Appendix: Full Category Comparison');
-    paragraph('Supporting detail behind the findings above', { size: 10.5, italic: true, color: GRAY, spaceAfter: 10 });
-    const appendixRows = TABLE_ROWS.filter(function(r) { return r.key !== 'takeaway'; }).map(function(r) {
-      return [r.label, rowText(r.key, 0), rowText(r.key, 1), rowText(r.key, 2)];
+    r.newPage();
+    r.sectionHeader('Appendix: Full Category Comparison');
+    r.paragraph('Supporting detail behind the findings above', { size: 10.5, italic: true, color: C.GRAY, spaceAfter: 10 });
+    const appendixRows = TABLE_ROWS.filter(function(rr) { return rr.key !== 'takeaway'; }).map(function(rr) {
+      return [rr.label, rowText(rr.key, 0), rowText(rr.key, 1), rowText(rr.key, 2)];
     });
-    tableBlock(['Category', names[0], names[1], names[2]], appendixRows, [CONTENT_W * 0.16, CONTENT_W * 0.28, CONTENT_W * 0.28, CONTENT_W * 0.28]);
+    r.tableBlock(['Category', names[0], names[1], names[2]], appendixRows, [r.CONTENT_W * 0.16, r.CONTENT_W * 0.28, r.CONTENT_W * 0.28, r.CONTENT_W * 0.28]);
 
     // ================= CONCLUSION =================
-    newPage();
-    sectionHeader('Conclusion');
-    paragraph('The strategic opportunity is synthesis, not imitation', { size: 10.5, italic: true, color: GRAY, spaceAfter: 10 });
+    r.newPage();
+    r.sectionHeader('Conclusion');
+    r.paragraph('The strategic opportunity is synthesis, not imitation', { size: 10.5, italic: true, color: C.GRAY, spaceAfter: 10 });
     const borrowRows = names.map(function(name, i) { return [rowText('takeaway', i) || '—', name]; });
-    tableBlock(['Borrow', 'From'], borrowRows, [CONTENT_W * 0.68, CONTENT_W * 0.32]);
-    if (conclusion) calloutBox('Bottom Line', conclusion, GOLD);
-    paragraph('Prepared for internal strategy discussion.', { size: 8.5, italic: true, color: GRAY, spaceAfter: 0 });
+    r.tableBlock(['Borrow', 'From'], borrowRows, [r.CONTENT_W * 0.68, r.CONTENT_W * 0.32]);
+    if (conclusion) r.calloutBox('Bottom Line', conclusion);
+    r.paragraph('Prepared for internal strategy discussion.', { size: 8.5, italic: true, color: C.GRAY, spaceAfter: 0 });
 
-    footer();
-    doc.save((companyName.replace(/[^a-z0-9]+/gi, '_') || 'Website') + '_Competitor_Analysis.pdf');
+    r.save((companyName.replace(/[^a-z0-9]+/gi, '_') || 'Website') + '_Competitor_Analysis.pdf');
   } catch (err) {
     console.error('PDF generation failed:', err);
     alert('PDF generation failed: ' + (err && err.message ? err.message : err));
