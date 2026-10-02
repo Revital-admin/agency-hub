@@ -123,57 +123,64 @@ ${references}
   });
 
   // Download PDF - a real leave-behind document, unlike Copy for ClickUp
-  // above (which only helps once it's pasted somewhere else). Re-parses
-  // currentMarkdown with its own leading "# ... Creative Brief: ..." title
-  // line stripped out (the container below builds its own styled h1 for
-  // that - reusing previewContainer.innerHTML as-is would print the title
-  // twice, since marked.js already turned that line into an h1 there),
-  // then restyles the result dark-on-white since the live preview relies
-  // on the Hub's dark-theme CSS variables, which won't be present in the
-  // exported document. Same html2pdf pattern (white page, Revital Hub
-  // logo header) as the audit tools' Download PDF buttons.
+  // above (which only helps once it's pasted somewhere else).
+  // Oct 2026 rebuild: switched from re-parsing currentMarkdown into a
+  // restyled HTML document for html2canvas/html2pdf to screenshot, to the
+  // shared RevitalPDF module - see ../shared/pdf-report.js for the full
+  // rationale. Reads the same field values directly instead of round-
+  // tripping through markdown/marked.js.
   const downloadPdfBtn = document.getElementById('downloadPdfBtn');
   if (downloadPdfBtn) {
-    downloadPdfBtn.addEventListener('click', async () => {
+    downloadPdfBtn.addEventListener('click', () => {
+      if (typeof window.RevitalPDF === 'undefined') {
+        alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
+        return;
+      }
       downloadPdfBtn.disabled = true;
       const origHtml = downloadPdfBtn.innerHTML;
       downloadPdfBtn.innerHTML = '<span>Generating...</span>';
 
       const campaignName = document.getElementById('campaignName').value || 'Creative Brief';
       const clientName = document.getElementById('clientName').value || 'Client';
-      const mdBody = currentMarkdown.replace(/^#.*Creative Brief:.*\n+/, '');
-      const bodyHtml = (typeof marked !== 'undefined') ? marked.parse(mdBody) : `<pre>${mdBody}</pre>`;
-
-      const container = document.createElement('div');
-      container.style.cssText = 'font-family: "Inter", sans-serif, Arial; color:#1e293b; font-size:14px; line-height:1.6; width:100%; padding:40px; box-sizing:border-box; background:white;';
-      container.innerHTML = `
-        <img src="assets/logo.png" onerror="this.src='../logo.png'" alt="Revital Hub" style="height:50px; width:144px; object-fit:contain; margin-bottom:30px;">
-        <h1 style="font-size:26px; font-weight:700; color:#0f172a; border-bottom:4px solid #f59e0b; padding-bottom:16px; margin-bottom:20px;">Creative Brief: ${campaignName}</h1>
-        <p style="color:#64748b; font-size:13px; margin-bottom:24px;"><strong>Client:</strong> ${clientName} &nbsp;&middot;&nbsp; <strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
-        <div>${bodyHtml}</div>
-      `;
-      container.querySelectorAll('h2').forEach(h => h.style.cssText = 'font-size:16px; color:#0f172a; border-bottom:2px solid #e2e8f0; padding-bottom:6px; margin:20px 0 10px;');
-      container.querySelectorAll('p, li, strong').forEach(elx => { elx.style.color = '#334155'; });
-      container.querySelectorAll('blockquote').forEach(elx => elx.style.cssText = 'border-left:3px solid #3b82f6; padding-left:12px; color:#475569; margin:10px 0;');
-      container.querySelectorAll('hr').forEach(elx => elx.style.cssText = 'border:none; border-top:1px solid #e2e8f0; margin:24px 0;');
-      container.querySelectorAll('em').forEach(elx => { elx.style.color = '#94a3b8'; });
+      const objective = document.getElementById('objective').value;
+      const targetAudience = document.getElementById('targetAudience').value;
+      const keyMessage = document.getElementById('keyMessage').value;
+      const toneOfVoice = document.getElementById('toneOfVoice').value;
+      const deliverables = document.getElementById('deliverables').value;
+      const references = document.getElementById('references').value;
 
       try {
-        const opt = {
-          margin: 0,
-          filename: `Creative_Brief_${campaignName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`,
-          image: { type: 'jpeg', quality: 0.92 },
-          html2canvas: { scale: 2, letterRendering: true, useCORS: true, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-        };
-        if (typeof html2pdf !== 'undefined') {
-          await html2pdf().set(opt).from(container).save();
-        } else {
-          alert("PDF library failed to load.");
-        }
+        const r = RevitalPDF.create({ reportTitle: 'CREATIVE BRIEF', companyName: clientName });
+        const C = r.colors;
+
+        r.coverPage({
+          title: `Creative Brief: ${campaignName}`,
+          subLine: new Date().toLocaleDateString(),
+          objective: objective || undefined,
+        });
+
+        r.newPage();
+        r.sectionHeader('Target Audience');
+        r.paragraph(targetAudience || 'Not provided', { spaceAfter: 16 });
+
+        r.sectionHeader('Key Message / Value Proposition');
+        r.paragraph(keyMessage || 'Not provided', { spaceAfter: 16 });
+
+        r.sectionHeader('Tone of Voice');
+        r.paragraph(toneOfVoice || 'Not provided', { bold: true, spaceAfter: 16 });
+
+        r.sectionHeader('Required Deliverables');
+        r.paragraph(deliverables || 'Not provided', { spaceAfter: 16 });
+
+        r.sectionHeader('Inspiration & References');
+        r.paragraph(references || 'None provided', { spaceAfter: 16 });
+
+        r.paragraph('Generated via Revital Hub - Creative Brief Generator', { italic: true, size: 8.5, color: C.GRAY });
+
+        r.save(`Creative_Brief_${campaignName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
       } catch (e) {
         console.error("PDF error:", e);
-        alert("Something went wrong generating the PDF.");
+        alert("Something went wrong generating the PDF: " + (e && e.message ? e.message : e));
       }
 
       downloadPdfBtn.disabled = false;

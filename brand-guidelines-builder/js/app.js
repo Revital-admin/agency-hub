@@ -350,103 +350,70 @@ function saveGuideline() {
 // ── Download PDF ──
 // Brand Guidelines Builder had zero export before this - you could build
 // out a full guideline here but had no way to actually hand it to anyone
-// (a lead, or use it for Revital's own materials) outside the Hub. Same
-// html2pdf pattern as the rest of the Hub's Download PDF buttons, built
-// from scratch (not reusing an on-screen preview, since this tool doesn't
-// have one) covering every section: overview, logo, colors, typography,
-// voice/tone, messaging, imagery.
-function colorSwatchHtml(hex, label, usage) {
-  const safeHex = /^#[0-9A-F]{3,8}$/i.test(hex || '') ? hex : '#ffffff';
-  return `
-    <div style="display:flex; align-items:flex-start; gap:12px; margin-bottom:14px;">
-      <div style="width:44px; height:44px; border-radius:8px; border:1px solid #e2e8f0; background:${safeHex}; flex-shrink:0;"></div>
-      <div>
-        <div style="font-weight:600; color:#0f172a;">${escapeHtml(label)} <span style="font-weight:400; color:#64748b; font-family:monospace; font-size:12px;">${escapeHtml(hex || '--')}</span></div>
-        ${usage ? `<div style="color:#475569; font-size:12.5px; margin-top:2px;">${escapeHtml(usage)}</div>` : ''}
-      </div>
-    </div>`;
+// (a lead, or use it for Revital's own materials) outside the Hub.
+// Oct 2026: built with the shared RevitalPDF module (../shared/pdf-report.js)
+// rather than html2canvas/html2pdf - see that file for the full rationale.
+// Covers every section: overview, logo, colors, typography, voice/tone,
+// messaging, imagery. Logo/reference images are drawn directly via jsPDF's
+// addImage() (same approach as Case Study Builder); color swatches are
+// drawn as real filled rectangles.
+
+function pdfTextBlock(r, label, value) {
+  if (!value) return;
+  r.paragraph(label, { bold: true, size: 10, spaceAfter: 3 });
+  r.paragraph(value, { spaceAfter: 12 });
 }
 
-function imageGridHtml(list, emptyLabel) {
-  if (!list || !list.length) return `<p style="color:#94a3b8; font-size:13px;">${emptyLabel}</p>`;
-  return `<div style="display:flex; flex-wrap:wrap; gap:12px;">${list.map(l => {
+function hexToRgbArr(hex) {
+  if (!/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(hex || '')) return [255, 255, 255];
+  let c = hex.replace('#', '');
+  if (c.length === 3) c = c.split('').map(ch => ch + ch).join('');
+  return [parseInt(c.slice(0, 2), 16), parseInt(c.slice(2, 4), 16), parseInt(c.slice(4, 6), 16)];
+}
+
+function pdfColorRow(r, hex, label, usage) {
+  const doc = r.doc; const C = r.colors;
+  r.ensureSpace(50);
+  doc.setFillColor.apply(doc, hexToRgbArr(hex));
+  doc.rect(r.MARGIN, r.y, 36, 36, 'F');
+  doc.setDrawColor(226, 232, 240); doc.rect(r.MARGIN, r.y, 36, 36);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor.apply(doc, C.DARK);
+  doc.text(`${label}  ${hex || '--'}`, r.MARGIN + 46, r.y + 14);
+  if (usage) {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor.apply(doc, C.GRAY);
+    doc.text(doc.splitTextToSize(usage, r.CONTENT_W - 46), r.MARGIN + 46, r.y + 28);
+  }
+  r.y += 50;
+}
+
+function pdfImageList(r, list, emptyLabel) {
+  const C = r.colors;
+  if (!list || !list.length) {
+    r.paragraph(emptyLabel, { italic: true, size: 9, color: C.GRAY, spaceAfter: 10 });
+    return;
+  }
+  list.forEach(l => {
     const isImage = l.isImage || (l.url || '').startsWith('data:image');
-    const thumb = isImage
-      ? `<img src="${l.url}" style="width:120px; height:90px; object-fit:contain; border:1px solid #e2e8f0; border-radius:6px; background:#f8fafc;">`
-      : `<div style="width:120px; height:90px; border:1px solid #e2e8f0; border-radius:6px; background:#f8fafc; display:flex; align-items:center; justify-content:center; font-size:10px; color:#94a3b8; text-align:center; padding:4px; overflow:hidden;">${escapeHtml(l.url || '')}</div>`;
-    return `<div style="width:120px;">${thumb}<div style="font-size:11px; color:#475569; margin-top:4px; text-align:center;">${escapeHtml(l.label || '')}</div></div>`;
-  }).join('')}</div>`;
+    if (!isImage) {
+      r.bulletList([`${l.label || 'Reference'}: ${l.url || ''}`]);
+      return;
+    }
+    try {
+      const props = r.doc.getImageProperties(l.url);
+      const w = Math.min(180, r.CONTENT_W);
+      const h = w * (props.height / props.width);
+      r.ensureSpace(h + 24);
+      const fmt = l.url.indexOf('data:image/png') === 0 ? 'PNG' : 'JPEG';
+      r.doc.addImage(l.url, fmt, r.MARGIN, r.y, w, h);
+      r.y += h + 4;
+      if (l.label) r.paragraph(l.label, { size: 8.5, italic: true, color: C.GRAY, spaceAfter: 10 });
+    } catch (e) {
+      console.warn('Skipping image in brand guidelines PDF:', e);
+    }
+  });
 }
 
-function pdfSectionHtml(title, bodyHtml) {
-  return `
-    <div style="margin-bottom:26px; page-break-inside:avoid;">
-      <h2 style="font-size:16px; color:#0f172a; border-bottom:2px solid #e2e8f0; padding-bottom:6px; margin-bottom:12px;">${title}</h2>
-      ${bodyHtml}
-    </div>`;
-}
-
-function pdfTextBlockHtml(label, value) {
-  return value ? `<div style="margin-bottom:10px;"><strong style="color:#0f172a;">${label}:</strong> <span style="color:#334155; white-space:pre-wrap;">${escapeHtml(value)}</span></div>` : '';
-}
-
-function buildGuidelinePdfHtml(clientName, g) {
-  return `
-    <img src="assets/logo.png" onerror="this.src='../logo.png'" alt="Revital Hub" style="height:50px; width:144px; object-fit:contain; margin-bottom:30px;">
-    <h1 style="font-size:26px; font-weight:700; color:#0f172a; border-bottom:4px solid #f59e0b; padding-bottom:16px; margin-bottom:6px;">Brand Guidelines: ${escapeHtml(clientName)}</h1>
-    <p style="color:#64748b; font-size:13px; margin-bottom:28px;"><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
-
-    ${pdfSectionHtml('Brand Overview', `
-      ${pdfTextBlockHtml('Mission', g.mission)}
-      ${pdfTextBlockHtml('Story', g.story)}
-      ${pdfTextBlockHtml('Core Values', g.values)}
-      ${pdfTextBlockHtml('Target Audience', g.audience)}
-    `)}
-
-    ${pdfSectionHtml('Logo', `
-      ${g.primaryLogoUrl ? `<img src="${g.primaryLogoUrl}" style="max-width:200px; max-height:120px; object-fit:contain; border:1px solid #e2e8f0; border-radius:6px; padding:10px; margin-bottom:14px; background:#f8fafc;">` : `<p style="color:#94a3b8; font-size:13px;">No primary logo uploaded.</p>`}
-      <div style="font-weight:600; color:#0f172a; margin:14px 0 8px;">Logo Variations</div>
-      ${imageGridHtml(g.logoVariations, 'None added yet.')}
-      ${pdfTextBlockHtml('Clear Space', g.clearSpace)}
-      ${pdfTextBlockHtml("Don'ts", g.logoDonts)}
-    `)}
-
-    ${pdfSectionHtml('Color Palette', `
-      ${colorSwatchHtml(g.primaryColor, 'Primary', g.primaryColorUsage)}
-      ${colorSwatchHtml(g.secondaryColor, 'Secondary', g.secondaryColorUsage)}
-      ${colorSwatchHtml(g.accentColor, 'Accent', g.accentColorUsage)}
-      ${colorSwatchHtml(g.neutralColor, 'Neutral', g.neutralColorUsage)}
-    `)}
-
-    ${pdfSectionHtml('Typography', `
-      ${pdfTextBlockHtml('Primary Font', g.fontPrimary)}
-      ${pdfTextBlockHtml('Secondary Font', g.fontSecondary)}
-      ${pdfTextBlockHtml('Type Scale', g.typeScale)}
-      ${pdfTextBlockHtml('Font License', g.fontLicenseUrl)}
-    `)}
-
-    ${pdfSectionHtml('Voice & Tone', `
-      ${pdfTextBlockHtml('Personality', g.personality)}
-      ${pdfTextBlockHtml('Tone', g.toneDescription)}
-      ${pdfTextBlockHtml("Writing Do's", g.writingDos)}
-      ${pdfTextBlockHtml("Writing Don'ts", g.writingDonts)}
-    `)}
-
-    ${pdfSectionHtml('Messaging', `
-      ${pdfTextBlockHtml('Tagline', g.tagline)}
-      ${pdfTextBlockHtml('Elevator Pitch', g.elevatorPitch)}
-      ${pdfTextBlockHtml('Messaging Pillars', g.messagingPillars)}
-    `)}
-
-    ${pdfSectionHtml('Imagery', `
-      ${pdfTextBlockHtml('Imagery Style', g.imageryStyle)}
-      <div style="font-weight:600; color:#0f172a; margin:14px 0 8px;">Reference Images</div>
-      ${imageGridHtml(g.imageryRefs, 'None added yet.')}
-    `)}
-  `;
-}
-
-async function downloadGuidelinePdf() {
+function downloadGuidelinePdf() {
   const clientName = el('clientSelect').value;
   if (!clientName) return;
   const btn = el('downloadGuidelinePdfBtn');
@@ -456,26 +423,81 @@ async function downloadGuidelinePdf() {
 
   const g = collectGuidelineFromForm();
 
-  const container = document.createElement('div');
-  container.style.cssText = 'font-family: "Inter", sans-serif, Arial; color:#1e293b; font-size:14px; line-height:1.6; width:100%; padding:40px; box-sizing:border-box; background:white;';
-  container.innerHTML = buildGuidelinePdfHtml(clientName, g);
-
   try {
-    const opt = {
-      margin: 0,
-      filename: `Brand_Guidelines_${clientName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`,
-      image: { type: 'jpeg', quality: 0.92 },
-      html2canvas: { scale: 2, letterRendering: true, useCORS: true, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-    if (typeof html2pdf !== 'undefined') {
-      await html2pdf().set(opt).from(container).save();
-    } else {
-      alert("PDF library failed to load.");
+    if (typeof window.RevitalPDF === 'undefined') {
+      alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
+      btn.disabled = false; btn.innerHTML = origHtml;
+      return;
     }
+    const r = RevitalPDF.create({ reportTitle: 'BRAND GUIDELINES', companyName: clientName });
+
+    r.coverPage({
+      title: 'Brand Guidelines',
+      subLine: new Date().toLocaleDateString(),
+      objective: g.mission || undefined,
+    });
+
+    r.newPage();
+    r.sectionHeader('Brand Overview');
+    pdfTextBlock(r, 'Mission', g.mission);
+    pdfTextBlock(r, 'Story', g.story);
+    pdfTextBlock(r, 'Core Values', g.values);
+    pdfTextBlock(r, 'Target Audience', g.audience);
+
+    r.sectionHeader('Logo');
+    if (g.primaryLogoUrl) {
+      try {
+        const props = r.doc.getImageProperties(g.primaryLogoUrl);
+        const w = Math.min(200, r.CONTENT_W);
+        const h = w * (props.height / props.width);
+        r.ensureSpace(h + 20);
+        const fmt = g.primaryLogoUrl.indexOf('data:image/png') === 0 ? 'PNG' : 'JPEG';
+        r.doc.addImage(g.primaryLogoUrl, fmt, r.MARGIN, r.y, w, h);
+        r.y += h + 14;
+      } catch (e) { console.warn('Skipping primary logo in PDF:', e); }
+    } else {
+      r.paragraph('No primary logo uploaded.', { italic: true, size: 9, color: r.colors.GRAY, spaceAfter: 10 });
+    }
+    r.paragraph('Logo Variations', { bold: true, size: 10, spaceAfter: 6 });
+    pdfImageList(r, g.logoVariations, 'None added yet.');
+    pdfTextBlock(r, 'Clear Space', g.clearSpace);
+    pdfTextBlock(r, "Don'ts", g.logoDonts);
+
+    r.newPage();
+    r.sectionHeader('Color Palette');
+    pdfColorRow(r, g.primaryColor, 'Primary', g.primaryColorUsage);
+    pdfColorRow(r, g.secondaryColor, 'Secondary', g.secondaryColorUsage);
+    pdfColorRow(r, g.accentColor, 'Accent', g.accentColorUsage);
+    pdfColorRow(r, g.neutralColor, 'Neutral', g.neutralColorUsage);
+
+    r.sectionHeader('Typography');
+    pdfTextBlock(r, 'Primary Font', g.fontPrimary);
+    pdfTextBlock(r, 'Secondary Font', g.fontSecondary);
+    pdfTextBlock(r, 'Type Scale', g.typeScale);
+    pdfTextBlock(r, 'Font License', g.fontLicenseUrl);
+
+    r.newPage();
+    r.sectionHeader('Voice & Tone');
+    pdfTextBlock(r, 'Personality', g.personality);
+    pdfTextBlock(r, 'Tone', g.toneDescription);
+    pdfTextBlock(r, "Writing Do's", g.writingDos);
+    pdfTextBlock(r, "Writing Don'ts", g.writingDonts);
+
+    r.sectionHeader('Messaging');
+    pdfTextBlock(r, 'Tagline', g.tagline);
+    pdfTextBlock(r, 'Elevator Pitch', g.elevatorPitch);
+    pdfTextBlock(r, 'Messaging Pillars', g.messagingPillars);
+
+    r.newPage();
+    r.sectionHeader('Imagery');
+    pdfTextBlock(r, 'Imagery Style', g.imageryStyle);
+    r.paragraph('Reference Images', { bold: true, size: 10, spaceAfter: 6 });
+    pdfImageList(r, g.imageryRefs, 'None added yet.');
+
+    r.save(`Brand_Guidelines_${clientName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
   } catch (e) {
     console.error("PDF error:", e);
-    alert("Something went wrong generating the PDF.");
+    alert("Something went wrong generating the PDF: " + (e && e.message ? e.message : e));
   }
 
   btn.disabled = false;
