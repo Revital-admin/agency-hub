@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shot List Builder</title>
+<link rel="stylesheet" href="../style.css?v=23">
+<link rel="stylesheet" href="css/style.css?v=1">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<main class="container container-wide">
+<div class="brand-bar">
+<div class="brand-logo-container"></div>
+</div>
+
+<header class="site-header">
+<div class="header-eyebrow">
+<span class="dot"></span>
+<span>Production</span>
+</div>
+<h1 class="site-title">Shot List <em>Builder</em></h1>
+<p class="site-subtitle">Every planned shot for a shoot, so nothing gets missed on set and everyone knows what's left to capture.</p>
+</header>
+
+<div class="summary-bar" id="summaryBar">
+<div class="summary-stat"><span class="summary-num" id="summaryPlanned">0</span><span class="summary-label">Planned</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryReshoot">0</span><span class="summary-label">Needs Reshoot</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryCaptured">0</span><span class="summary-label">Captured</span></div>
+</div>
+
+<div class="step-card">
+<div class="section-title" style="margin-bottom: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent);">Add a Shot</h2>
+</div>
+
+<div class="form-grid">
+<div class="form-group"><label for="clientName">Client Name</label><input type="text" id="clientName" list="clientOptions" placeholder="Client / company name..."><datalist id="clientOptions"></datalist></div>
+<div class="form-group"><label for="projectTitle">Project / Shoot Title</label><input type="text" id="projectTitle" placeholder="e.g. Summer Sale Campaign Shoot"></div>
+<div class="form-group"><label for="shotNumber">Shot #</label><input type="text" id="shotNumber" placeholder="e.g. 1, 2A, B-Roll 3..."></div>
+<div class="form-group"><label for="shotType">Shot Type</label><select id="shotType"><option>Wide</option><option>Medium</option><option>Close-Up</option><option>POV</option><option>Drone / Aerial</option><option>B-Roll</option><option>Interview</option><option>Other</option></select></div>
+<div class="form-group"><label for="location">Location</label><input type="text" id="location" placeholder="Where this shot happens..."></div>
+<div class="form-group"><label for="status">Status</label><select id="status"><option>Planned</option><option>Captured</option><option>Needs Reshoot</option></select></div>
+</div>
+<div class="form-group"><label for="shotDescription">Shot Description</label><input type="text" id="shotDescription" placeholder="What's happening in frame, action, framing notes..."></div>
+<div class="form-group"><label for="notes">Notes</label><input type="text" id="notes" placeholder="Gear needed, talent, anything crew should know..."></div>
+
+<button id="saveEntryBtn" class="btn-primary">Add Shot</button>
+</div>
+
+<div class="step-card">
+<div class="tracker-controls-row" style="flex-wrap: wrap; gap: 14px;">
+<input type="text" id="filterClientInput" placeholder="Filter by client name..." style="flex:1; min-width:220px;">
+<label class="show-closed-toggle">
+<input type="checkbox" id="showAllStatusesToggle"> Show captured shots
+</label>
+</div>
+</div>
+
+<div class="step-card table-card">
+<div class="tracker-table-wrap">
+<table class="tracker-table">
+<thead>
+<tr>
+<th>Client</th>
+<th>Project</th>
+<th>Shot #</th>
+<th>Description</th>
+<th>Type</th>
+<th>Status</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="logTableBody"></tbody>
+</table>
+<p id="emptyState" class="empty-state" style="display:none;">No shots added yet.</p>
+</div>
+</div>
+
+</main>
+<script src="js/app.js?v=1"></script>
+</body>
+</html>

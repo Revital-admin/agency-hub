@@ -1273,7 +1273,10 @@ let iframeNeedsReload = {
   "tab-releaseforms": true,
   "tab-runofshow": true,
   "tab-venuespecs": true,
-  "tab-vendorrental": true
+  "tab-vendorrental": true,
+  "tab-shotlist": true,
+  "tab-permittracker": true,
+  "tab-wrapreport": true
 };
 
 // ── Initial State Blueprint ──
@@ -1910,6 +1913,15 @@ function refreshIframeTab(tabId) {
       break;
     case "tab-releaseforms":
       renderReleaseFormsTab();
+      break;
+    case "tab-shotlist":
+      renderShotListTab();
+      break;
+    case "tab-permittracker":
+      renderPermitTrackerTab();
+      break;
+    case "tab-wrapreport":
+      renderWrapReportTab();
       break;
     case "tab-runofshow":
       renderRunOfShowTab();
@@ -3985,6 +3997,21 @@ function renderRawFootageTab() {
 // ── Release Forms Tracker Controller ──
 function renderReleaseFormsTab() {
   setIframeAbsoluteSrc('#tab-releaseforms iframe', "release-forms-tracker/index.html");
+}
+
+// ── Shot List Builder Controller ──
+function renderShotListTab() {
+  setIframeAbsoluteSrc('#tab-shotlist iframe', "shot-list-builder/index.html");
+}
+
+// ── Permit Tracker Controller ──
+function renderPermitTrackerTab() {
+  setIframeAbsoluteSrc('#tab-permittracker iframe', "permit-tracker/index.html");
+}
+
+// ── Wrap Report Controller ──
+function renderWrapReportTab() {
+  setIframeAbsoluteSrc('#tab-wrapreport iframe', "wrap-report/index.html");
 }
 
 // ── Run of Show Tracker Controller ──

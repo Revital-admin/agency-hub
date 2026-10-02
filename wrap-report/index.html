@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wrap Report</title>
+<link rel="stylesheet" href="../style.css?v=23">
+<link rel="stylesheet" href="css/style.css?v=1">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<main class="container container-wide">
+<div class="brand-bar">
+<div class="brand-logo-container"></div>
+</div>
+
+<header class="site-header">
+<div class="header-eyebrow">
+<span class="dot"></span>
+<span>Production</span>
+</div>
+<h1 class="site-title">Wrap <em>Report</em></h1>
+<p class="site-subtitle">A quick debrief after every shoot — what broke, what ran long, what to fix before the next one with this client.</p>
+</header>
+
+<div class="summary-bar" id="summaryBar">
+<div class="summary-stat"><span class="summary-num" id="summaryGreat">0</span><span class="summary-label">Great</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryGood">0</span><span class="summary-label">Good</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryRough">0</span><span class="summary-label">Rough</span></div>
+</div>
+
+<div class="step-card">
+<div class="section-title" style="margin-bottom: 20px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
+<h2 style="font-family: var(--font-heading); color: var(--color-accent);">Log a Wrap Report</h2>
+</div>
+
+<div class="form-grid">
+<div class="form-group"><label for="clientName">Client Name</label><input type="text" id="clientName" list="clientOptions" placeholder="Client / company name..."><datalist id="clientOptions"></datalist></div>
+<div class="form-group"><label for="projectTitle">Project / Shoot Title</label><input type="text" id="projectTitle"></div>
+<div class="form-group"><label for="shootDate">Shoot Date</label><input type="date" id="shootDate"></div>
+<div class="form-group"><label for="rating">Overall Rating</label><select id="rating"><option>Great</option><option>Good</option><option>Rough</option></select></div>
+<div class="form-group"><label for="scheduleNotes">Ran Long / Short?</label><input type="text" id="scheduleNotes" placeholder="e.g. Wrapped 45 min over call time..."></div>
+</div>
+<div class="form-group"><label for="whatWentWell">What Went Well</label><textarea id="whatWentWell" rows="2" placeholder="Worth repeating next time..."></textarea></div>
+<div class="form-group"><label for="whatWentWrong">What Broke / Went Wrong</label><textarea id="whatWentWrong" rows="2" placeholder="Equipment, access, timing, communication issues..."></textarea></div>
+<div class="form-group"><label for="vendorIssues">Vendor / Location Issues</label><textarea id="vendorIssues" rows="2" placeholder="Anything on the venue or vendor side worth flagging..."></textarea></div>
+<div class="form-group"><label for="actionItems">Action Items for Next Time</label><textarea id="actionItems" rows="2" placeholder="Concrete changes before the next shoot with this client..."></textarea></div>
+
+<button id="saveEntryBtn" class="btn-primary">Log Wrap Report</button>
+</div>
+
+<div class="step-card">
+<div class="tracker-controls-row" style="flex-wrap: wrap; gap: 14px;">
+<input type="text" id="filterClientInput" placeholder="Filter by client name..." style="flex:1; min-width:220px;">
+<label class="show-closed-toggle">
+<input type="checkbox" id="showAllStatusesToggle"> Show all reports
+</label>
+</div>
+</div>
+
+<div class="step-card table-card">
+<div class="tracker-table-wrap">
+<table class="tracker-table">
+<thead>
+<tr>
+<th>Client</th>
+<th>Project</th>
+<th>Shoot Date</th>
+<th>Rating</th>
+<th>Action Items</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="logTableBody"></tbody>
+</table>
+<p id="emptyState" class="empty-state" style="display:none;">No wrap reports logged yet.</p>
+</div>
+</div>
+
+</main>
+<script src="js/app.js?v=1"></script>
+</body>
+</html>
