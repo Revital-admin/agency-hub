@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Revital Hub</title>
-  <link rel="stylesheet" href="style.css?v=18">
+  <link rel="stylesheet" href="style.css?v=19">
   <!-- Firebase SDK Compat, config, central references, and the app
        controller - all `defer`red (perf fix, Aug 2026). These used to
        load synchronously with no defer/async, which meant the browser
@@ -40,7 +40,7 @@
        the time app.js's own init runs. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
   <script src="shared/pdf-report.js?v=1" defer></script>
-  <script src="app.js?v=167" defer></script>
+  <script src="app.js?v=168" defer></script>
 
 </head>
 <body>
@@ -48,15 +48,17 @@
   <!-- Admin Auth Gate: blocks the hub until signed into Firebase as the
        authorized admin account. Hidden by default; app.js shows it if the
        user isn't signed in, and hides it once they are. -->
-  <div id="authGate" style="display:none; position:fixed; inset:0; z-index:9999; background:#0b0f14; color:#e5e7eb; flex-direction:column; align-items:center; justify-content:center; gap:16px; font-family:inherit; text-align:center; padding:24px;">
-    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-    <h2 style="margin:0;">Revital Hub</h2>
+  <div id="authGate" class="idle-lock-overlay">
+    <div class="idle-lock-icon">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+    </div>
+    <h2 class="idle-lock-title">Revital Hub</h2>
     <!-- Shown immediately while the silent Cloudflare Access -> Firebase
          exchange runs; app.js hides this and shows the button below only
          if that silent exchange fails. -->
-    <p id="authGateStatus" style="max-width:380px; color:#9ca3af; margin:0;">Checking access&hellip;</p>
-    <button id="authGateSignInBtn" style="display:none; padding:10px 20px; border-radius:8px; border:none; background:#10b981; color:#04120c; font-weight:600; cursor:pointer;">Sign in with Google</button>
-    <p id="authGateError" style="display:none; color:#ef4444; max-width:380px; margin:0;"></p>
+    <p id="authGateStatus" class="idle-lock-status">Checking access&hellip;</p>
+    <button id="authGateSignInBtn" class="idle-lock-btn" type="button" style="display:none;">Sign in with Google</button>
+    <p id="authGateError" class="idle-lock-error"></p>
   </div>
 
   <!-- Idle Session Lock: after IDLE_TIMEOUT_MS of no mouse/keyboard/scroll
@@ -64,27 +66,29 @@
        shows this to hide client data from anyone walking up to an
        unattended screen. Hidden by default. Applies to everyone, no
        exceptions - see initIdleSessionLock() in app.js. -->
-  <div id="idleLockOverlay" style="display:none; position:fixed; inset:0; z-index:10000; background:#0b0f14; color:#e5e7eb; flex-direction:column; align-items:center; justify-content:center; gap:16px; font-family:inherit; text-align:center; padding:24px;">
-    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-    <h2 style="margin:0;">Hub Locked</h2>
-    <p id="idleLockStatus" style="max-width:380px; color:#9ca3af; margin:0;">You've been idle for a while. Client data is hidden until you unlock.</p>
+  <div id="idleLockOverlay" class="idle-lock-overlay">
+    <div class="idle-lock-icon">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+    </div>
+    <h2 class="idle-lock-title">Hub Locked</h2>
+    <p id="idleLockStatus" class="idle-lock-status">You've been idle for a while. Client data is hidden until you unlock.</p>
     <!-- PIN entry - each person has their own PIN, generated for them by
          a Hub Admin (see teamPinsModal below). If the caller doesn't have
          one yet, showIdleLockOverlay in app.js hides this form entirely
          and idleLockStatus explains what to do instead. -->
-    <form id="idleLockPinForm" style="display:none; flex-direction:column; align-items:center; gap:10px;">
-      <input id="idleLockPinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="Your PIN" style="width:160px; text-align:center; letter-spacing:4px; font-size:18px; padding:10px 12px; border-radius:8px; border:1px solid #374151; background:#111827; color:#e5e7eb;">
-      <button id="idleLockUnlockBtn" type="submit" style="padding:10px 20px; border-radius:8px; border:none; background:#10b981; color:#04120c; font-weight:600; cursor:pointer;">Unlock</button>
+    <form id="idleLockPinForm" class="idle-lock-form">
+      <input id="idleLockPinInput" class="idle-lock-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="Your PIN">
+      <button id="idleLockUnlockBtn" class="idle-lock-btn" type="submit">Unlock</button>
     </form>
     <!-- Admin self-serve escape hatch - see showAdminSelfServePin in
          app.js. Only ever shown to a confirmed Hub Admin who has no PIN
          of their own yet, so the very first admin to hit the lock isn't
          stuck (the normal Team PINs panel lives in the sidebar, which
          this overlay covers). -->
-    <div id="idleLockAdminSelfServe" style="display:none; flex-direction:column; align-items:center; gap:10px;">
-      <button id="idleLockAdminSelfServeBtn" type="button" style="padding:10px 20px; border-radius:8px; border:none; background:#10b981; color:#04120c; font-weight:600; cursor:pointer;">Generate My PIN</button>
+    <div id="idleLockAdminSelfServe" class="idle-lock-self-serve">
+      <button id="idleLockAdminSelfServeBtn" class="idle-lock-btn" type="button">Generate My PIN</button>
     </div>
-    <p id="idleLockError" style="display:none; color:#ef4444; max-width:380px; margin:0;"></p>
+    <p id="idleLockError" class="idle-lock-error"></p>
   </div>
 
   <!-- Idle-lock warning toast (Sep 2026) - shown IDLE_WARNING_LEAD_MS
@@ -92,8 +96,8 @@
        Any activity that resets the idle timer also hides this - see
        resetIdleTimer/showIdleWarningToast/hideIdleWarningToast in app.js.
        Purely a heads-up; doesn't change when the actual lock fires. -->
-  <div id="idleWarningToast" style="display:none; position:fixed; bottom:24px; right:24px; z-index:9999; background:#111827; color:#e5e7eb; border:1px solid #374151; border-radius:10px; padding:14px 18px; max-width:320px; align-items:center; gap:12px; font-family:inherit; font-size:13px; box-shadow:0 8px 24px rgba(0,0,0,0.35);">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+  <div id="idleWarningToast" class="idle-warning-toast">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
     <span>You've been idle a while - the Hub will lock in about a minute. Move your mouse or press a key to stay active.</span>
   </div>
 
@@ -102,20 +106,20 @@
        admin-typed) for each teammate to hand out during onboarding, or
        regenerate/remove later. See idle lock PIN comment block in
        app.js / _worker.js. -->
-  <div id="teamPinsModal" style="display:none; position:fixed; inset:0; z-index:10001; background:rgba(0,0,0,0.6); align-items:center; justify-content:center;">
-    <div style="background:#111827; color:#e5e7eb; border-radius:12px; padding:24px; width:420px; max-height:80vh; display:flex; flex-direction:column; gap:12px; font-family:inherit;">
-      <h3 style="margin:0;">Team Idle-Lock PINs</h3>
-      <p style="margin:0; font-size:13px; color:#9ca3af;">Each person gets their own PIN, generated here - not chosen by them. A generated PIN is shown once, right after you create it, so copy it and hand it to them directly.</p>
-      <div style="display:flex; gap:8px;">
-        <input id="teamPinsNewEmail" type="email" placeholder="new-teammate@revitalproductions.com" style="flex:1; padding:8px 10px; border-radius:8px; border:1px solid #374151; background:#0b0f14; color:#e5e7eb; font-size:13px;">
-        <button id="teamPinsAddBtn" type="button" style="padding:8px 14px; border-radius:8px; border:1px solid #374151; background:transparent; color:#e5e7eb; cursor:pointer; white-space:nowrap;">+ Add</button>
+  <div id="teamPinsModal" class="team-pins-modal-overlay">
+    <div class="team-pins-modal">
+      <h3>Team Idle-Lock PINs</h3>
+      <p class="team-pins-modal-desc">Each person gets their own PIN, generated here - not chosen by them. A generated PIN is shown once, right after you create it, so copy it and hand it to them directly.</p>
+      <div class="team-pins-add-row">
+        <input id="teamPinsNewEmail" class="team-pins-input" type="email" placeholder="new-teammate@revitalproductions.com">
+        <button id="teamPinsAddBtn" class="team-pins-add-btn" type="button">+ Add</button>
       </div>
-      <p id="teamPinsError" style="display:none; color:#ef4444; margin:0; font-size:13px;"></p>
-      <div id="teamPinsList" style="overflow-y:auto; display:flex; flex-direction:column; gap:8px;">
+      <p id="teamPinsError" class="team-pins-error"></p>
+      <div id="teamPinsList" class="team-pins-list">
         <!-- Populated by JS - see renderTeamPinsList in app.js -->
       </div>
-      <div style="display:flex; justify-content:flex-end;">
-        <button id="teamPinsCloseBtn" type="button" style="padding:8px 14px; border-radius:8px; border:1px solid #374151; background:transparent; color:#e5e7eb; cursor:pointer;">Close</button>
+      <div class="team-pins-close-row">
+        <button id="teamPinsCloseBtn" class="team-pins-close-btn" type="button">Close</button>
       </div>
     </div>
   </div>

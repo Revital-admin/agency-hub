@@ -3664,3 +3664,355 @@ textarea {
   text-decoration: underline;
   white-space: nowrap;
 }
+
+/* ── Idle Session Lock / Team PINs (Oct 2026 restyle) ──
+   This whole family (the full-screen idle lock, its pre-lock warning
+   toast, and the admin Team PINs modal + the rows it renders via JS)
+   used to be 100% inline-styled with a generic cold blue-gray palette
+   (#0b0f14/#111827/#374151/#e5e7eb/#9ca3af, plain green #10b981 on
+   every primary button) that didn't match the rest of the Hub's warm
+   brand palette anywhere else - it looked like a different, unstyled
+   app bolted on. Converted to real classes using the same custom
+   properties as everything else (--bg-main, --bg-card-opaque,
+   --border-color, --primary, --font-heading, etc.) so hover/focus
+   states work too, which inline styles can't do. IDs are unchanged -
+   app.js's getElementById calls and show/hide via el.style.display
+   still work exactly as before; only the visual treatment moved here. */
+
+.idle-lock-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: var(--bg-main);
+  color: var(--text-main);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  font-family: var(--font-sans);
+  text-align: center;
+  padding: 24px;
+}
+
+.idle-lock-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: rgba(246, 141, 95, 0.1);
+  border: 1px solid rgba(246, 141, 95, 0.25);
+}
+
+.idle-lock-icon svg {
+  filter: drop-shadow(0 0 10px rgba(246, 141, 95, 0.35));
+}
+
+.idle-lock-title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 1.7rem;
+  font-weight: 600;
+  color: var(--text-title);
+}
+
+.idle-lock-status {
+  max-width: 380px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.idle-lock-form {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.idle-lock-input {
+  width: 180px;
+  text-align: center;
+  letter-spacing: 4px;
+  font-size: 18px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  transition: border-color var(--transition-fast);
+}
+
+.idle-lock-input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: var(--shadow-glow);
+}
+
+.idle-lock-btn {
+  padding: 11px 26px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--primary);
+  color: white;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.idle-lock-btn:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.idle-lock-self-serve {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.idle-lock-error {
+  display: none;
+  max-width: 380px;
+  margin: 0;
+  color: var(--error);
+  font-size: 0.85rem;
+}
+
+.idle-warning-toast {
+  display: none;
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  align-items: center;
+  gap: 12px;
+  max-width: 320px;
+  padding: 14px 18px;
+  background: var(--bg-card-opaque);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  box-shadow: var(--shadow-lg);
+}
+
+.team-pins-modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  background: rgba(0, 0, 0, 0.6);
+  align-items: center;
+  justify-content: center;
+}
+
+.team-pins-modal {
+  background: var(--bg-card-opaque);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  width: 420px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-family: var(--font-sans);
+  box-shadow: var(--shadow-lg);
+}
+
+.team-pins-modal h3 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-title);
+}
+
+.team-pins-modal-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.team-pins-add-row {
+  display: flex;
+  gap: 8px;
+}
+
+.team-pins-input {
+  flex: 1;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-main);
+  font-size: 13px;
+  font-family: var(--font-sans);
+  transition: border-color var(--transition-fast);
+}
+
+.team-pins-input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+.team-pins-add-btn {
+  padding: 9px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-main);
+  font-size: 13px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.team-pins-add-btn:hover {
+  background: rgba(246, 141, 95, 0.12);
+  border-color: rgba(246, 141, 95, 0.35);
+  color: #fbcbae;
+}
+
+.team-pins-error {
+  display: none;
+  margin: 0;
+  color: var(--error);
+  font-size: 13px;
+}
+
+.team-pins-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.team-pins-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.team-pins-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.team-pins-row-email-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.team-pins-row-email {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-main);
+}
+
+.team-pins-row-status {
+  font-size: 11px;
+}
+
+.team-pins-row-status.has-pin {
+  color: var(--success);
+}
+
+.team-pins-row-status.no-pin {
+  color: var(--text-muted);
+}
+
+.team-pins-generate-btn {
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--primary);
+  color: white;
+  font-weight: 600;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast);
+}
+
+.team-pins-generate-btn:hover {
+  background: var(--primary-hover);
+}
+
+.team-pins-remove-btn,
+.team-pins-done-btn,
+.team-pins-close-btn {
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-main);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.team-pins-close-btn {
+  font-size: 13px;
+  padding: 8px 16px;
+}
+
+.team-pins-remove-btn:hover,
+.team-pins-done-btn:hover,
+.team-pins-close-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-bright);
+}
+
+.team-pins-close-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.team-pins-pin-reveal {
+  flex: 1;
+  font-size: 13px;
+}
+
+.team-pins-pin-reveal strong {
+  color: var(--text-bright);
+}
+
+.team-pins-pin-reveal .note {
+  font-size: 11px;
+}
+
+.team-pins-pin-reveal .note.sent {
+  color: var(--success);
+}
+
+.team-pins-pin-reveal .note.not-sent {
+  color: var(--warning);
+}
+
+.team-pins-pin-reveal .pin-value {
+  font-size: 20px;
+  letter-spacing: 3px;
+  color: var(--success);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}

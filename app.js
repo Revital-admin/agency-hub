@@ -530,7 +530,7 @@ async function generateOwnPinAndUnlock() {
     if (!res.ok || !data.ok) throw new Error((data && data.error) || "Couldn't generate a PIN");
 
     const emailNote = data.emailSent ? " (also emailed to you)" : "";
-    if (statusEl) statusEl.innerHTML = `Your new PIN is <strong style="letter-spacing:3px; color:#10b981;">${data.pin}</strong>${emailNote} - remember it, it won't be shown again. Unlocking now...`;
+    if (statusEl) statusEl.innerHTML = `Your new PIN is <strong style="letter-spacing:3px; color:var(--success);">${data.pin}</strong>${emailNote} - remember it, it won't be shown again. Unlocking now...`;
     setTimeout(() => { finishIdleUnlockAfterPin(); }, 2500);
   } catch (e) {
     if (errorEl) { errorEl.textContent = e.message; errorEl.style.display = "block"; }
@@ -638,7 +638,7 @@ function closeTeamPinsModal() {
 async function loadTeamPinsList() {
   const listEl = document.getElementById("teamPinsList");
   const errorEl = document.getElementById("teamPinsError");
-  if (listEl) listEl.innerHTML = `<p style="margin:0; font-size:13px; color:#9ca3af;">Loading...</p>`;
+  if (listEl) listEl.innerHTML = `<p class="team-pins-empty">Loading...</p>`;
   try {
     const res = await fetch("/api/idle-lock/people", { credentials: "include" });
     const data = await res.json();
@@ -655,17 +655,17 @@ function renderTeamPinsList() {
   const listEl = document.getElementById("teamPinsList");
   if (!listEl) return;
   if (!teamPinsPeople.length) {
-    listEl.innerHTML = `<p style="margin:0; font-size:13px; color:#9ca3af;">Nobody yet - add a teammate's email above, or wait for them to sign in once.</p>`;
+    listEl.innerHTML = `<p class="team-pins-empty">Nobody yet - add a teammate's email above, or wait for them to sign in once.</p>`;
     return;
   }
   listEl.innerHTML = teamPinsPeople.map(p => `
-    <div class="team-pins-row" style="display:flex; align-items:center; gap:8px; padding:8px; border:1px solid #374151; border-radius:8px;">
-      <div style="flex:1; min-width:0;">
-        <div style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtmlForPins(p.email)}</div>
-        <div style="font-size:11px; color:${p.hasPin ? '#10b981' : '#9ca3af'};">${p.hasPin ? 'PIN set' : 'No PIN yet'}</div>
+    <div class="team-pins-row">
+      <div class="team-pins-row-email-wrap">
+        <div class="team-pins-row-email">${escapeHtmlForPins(p.email)}</div>
+        <div class="team-pins-row-status ${p.hasPin ? 'has-pin' : 'no-pin'}">${p.hasPin ? 'PIN set' : 'No PIN yet'}</div>
       </div>
-      <button type="button" class="team-pins-generate-btn" data-email="${escapeHtmlForPins(p.email)}" style="padding:6px 10px; border-radius:6px; border:none; background:#10b981; color:#04120c; font-weight:600; font-size:12px; cursor:pointer; white-space:nowrap;">${p.hasPin ? 'Regenerate' : 'Generate'}</button>
-      ${p.hasPin ? `<button type="button" class="team-pins-remove-btn" data-email="${escapeHtmlForPins(p.email)}" style="padding:6px 10px; border-radius:6px; border:1px solid #374151; background:transparent; color:#e5e7eb; font-size:12px; cursor:pointer; white-space:nowrap;">Remove</button>` : ''}
+      <button type="button" class="team-pins-generate-btn" data-email="${escapeHtmlForPins(p.email)}">${p.hasPin ? 'Regenerate' : 'Generate'}</button>
+      ${p.hasPin ? `<button type="button" class="team-pins-remove-btn" data-email="${escapeHtmlForPins(p.email)}">Remove</button>` : ''}
     </div>
   `).join("");
 
@@ -713,12 +713,12 @@ async function generateTeamPin(email, btn) {
         ? `Emailed to ${escapeHtmlForPins(email)}. Also shown here once:`
         : `Couldn't email it automatically${data.emailError ? ' (' + escapeHtmlForPins(data.emailError) + ')' : ''} - copy and share this now:`;
       row.innerHTML = `
-        <div style="flex:1; font-size:13px;">
+        <div class="team-pins-pin-reveal">
           <strong>${escapeHtmlForPins(email)}</strong><br>
-          <span style="font-size:11px; color:${data.emailSent ? '#10b981' : '#f59e0b'};">${emailNote}</span><br>
-          <span style="font-size:20px; letter-spacing:3px; color:#10b981; font-weight:700;">${escapeHtmlForPins(data.pin)}</span>
+          <span class="note ${data.emailSent ? 'sent' : 'not-sent'}">${emailNote}</span><br>
+          <span class="pin-value">${escapeHtmlForPins(data.pin)}</span>
         </div>
-        <button type="button" class="team-pins-done-btn" style="padding:6px 10px; border-radius:6px; border:1px solid #374151; background:transparent; color:#e5e7eb; font-size:12px; cursor:pointer; white-space:nowrap;">Done</button>
+        <button type="button" class="team-pins-done-btn">Done</button>
       `;
       const doneBtn = row.querySelector(".team-pins-done-btn");
       if (doneBtn) doneBtn.addEventListener("click", renderTeamPinsList);
