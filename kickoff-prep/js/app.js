@@ -593,23 +593,22 @@ function presentPrev() {
 }
 
 // ── PDF export ──
-// Same html2pdf pattern as QBR Generator's buildQbrPdfPayload - landscape
-// or portrait doesn't matter much since each slide is centered text, but
-// landscape reads more like an actual deck when opened/printed.
-async function exportSlidesToPdf() {
+// Oct 2026 rebuild: switched from html2canvas/html2pdf (one landscape
+// letter page per slide, screenshotted) to the shared RevitalPDF module.
+// shared/pdf-report.js is fixed-portrait (same call made for QBR
+// Generator's deck-like export) - each slide becomes its own portrait
+// page with the heading as a big section title and the body as large
+// centered-feeling body text, so it still reads like a deck handout
+// rather than a dense report, just not literally landscape.
+function exportSlidesToPdf() {
   const client = currentClient();
   if (!client) { if (window.parent.showBanner) window.parent.showBanner('error', 'Select a client first.'); return; }
   const slides = ensureKickoffPrep(client).deck.slides;
   if (!slides.length) { if (window.parent.showBanner) window.parent.showBanner('error', 'No slides yet.'); return; }
-
-  const container = document.createElement('div');
-  container.style.cssText = 'width: 11in;';
-  container.innerHTML = slides.map((s, i) => `
-    <div style="width:11in; height:8.5in; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:1in; box-sizing:border-box; font-family: Helvetica, Arial, sans-serif; background:#fff; color:#1a1a1a; ${i < slides.length - 1 ? 'page-break-after: always;' : ''}">
-      <h1 style="font-size:34px; margin:0 0 24px;">${escapeHtml(s.heading)}</h1>
-      <p style="font-size:18px; white-space:pre-wrap; color:#444; max-width:8in;">${escapeHtml(s.body)}</p>
-    </div>
-  `).join('');
+  if (typeof window.RevitalPDF === 'undefined') {
+    if (window.parent.showBanner) window.parent.showBanner('error', 'PDF library failed to load.');
+    return;
+  }
 
   const btn = el('exportPdfBtn');
   const originalText = btn.textContent;
@@ -617,18 +616,38 @@ async function exportSlidesToPdf() {
   btn.textContent = 'Generating...';
 
   try {
-    if (typeof html2pdf === 'undefined') throw new Error('PDF library failed to load');
-    await html2pdf().set({
-      margin: 0,
-      filename: `${currentClientName().replace(/\s+/g, '_')}_Kickoff_Deck.pdf`,
-      image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: { scale: 2, letterRendering: true, useCORS: true, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-      jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape' }
-    }).from(container).save();
+    const r = RevitalPDF.create({ reportTitle: 'KICKOFF DECK', companyName: currentClientName() });
+    const C = r.colors;
+
+    r.coverPage({
+      title: `Kickoff Deck: ${currentClientName()}`,
+      subLine: new Date().toLocaleDateString(),
+      objective: `${slides.length} slide${slides.length === 1 ? '' : 's'} - prepared to walk through on the kickoff call.`,
+    });
+
+    slides.forEach(function (s) {
+      r.newPage();
+      r.y = r.y + 40;
+      r.doc.setFont('helvetica', 'bold');
+      r.doc.setFontSize(22);
+      r.doc.setTextColor.apply(r.doc, C.DARK);
+      const headingLines = r.doc.splitTextToSize(r.sanitizeText(s.heading || 'Untitled Slide'), r.CONTENT_W);
+      r.doc.text(headingLines, r.MARGIN, r.y);
+      r.y += headingLines.length * 26 + 20;
+
+      r.doc.setDrawColor.apply(r.doc, C.ACCENT);
+      r.doc.setLineWidth(2);
+      r.doc.line(r.MARGIN, r.y, r.MARGIN + 80, r.y);
+      r.y += 30;
+
+      r.paragraph(s.body || '', { size: 12.5, spaceAfter: 10 });
+    });
+
+    r.save(`${currentClientName().replace(/\s+/g, '_')}_Kickoff_Deck.pdf`);
     if (window.parent.logAdminActivity) window.parent.logAdminActivity('Kickoff deck PDF generated', currentClientName());
   } catch (e) {
     console.error('Kickoff deck PDF export failed:', e);
-    if (window.parent.showBanner) window.parent.showBanner('error', 'Could not generate PDF: ' + e.message);
+    if (window.parent.showBanner) window.parent.showBanner('error', 'Could not generate PDF: ' + (e && e.message ? e.message : e));
   } finally {
     btn.disabled = false;
     btn.textContent = originalText;

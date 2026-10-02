@@ -95,44 +95,68 @@ document.addEventListener('DOMContentLoaded', () => {
     input.addEventListener('input', () => renderPreview());
   });
 
+  // Oct 2026 rebuild: switched from html2canvas/html2pdf screenshotting the
+  // on-screen preview (built by window.parent.build90DayPlanHtml, which
+  // still drives the live HTML preview above) to the shared RevitalPDF
+  // module, building the PDF directly from planData instead of
+  // reparsing/screenshotting HTML. Factored into a function so both the
+  // Download PDF button and the Email to Client send button (below) can
+  // build the same document - the latter needs the raw bytes/data-uri to
+  // attach rather than triggering a browser download.
+  function buildNinetyDayPlanPdf(clientName, planData) {
+    const p = planData || {};
+    const name = clientName || 'Client';
+    const r = RevitalPDF.create({ reportTitle: '90-DAY MARKETING ROADMAP', companyName: name });
+    const C = r.colors;
+
+    r.coverPage({
+      title: '90-Day Marketing Roadmap',
+      subLine: `${name} — Your First Quarter Plan`,
+      objective: p.planIntro || undefined,
+    });
+
+    r.newPage();
+    r.sectionHeader('The Roadmap');
+    r.calloutBox('Month 1', p.month1 || 'Priorities to be defined.');
+    r.calloutBox('Month 2', p.month2 || 'Priorities to be defined.');
+    r.calloutBox('Month 3', p.month3 || 'Priorities to be defined.');
+
+    r.sectionHeader('Channels & Budget');
+    r.paragraph('Recommended Channels', { bold: true, size: 10.5, spaceAfter: 6 });
+    r.paragraph(p.channelRecommendations || 'To be defined.', { spaceAfter: 14 });
+    r.paragraph('Budget Allocation', { bold: true, size: 10.5, spaceAfter: 6 });
+    r.paragraph(p.budgetAllocation || 'To be defined.', { spaceAfter: 14 });
+
+    r.sectionHeader('Success Criteria');
+    r.tableBlock(['Timeframe', 'What success looks like'], [
+      ['At 3 Months', p.success3mo || 'To be defined.'],
+      ['At 6 Months', p.success6mo || 'To be defined.'],
+      ['At 12 Months', p.success12mo || 'To be defined.'],
+    ], [r.CONTENT_W * 0.25, r.CONTENT_W * 0.75]);
+
+    return r;
+  }
+
   generateBtn.addEventListener('click', () => {
     const clientName = document.getElementById('clientName').value || 'Client';
-    const opt = {
-      margin:       0,
-      filename:     `90_Day_Plan_${clientName.replace(/\s+/g, '_')}.pdf`,
-      // Same tuned options as Welcome Guide's Download PDF - JPEG (no
-      // alpha layer), scale 2, forced scrollX/scrollY 0 for a detached
-      // capture, no pagebreak override (the two .pdf-page divs with
-      // overflow:hidden already guarantee exact one-page sizing each).
-      image:        { type: 'jpeg', quality: 0.92 },
-      html2canvas:  { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
+    if (typeof window.RevitalPDF === 'undefined') {
+      alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
+      return;
+    }
 
     generateBtn.innerHTML = 'Generating...';
     generateBtn.disabled = true;
 
-    if (typeof html2pdf === 'undefined') {
-      alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
-      generateBtn.disabled = false;
-      generateBtn.innerHTML = 'Download PDF';
-      return;
-    }
-
-    // Capture from a detached copy of the preview content, same reasoning
-    // as Welcome Guide's Download PDF handler - see that file's comments.
-    const exportContainer = document.createElement('div');
-    exportContainer.innerHTML = pdfContainer.innerHTML;
-
-    html2pdf().set(opt).from(exportContainer).save().then(() => {
+    try {
+      const r = buildNinetyDayPlanPdf(clientName, collectPlanData());
+      r.save(`90_Day_Plan_${clientName.replace(/\s+/g, '_')}.pdf`);
       generateBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download PDF';
-      generateBtn.disabled = false;
-    }).catch((err) => {
+    } catch (err) {
       console.error('PDF generation failed:', err);
-      alert('PDF generation failed - check the browser console for details.');
+      alert('PDF generation failed: ' + (err && err.message ? err.message : err));
       generateBtn.innerHTML = 'Download PDF';
-      generateBtn.disabled = false;
-    });
+    }
+    generateBtn.disabled = false;
   });
 
   // Wait for the parent to fully inject its globals if this iframe just
@@ -247,7 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (emailToClientSendBtn) {
     emailToClientSendBtn.addEventListener('click', async () => {
       if (!currentEmailToClientFrom) return;
-      if (typeof html2pdf === 'undefined') {
+      if (typeof window.RevitalPDF === 'undefined') {
         alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
         return;
       }
@@ -256,20 +280,13 @@ document.addEventListener('DOMContentLoaded', () => {
       emailToClientSendBtn.textContent = 'Generating PDF...';
       if (emailToClientStatus) emailToClientStatus.textContent = '';
 
-      const clientNameForFile = ((document.getElementById('clientName').value || 'Client')).replace(/\s+/g, '_');
-      const opt = {
-        margin: 0,
-        filename: `90_Day_Plan_${clientNameForFile}.pdf`,
-        image: { type: 'jpeg', quality: 0.92 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollX: 0, scrollY: 0, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-      };
-
-      const exportContainer = document.createElement('div');
-      exportContainer.innerHTML = pdfContainer.innerHTML;
+      const clientNameRaw = (document.getElementById('clientName').value || 'Client');
+      const clientNameForFile = clientNameRaw.replace(/\s+/g, '_');
+      const filename = `90_Day_Plan_${clientNameForFile}.pdf`;
 
       try {
-        const dataUri = await html2pdf().set(opt).from(exportContainer).outputPdf('datauristring');
+        const r = buildNinetyDayPlanPdf(clientNameRaw, collectPlanData());
+        const dataUri = r.doc.output('datauristring');
         const base64 = dataUri.slice(dataUri.indexOf(',') + 1);
         if (!base64) throw new Error('PDF generation produced no data');
 
@@ -283,7 +300,7 @@ document.addEventListener('DOMContentLoaded', () => {
             subject: emailToClientSubject.value,
             body: emailToClientBody.value,
             from: currentEmailToClientFrom,
-            attachments: [{ filename: opt.filename, content: base64 }]
+            attachments: [{ filename: filename, content: base64 }]
           })
         });
         const data = await res.json().catch(() => ({}));
