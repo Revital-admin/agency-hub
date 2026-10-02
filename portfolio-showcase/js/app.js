@@ -110,39 +110,43 @@ function selectNone() {
   renderList();
 }
 
-// Each case study renders as its own full page - page-break-before keeps
-// it starting on a fresh sheet regardless of how long the previous one ran.
-function caseStudyPdfPageHtml(cs) {
-  return `
-    <div style="page-break-before: always; box-sizing: border-box; width: 8.5in; padding: 0.6in; font-family: Helvetica, Arial, sans-serif; color: #1a1a1a;">
-      <div style="border-bottom: 3px solid #6366f1; padding-bottom: 16px; margin-bottom: 24px;">
-        <div style="font-size: 11px; letter-spacing: 1.5px; color: #6366f1; font-weight: 700; text-transform: uppercase;">Revital Productions — Case Study</div>
-        <h1 style="font-size: 26px; margin: 6px 0 0;">${escapeHtml(cs.title)}</h1>
-        <div style="margin-top: 10px; display:flex; gap:8px; flex-wrap:wrap;">
-          <span style="display:inline-block; background:#eef0fe; color:#6366f1; font-size:11px; font-weight:700; padding:3px 10px; border-radius:100px;">${escapeHtml(cs.clientName || '')}</span>
-          ${cs.industry ? `<span style="display:inline-block; background:#f4f4f8; color:#555; font-size:11px; font-weight:600; padding:3px 10px; border-radius:100px;">${escapeHtml(cs.industry)}</span>` : ''}
-        </div>
-      </div>
-      ${cs.servicesProvided ? `<p style="font-size: 12px; color:#555; margin-bottom: 20px;"><strong>Services Provided:</strong> ${escapeHtml(cs.servicesProvided)}</p>` : ''}
-      <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px; margin-bottom: 8px;">The Challenge</h3>
-      <p style="font-size: 13px; line-height: 1.6; margin-bottom: 18px;">${escapeHtml(cs.challenge) || '—'}</p>
-      <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px; margin-bottom: 8px;">Our Solution</h3>
-      <p style="font-size: 13px; line-height: 1.6; margin-bottom: 18px;">${escapeHtml(cs.solution) || '—'}</p>
-      <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px; margin-bottom: 8px;">The Results</h3>
-      <p style="font-size: 13px; line-height: 1.6; margin-bottom: 18px; font-weight:600;">${escapeHtml(cs.results) || '—'}</p>
-      ${cs.testimonial ? `
-      <div style="margin-top: 20px; padding: 16px 20px; background:#f9f9fc; border-left: 3px solid #6366f1; border-radius: 0 6px 6px 0;">
-        <p style="font-size: 13px; font-style: italic; margin:0;">"${escapeHtml(cs.testimonial)}"</p>
-        ${cs.testimonialAuthor ? `<p style="font-size: 12px; font-weight:700; margin: 8px 0 0; color:#6366f1;">— ${escapeHtml(cs.testimonialAuthor)}</p>` : ''}
-      </div>` : ''}
-    </div>
-  `;
+// Each case study renders as its own full page.
+// Oct 2026 rebuild: switched from html2canvas/html2pdf screenshotting an
+// HTML mockup to the shared RevitalPDF module - draws straight onto the
+// jsPDF doc instead of building markup.
+function caseStudyPdfPage(r, cs) {
+  const C = r.colors;
+  r.newPage();
+  r.sectionHeader(cs.title || 'Case Study');
+  r.paragraph((cs.clientName || '') + (cs.industry ? '   |   ' + cs.industry : ''), { size: 9, color: C.ACCENT, bold: true, spaceAfter: 14 });
+
+  if (cs.servicesProvided) {
+    r.paragraph('Services Provided', { bold: true, size: 9.5, spaceAfter: 3 });
+    r.paragraph(cs.servicesProvided, { size: 9.5, color: C.GRAY, spaceAfter: 14 });
+  }
+
+  r.paragraph('The Challenge', { bold: true, size: 10.5, spaceAfter: 6 });
+  r.paragraph(cs.challenge || '—', { spaceAfter: 14 });
+
+  r.paragraph('Our Solution', { bold: true, size: 10.5, spaceAfter: 6 });
+  r.paragraph(cs.solution || '—', { spaceAfter: 14 });
+
+  r.paragraph('The Results', { bold: true, size: 10.5, spaceAfter: 6 });
+  r.paragraph(cs.results || '—', { bold: true, spaceAfter: 14 });
+
+  if (cs.testimonial) {
+    r.calloutBox(cs.testimonialAuthor || 'Client Testimonial', '"' + cs.testimonial + '"');
+  }
 }
 
-async function generatePortfolioPdf() {
+function generatePortfolioPdf() {
   const selected = items.filter(i => selectedIds.has(i.id));
   if (selected.length === 0) {
     if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', 'Select at least one case study first.');
+    return;
+  }
+  if (typeof window.RevitalPDF === 'undefined') {
+    if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', 'PDF library failed to load.');
     return;
   }
 
@@ -150,39 +154,24 @@ async function generatePortfolioPdf() {
   const coverNote = el('coverNote').value.trim();
   const todayStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
-  const container = document.createElement('div');
-  container.style.cssText = 'width: 8.5in; font-family: Helvetica, Arial, sans-serif; color: #1a1a1a; background: #fff;';
+  try {
+    const r = RevitalPDF.create({ reportTitle: 'PORTFOLIO & CASE STUDIES', companyName: preparedFor || 'Revital Productions' });
 
-  const coverHtml = `
-    <div style="width: 8.5in; height: 11in; box-sizing: border-box; padding: 1in 0.8in; display:flex; flex-direction:column; justify-content:center;">
-      <div style="font-size: 12px; letter-spacing: 2px; color: #6366f1; font-weight: 700; text-transform: uppercase;">Revital Productions</div>
-      <h1 style="font-size: 42px; margin: 16px 0 0; line-height:1.15;">Portfolio &amp;<br>Case Studies</h1>
-      ${coverNote ? `<p style="font-size: 15px; color:#444; margin-top:20px; max-width:5.5in; line-height:1.5;">${escapeHtml(coverNote)}</p>` : ''}
-      <div style="margin-top: 48px; font-size: 13px; color:#555;">
-        ${preparedFor ? `<div><strong>Prepared for:</strong> ${escapeHtml(preparedFor)}</div>` : ''}
-        <div style="margin-top:6px;"><strong>Date:</strong> ${todayStr}</div>
-      </div>
-      <div style="margin-top: 60px; font-size: 11px; color:#888;">revitalproductions.com</div>
-    </div>
-  `;
+    r.coverPage({
+      title: 'Portfolio & Case Studies',
+      subLine: todayStr,
+      objective: coverNote || undefined,
+      preparedFrom: preparedFor ? ('Prepared for: ' + preparedFor) : undefined,
+    });
 
-  container.innerHTML = coverHtml + selected.map(caseStudyPdfPageHtml).join('');
+    selected.forEach(function (cs) { caseStudyPdfPage(r, cs); });
 
-  const opt = {
-    margin: 0,
-    filename: `Revital_Productions_Portfolio${preparedFor ? '_' + preparedFor.replace(/\s+/g, '_') : ''}.pdf`,
-    image: { type: 'jpeg', quality: 0.95 },
-    html2canvas: { scale: 2, letterRendering: true, useCORS: true, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
-    pagebreak: { mode: ['css'] }
-  };
-
-  if (typeof html2pdf !== 'undefined') {
-    await html2pdf().set(opt).from(container).save();
+    r.save(`Revital_Productions_Portfolio${preparedFor ? '_' + preparedFor.replace(/\s+/g, '_') : ''}.pdf`);
     if (isEmbedded && window.parent.showBanner) window.parent.showBanner('success', `Generated a ${selected.length}-case-study portfolio PDF.`);
     recordPortfolioPdfGenerated(selected.length, preparedFor);
-  } else if (isEmbedded && window.parent.showBanner) {
-    window.parent.showBanner('error', 'PDF library failed to load.');
+  } catch (e) {
+    console.error('Portfolio PDF error:', e);
+    if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', 'Could not generate PDF: ' + (e && e.message ? e.message : e));
   }
 }
 
