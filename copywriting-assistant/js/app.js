@@ -301,12 +301,17 @@ function bindEvents() {
   // TXT above (plain text is fine internally, but not something you'd
   // hand a lead or drop into a polished deck). Output is plain text
   // already (not markdown, unlike most of the Hub's other copy-building
-  // tools), so this just wraps outputCopy's value in a styled white page
-  // with white-space:pre-wrap rather than parsing it as markdown. Same
-  // html2pdf pattern as the rest of the Hub's Download PDF buttons.
+  // tools), so this just drops outputCopy's value in as a paragraph
+  // rather than parsing it as markdown.
+  // Oct 2026 rebuild: switched from html2canvas/html2pdf to the shared
+  // RevitalPDF module.
   if (elements.downloadPdfBtn) {
-    elements.downloadPdfBtn.addEventListener("click", async () => {
+    elements.downloadPdfBtn.addEventListener("click", () => {
       const btn = elements.downloadPdfBtn;
+      if (typeof window.RevitalPDF === 'undefined') {
+        alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
+        return;
+      }
       btn.disabled = true;
       const origHtml = btn.innerHTML;
       btn.innerHTML = "<span>Generating...</span>";
@@ -317,32 +322,28 @@ function bindEvents() {
       const copyText = elements.outputCopy.value || "(No copy generated yet.)";
       const notesText = (elements.workspaceNotes.value || "").trim();
 
-      const container = document.createElement("div");
-      container.style.cssText = 'font-family: "Inter", sans-serif, Arial; color:#1e293b; font-size:14px; line-height:1.6; width:100%; padding:40px; box-sizing:border-box; background:white;';
-      container.innerHTML = `
-        <img src="assets/logo.png" onerror="this.src='../logo.png'" alt="Revital Hub" style="height:50px; width:144px; object-fit:contain; margin-bottom:30px;">
-        <h1 style="font-size:26px; font-weight:700; color:#0f172a; border-bottom:4px solid #f59e0b; padding-bottom:16px; margin-bottom:6px;">${escapeHtmlCopy(productLabel)}</h1>
-        <p style="color:#64748b; font-size:13px; margin-bottom:24px;"><strong>Framework:</strong> ${escapeHtmlCopy(frameworkTitle)}${clientName ? ` &nbsp;&middot;&nbsp; <strong>Client:</strong> ${escapeHtmlCopy(clientName)}` : ""} &nbsp;&middot;&nbsp; <strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
-        <div style="white-space:pre-wrap; color:#334155;">${escapeHtmlCopy(copyText)}</div>
-        ${notesText ? `<h2 style="font-size:16px; color:#0f172a; border-bottom:2px solid #e2e8f0; padding-bottom:6px; margin:26px 0 10px;">Scratchpad Notes</h2><div style="white-space:pre-wrap; color:#334155;">${escapeHtmlCopy(notesText)}</div>` : ""}
-      `;
-
       try {
-        const opt = {
-          margin: 0,
-          filename: `Copywriting_${productLabel.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`,
-          image: { type: 'jpeg', quality: 0.92 },
-          html2canvas: { scale: 2, letterRendering: true, useCORS: true, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-        };
-        if (typeof html2pdf !== 'undefined') {
-          await html2pdf().set(opt).from(container).save();
-        } else {
-          alert("PDF library failed to load.");
+        const r = RevitalPDF.create({ reportTitle: 'COPYWRITING DRAFT', companyName: clientName || 'Client' });
+        const C = r.colors;
+
+        r.coverPage({
+          title: productLabel,
+          subLine: `Framework: ${frameworkTitle}` + (clientName ? `   |   Client: ${clientName}` : '') + `   |   ${new Date().toLocaleDateString()}`,
+        });
+
+        r.newPage();
+        r.sectionHeader(productLabel);
+        r.paragraph(copyText, { spaceAfter: 16 });
+
+        if (notesText) {
+          r.sectionHeader('Scratchpad Notes');
+          r.paragraph(notesText, { color: C.GRAY, spaceAfter: 10 });
         }
+
+        r.save(`Copywriting_${productLabel.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
       } catch (e) {
         console.error("PDF error:", e);
-        alert("Something went wrong generating the PDF.");
+        alert("Something went wrong generating the PDF: " + (e && e.message ? e.message : e));
       }
 
       btn.disabled = false;
