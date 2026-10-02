@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Revital Hub</title>
-  <link rel="stylesheet" href="style.css?v=22">
+  <link rel="stylesheet" href="style.css?v=23">
   <!-- Firebase SDK Compat, config, central references, and the app
        controller - all `defer`red (perf fix, Aug 2026). These used to
        load synchronously with no defer/async, which meant the browser
@@ -40,7 +40,7 @@
        the time app.js's own init runs. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
   <script src="shared/pdf-report.js?v=1" defer></script>
-  <script src="app.js?v=169" defer></script>
+  <script src="app.js?v=170" defer></script>
 
 </head>
 <body>
@@ -214,18 +214,14 @@
       </div>
 
       <!-- Sidebar Navigation Menu -->
-      <!-- Oct 2026: rail mode + search added to cut through 94 tools
-           across 13 sections (see initSidebarRailMode/initNavSearch in
-           app.js). Rail mode shows one section's tools at a time as a
-           flyout panel next to a compact icon column; the mode toggle
-           switches back to today's full scrollable list. Search works in
-           either mode and temporarily flattens everything into a
-           filtered list regardless of rail/list state. -->
+      <!-- Oct 2026: rail mode added to cut through 94 tools across 13
+           sections (see initSidebarRailMode in app.js). Rail mode shows
+           one section's tools at a time as a flyout panel next to a
+           compact icon column; the mode toggle switches back to today's
+           full scrollable list. (An in-sidebar search box was tried here
+           too, but dropped - Cmd+K already fuzzy-searches every tool and
+           client, so a second search box was redundant clutter.) -->
       <div class="sidebar-mode-toggle-row">
-        <div class="nav-search">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <input type="text" id="navSearchInput" placeholder="Search tools..." autocomplete="off">
-        </div>
         <button id="sidebarModeToggle" class="sidebar-mode-toggle" type="button" title="Switch to list view" aria-label="Switch to list view"></button>
       </div>
       <nav class="sidebar-nav">
