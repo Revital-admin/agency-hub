@@ -2089,7 +2089,7 @@ function initTabNavigation() {
         if (toggleBtn) toggleBtn.setAttribute("aria-expanded", "true");
         const slug = parentSection.getAttribute("data-section");
         if (slug) {
-          const current = new Set(getCollapsedNavSections());
+          const current = new Set(effectiveCollapsedNavSections());
           current.delete(slug);
           saveCollapsedNavSections(Array.from(current));
         }
@@ -2168,12 +2168,16 @@ function initTabNavigation() {
 // ── Collapsible Nav Sections ──
 const NAV_COLLAPSED_SECTIONS_KEY = "REVITAL_HUB_NAV_COLLAPSED_SECTIONS";
 
+// Returns null (not []) when the user has never touched a section toggle,
+// so initNavSectionToggles below can tell "never set - default everything
+// collapsed" apart from "explicitly expanded everything" (an empty array
+// the user arrived at by opening every section and leaving it that way).
 function getCollapsedNavSections() {
   try {
     const stored = localStorage.getItem(NAV_COLLAPSED_SECTIONS_KEY);
-    return stored ? JSON.parse(stored) : [];
+    return stored ? JSON.parse(stored) : null;
   } catch (e) {
-    return [];
+    return null;
   }
 }
 
@@ -2183,11 +2187,22 @@ function saveCollapsedNavSections(collapsedSlugs) {
   } catch (e) {}
 }
 
+// The list the sidebar should actually treat as collapsed right now:
+// whatever's stored, or - the first time, before the user has touched
+// any toggle - every section, so the list starts closed by default
+// instead of all 13 sections dumped open at once.
+function effectiveCollapsedNavSections() {
+  const stored = getCollapsedNavSections();
+  if (stored !== null) return stored;
+  return Array.from(document.querySelectorAll(".nav-section[data-section]"))
+    .map(s => s.getAttribute("data-section"));
+}
+
 function initNavSectionToggles() {
   const sections = document.querySelectorAll(".nav-section");
   if (!sections.length) return;
 
-  const collapsedSlugs = new Set(getCollapsedNavSections());
+  const collapsedSlugs = new Set(effectiveCollapsedNavSections());
 
   // Don't collapse the section that contains the currently active tab,
   // so the user always lands on a page that shows where they are.
@@ -2218,7 +2233,7 @@ function initNavSectionToggles() {
       const isCollapsed = section.classList.toggle("collapsed");
       toggleBtn.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
 
-      const current = new Set(getCollapsedNavSections());
+      const current = new Set(effectiveCollapsedNavSections());
       if (isCollapsed) {
         current.add(slug);
       } else {
