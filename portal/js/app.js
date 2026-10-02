@@ -990,56 +990,24 @@ if (btnBackToReports) {
 }
 
 // ── Report PDF export ──
-// Builds a standalone, branded copy of the currently-open report (client's
-// own logo/colors, not a fixed Revital look - this page's CSS vars are
-// already set per-client in renderPortal) into the off-screen container
-// below, then hands it to html2pdf. Only ever used for the "old schema"
-// structured reports (date/focus/wins/platforms/cellData) - the newer
-// monthYear/url reports are just external links with nothing in-app to
-// export, and showReportDetail (the only thing that reveals this button)
-// is never called for those.
+// Only ever used for the "old schema" structured reports (date/focus/
+// wins/platforms/cellData) - the newer monthYear/url reports are just
+// external links with nothing in-app to export, and showReportDetail
+// (the only thing that reveals this button) is never called for those.
+// Oct 2026 rebuild: switched from html2canvas/html2pdf screenshotting an
+// off-screen HTML mockup to the shared RevitalPDF module (same data
+// shape and same rebuild as the agency-side Monthly Report tool in
+// ../competitor-analysis/script.js's downloadPDF - this is the
+// client-facing download of the same report data).
 const btnDownloadReportPdf = document.getElementById("btnDownloadReportPdf");
 if (btnDownloadReportPdf) {
   btnDownloadReportPdf.addEventListener("click", () => {
-    if (!currentReportForExport || typeof html2pdf === "undefined") return;
+    if (!currentReportForExport || typeof window.RevitalPDF === "undefined") return;
 
     const report = currentReportForExport;
-    const config = clientData.portalConfig || {};
     const platforms = Array.isArray(report.platforms) ? report.platforms : [];
     const cellData = report.cellData || {};
     const metricKeys = Object.keys(REPORT_METRIC_LABELS);
-
-    let tableRows = "";
-    metricKeys.forEach((key) => {
-      tableRows += `<tr><td class="metric-label">${escapeHtml(REPORT_METRIC_LABELS[key])}</td>`;
-      platforms.forEach((_, idx) => {
-        const val = cellData[key] && cellData[key][idx] ? cellData[key][idx] : "—";
-        tableRows += `<td>${escapeHtml(val)}</td>`;
-      });
-      tableRows += "</tr>";
-    });
-    let platformHeaders = "";
-    platforms.forEach((p) => {
-      platformHeaders += `<th><span class="platform-dot" style="background:${escapeHtml(p.color || "#999")}"></span>${escapeHtml(p.name || "Platform")}</th>`;
-    });
-
-    const brandLabel = config.clientLogoUrl
-      ? `<img src="${escapeHtml(config.clientLogoUrl)}" style="height:36px; max-width:180px; object-fit:contain;">`
-      : `<div style="font-family:var(--font-heading); font-size:1.1rem; font-weight:700; background:linear-gradient(to right, var(--color-primary), var(--color-secondary)); -webkit-background-clip:text; -webkit-text-fill-color:transparent;">${escapeHtml(clientName)} Portal</div>`;
-
-    const exportContainer = document.getElementById("reportPdfExportContainer");
-    exportContainer.innerHTML = `
-      <div class="pdf-export-page">
-        <div class="pdf-export-header">
-          ${brandLabel}
-          <div class="pdf-export-title">${escapeHtml(report.date || "Report")}</div>
-          ${report.preparedBy ? `<p class="report-meta">Prepared by ${escapeHtml(report.preparedBy)}</p>` : ""}
-          ${report.focus ? `<p class="report-meta">Focus: ${escapeHtml(report.focus)}</p>` : ""}
-        </div>
-        ${report.wins ? `<div class="report-wins"><strong>Key wins this month</strong><p>${escapeHtml(report.wins)}</p></div>` : ""}
-        ${platforms.length > 0 ? `<table class="report-metrics-table"><thead><tr><th>Metric</th>${platformHeaders}</tr></thead><tbody>${tableRows}</tbody></table>` : ""}
-      </div>
-    `;
 
     const originalText = btnDownloadReportPdf.innerHTML;
     btnDownloadReportPdf.textContent = "Generating...";
@@ -1047,22 +1015,44 @@ if (btnDownloadReportPdf) {
 
     const fileName = `${(clientName || "Client").replace(/\s+/g, "_")}_Report_${(report.date || "report").replace(/[^a-z0-9]+/gi, "_")}.pdf`;
 
-    html2pdf().set({
-      margin: 0,
-      filename: fileName,
-      image: { type: "jpeg", quality: 0.92 },
-      html2canvas: { scale: 2, useCORS: true, backgroundColor: null, scrollX: 0, scrollY: 0 },
-      jsPDF: { unit: "in", format: "letter", orientation: "portrait" }
-    }).from(exportContainer.querySelector(".pdf-export-page")).save().then(() => {
+    try {
+      const r = RevitalPDF.create({ reportTitle: 'MONTHLY REPORT', companyName: clientName || 'Client' });
+
+      r.coverPage({
+        title: report.date || 'Report',
+        subLine: report.preparedBy ? ('Prepared by ' + report.preparedBy) : undefined,
+        objective: report.focus || undefined,
+      });
+
+      if (report.wins) {
+        r.newPage();
+        r.sectionHeader('Key Wins This Month');
+        r.paragraph(report.wins, { spaceAfter: 16 });
+      }
+
+      if (platforms.length > 0) {
+        if (!report.wins) r.newPage();
+        r.sectionHeader('Performance Metrics');
+        const metricColW = r.CONTENT_W * 0.3;
+        const platformColW = (r.CONTENT_W - metricColW) / platforms.length;
+        r.tableBlock(
+          ['Metric', ...platforms.map(p => p.name || 'Platform')],
+          metricKeys.map((key) => [
+            REPORT_METRIC_LABELS[key],
+            ...platforms.map((_, idx) => (cellData[key] && cellData[key][idx]) || '—'),
+          ]),
+          [metricColW, ...platforms.map(() => platformColW)]
+        );
+      }
+
+      r.save(fileName);
       btnDownloadReportPdf.innerHTML = originalText;
       btnDownloadReportPdf.disabled = false;
-      exportContainer.innerHTML = "";
-    }).catch((err) => {
-      console.error("PDF export failed:", err);
+    } catch (e) {
+      console.error('Report PDF export failed:', e);
       btnDownloadReportPdf.innerHTML = originalText;
       btnDownloadReportPdf.disabled = false;
-      exportContainer.innerHTML = "";
-    });
+    }
   });
 }
 

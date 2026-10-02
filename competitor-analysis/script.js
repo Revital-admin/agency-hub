@@ -375,107 +375,71 @@ function clearForm() {
   showBanner('success', 'Form data cleared successfully.');
 }
 
-/* ── Print / Save as PDF ── */
+/* ── Print / Save as PDF ──
+   Oct 2026 rebuild: switched from html2canvas/html2pdf (which hid
+   buttons, swapped in the real logo, and replaced every input/textarea
+   with a styled span purely so the screenshot wouldn't show raw form
+   chrome - see git history for that version) to the shared RevitalPDF
+   module. None of that staging is needed anymore: this builds the PDF
+   straight from the same client/platforms/cellData/wins values that
+   drive the on-screen table, via native jsPDF text and a real table. */
 function downloadPDF() {
-  const container = document.querySelector('main.container') || document.querySelector('.page');
-  if (!container) {
-    window.print();
-    return;
-  }
-
   const pdfBtn = document.querySelector('.download-pdf-btn');
   const origText = pdfBtn ? pdfBtn.innerHTML : '';
+  if (typeof window.RevitalPDF === 'undefined') {
+    alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
+    return;
+  }
   if (pdfBtn) {
     pdfBtn.disabled = true;
     pdfBtn.innerHTML = "⏳ Generating...";
   }
 
-  // Hide UI elements
-  const hides = container.querySelectorAll('.action-row, .controls-row, .prompt-toggle, .prompt-panel, button');
-  hides.forEach(el => el.style.display = 'none');
+  try {
+    const clientName = (document.getElementById('client')?.value || '').trim() || 'Client';
+    const dateVal = document.getElementById('rdate')?.value || '';
+    const preparedBy = document.getElementById('preparedby')?.value || '';
+    const focus = document.getElementById('focus')?.value || '';
+    const winsEl = document.getElementById('overviewText');
+    const winsText = winsEl ? winsEl.textContent.trim() : '';
+    const wins = (winsText === placeholderText) ? '' : winsText;
 
-  // The on-screen nav branding is a generic "REVITAL HUB" icon+wordmark
-  // (see logo.js), not the actual client-facing logo used on every other
-  // exported PDF in the Hub. Swap in the real logo just for the capture,
-  // then restore the nav version afterward so the live tool is unaffected.
-  const logoContainer = container.querySelector('.brand-logo-container');
-  const origLogoHTML = logoContainer ? logoContainer.innerHTML : null;
-  if (logoContainer) {
-    logoContainer.innerHTML = '<img src="../logo.png" alt="Revital Hub" style="height: 40px; width: 115px; object-fit: contain;">';
+    const r = RevitalPDF.create({ reportTitle: 'MONTHLY REPORT', companyName: clientName });
+
+    r.coverPage({
+      title: 'Monthly Report',
+      subLine: [dateVal, preparedBy ? ('Prepared by: ' + preparedBy) : ''].filter(Boolean).join('   |   '),
+      objective: focus || undefined,
+    });
+
+    r.newPage();
+    r.sectionHeader('Performance Metrics');
+    const metricColW = r.CONTENT_W * 0.3;
+    const platformColW = (r.CONTENT_W - metricColW) / Math.max(platforms.length, 1);
+    r.tableBlock(
+      ['Metric', ...platforms.map(p => p.name)],
+      METRICS.map((m, metricIdx) => [
+        m.label,
+        ...platforms.map((_, platformIdx) => (cellData[metricIdx] && cellData[metricIdx][platformIdx]) || '—'),
+      ]),
+      [metricColW, ...platforms.map(() => platformColW)]
+    );
+
+    if (wins) {
+      r.sectionHeader('Monthly Highlights');
+      r.paragraph(wins, { spaceAfter: 10 });
+    }
+
+    r.save(`${clientName.replace(/\s+/g, '_')}_Monthly_Report.pdf`);
+  } catch (e) {
+    console.error('PDF error:', e);
+    alert('Something went wrong generating the PDF: ' + (e && e.message ? e.message : e));
   }
 
-  // Replace inputs/textareas with their text values temporarily
-  const inputs = container.querySelectorAll('input, textarea');
-  const replacements = [];
-  inputs.forEach(el => {
-    const span = document.createElement('span');
-    span.style.whiteSpace = 'pre-wrap';
-    span.style.fontFamily = 'inherit';
-    span.style.fontSize = 'inherit';
-    span.style.display = 'inline-block';
-    span.style.width = '100%';
-    // Bug fix (Oct 2026 - "words become unreadable because of colors on
-    // different backgrounds in PDF downloads"): this span used to only
-    // copy font-family/size from the replaced input/textarea, never its
-    // actual text color or background. Most inputs here get their
-    // readable color from sitting on an opaque input background
-    // (--bg-input) or the dark page body behind a transparent card -
-    // neither of which this bare span had, so once html2canvas flattened
-    // everything onto its own plain canvas, user-typed text (exactly the
-    // content this swap exists to preserve) was the most likely thing to
-    // end up unreadable. Copy the real computed values across instead of
-    // relying on inheritance.
-    const computedInputStyle = getComputedStyle(el);
-    span.style.color = computedInputStyle.color;
-    span.style.backgroundColor = computedInputStyle.backgroundColor;
-    span.style.padding = computedInputStyle.padding;
-    let val = (el.value || '').trim();
-    if (!val) {
-      span.innerHTML = '<span style="color: #94a3b8; font-style: italic;">N/A</span>';
-    } else {
-      span.innerHTML = val.replace(/\\n/g, '<br>');
-    }
-    
-    // For date or company inputs at top
-    if (el.type === 'date' || el.id === 'company') {
-      span.style.fontWeight = 'bold';
-    }
-
-    el.parentNode.insertBefore(span, el);
-    el.style.display = 'none';
-    replacements.push({ el, span });
-  });
-
-  const opt = {
-    margin:       0.5,
-    filename:     'Competitor_Analysis.pdf',
-    image:        { type: 'jpeg', quality: 0.92 },
-    html2canvas:  { scale: 2, letterRendering: true, useCORS: true, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-    jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' }
-  };
-  
-  // Wait a tick for DOM to update
-  setTimeout(() => {
-    if (typeof html2pdf === 'undefined') {
-      alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
-      if (pdfBtn) { pdfBtn.disabled = false; pdfBtn.innerHTML = origText || 'Download PDF'; }
-      if (generateBtn) { generateBtn.disabled = false; generateBtn.innerHTML = 'Download PDF'; }
-      return;
-    }
-    html2pdf().set(opt).from(container).save().then(() => {
-      // Restore UI
-      hides.forEach(el => el.style.display = '');
-      replacements.forEach(r => {
-        r.span.remove();
-        r.el.style.display = '';
-      });
-      if (logoContainer) logoContainer.innerHTML = origLogoHTML;
-      if (pdfBtn) {
-        pdfBtn.disabled = false;
-        pdfBtn.innerHTML = origText;
-      }
-    });
-  }, 200);
+  if (pdfBtn) {
+    pdfBtn.disabled = false;
+    pdfBtn.innerHTML = origText;
+  }
 }
 
 

@@ -1116,68 +1116,54 @@ function boot() {
 }
 
 // ── PDF Generation ──
-async function generateClientPDF() {
+// Oct 2026 rebuild: switched from html2canvas/html2pdf to the shared
+// RevitalPDF module (see shared/pdf-report.js for the full history/
+// rationale) - draws straight onto the jsPDF doc from the client's
+// SWOT/Brand Vault data instead of building then screenshotting an HTML
+// fragment.
+function generateClientPDF() {
   const btn = document.getElementById('exportPdfBtn');
   if (!activeClientName || !clientsDb[activeClientName]) {
     alert("Please select a client first!");
     return;
   }
-  
+  if (typeof window.RevitalPDF === 'undefined') {
+    alert("PDF generator library failed to load. Please check your internet connection or disable ad-blockers.");
+    return;
+  }
+
   const client = clientsDb[activeClientName];
   const oldText = btn.innerHTML;
   btn.innerHTML = '<span class="icon">⏳</span> Generating...';
   btn.disabled = true;
 
   try {
-    const el = document.createElement('div');
-    el.style.padding = '40px';
-    el.style.fontFamily = 'sans-serif';
-    el.style.color = '#000';
-    el.style.background = '#fff';
-    
-    // Build HTML content
-    let html = `<h1 style="font-size:24px; border-bottom: 2px solid #000; padding-bottom:10px; margin-bottom:20px;">Monthly Report: ${activeClientName}</h1>`;
-    
-    // SWOT
+    const r = RevitalPDF.create({ reportTitle: 'MONTHLY REPORT', companyName: activeClientName });
+
+    r.sectionHeader('Monthly Report: ' + activeClientName);
+
     if (client.swot) {
-      html += `<h2>SWOT Analysis</h2><ul>`;
-      ['strengths', 'weaknesses', 'opportunities', 'threats'].forEach(k => {
-        if (client.swot[k] && client.swot[k].length > 0) {
-          html += `<li><strong>${k.toUpperCase()}:</strong> ${client.swot[k].join(', ')}</li>`;
-        }
-      });
-      html += `</ul><br>`;
+      const swotItems = ['strengths', 'weaknesses', 'opportunities', 'threats']
+        .filter(k => client.swot[k] && client.swot[k].length > 0)
+        .map(k => k.toUpperCase() + ': ' + client.swot[k].join(', '));
+      if (swotItems.length) {
+        r.paragraph('SWOT Analysis', { bold: true, size: 11, spaceAfter: 8 });
+        r.bulletList(swotItems);
+      }
     }
 
-    // Brand Vault
     if (client.brandVault && client.brandVault.brandName) {
-      html += `<h2>Brand Identity</h2>`;
-      html += `<p><strong>Name:</strong> ${client.brandVault.brandName}</p>`;
-      html += `<p><strong>Tagline:</strong> ${client.brandVault.tagline || 'N/A'}</p>`;
-      html += `<br>`;
+      r.paragraph('Brand Identity', { bold: true, size: 11, spaceAfter: 6 });
+      r.paragraph('Name: ' + client.brandVault.brandName, { spaceAfter: 4 });
+      r.paragraph('Tagline: ' + (client.brandVault.tagline || 'N/A'), { spaceAfter: 10 });
     }
 
-    // Append to hidden element
-    el.innerHTML = html;
-    
-    const opt = {
-      margin:       0.5,
-      filename:     `${activeClientName.replace(/\s+/g, '_')}_Report.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-    
-    if (typeof html2pdf !== 'undefined') {
-      await html2pdf().set(opt).from(el).save();
-    } else {
-      alert("PDF library failed to load.");
-    }
+    r.save(`${activeClientName.replace(/\s+/g, '_')}_Report.pdf`);
   } catch(e) {
     console.error("PDF Error:", e);
-    alert("An error occurred generating the PDF.");
+    alert("An error occurred generating the PDF: " + (e && e.message ? e.message : e));
   }
-  
+
   btn.innerHTML = oldText;
   btn.disabled = false;
 }
