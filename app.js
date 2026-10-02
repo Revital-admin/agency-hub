@@ -664,8 +664,10 @@ function renderTeamPinsList() {
         <div class="team-pins-row-email">${escapeHtmlForPins(p.email)}</div>
         <div class="team-pins-row-status ${p.hasPin ? 'has-pin' : 'no-pin'}">${p.hasPin ? 'PIN set' : 'No PIN yet'}</div>
       </div>
-      <button type="button" class="team-pins-generate-btn" data-email="${escapeHtmlForPins(p.email)}">${p.hasPin ? 'Regenerate' : 'Generate'}</button>
-      ${p.hasPin ? `<button type="button" class="team-pins-remove-btn" data-email="${escapeHtmlForPins(p.email)}">Remove</button>` : ''}
+      <div class="team-pins-row-actions">
+        <button type="button" class="team-pins-generate-btn" data-email="${escapeHtmlForPins(p.email)}">${p.hasPin ? 'Regenerate' : 'Generate'}</button>
+        ${p.hasPin ? `<button type="button" class="team-pins-remove-btn" data-email="${escapeHtmlForPins(p.email)}">Remove</button>` : ''}
+      </div>
     </div>
   `).join("");
 

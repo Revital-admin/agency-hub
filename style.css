@@ -3903,9 +3903,15 @@ textarea {
   color: var(--text-muted);
 }
 
+/* Stacked, not side-by-side with the action buttons (fixed Oct 2026 -
+   at the modal's 420px width, "Regenerate" + "Remove" ate most of the
+   row, squeezing the email column down to ~140px and truncating real
+   addresses to almost nothing - looked like the email was being
+   covered). Email gets the row's full width on its own line; actions
+   sit below, right-aligned. */
 .team-pins-row {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
   padding: 10px;
   border: 1px solid var(--border-color);
@@ -3914,7 +3920,7 @@ textarea {
 }
 
 .team-pins-row-email-wrap {
-  flex: 1;
+  width: 100%;
   min-width: 0;
 }
 
@@ -3924,6 +3930,12 @@ textarea {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-main);
+}
+
+.team-pins-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .team-pins-row-status {
@@ -3991,6 +4003,13 @@ textarea {
 .team-pins-pin-reveal {
   flex: 1;
   font-size: 13px;
+}
+
+/* .team-pins-row is now flex-direction:column (see above) with default
+   align-items:stretch, which would otherwise make this button stretch
+   to the row's full width. */
+.team-pins-done-btn {
+  align-self: flex-end;
 }
 
 .team-pins-pin-reveal strong {
