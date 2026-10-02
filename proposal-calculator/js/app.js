@@ -845,23 +845,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // ROI projection math
-    let roiHtml = "";
+    let roiLines = null;
     if (propAov && propAov.value && propConvRate && propConvRate.value && monthlyNum > 0) {
       const aov = parseFormattedNumber(propAov.value);
       const cr = parseFloat(propConvRate.value) / 100;
       const salesNeeded = Math.ceil(monthlyNum / aov);
       const trafficNeeded = Math.ceil(salesNeeded / cr);
-      roiHtml = `
-        <div style="background: #f8fafc; padding: 20px; border-left: 4px solid #3b82f6; margin-top: 20px;">
-          <h4 style="margin-top:0; color:#0f172a;">Value Projection & ROI</h4>
-          <p style="margin-bottom: 5px;">Based on your current Average Order Value ($${aov}) and Conversion Rate (${(cr*100).toFixed(1)}%):</p>
-          <ul style="margin-bottom: 0;">
-            <li>We only need to generate <strong>${salesNeeded} new sales per month</strong> for this entire marketing campaign to break even.</li>
-            <li>That requires driving just <strong>${trafficNeeded} qualified visitors</strong> to your site.</li>
-            <li>Everything beyond that is pure profit growth for ${clientName}.</li>
-          </ul>
-        </div>
-      `;
+      roiLines = {
+        intro: `Based on your current Average Order Value ($${aov}) and Conversion Rate (${(cr * 100).toFixed(1)}%):`,
+        bullets: [
+          `We only need to generate ${salesNeeded} new sales per month for this entire marketing campaign to break even.`,
+          `That requires driving just ${trafficNeeded} qualified visitors to your site.`,
+          `Everything beyond that is pure profit growth for ${clientName}.`,
+        ],
+      };
     }
 
     // Proposal expiry date - 14 days from the proposal date, used on both
@@ -869,223 +866,143 @@ document.addEventListener('DOMContentLoaded', async () => {
     const expiryDate = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
     const expiryDateStr = expiryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-    // Build the massive HTML document
-    const container = document.createElement('div');
-    container.style.fontFamily = "'Inter', sans-serif, Arial";
-    container.style.color = "#1e293b";
-    container.style.fontSize = "14px";
-    container.style.lineHeight = "1.6";
-    container.style.width = "100%";
-
-    // CSS for PDF
-    const style = `
-      <style>
-          .box, .col, .score-box, tr, td, h2, h3 { page-break-inside: avoid; }
-
-        .page { padding: 40px; box-sizing: border-box; page-break-after: always; position: relative; min-height: 1050px; background: white; }
-        .page:last-child { page-break-after: auto; }
-        h1 { font-size: 32px; font-weight: 700; margin-bottom: 10px; color: #0f172a; }
-        h2 { font-size: 24px; font-weight: 600; margin-bottom: 20px; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-top: 40px; text-transform: uppercase; letter-spacing: 1px; }
-        h3 { font-size: 18px; font-weight: 600; margin-bottom: 15px; color: #334155; }
-        p { margin-bottom: 15px; }
-        ul { margin-bottom: 20px; padding-left: 20px; }
-        li { margin-bottom: 8px; }
-        .table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-        .table th, .table td { border: 1px solid #cbd5e1; padding: 12px; text-align: left; }
-        .table th { background: #f1f5f9; font-weight: 600; color: #0f172a; }
-        .cover-title { margin-top: 150px; font-size: 48px; border-bottom: 4px solid #3b82f6; padding-bottom: 20px; margin-bottom: 40px;}
-        .meta-text { font-size: 16px; margin-bottom: 10px; color: #475569; }
-        .btn-link { display: inline-block; background: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600; margin-top: 20px;}
-        .tier-box { border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 20px; background: #fff; }
-        .tier-box.recommended { border-color: #3b82f6; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-width: 2px; }
-        .logo { height: 50px; width: 144px; object-fit: contain; margin-bottom: 40px; }
-      </style>
-    `;
-
-    // Format textareas preserving newlines
-    const formatText = (txt) => txt.replace(/\\n/g, '<br>').replace(/\\- /g, '<li>').replace(/<li>/g, '<ul><li>') + '</ul>';
-
     // Tier calculations
     const starterPrice = Math.round(monthlyNum * 0.7);
     const elitePrice = Math.round(monthlyNum * 1.4);
 
-    container.innerHTML = `
-      ${style}
-      
-      <!-- PAGE 1: COVER -->
-      <div class="page">
-        <img src="../logo.png" alt="Revital Hub" class="logo">
-        <h1 class="cover-title">MARKETING PROPOSAL</h1>
-        <div class="meta-text"><strong>Prepared For:</strong> ${clientName}</div>
-        <div class="meta-text"><strong>Contact:</strong> ${contactName}</div>
-        <div class="meta-text"><strong>Date:</strong> ${currentDateEl.textContent}</div>
-        <div class="meta-text"><strong>Prepared By:</strong> Revital Productions</div>
-        <div class="meta-text" style="margin-top: 20px; font-size: 13px; color: #94a3b8;">This proposal is valid for 14 days from the date above.</div>
-        <div class="meta-text" style="font-size: 13px; color: #94a3b8;">Proposal expires: ${expiryDateStr}</div>
-      </div>
-
-      <!-- PAGE 2: NOTE & WHO WE ARE -->
-      <div class="page">
-        <h2>A NOTE FROM US</h2>
-        <p>Hi ${contactName},</p>
-        <p>${note}</p>
-        
-        <h2>WHO WE ARE</h2>
-        <p>Revital Productions is a full-service marketing and digital production company. We specialize in helping businesses build a powerful digital presence — from content creation and social media management to paid advertising, SEO, and web design.</p>
-        <p>We don't just run campaigns. We become an extension of your team — learning your brand, understanding your goals, and building a strategy that actually moves the needle.</p>
-        <h3>What makes us different:</h3>
-        <ul>
-          <li><strong>Strategy-first approach</strong> — every campaign starts with a clear plan tied to your goals</li>
-          <li><strong>Full in-house production</strong> — content, creative, copy, and ads all under one roof</li>
-          <li><strong>Transparent reporting</strong> — you always know exactly what we're doing and why</li>
-          <li><strong>Dedicated account management</strong> — one point of contact, always available</li>
-        </ul>
-      </div>
-
-      ${testimonial ? `
-      <!-- PAGE: WHAT OUR CLIENTS SAY (only when a testimonial is provided) -->
-      <div class="page">
-        <h2>WHAT OUR CLIENTS SAY</h2>
-        <div style="border-left: 4px solid #3b82f6; padding: 10px 30px; margin-top: 60px;">
-          <p style="font-size: 26px; font-style: italic; line-height: 1.5; color: #0f172a;">&ldquo;${testimonial.replace(/\\n/g, '<br>')}&rdquo;</p>
-        </div>
-      </div>
-      ` : ''}
-
-      <!-- PAGE 3: SITUATION -->
-      <div class="page">
-        <h2>YOUR CURRENT SITUATION</h2>
-        ${meetingRecap ? `
-        <h3>Based on Our Conversation</h3>
-        <p>${meetingRecap.replace(/\\n/g, '<br>')}</p>
-        ` : ''}
-        <h3>What's Working:</h3>
-        <p>${working.replace(/\\n/g, '<br>')}</p>
-        
-        <h3>Opportunities We've Identified:</h3>
-        <p>${opps.replace(/\\n/g, '<br>')}</p>
-
-        <h2>OUR RECOMMENDED SOLUTION</h2>
-        <p>Based on our assessment, the fastest path to growth for ${clientName} is to implement a comprehensive strategy focusing on the exact services outlined below.</p>
-        ${roiHtml}
-      </div>
-
-      <!-- PAGE 4: SCOPE OF SERVICES -->
-      <div class="page">
-        <h2>SCOPE OF SERVICES</h2>
-        <p>The following scope of work outlines exactly what is included in our proposed engagement.</p>
-        <ul style="list-style-type: square;">
-          ${Array.from(sowListEl.querySelectorAll('li')).map(li => `<li>${li.textContent}</li>`).join('')}
-        </ul>
-
-        <h2 style="margin-top: 30px;">WHAT IS NOT INCLUDED</h2>
-        <ul style="list-style-type: square;">
-          <li>Ad spend and advertising platform fees (billed directly to client by the platform)</li>
-          <li>Software and platform subscription fees (e.g. email marketing tools, scheduling software)</li>
-          <li>Photography, videography, or on-location production shoots unless listed above</li>
-          <li>Any services not explicitly listed in the scope above</li>
-        </ul>
-      </div>
-
-      <!-- PAGE 5: INVESTMENT TIERS -->
-      <div class="page">
-        <h2>INVESTMENT TIERS</h2>
-        <p>We offer three flexible tiers of partnership. We highly recommend the <strong>Professional Package</strong> based on our discovery call.</p>
-        
-        <div class="tier-box">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h3 style="margin:0;">Starter Package</h3>
-            <span style="font-size:20px; font-weight:bold;">$${starterPrice.toLocaleString()} / mo</span>
-          </div>
-          <p style="color:#64748b; font-size:13px; margin-top:5px;">A stripped-down approach focusing only on the absolute essentials to keep momentum going.</p>
-        </div>
-
-        <div class="tier-box recommended">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div style="display:flex; align-items:center; gap:10px;">
-              <h3 style="margin:0; color:#3b82f6;">Professional Package (Recommended)</h3>
-              <span style="background:#dbeafe; color:#1e40af; font-size:11px; padding:3px 8px; border-radius:12px; font-weight:600;">BEST VALUE</span>
-            </div>
-            <span style="font-size:24px; font-weight:bold; color:#3b82f6;">${monthlyStr} / mo</span>
-          </div>
-          <div style="font-size:13px; color:#3b82f6; font-weight:600; margin-top:6px;">Contract Term: ${contractTermLabel}</div>
-          <p style="color:#64748b; font-size:13px; margin-top:5px;">The exact Scope of Services outlined on the previous page. Designed to hit your growth targets aggressively.</p>
-        </div>
-
-        <div class="tier-box">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h3 style="margin:0;">Elite Package</h3>
-            <span style="font-size:20px; font-weight:bold;">$${elitePrice.toLocaleString()} / mo</span>
-          </div>
-          <p style="color:#64748b; font-size:13px; margin-top:5px;">Includes everything in Professional, plus doubled ad spend management and aggressive SEO/Content scaling.</p>
-        </div>
-
-        <h3>One-Time Fees</h3>
-        <table class="table">
-          <tr><th>Item</th><th>Investment</th></tr>
-          <tr><td>Setup & Onboarding Strategy</td><td>${setupStr}</td></tr>
-        </table>
-      </div>
-
-      <!-- PAGE 6: TERMS & CONDITIONS -->
-      <div class="page">
-        <h2>TERMS &amp; CONDITIONS</h2>
-        <ul>
-          <li>Payment is processed via Stripe on the 1st of each month, in advance for that month's services</li>
-          <li>The first payment is due upon signing and confirms intent to begin services. Work does not begin until the first payment is received.</li>
-          <li>Written cancellation notice must be received by Revital Productions no later than the 20th of the month to avoid being charged for the following month's retainer</li>
-          <li>Ad spend and advertising platform fees are billed directly to the client by the platform and are entirely separate from Revital Productions management fees</li>
-          <li>Any services not explicitly listed in the Scope of Services above require a written Change Order before work begins</li>
-          <li>Revision requests must be submitted through the Submit a Revision Quick Action in the client's Hub portal &mdash; not via email or text</li>
-          <li>Content approvals must be submitted through the Hub portal Approvals tab</li>
-          <li>Full legal terms are covered in the Statement of Work and Master Service Agreement included with this proposal</li>
-        </ul>
-      </div>
-
-      <!-- PAGE 7: NEXT STEPS -->
-      <div class="page">
-        <h2>NEXT STEPS</h2>
-        <p>Ready to move forward with the Recommended Package? Here's exactly what happens next:</p>
-
-        <div style="margin-top: 20px;">
-          <p style="margin-bottom: 10px;"><strong>Step 1</strong> &mdash; Review this proposal and the included Statement of Work and Master Service Agreement</p>
-          <p style="margin-bottom: 10px;"><strong>Step 2</strong> &mdash; Sign the Statement of Work and Master Service Agreement</p>
-          <p style="margin-bottom: 10px;"><strong>Step 3</strong> &mdash; Submit your first payment via the button below to lock in your start date</p>
-          <p style="margin-bottom: 10px;"><strong>Step 4</strong> &mdash; We send your welcome email and set up your Hub portal (Day 1-2)</p>
-          <p style="margin-bottom: 10px;"><strong>Step 5</strong> &mdash; Kick-off call to align on strategy (Within 5 days)</p>
-          <p style="margin-bottom: 10px;"><strong>Step 6</strong> &mdash; We build your campaigns and content (Week 1-2)</p>
-          <p style="margin-bottom: 10px;"><strong>Step 7</strong> &mdash; We go live (Week 2-3)</p>
-        </div>
-
-        ${startDate ? `<p style="margin-top: 20px;"><strong>Proposed Start Date:</strong> ${startDate}</p>` : ''}
-
-        ${stripeUrl !== '#' ? `
-        <div style="text-align:center; margin-top:40px;">
-          <a href="${stripeUrl}" class="btn-link" target="_blank">Submit Payment &amp; Lock In Your Start Date</a>
-        </div>
-        ` : ''}
-
-        <p style="margin-top: 30px; font-size: 13px; color: #94a3b8;">This proposal expires on ${expiryDateStr}. Prices and availability are not guaranteed after this date.</p>
-      </div>
-    `;
-
+    // Oct 2026 rebuild: switched from a ~200-line hand-built HTML document
+    // screenshotted by html2canvas/html2pdf to the shared RevitalPDF module
+    // (../shared/pdf-report.js) - see that file for the full rationale
+    // (white-on-white text, content sliced mid-sentence at page breaks).
+    // This is the longest, most content-heavy document in the Hub's PDF
+    // rollout (up to 9 pages), so it leans on RevitalPDF's primitives
+    // directly (paragraph/bulletList/tableBlock/calloutBox) rather than
+    // trying to preserve the exact 7-page layout of the old HTML version.
     try {
-      const opt = {
-        margin:       0,
-        filename:     `${clientName.replace(/\s+/g, '_')}_Proposal_${new Date().toISOString().split('T')[0]}.pdf`,
-        image:        { type: 'jpeg', quality: 0.92 },
-        html2canvas:  { scale: 2, letterRendering: true, useCORS: true, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-      };
-      
-      if (typeof html2pdf !== 'undefined') {
-        await html2pdf().set(opt).from(container).save();
-      } else {
-        alert("PDF library failed to load.");
+      if (typeof window.RevitalPDF === 'undefined') {
+        alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
+        pdfBtn.disabled = false;
+        pdfBtn.innerHTML = origText;
+        return;
       }
-    } catch(e) {
+
+      const r = RevitalPDF.create({ reportTitle: 'MARKETING PROPOSAL', companyName: clientName });
+      const C = r.colors;
+
+      r.coverPage({
+        title: 'Marketing Proposal',
+        subLine: `Prepared for ${contactName}   |   ${currentDateEl.textContent}`,
+        preparedFrom: 'Revital Productions',
+        note: `This proposal is valid for 14 days from the date above. Proposal expires: ${expiryDateStr}.`,
+      });
+
+      r.newPage();
+      r.sectionHeader('A Note From Us');
+      r.paragraph(`Hi ${contactName},`, { spaceAfter: 10 });
+      r.paragraph(note, { spaceAfter: 20 });
+
+      r.sectionHeader('Who We Are');
+      r.paragraph('Revital Productions is a full-service marketing and digital production company. We specialize in helping businesses build a powerful digital presence - from content creation and social media management to paid advertising, SEO, and web design.', { spaceAfter: 10 });
+      r.paragraph("We don't just run campaigns. We become an extension of your team - learning your brand, understanding your goals, and building a strategy that actually moves the needle.", { spaceAfter: 14 });
+      r.paragraph('What makes us different:', { bold: true, size: 10.5, spaceAfter: 6 });
+      r.bulletList([
+        'Strategy-first approach - every campaign starts with a clear plan tied to your goals',
+        'Full in-house production - content, creative, copy, and ads all under one roof',
+        'Transparent reporting - you always know exactly what we are doing and why',
+        'Dedicated account management - one point of contact, always available',
+      ]);
+
+      if (testimonial) {
+        r.newPage();
+        r.sectionHeader('What Our Clients Say');
+        r.paragraph('"' + testimonial + '"', { italic: true, size: 14, spaceAfter: 10 });
+      }
+
+      r.newPage();
+      r.sectionHeader('Your Current Situation');
+      if (meetingRecap) {
+        r.paragraph('Based on Our Conversation', { bold: true, size: 11, spaceAfter: 6 });
+        r.paragraph(meetingRecap, { spaceAfter: 14 });
+      }
+      r.paragraph("What's Working", { bold: true, size: 11, spaceAfter: 6 });
+      r.paragraph(working, { spaceAfter: 14 });
+      r.paragraph("Opportunities We've Identified", { bold: true, size: 11, spaceAfter: 6 });
+      r.paragraph(opps, { spaceAfter: 14 });
+
+      r.sectionHeader('Our Recommended Solution');
+      r.paragraph(`Based on our assessment, the fastest path to growth for ${clientName} is to implement a comprehensive strategy focusing on the exact services outlined below.`, { spaceAfter: 10 });
+      if (roiLines) {
+        r.calloutBox('Value Projection & ROI', roiLines.intro);
+        r.bulletList(roiLines.bullets);
+      }
+
+      r.newPage();
+      r.sectionHeader('Scope of Services');
+      r.paragraph('The following scope of work outlines exactly what is included in our proposed engagement.', { spaceAfter: 10 });
+      const sowItems = Array.from(sowListEl.querySelectorAll('li')).map(li => li.textContent.trim()).filter(Boolean);
+      r.bulletList(sowItems.length ? sowItems : ['No services selected yet.']);
+
+      r.paragraph('What Is Not Included', { bold: true, size: 13, spaceAfter: 8 });
+      r.bulletList([
+        'Ad spend and advertising platform fees (billed directly to client by the platform)',
+        'Software and platform subscription fees (e.g. email marketing tools, scheduling software)',
+        'Photography, videography, or on-location production shoots unless listed above',
+        'Any services not explicitly listed in the scope above',
+      ]);
+
+      r.newPage();
+      r.sectionHeader('Investment Tiers');
+      r.paragraph('We offer three flexible tiers of partnership. We highly recommend the Professional Package based on our discovery call.', { spaceAfter: 12 });
+      r.tableBlock(
+        ['Package', 'Investment', 'Details'],
+        [
+          ['Starter Package', `$${starterPrice.toLocaleString()} / mo`, 'A stripped-down approach focusing only on the absolute essentials to keep momentum going.'],
+          ['Professional Package (Recommended - Best Value)', `${monthlyStr} / mo`, `Contract Term: ${contractTermLabel}. The exact Scope of Services outlined on the previous page.`],
+          ['Elite Package', `$${elitePrice.toLocaleString()} / mo`, 'Includes everything in Professional, plus doubled ad spend management and aggressive SEO/Content scaling.'],
+        ],
+        [r.CONTENT_W * 0.3, r.CONTENT_W * 0.2, r.CONTENT_W * 0.5]
+      );
+      r.paragraph('One-Time Fees', { bold: true, size: 11, spaceAfter: 6 });
+      r.tableBlock(['Item', 'Investment'], [['Setup & Onboarding Strategy', setupStr]], [r.CONTENT_W * 0.6, r.CONTENT_W * 0.4]);
+
+      r.newPage();
+      r.sectionHeader('Terms & Conditions');
+      r.bulletList([
+        "Payment is processed via Stripe on the 1st of each month, in advance for that month's services",
+        'The first payment is due upon signing and confirms intent to begin services. Work does not begin until the first payment is received.',
+        'Written cancellation notice must be received by Revital Productions no later than the 20th of the month to avoid being charged for the following month\'s retainer',
+        'Ad spend and advertising platform fees are billed directly to the client by the platform and are entirely separate from Revital Productions management fees',
+        'Any services not explicitly listed in the Scope of Services above require a written Change Order before work begins',
+        "Revision requests must be submitted through the Submit a Revision Quick Action in the client's Hub portal - not via email or text",
+        'Content approvals must be submitted through the Hub portal Approvals tab',
+        'Full legal terms are covered in the Statement of Work and Master Service Agreement included with this proposal',
+      ]);
+
+      r.newPage();
+      r.sectionHeader('Next Steps');
+      r.paragraph("Ready to move forward with the Recommended Package? Here's exactly what happens next:", { spaceAfter: 10 });
+      r.bulletList([
+        'Step 1 - Review this proposal and the included Statement of Work and Master Service Agreement',
+        'Step 2 - Sign the Statement of Work and Master Service Agreement',
+        'Step 3 - Submit your first payment via the link below to lock in your start date',
+        'Step 4 - We send your welcome email and set up your Hub portal (Day 1-2)',
+        'Step 5 - Kick-off call to align on strategy (Within 5 days)',
+        'Step 6 - We build your campaigns and content (Week 1-2)',
+        'Step 7 - We go live (Week 2-3)',
+      ]);
+      if (startDate) r.paragraph(`Proposed Start Date: ${startDate}`, { bold: true, spaceAfter: 10 });
+      if (stripeUrl && stripeUrl !== '#') {
+        r.ensureSpace(30);
+        r.doc.setFont('helvetica', 'bold'); r.doc.setFontSize(10.5); r.doc.setTextColor.apply(r.doc, C.BLUE);
+        r.doc.textWithLink('Submit Payment & Lock In Your Start Date ->', r.MARGIN, r.y + 10, { url: stripeUrl });
+        r.y += 26;
+      }
+      r.paragraph(`This proposal expires on ${expiryDateStr}. Prices and availability are not guaranteed after this date.`, { italic: true, size: 8.5, color: C.GRAY });
+
+      r.save(`${clientName.replace(/\s+/g, '_')}_Proposal_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (e) {
       console.error("PDF Error:", e);
-      alert("An error occurred generating the PDF.");
+      alert('An error occurred generating the PDF: ' + (e && e.message ? e.message : e));
     }
 
     pdfBtn.disabled = false;
