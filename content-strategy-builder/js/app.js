@@ -709,214 +709,134 @@ function setupEventHandlers() {
   });
 
   // Download PDF Button
-  
+  // Oct 2026 rebuild: switched from a ~130-line hand-built HTML document
+  // (screenshotted by html2canvas/html2pdf) to the shared RevitalPDF
+  // module - see ../shared/pdf-report.js for the full rationale.
   const downloadBtn = document.getElementById('downloadPdfBtn');
   if (downloadBtn) {
-    downloadBtn.addEventListener('click', async () => {
+    downloadBtn.addEventListener('click', () => {
+      if (typeof window.RevitalPDF === 'undefined') {
+        alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
+        return;
+      }
       downloadBtn.disabled = true;
       const origText = downloadBtn.innerHTML;
       downloadBtn.innerHTML = "⏳ Generating...";
 
       const d = state.data;
-      
-      const formatText = (txt) => {
-        if (!txt) return '<span style="color: #94a3b8; font-style: italic;">Not provided</span>';
-        return txt.replace(/\\n/g, '<br>');
-      };
-      
-      const formatArray = (arr) => {
-        if (!arr || arr.length === 0) return '<span style="color: #94a3b8; font-style: italic;">None selected</span>';
-        return '<ul style="margin-top:0;">' + arr.map(i => `<li>${i}</li>`).join('') + '</ul>';
-      };
-
-      let platformsHtml = '';
-      if (d.platforms && d.platforms.length > 0) {
-        platformsHtml = d.platforms.map(p => `
-          <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
-            <h4 style="margin: 0 0 10px 0; color: #3b82f6;">${p.name}</h4>
-            <p style="margin: 0 0 5px 0;"><strong>Purpose:</strong> ${formatText(p.purpose)}</p>
-            <p style="margin: 0 0 5px 0;"><strong>Frequency:</strong> ${formatText(p.frequency)}</p>
-            <div><strong>Content Types:</strong> ${formatArray(p.contentTypes)}</div>
-          </div>
-        `).join('');
-      } else {
-        platformsHtml = '<p style="color: #94a3b8; font-style: italic;">No platform strategy defined.</p>';
-      }
-
-      const container = document.createElement('div');
-      container.style.fontFamily = "'Inter', sans-serif, Arial";
-      container.style.color = "#1e293b";
-      container.style.fontSize = "14px";
-      container.style.lineHeight = "1.6";
-      container.style.width = "100%";
-
-      const style = `
-        <style>
-          .box, .col, .score-box, tr, td, h2, h3 { page-break-inside: avoid; }
-
-          .page { padding: 40px; box-sizing: border-box; page-break-after: always; position: relative; background: white; }
-          .page:last-child { page-break-after: auto; }
-          h1 { font-size: 32px; font-weight: 700; margin-bottom: 10px; color: #0f172a; border-bottom: 4px solid #f59e0b; padding-bottom: 20px;}
-          h2 { font-size: 20px; font-weight: 600; margin-bottom: 15px; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-top: 30px; }
-          h3 { font-size: 16px; font-weight: 600; margin-bottom: 10px; color: #334155; margin-top: 20px;}
-          p { margin-bottom: 15px; }
-          .logo { height: 50px; width: 144px; object-fit: contain; margin-bottom: 40px;  }
-          .grid { display: flex; flex-wrap: wrap; gap: 20px; }
-          .col { flex: 1; min-width: 300px; }
-          .box { background:#f8fafc; padding:15px; border-radius:8px; margin-bottom:15px; }
-        </style>
-      `;
-
-      container.innerHTML = `
-        ${style}
-        <div class="page">
-          <img src="assets/logo.png" onerror="this.src='../logo.png'" alt="Revital Hub" class="logo">
-          <h1>Content Planning Blueprint</h1>
-          <p><strong>Target URL / Project:</strong> ${formatText(state.targetUrl)}</p>
-          
-          <div class="grid">
-            <div class="col">
-              <h2>1. Company Overview</h2>
-              <h3>Business Name</h3><p>${formatText(d.businessName)}</p>
-              <h3>Industry</h3><p>${formatText(d.industry)}</p>
-              <h3>Primary Services/Products</h3><p>${formatText(d.primaryServices)}</p>
-              <h3>Brand Mission</h3><p>${formatText(d.brandMission)}</p>
-              <h3>Core Values</h3><p>${formatText(d.coreValues)}</p>
-              <h3>Unique Selling Proposition (USP)</h3><p>${formatText(d.usp)}</p>
-            </div>
-            <div class="col">
-              <h2>2. Business Goals</h2>
-              <h3>Short-Term Goals</h3><p>${formatText(d.goalsShortTerm)}</p>
-              <h3>Long-Term Goals</h3><p>${formatText(d.goalsLongTerm)}</p>
-              <h3>Primary Objectives</h3>${formatArray(d.primaryGoals)}
-              
-              <h2>3. Target Audience</h2>
-              <h3>Demographics</h3><p>${formatText(d.audienceAge)} | ${formatText(d.audienceLocation)} | ${formatText(d.audienceIndustry)}</p>
-              <h3>Pain Points</h3><p>${formatText(d.audiencePainPoints)}</p>
-              <h3>Desired Outcomes</h3><p>${formatText(d.audienceDesires)}</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="page">
-          <div class="grid">
-            <div class="col">
-              <h2>4. Brand Identity</h2>
-              <h3>Brand Personality</h3>${formatArray(d.brandPersonality)}
-              <h3>Brand Voice</h3><p>${formatText(d.brandVoice)}</p>
-              <h3>Visual Assets</h3>${formatArray(d.existingAssets)}
-              
-              <h2>5. Competitor Analysis</h2>
-              <h3>Main Competitors</h3><p>${formatText(d.mainCompetitors)}</p>
-              <h3>What They Do Well</h3><p>${formatText(d.competitorStrengths)}</p>
-              <h3>Our Differentiator</h3><p>${formatText(d.competitorDifferentiate)}</p>
-            </div>
-            
-            <div class="col">
-              <h2>6. Content Strategy</h2>
-              <div class="box">
-                <h3 style="margin-top:0;">Pillar 1: ${formatText(d.pillar1Name)}</h3>
-                <p>${formatText(d.pillar1Topics)}</p>
-              </div>
-              <div class="box">
-                <h3 style="margin-top:0;">Pillar 2: ${formatText(d.pillar2Name)}</h3>
-                <p>${formatText(d.pillar2Topics)}</p>
-              </div>
-              <div class="box">
-                <h3 style="margin-top:0;">Pillar 3: ${formatText(d.pillar3Name)}</h3>
-                <p>${formatText(d.pillar3Topics)}</p>
-              </div>
-              <div class="box">
-                <h3 style="margin-top:0;">Pillar 4: ${formatText(d.pillar4Name)}</h3>
-                <p>${formatText(d.pillar4Topics)}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="page">
-          <h2>7. Platform Strategy</h2>
-          ${platformsHtml}
-
-          <div class="grid">
-            <div class="col">
-              <h2>8. Workflow & Production</h2>
-              <h3>Pre-Production</h3>${formatArray(d.workflowPre)}
-              <h3>Production</h3>${formatArray(d.workflowProd)}
-              <h3>Post-Production</h3>${formatArray(d.workflowPost)}
-              <h3>Publishing</h3>${formatArray(d.workflowPub)}
-            </div>
-            <div class="col">
-              <h2>9. Content Ideas</h2>
-              <h3>Educational</h3><p>${formatText(d.ideasEducational)}</p>
-              <h3>Promotional</h3><p>${formatText(d.ideasPromotional)}</p>
-              <h3>Social Proof</h3><p>${formatText(d.ideasSocialProof)}</p>
-              <h3>Trend / Viral Content Ideas</h3><p>${formatText(d.ideasViral)}</p>
-              <h3>Behind-The-Scenes</h3><p>${formatText(d.ideasBehindScenes)}</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="page">
-          <h2>9b. Viral Content Framework</h2>
-          <div class="grid">
-            <div class="col">
-              <h3>Hook Formulas & Openers</h3><p>${formatText(d.viralHookFormulas)}</p>
-              <h3>Trending Audio / Sounds To Watch</h3><p>${formatText(d.viralTrendingAudio)}</p>
-            </div>
-            <div class="col">
-              <h3>Trend-Jacking Process</h3><p>${formatText(d.viralTrendJackProcess)}</p>
-              <h3>Repurposing Plan</h3><p>${formatText(d.viralRepurposing)}</p>
-              <h3>Pre-Post Viral Checklist</h3>${formatArray(d.viralChecklist)}
-            </div>
-          </div>
-        </div>
-
-        <div class="page">
-          <div class="grid">
-            <div class="col">
-              <h2>10. KPI & Tracking</h2>
-              <h3>Metrics to Track</h3>${formatArray(d.kpisMetrics)}
-              <h3>Reporting Frequency</h3>${formatArray(d.kpisFrequency)}
-              <h3>Benchmarks</h3><p>${formatText(d.kpisBenchmarks)}</p>
-
-              <h2>11. Client Communication</h2>
-              <h3>Methods</h3>${formatArray(d.commMethods)}
-              <h3>Timeline Expectations</h3><p>${formatText(d.commTimeline)}</p>
-            </div>
-            <div class="col">
-              <h2>12. Action Plan</h2>
-              <h3>Action Items</h3>
-              <ul style="margin-top:0;">
-                <li>${formatText(d.action1)}</li>
-                <li>${formatText(d.action2)}</li>
-                <li>${formatText(d.action3)}</li>
-                <li>${formatText(d.action4)}</li>
-              </ul>
-              <h3>Next Steps</h3>${formatArray(d.nextSteps)}
-              <h3>Notes</h3><p>${formatText(d.notesSection)}</p>
-            </div>
-          </div>
-        </div>
-      `;
 
       try {
-        const opt = {
-          margin:       0,
-          filename:     'Content_Strategy_Builder.pdf',
-          image:        { type: 'jpeg', quality: 0.92 },
-          html2canvas:  { scale: 2, letterRendering: true, useCORS: true, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-          jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-        };
-        
-        if (typeof html2pdf !== 'undefined') {
-          await html2pdf().set(opt).from(container).save();
-        } else {
-          alert("PDF library failed to load.");
+        const r = RevitalPDF.create({ reportTitle: 'CONTENT PLANNING BLUEPRINT', companyName: state.targetUrl || 'Client' });
+        const C = r.colors;
+
+        function block(label, value) {
+          r.paragraph(label, { bold: true, size: 10, spaceAfter: 3 });
+          r.paragraph(value || 'Not provided', value ? {} : { italic: true, color: C.GRAY, spaceAfter: 12 });
+          if (value) r.y += 2;
         }
-      } catch(e) {
+        function listBlock(label, arr) {
+          r.paragraph(label, { bold: true, size: 10, spaceAfter: 6 });
+          if (arr && arr.length) r.bulletList(arr);
+          else r.paragraph('None selected', { italic: true, color: C.GRAY, spaceAfter: 12 });
+        }
+
+        r.coverPage({
+          title: 'Content Planning Blueprint',
+          subLine: state.targetUrl ? ('Target URL / Project: ' + state.targetUrl) : undefined,
+        });
+
+        r.newPage();
+        r.sectionHeader('1. Company Overview');
+        block('Business Name', d.businessName);
+        block('Industry', d.industry);
+        block('Primary Services/Products', d.primaryServices);
+        block('Brand Mission', d.brandMission);
+        block('Core Values', d.coreValues);
+        block('Unique Selling Proposition (USP)', d.usp);
+
+        r.sectionHeader('2. Business Goals');
+        block('Short-Term Goals', d.goalsShortTerm);
+        block('Long-Term Goals', d.goalsLongTerm);
+        listBlock('Primary Objectives', d.primaryGoals);
+
+        r.newPage();
+        r.sectionHeader('3. Target Audience');
+        block('Demographics', [d.audienceAge, d.audienceLocation, d.audienceIndustry].filter(Boolean).join(' | '));
+        block('Pain Points', d.audiencePainPoints);
+        block('Desired Outcomes', d.audienceDesires);
+
+        r.sectionHeader('4. Brand Identity');
+        listBlock('Brand Personality', d.brandPersonality);
+        block('Brand Voice', d.brandVoice);
+        listBlock('Visual Assets', d.existingAssets);
+
+        r.newPage();
+        r.sectionHeader('5. Competitor Analysis');
+        block('Main Competitors', d.mainCompetitors);
+        block('What They Do Well', d.competitorStrengths);
+        block('Our Differentiator', d.competitorDifferentiate);
+
+        r.sectionHeader('6. Content Strategy');
+        [['Pillar 1', d.pillar1Name, d.pillar1Topics], ['Pillar 2', d.pillar2Name, d.pillar2Topics], ['Pillar 3', d.pillar3Name, d.pillar3Topics], ['Pillar 4', d.pillar4Name, d.pillar4Topics]]
+          .forEach(([label, name, topics]) => r.calloutBox(`${label}: ${name || 'Untitled'}`, topics || 'Not provided'));
+
+        r.newPage();
+        r.sectionHeader('7. Platform Strategy');
+        if (d.platforms && d.platforms.length > 0) {
+          d.platforms.forEach(p => {
+            r.paragraph(p.name || 'Untitled Platform', { bold: true, size: 11, spaceAfter: 4 });
+            r.paragraph(`Purpose: ${p.purpose || '--'}`, { size: 9.5, spaceAfter: 3 });
+            r.paragraph(`Frequency: ${p.frequency || '--'}`, { size: 9.5, spaceAfter: 6 });
+            if (p.contentTypes && p.contentTypes.length) r.bulletList(p.contentTypes);
+            r.y += 4;
+          });
+        } else {
+          r.paragraph('No platform strategy defined.', { italic: true, color: C.GRAY, spaceAfter: 12 });
+        }
+
+        r.newPage();
+        r.sectionHeader('8. Workflow & Production');
+        listBlock('Pre-Production', d.workflowPre);
+        listBlock('Production', d.workflowProd);
+        listBlock('Post-Production', d.workflowPost);
+        listBlock('Publishing', d.workflowPub);
+
+        r.sectionHeader('9. Content Ideas');
+        block('Educational', d.ideasEducational);
+        block('Promotional', d.ideasPromotional);
+        block('Social Proof', d.ideasSocialProof);
+        block('Trend / Viral Content Ideas', d.ideasViral);
+        block('Behind-The-Scenes', d.ideasBehindScenes);
+
+        r.newPage();
+        r.sectionHeader('9b. Viral Content Framework');
+        block('Hook Formulas & Openers', d.viralHookFormulas);
+        block('Trending Audio / Sounds To Watch', d.viralTrendingAudio);
+        block('Trend-Jacking Process', d.viralTrendJackProcess);
+        block('Repurposing Plan', d.viralRepurposing);
+        listBlock('Pre-Post Viral Checklist', d.viralChecklist);
+
+        r.newPage();
+        r.sectionHeader('10. KPI & Tracking');
+        listBlock('Metrics to Track', d.kpisMetrics);
+        listBlock('Reporting Frequency', d.kpisFrequency);
+        block('Benchmarks', d.kpisBenchmarks);
+
+        r.sectionHeader('11. Client Communication');
+        listBlock('Methods', d.commMethods);
+        block('Timeline Expectations', d.commTimeline);
+
+        r.newPage();
+        r.sectionHeader('12. Action Plan');
+        r.paragraph('Action Items', { bold: true, size: 10, spaceAfter: 6 });
+        r.bulletList([d.action1, d.action2, d.action3, d.action4].filter(Boolean).length ? [d.action1, d.action2, d.action3, d.action4].filter(Boolean) : ['Not provided']);
+        listBlock('Next Steps', d.nextSteps);
+        block('Notes', d.notesSection);
+
+        r.save('Content_Strategy_Builder.pdf');
+      } catch (e) {
         console.error("PDF Error:", e);
-        alert("An error occurred generating the PDF.");
+        alert("An error occurred generating the PDF: " + (e && e.message ? e.message : e));
       }
 
       downloadBtn.disabled = false;

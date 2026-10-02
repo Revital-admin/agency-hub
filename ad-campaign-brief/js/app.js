@@ -154,55 +154,88 @@ ${specialNotes}
     });
   });
 
-  // Download PDF - same reasoning/pattern as creative-brief-generator's
-  // Download PDF: a real leave-behind document. Re-parses currentMarkdown
-  // with its own leading "# ... Ad Campaign Brief: ..." title line
-  // stripped out (the container below builds its own styled h1 for that -
-  // reusing previewContainer.innerHTML as-is would print the title twice),
-  // then restyles the result dark-on-white since the live preview relies
-  // on the Hub's dark-theme CSS variables.
+  // Download PDF - a real leave-behind document.
+  // Oct 2026 rebuild: switched from re-parsing currentMarkdown into a
+  // restyled HTML document for html2canvas/html2pdf to screenshot, to the
+  // shared RevitalPDF module - see ../shared/pdf-report.js for the full
+  // rationale. Reads the field values directly instead of round-tripping
+  // through markdown/marked.js (this tool's markdown uses blockquotes and
+  // multi-label lines that don't fit the generic shared/markdown-pdf.js
+  // renderer used by the other brief tools, so it's simpler and more
+  // reliable to read the fields straight).
   const downloadPdfBtn = document.getElementById('downloadPdfBtn');
   if (downloadPdfBtn) {
-    downloadPdfBtn.addEventListener('click', async () => {
+    downloadPdfBtn.addEventListener('click', () => {
+      if (typeof window.RevitalPDF === 'undefined') {
+        alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
+        return;
+      }
       downloadPdfBtn.disabled = true;
       const origHtml = downloadPdfBtn.innerHTML;
       downloadPdfBtn.innerHTML = '<span>Generating...</span>';
 
       const campaignName = document.getElementById('campaignName').value || 'Ad Campaign Brief';
       const clientName = document.getElementById('clientName').value || 'Client';
-      const mdBody = currentMarkdown.replace(/^#.*Ad Campaign Brief:.*\n+/, '');
-      const bodyHtml = (typeof marked !== 'undefined') ? marked.parse(mdBody) : `<pre>${mdBody}</pre>`;
-
-      const container = document.createElement('div');
-      container.style.cssText = 'font-family: "Inter", sans-serif, Arial; color:#1e293b; font-size:14px; line-height:1.6; width:100%; padding:40px; box-sizing:border-box; background:white;';
-      container.innerHTML = `
-        <img src="assets/logo.png" onerror="this.src='../logo.png'" alt="Revital Hub" style="height:50px; width:144px; object-fit:contain; margin-bottom:30px;">
-        <h1 style="font-size:26px; font-weight:700; color:#0f172a; border-bottom:4px solid #f59e0b; padding-bottom:16px; margin-bottom:20px;">Ad Campaign Brief: ${campaignName}</h1>
-        <p style="color:#64748b; font-size:13px; margin-bottom:24px;"><strong>Client:</strong> ${clientName} &nbsp;&middot;&nbsp; <strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
-        <div>${bodyHtml}</div>
-      `;
-      container.querySelectorAll('h2').forEach(h => h.style.cssText = 'font-size:16px; color:#0f172a; border-bottom:2px solid #e2e8f0; padding-bottom:6px; margin:20px 0 10px;');
-      container.querySelectorAll('p, li, strong').forEach(elx => { elx.style.color = '#334155'; });
-      container.querySelectorAll('blockquote').forEach(elx => elx.style.cssText = 'border-left:3px solid #3b82f6; padding-left:12px; color:#475569; margin:10px 0;');
-      container.querySelectorAll('hr').forEach(elx => elx.style.cssText = 'border:none; border-top:1px solid #e2e8f0; margin:24px 0;');
-      container.querySelectorAll('em').forEach(elx => { elx.style.color = '#94a3b8'; });
+      const objective = document.getElementById('objective').value;
+      const platforms = Array.from(platformChecks).filter(cb => cb.checked).map(cb => cb.value);
+      const totalBudget = document.getElementById('totalBudget').value;
+      const totalBudgetText = totalBudget !== '' ? formatCurrency(totalBudget) : 'Not provided';
+      const budgetSplit = document.getElementById('budgetSplit').value;
+      const startDate = document.getElementById('startDate').value;
+      const endDate = document.getElementById('endDate').value;
+      const targeting = document.getElementById('targeting').value;
+      const kpis = document.getElementById('kpis').value;
+      const adFormats = document.getElementById('adFormats').value;
+      const destinationUrl = document.getElementById('destinationUrl').value;
+      const trackingNotes = document.getElementById('trackingNotes').value;
+      const specialNotes = document.getElementById('specialNotes').value;
 
       try {
-        const opt = {
-          margin: 0,
-          filename: `Ad_Campaign_Brief_${campaignName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`,
-          image: { type: 'jpeg', quality: 0.92 },
-          html2canvas: { scale: 2, letterRendering: true, useCORS: true, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-        };
-        if (typeof html2pdf !== 'undefined') {
-          await html2pdf().set(opt).from(container).save();
-        } else {
-          alert("PDF library failed to load.");
-        }
+        const r = RevitalPDF.create({ reportTitle: 'AD CAMPAIGN BRIEF', companyName: clientName });
+        const C = r.colors;
+
+        r.coverPage({
+          title: `Ad Campaign Brief: ${campaignName}`,
+          subLine: new Date().toLocaleDateString(),
+          objective: objective || undefined,
+        });
+
+        r.newPage();
+        r.sectionHeader('Budget');
+        r.tableBlock(['Item', 'Detail'], [
+          ['Total Budget', totalBudgetText],
+          ['Split', budgetSplit || 'Not specified'],
+          ['Platforms', platforms.length ? platforms.join(', ') : 'None selected'],
+        ], [r.CONTENT_W * 0.3, r.CONTENT_W * 0.7]);
+
+        r.sectionHeader('Flight Dates');
+        r.paragraph(`Start: ${startDate || 'TBD'}     End: ${endDate || 'TBD'}`, { spaceAfter: 16 });
+
+        r.sectionHeader('Targeting Parameters');
+        r.calloutBox('Targeting', targeting || 'Not provided');
+
+        r.newPage();
+        r.sectionHeader('KPIs / Success Metrics');
+        r.paragraph(kpis || 'Not provided', { spaceAfter: 16 });
+
+        r.sectionHeader('Ad Formats / Placements');
+        r.paragraph(adFormats || 'Not provided', { spaceAfter: 16 });
+
+        r.sectionHeader('Destination');
+        r.paragraph(destinationUrl || 'Not provided', { spaceAfter: 16 });
+
+        r.sectionHeader('Tracking & UTM Notes');
+        r.paragraph(trackingNotes || 'None provided', { spaceAfter: 16 });
+
+        r.sectionHeader('Special Instructions');
+        r.paragraph(specialNotes || 'None', { spaceAfter: 16 });
+
+        r.paragraph('Generated via Revital Hub - Ad Campaign Brief Generator', { italic: true, size: 8.5, color: C.GRAY });
+
+        r.save(`Ad_Campaign_Brief_${campaignName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
       } catch (e) {
         console.error("PDF error:", e);
-        alert("Something went wrong generating the PDF.");
+        alert("Something went wrong generating the PDF: " + (e && e.message ? e.message : e));
       }
 
       downloadPdfBtn.disabled = false;

@@ -1224,12 +1224,15 @@
 
   </main>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <!-- Oct 2026: PDF export switched from html2canvas/html2pdf to the shared
+       jsPDF-based report builder - see shared/pdf-report.js for history. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="../shared/pdf-report.js?v=1"></script>
   <!-- Base64 Logo variable -->
   <script>
     // Seeding logo placeholder (will be replaced or read dynamically if available)
     window.LOGO_BASE64 = "";
   </script>
-  <script src="js/app.js?v=66"></script>
+  <script src="js/app.js?v=67"></script>
 </body>
 </html>
