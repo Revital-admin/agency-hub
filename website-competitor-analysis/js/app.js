@@ -385,20 +385,42 @@ function downloadPDF() {
     replacements.push({ el, span });
   });
 
+  // Bug fix (Oct 2026, round 2 - PDF still unreadable in the hero/SWOT/
+  // insight areas after the first fix): html2canvas's own `backgroundColor`
+  // CONFIG OPTION turns out not to be honored by this html2pdf.js bundle
+  // when driving the full .save() pipeline - verified directly by running
+  // html2pdf().set({html2canvas:{backgroundColor:'#ff0000'}}) against a
+  // plain, background-less test element and reading back the rendered
+  // canvas pixel: it comes back pure white (255,255,255) regardless of
+  // what's passed in that option, every time. Elements with their own real
+  // CSS background (table cells, cards) were never affected by this and
+  // looked fine; text sitting directly on the page (the hero title, SWOT
+  // labels, the insight box's translucent background) has no such
+  // background of its own, relies entirely on the page behind it, and so
+  // rendered on html2canvas's hardcoded white default instead of the dark
+  // theme - unreadable, exactly as reported a second time.
+  // Fix: set the background directly as an inline style on the captured
+  // container element itself instead of trusting the config option -
+  // confirmed by the same pixel-level test that html2canvas DOES always
+  // honor a real DOM background-color on the element being captured.
+  const origContainerBg = container.style.backgroundColor;
+  container.style.backgroundColor = getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f';
+
   const opt = {
     margin:       0.5,
     filename:     'Competitor_Analysis.pdf',
     image:        { type: 'jpeg', quality: 0.92 },
-    html2canvas:  { scale: 2, letterRendering: true, useCORS: true, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
+    html2canvas:  { scale: 2, letterRendering: true, useCORS: true },
     jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' }
   };
-  
+
   // Wait a tick for DOM to update
   setTimeout(() => {
     if (typeof html2pdf === 'undefined') {
       alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
       if (pdfBtn) { pdfBtn.disabled = false; pdfBtn.innerHTML = origText || 'Download PDF'; }
       if (generateBtn) { generateBtn.disabled = false; generateBtn.innerHTML = 'Download PDF'; }
+      container.style.backgroundColor = origContainerBg;
       return;
     }
     html2pdf().set(opt).from(container).save().then(() => {
@@ -409,6 +431,7 @@ function downloadPDF() {
         r.el.style.display = '';
       });
       if (logoContainer) logoContainer.innerHTML = origLogoHTML;
+      container.style.backgroundColor = origContainerBg;
       if (pdfBtn) {
         pdfBtn.disabled = false;
         pdfBtn.innerHTML = origText;
