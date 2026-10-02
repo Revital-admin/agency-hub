@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Revital Hub</title>
-  <link rel="stylesheet" href="style.css?v=16">
+  <link rel="stylesheet" href="style.css?v=17">
   <!-- Firebase SDK Compat, config, central references, and the app
        controller - all `defer`red (perf fix, Aug 2026). These used to
        load synchronously with no defer/async, which meant the browser
@@ -40,7 +40,7 @@
        the time app.js's own init runs. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
   <script src="shared/pdf-report.js?v=1" defer></script>
-  <script src="app.js?v=166" defer></script>
+  <script src="app.js?v=167" defer></script>
 
 </head>
 <body>
@@ -210,11 +210,26 @@
       </div>
 
       <!-- Sidebar Navigation Menu -->
+      <!-- Oct 2026: rail mode + search added to cut through 94 tools
+           across 13 sections (see initSidebarRailMode/initNavSearch in
+           app.js). Rail mode shows one section's tools at a time as a
+           flyout panel next to a compact icon column; the mode toggle
+           switches back to today's full scrollable list. Search works in
+           either mode and temporarily flattens everything into a
+           filtered list regardless of rail/list state. -->
+      <div class="sidebar-mode-toggle-row">
+        <div class="nav-search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input type="text" id="navSearchInput" placeholder="Search tools..." autocomplete="off">
+        </div>
+        <button id="sidebarModeToggle" class="sidebar-mode-toggle" type="button" title="Switch to list view" aria-label="Switch to list view"></button>
+      </div>
       <nav class="sidebar-nav">
         <ul class="nav-menu">
-          
+
           <li class="nav-section" data-section="agency-globals">
             <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <svg class="rail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
               <span>AGENCY GLOBALS</span>
               <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
@@ -285,6 +300,7 @@
                Access Manager if needed. -->
           <li class="nav-section" data-section="team-ops">
             <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <svg class="rail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
               <span>TEAM OPS</span>
               <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
@@ -324,6 +340,7 @@
 
           <li class="nav-section" data-section="core">
             <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <svg class="rail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
               <span>CORE</span>
               <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
@@ -375,6 +392,7 @@
 
           <li class="nav-section" data-section="ad-accounts-access">
             <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <svg class="rail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"></path></svg>
               <span>AD ACCOUNTS & ACCESS</span>
               <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
@@ -408,6 +426,7 @@
 
           <li class="nav-section" data-section="reporting-health">
             <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <svg class="rail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
               <span>REPORTING & HEALTH</span>
               <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
@@ -453,6 +472,7 @@
 
           <li class="nav-section" data-section="production">
             <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <svg class="rail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"></path><path d="M5 21V7l8-4v18"></path><path d="M19 21V11l-6-4"></path><path d="M9 9v.01"></path><path d="M9 12v.01"></path><path d="M9 15v.01"></path><path d="M9 18v.01"></path></svg>
               <span>PRODUCTION</span>
               <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
@@ -498,6 +518,7 @@
 
           <li class="nav-section" data-section="content-creation">
             <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <svg class="rail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
               <span>CONTENT CREATION</span>
               <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
@@ -579,6 +600,7 @@
 
           <li class="nav-section" data-section="account-ops">
             <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <svg class="rail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
               <span>ACCOUNT OPS</span>
               <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
@@ -627,6 +649,7 @@
 
           <li class="nav-section" data-section="audits">
             <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <svg class="rail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
               <span>AUDITS</span>
               <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
@@ -675,6 +698,7 @@
 
           <li class="nav-section" data-section="strategy-competition">
             <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <svg class="rail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
               <span>STRATEGY & COMPETITION</span>
               <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
@@ -717,6 +741,7 @@
 
           <li class="nav-section" data-section="sales-pipeline">
             <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <svg class="rail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="18"></rect><rect x="10.5" y="3" width="6" height="12"></rect><rect x="18" y="3" width="3" height="8"></rect></svg>
               <span>SALES PIPELINE</span>
               <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
@@ -806,6 +831,7 @@
                tool or its data. -->
           <li class="nav-section" data-section="finance">
             <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <svg class="rail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
               <span>FINANCE</span>
               <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
@@ -839,6 +865,7 @@
 
           <li class="nav-section" data-section="retention-social-proof">
             <button class="nav-section-toggle" type="button" aria-expanded="true">
+              <svg class="rail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
               <span>RETENTION & SOCIAL PROOF</span>
               <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>

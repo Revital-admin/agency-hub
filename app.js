@@ -1073,6 +1073,8 @@ function boot() {
   fetchCloudflareProfile();
   try { initTabNavigation(); } catch(e) { console.error("TabNav Error:", e); }
   try { initNavSectionToggles(); } catch(e) { console.error("NavSectionToggles Error:", e); }
+  try { initSidebarRailMode(); } catch(e) { console.error("SidebarRailMode Error:", e); }
+  try { initNavSearch(); } catch(e) { console.error("NavSearch Error:", e); }
   try { initSidebarFooterToggle(); } catch(e) { console.error("SidebarFooterToggle Error:", e); }
   try { initMobileNavigation(); } catch(e) { console.error("MobileNav Error:", e); }
   try { initParentEventListeners(); } catch(e) { console.error("ParentListeners Error:", e); }
@@ -2203,6 +2205,18 @@ function initNavSectionToggles() {
     }
 
     toggleBtn.addEventListener("click", () => {
+      // Rail mode (see initSidebarRailMode below) repurposes this same
+      // click to mean "show this section's flyout panel" instead of
+      // "collapse/expand" - bail out here so a rail-mode click doesn't
+      // also silently toggle+persist this list-mode-only collapsed
+      // state, which would leave sections unexpectedly collapsed the
+      // next time the user switches back to list mode. Also bail during
+      // an active search - every section's items are force-visible then
+      // regardless of this class (see .search-active CSS), so toggling
+      // it would have no visible effect but would still persist.
+      const sidebarEl = document.getElementById("sidebar");
+      if (sidebarEl && (sidebarEl.classList.contains("rail-mode") || sidebarEl.classList.contains("search-active"))) return;
+
       const isCollapsed = section.classList.toggle("collapsed");
       toggleBtn.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
 
@@ -2214,6 +2228,128 @@ function initNavSectionToggles() {
       }
       saveCollapsedNavSections(Array.from(current));
     });
+  });
+}
+
+// ── Sidebar Rail Mode (icon rail + single flyout panel) ──
+// Default experience as of Oct 2026 - see the CSS comment above
+// .sidebar-mode-toggle-row in style.css for the full rationale. Falls
+// back to the original full list (list mode) via #sidebarModeToggle;
+// the choice persists per-browser.
+const SIDEBAR_RAIL_MODE_KEY = "REVITAL_HUB_SIDEBAR_RAIL_MODE";
+
+function getSidebarRailMode() {
+  try {
+    const stored = localStorage.getItem(SIDEBAR_RAIL_MODE_KEY);
+    return stored === null ? true : stored === "true"; // default ON for new/unset preference
+  } catch (e) {
+    return true;
+  }
+}
+
+function saveSidebarRailMode(isRail) {
+  try { localStorage.setItem(SIDEBAR_RAIL_MODE_KEY, isRail ? "true" : "false"); } catch (e) {}
+}
+
+function setRailActiveSection(slug) {
+  document.querySelectorAll(".nav-section[data-section]").forEach(sec => {
+    sec.classList.toggle("rail-active", sec.getAttribute("data-section") === slug);
+  });
+}
+
+// Picks which section's flyout panel should open by default: wherever
+// the currently active tab lives, so switching into rail mode (or
+// loading the page in it) never hides the page the user is already on.
+function defaultRailSlug() {
+  const activeBtn = document.querySelector(".nav-item-btn.active");
+  const activeSection = activeBtn ? activeBtn.closest(".nav-section[data-section]") : null;
+  if (activeSection) return activeSection.getAttribute("data-section");
+  const firstSection = document.querySelector(".nav-section[data-section]");
+  return firstSection ? firstSection.getAttribute("data-section") : null;
+}
+
+const SIDEBAR_LIST_ICON_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>';
+const SIDEBAR_RAIL_ICON_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="18" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg>';
+
+function initSidebarRailMode() {
+  const sidebar = document.getElementById("sidebar");
+  const toggleBtn = document.getElementById("sidebarModeToggle");
+  if (!sidebar) return;
+
+  let isRail = getSidebarRailMode();
+
+  function applyMode() {
+    sidebar.classList.toggle("rail-mode", isRail);
+    if (toggleBtn) {
+      const label = isRail ? "Switch to list view" : "Switch to rail view";
+      toggleBtn.setAttribute("aria-label", label);
+      toggleBtn.title = label;
+      // Icon shown is the view you'd switch TO, not the current one -
+      // same convention as a light/dark mode toggle showing the moon
+      // while in light mode.
+      toggleBtn.innerHTML = isRail ? SIDEBAR_LIST_ICON_SVG : SIDEBAR_RAIL_ICON_SVG;
+    }
+    if (isRail) {
+      const slug = defaultRailSlug();
+      if (slug) setRailActiveSection(slug);
+    }
+  }
+
+  applyMode();
+
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", () => {
+      isRail = !isRail;
+      saveSidebarRailMode(isRail);
+      applyMode();
+    });
+  }
+
+  document.querySelectorAll(".nav-section-toggle").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (!sidebar.classList.contains("rail-mode") || sidebar.classList.contains("search-active")) return;
+      const section = btn.closest(".nav-section[data-section]");
+      const slug = section && section.getAttribute("data-section");
+      if (slug) setRailActiveSection(slug);
+    });
+  });
+}
+
+// ── Sidebar Tool Search ──
+// Works in either rail or list mode - see .search-active in style.css,
+// which overrides both of those layouts back to a plain filtered list
+// so a match is never hidden behind an unselected rail icon or a
+// collapsed section.
+function initNavSearch() {
+  const input = document.getElementById("navSearchInput");
+  const sidebar = document.getElementById("sidebar");
+  if (!input || !sidebar) return;
+
+  function applyFilter() {
+    const query = input.value.trim().toLowerCase();
+    const hasQuery = query.length > 0;
+    sidebar.classList.toggle("search-active", hasQuery);
+
+    document.querySelectorAll(".nav-section[data-section]").forEach(section => {
+      let sectionHasMatch = false;
+      section.querySelectorAll(".nav-item-btn").forEach(btn => {
+        const labelEl = btn.querySelector("span");
+        const label = (labelEl ? labelEl.textContent : "").toLowerCase();
+        const matches = !hasQuery || label.includes(query);
+        btn.classList.toggle("no-match", !matches);
+        if (matches) sectionHasMatch = true;
+      });
+      section.classList.toggle("no-match", hasQuery && !sectionHasMatch);
+    });
+  }
+
+  input.addEventListener("input", applyFilter);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      input.value = "";
+      applyFilter();
+      input.blur();
+    }
   });
 }
 

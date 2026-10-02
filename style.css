@@ -808,6 +808,195 @@ input, select, textarea { max-width: 100%; }
   filter: drop-shadow(0 0 4px rgba(246, 141, 95, 0.4));
 }
 
+/* ── Sidebar Rail Mode + Search (Oct 2026) ──
+   Two independent features layered on top of the existing collapsible
+   nav-section markup, added with zero changes to that markup's own
+   structure:
+   1. Rail mode: compresses the 13 section toggles into a narrow icon
+      column (each toggle's .rail-icon, injected from that section's
+      first tool's own icon) and shows only the active section's items
+      as an absolutely-positioned flyout panel beside the rail, instead
+      of all 13 sections' full item lists stacked and expanded at once.
+      List mode (the original layout) is still one click away via
+      #sidebarModeToggle - see initSidebarRailMode in app.js.
+   2. Search: a filter box that works in EITHER mode. Typing adds
+      .search-active to #sidebar, which overrides both rail-mode's and
+      list-mode's layout back to a plain flattened, filtered list (see
+      initNavSearch in app.js) - so search results are never hidden
+      behind an unselected rail icon or a collapsed section. */
+.sidebar-mode-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 12px;
+}
+
+.nav-search {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.nav-search svg {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.nav-search input {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  padding: 9px 12px 9px 32px;
+  transition: border-color var(--transition-fast);
+}
+
+.nav-search input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+.sidebar-mode-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sidebar-mode-toggle:hover {
+  color: var(--text-bright);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.rail-icon {
+  display: none;
+}
+
+/* Rail layout: icon column + one flyout panel for the active section */
+.sidebar.rail-mode .nav-menu {
+  flex-direction: row;
+  position: relative;
+  gap: 0;
+}
+
+.sidebar.rail-mode .nav-section-toggle {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  margin: 0 0 4px;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+}
+
+.sidebar.rail-mode .nav-section:first-child .nav-section-toggle {
+  margin-top: 0;
+}
+
+.sidebar.rail-mode .nav-section.rail-active .nav-section-toggle {
+  background: rgba(246, 141, 95, 0.15);
+  color: var(--primary);
+}
+
+.sidebar.rail-mode .nav-section-toggle span,
+.sidebar.rail-mode .nav-section-toggle .chevron {
+  display: none;
+}
+
+.sidebar.rail-mode .nav-section-toggle .rail-icon {
+  display: flex;
+}
+
+.sidebar.rail-mode .nav-section-items {
+  display: none;
+  max-height: none;
+  opacity: 1;
+}
+
+.sidebar.rail-mode .nav-section.rail-active .nav-section-items {
+  display: flex;
+  position: absolute;
+  /* Sized to fit inside the sidebar's own 232px content box (280px
+     sidebar - 24px padding each side) so .sidebar-nav's overflow-x:
+     hidden never clips this - 34px rail + 6px gap + 184px panel = 224px,
+     an 8px safety margin under that ceiling. */
+  left: 40px;
+  top: 0;
+  width: 184px;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--bg-card-opaque);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  z-index: 5;
+  box-shadow: var(--shadow-lg);
+}
+
+/* Search override - takes priority over both rail and list layout so
+   results are always a plain, fully visible, filtered list. */
+.sidebar.search-active .nav-menu {
+  flex-direction: column;
+  position: static;
+}
+
+.sidebar.search-active .nav-section-toggle {
+  width: 100%;
+  height: auto;
+  padding: 4px 14px;
+  justify-content: space-between;
+  margin: 20px 0 4px;
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.sidebar.search-active .nav-section:first-child .nav-section-toggle {
+  margin-top: 0;
+}
+
+.sidebar.search-active .nav-section-toggle .rail-icon {
+  display: none;
+}
+
+.sidebar.search-active .nav-section-toggle span {
+  display: inline;
+}
+
+.sidebar.search-active .nav-section-items {
+  display: flex !important;
+  position: static !important;
+  width: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+}
+
+.sidebar.search-active .nav-section.no-match {
+  display: none !important;
+}
+
+.nav-item-btn.no-match {
+  display: none !important;
+}
+
 /* Sidebar Footer Options — visually a separate "admin bar", not a
    continuation of the scrollable tool list above it. Previously fixed-
    height with its own scrollbar to stop it from squeezing .sidebar-nav
