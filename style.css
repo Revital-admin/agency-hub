@@ -846,7 +846,7 @@ input, select, textarea { max-width: 100%; }
   pointer-events: none;
 }
 
-.nav-search input {
+.nav-search input[type="text"] {
   width: 100%;
   background: var(--bg-input);
   border: 1px solid var(--border-color);
@@ -858,9 +858,10 @@ input, select, textarea { max-width: 100%; }
   transition: border-color var(--transition-fast);
 }
 
-.nav-search input:focus {
+.nav-search input[type="text"]:focus {
   outline: none;
   border-color: var(--border-focus);
+  box-shadow: none;
 }
 
 .sidebar-mode-toggle {
@@ -887,9 +888,12 @@ input, select, textarea { max-width: 100%; }
   display: none;
 }
 
-/* Rail layout: icon column + one flyout panel for the active section */
+/* Rail layout: icon column + one flyout panel for the active section.
+   flex-direction stays column (the default) so the 13 section icons
+   stack vertically - the flyout panel achieves the "beside the rail"
+   look on its own via position:absolute, anchored to this relative
+   container, without needing the icons themselves laid out in a row. */
 .sidebar.rail-mode .nav-menu {
-  flex-direction: row;
   position: relative;
   gap: 0;
 }
