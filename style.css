@@ -901,6 +901,48 @@ input, select, textarea { max-width: 100%; }
   margin: 0 0 4px;
   justify-content: center;
   border-radius: var(--radius-sm);
+  position: relative;
+}
+
+/* Hover tooltip naming the section - rail mode only (list mode already
+   shows the name as the toggle's own visible label). data-tooltip is
+   set per-button in index.html from that section's own heading text. */
+.sidebar.rail-mode .nav-section-toggle::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--bg-card-opaque);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  font-family: var(--font-heading);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
+  z-index: 20;
+}
+
+.sidebar.rail-mode .nav-section-toggle:hover::after {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0.15s;
+}
+
+/* Search temporarily reverts to the full-label list layout - no need
+   for a tooltip then, and leaving it active risked a stray tooltip
+   rendering mid-list where it no longer had rail-icon positioning to
+   anchor against. */
+.sidebar.search-active .nav-section-toggle::after {
+  content: none;
 }
 
 .sidebar.rail-mode .nav-section:first-child .nav-section-toggle {
