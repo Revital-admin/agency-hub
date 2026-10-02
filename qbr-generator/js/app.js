@@ -222,60 +222,105 @@ async function renderQbr() {
   ]);
 }
 
-// Builds the printable QBR container + html2pdf options for a given
-// client. Pulled out of generateQbrPdf so the Email to Client send flow
-// below can produce the exact same document (as a data URI instead of a
-// browser download) without duplicating this markup.
-function buildQbrPdfPayload(clientName) {
-  const container = document.createElement('div');
-  container.style.cssText = 'width: 8.5in; padding: 0.6in; font-family: Helvetica, Arial, sans-serif; color: #1a1a1a; background: #fff;';
+// Pulls the label/meta text out of the already-rendered ".qbr-list-row"
+// rows inside a container (health trend, deliverables, billing, budget
+// pacing all use this same row markup) - used as plain text for the PDF
+// rather than re-fetching the underlying data a second time.
+function rowsFromListBlock(id) {
+  const container = document.getElementById(id);
+  if (!container) return [];
+  return Array.from(container.querySelectorAll('.qbr-list-row')).map(row => {
+    const label = (row.querySelector('.qbr-list-row-label') || {}).textContent || '';
+    const meta = (row.querySelector('.qbr-list-row-meta') || {}).textContent || '';
+    return [label.trim(), meta.trim()];
+  });
+}
 
-  const healthHtml = document.getElementById('healthTrendList').innerHTML;
-  const deliverablesSummaryHtml = document.getElementById('deliverablesSummary').innerHTML;
-  const deliverablesListHtml = document.getElementById('deliverablesList').innerHTML;
-  const referralsHtml = document.getElementById('referralsSummary').innerHTML;
-  const billingHtml = document.getElementById('billingSummaryBlock').innerHTML;
-  const revisionsHtml = document.getElementById('revisionsSummary').innerHTML;
-  const budgetPacingHtml = document.getElementById('budgetPacingBlock').innerHTML;
+// Same idea for the ".qbr-stat" number+label cards (deliverables and
+// referrals summaries both use this markup).
+function statsFromBlock(id) {
+  const container = document.getElementById(id);
+  if (!container) return [];
+  return Array.from(container.querySelectorAll('.qbr-stat')).map(stat => {
+    const num = (stat.querySelector('.qbr-stat-num') || {}).textContent || '';
+    const label = (stat.querySelector('.qbr-stat-label') || {}).textContent || '';
+    return [label.trim(), num.trim()];
+  });
+}
 
-  // Reuse the already-rendered section markup but strip the dark-theme
-  // classes down to plain text - this document needs to print on white,
-  // same convention as the Change Order Generator's signable PDF.
-  const stripToText = (html) => html
-    .replace(/<span class="qbr-health-dot[^"]*"><\/span>/g, '')
-    .replace(/<[^>]+>/g, (tag) => tag.startsWith('</div') || tag.startsWith('<div') ? '\n' : ' ')
-    .replace(/\s+\n/g, '\n').trim();
+function isEmptyNote(id) {
+  const container = document.getElementById(id);
+  return !!(container && container.querySelector('.qbr-empty-note'));
+}
 
-  container.innerHTML = `
-    <div style="border-bottom: 3px solid #6366f1; padding-bottom: 16px; margin-bottom: 24px;">
-      <div style="font-size: 11px; letter-spacing: 1.5px; color: #6366f1; font-weight: 700; text-transform: uppercase;">Revital Productions</div>
-      <h1 style="font-size: 26px; margin: 6px 0 0;">Quarterly Business Review</h1>
-      <p style="font-size: 13px; color: #555; margin: 4px 0 0;">${escapeHtml(clientName)} — ${new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</p>
-    </div>
-    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Client health trend</h3>
-    <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit; margin-bottom:18px;">${stripToText(healthHtml)}</pre>
-    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Deliverables &amp; approvals</h3>
-    <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit;">${stripToText(deliverablesSummaryHtml)}</pre>
-    <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit; margin-bottom:18px;">${stripToText(deliverablesListHtml)}</pre>
-    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Referrals</h3>
-    <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit; margin-bottom:18px;">${stripToText(referralsHtml)}</pre>
-    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Billing &amp; contract</h3>
-    <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit; margin-bottom:18px;">${stripToText(billingHtml)}</pre>
-    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Budget &amp; pacing</h3>
-    <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit; margin-bottom:18px;">${stripToText(budgetPacingHtml)}</pre>
-    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px;">Open revisions</h3>
-    <pre style="font-size:12px; white-space:pre-wrap; font-family:inherit;">${stripToText(revisionsHtml)}</pre>
-  `;
+// Builds the QBR as a RevitalPDF report and returns the `r` wrapper
+// (see ../shared/pdf-report.js) so the caller can either r.save(filename)
+// for a browser download, or call r.doc.output(...) to get a data URI for
+// the "Email to Client" send flow below - both need the exact same
+// document, which is why this is split out from generateQbrPdf.
+// Oct 2026 rebuild: switched from html2canvas/html2pdf (screenshotting a
+// hidden container built from scraped, regex-stripped innerHTML) to the
+// shared RevitalPDF module - reads the same already-rendered section data,
+// but as structured text/table rows instead of HTML strings to strip.
+function buildQbrReport(clientName) {
+  if (typeof window.RevitalPDF === 'undefined') {
+    throw new Error('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
+  }
+  const r = RevitalPDF.create({ reportTitle: 'QUARTERLY BUSINESS REVIEW', companyName: clientName });
+  const period = new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
-  const opt = {
-    margin: 0,
-    filename: `${clientName.replace(/\s+/g, '_')}_QBR_${new Date().toISOString().slice(0, 10)}.pdf`,
-    image: { type: 'jpeg', quality: 0.95 },
-    html2canvas: { scale: 2, letterRendering: true, useCORS: true, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-  };
+  r.coverPage({
+    title: 'Quarterly Business Review',
+    subLine: period,
+    preparedFrom: `Account health, deliverables, referrals, billing, and budget pacing on file for ${clientName}.`,
+  });
 
-  return { container, opt };
+  r.newPage();
+  r.sectionHeader('Client Health Trend');
+  if (isEmptyNote('healthTrendList')) {
+    r.paragraph('No weekly check-ins logged yet.', { italic: true, color: r.colors.GRAY });
+  } else {
+    r.tableBlock(['Date', 'Health / Priority'], rowsFromListBlock('healthTrendList'), [r.CONTENT_W * 0.3, r.CONTENT_W * 0.7]);
+  }
+
+  r.sectionHeader('Deliverables & Approvals');
+  const delivStats = statsFromBlock('deliverablesSummary');
+  if (delivStats.length) r.tableBlock(['Metric', 'Count'], delivStats, [r.CONTENT_W * 0.7, r.CONTENT_W * 0.3]);
+  if (isEmptyNote('deliverablesList')) {
+    r.paragraph('No approval decisions logged yet.', { italic: true, color: r.colors.GRAY });
+  } else {
+    r.paragraph('Recent decisions', { bold: true, size: 10, spaceAfter: 6 });
+    r.tableBlock(['Title', 'Decision'], rowsFromListBlock('deliverablesList'), [r.CONTENT_W * 0.6, r.CONTENT_W * 0.4]);
+  }
+
+  r.newPage();
+  r.sectionHeader('Referrals');
+  const refStats = statsFromBlock('referralsSummary');
+  if (refStats.length) r.tableBlock(['Metric', 'Count'], refStats, [r.CONTENT_W * 0.7, r.CONTENT_W * 0.3]);
+
+  r.sectionHeader('Billing & Contract');
+  if (isEmptyNote('billingSummaryBlock')) {
+    r.paragraph('No contract/invoice record on file for this client.', { italic: true, color: r.colors.GRAY });
+  } else {
+    r.tableBlock(['Item', 'Status'], rowsFromListBlock('billingSummaryBlock'), [r.CONTENT_W * 0.4, r.CONTENT_W * 0.6]);
+  }
+
+  r.sectionHeader('Budget & Pacing');
+  if (isEmptyNote('budgetPacingBlock')) {
+    r.paragraph('No budget pacing tracked for this client.', { italic: true, color: r.colors.GRAY });
+  } else {
+    r.tableBlock(['Item', 'Status'], rowsFromListBlock('budgetPacingBlock'), [r.CONTENT_W * 0.4, r.CONTENT_W * 0.6]);
+  }
+
+  r.sectionHeader('Open Revisions');
+  const revStats = statsFromBlock('revisionsSummary');
+  if (revStats.length) r.tableBlock(['Metric', 'Count'], revStats, [r.CONTENT_W * 0.7, r.CONTENT_W * 0.3]);
+
+  return r;
+}
+
+function qbrFilename(clientName) {
+  return `${clientName.replace(/\s+/g, '_')}_QBR_${new Date().toISOString().slice(0, 10)}.pdf`;
 }
 
 async function generateQbrPdf() {
@@ -289,19 +334,14 @@ async function generateQbrPdf() {
   btn.textContent = "Generating...";
 
   try {
-    const { container, opt } = buildQbrPdfPayload(clientName);
-
-    if (typeof html2pdf !== 'undefined') {
-      await html2pdf().set(opt).from(container).save();
-      if (window.parent.logAdminActivity) {
-        window.parent.logAdminActivity("QBR PDF generated", clientName);
-      }
-    } else if (window.parent.showBanner) {
-      window.parent.showBanner('error', 'PDF library failed to load.');
+    const r = buildQbrReport(clientName);
+    r.save(qbrFilename(clientName));
+    if (window.parent.logAdminActivity) {
+      window.parent.logAdminActivity("QBR PDF generated", clientName);
     }
   } catch (e) {
     console.error("QBR PDF error:", e);
-    if (window.parent.showBanner) window.parent.showBanner('error', 'Something went wrong generating the QBR PDF.');
+    if (window.parent.showBanner) window.parent.showBanner('error', 'Something went wrong generating the QBR PDF: ' + (e && e.message ? e.message : e));
   } finally {
     btn.disabled = false;
     btn.textContent = originalText;
@@ -408,10 +448,6 @@ if (emailToClientBtn) {
 if (emailToClientSendBtn) {
   emailToClientSendBtn.addEventListener('click', async () => {
     if (!currentEmailToClientFrom) return;
-    if (typeof html2pdf === 'undefined') {
-      alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
-      return;
-    }
 
     const clientName = currentClientName();
     const client = currentClient();
@@ -422,8 +458,11 @@ if (emailToClientSendBtn) {
     if (emailToClientStatus) emailToClientStatus.textContent = '';
 
     try {
-      const { container, opt } = buildQbrPdfPayload(clientName);
-      const dataUri = await html2pdf().set(opt).from(container).outputPdf('datauristring');
+      const r = buildQbrReport(clientName);
+      const filename = qbrFilename(clientName);
+      // jsPDF's own datauristring output (replaces html2pdf's
+      // outputPdf('datauristring') - same base64-after-the-comma shape).
+      const dataUri = r.doc.output('datauristring');
       const base64 = dataUri.slice(dataUri.indexOf(',') + 1);
       if (!base64) throw new Error('PDF generation produced no data');
 
@@ -437,7 +476,7 @@ if (emailToClientSendBtn) {
           subject: emailToClientSubject.value,
           body: emailToClientBody.value,
           from: currentEmailToClientFrom,
-          attachments: [{ filename: opt.filename, content: base64 }]
+          attachments: [{ filename: filename, content: base64 }]
         })
       });
       const data = await res.json().catch(() => ({}));

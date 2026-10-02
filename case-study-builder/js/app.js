@@ -274,63 +274,83 @@ function toggleFeatured(id) {
 
 // ── PDF Generation ──
 // One-pager, branded, meant to be attached to a proposal or sent straight
-// to a prospect as "services proof" - same html2pdf approach as the
-// Change Order Generator.
-async function generateCaseStudyPdf(id) {
+// to a prospect as "services proof".
+// Oct 2026 rebuild: switched from html2canvas/html2pdf to the shared
+// RevitalPDF module (../shared/pdf-report.js) - see that file for the
+// full rationale (white-on-white text, content sliced mid-sentence at
+// page breaks). Reference images are drawn directly via jsPDF's own
+// addImage() (they're already stored as data URLs - see
+// handleDroppedImage above), since that's a case this tool needs that
+// none of the other rebuilt tools so far have had.
+function generateCaseStudyPdf(id) {
   const client = currentClient();
   const clientName = currentClientName();
   if (!client) return;
   const cs = (client.caseStudies || []).find(c => c.id === id);
   if (!cs) return;
 
-  const container = document.createElement('div');
-  container.style.cssText = 'width: 8.5in; padding: 0.6in; font-family: Helvetica, Arial, sans-serif; color: #1a1a1a; background: #fff;';
-  container.innerHTML = `
-    <div style="border-bottom: 3px solid #6366f1; padding-bottom: 16px; margin-bottom: 24px;">
-      <div style="font-size: 11px; letter-spacing: 1.5px; color: #6366f1; font-weight: 700; text-transform: uppercase;">Revital Productions — Case Study</div>
-      <h1 style="font-size: 26px; margin: 6px 0 0;">${escapeHtml(cs.title)}</h1>
-      <div style="margin-top: 10px; display:flex; gap:8px; flex-wrap:wrap;">
-        <span style="display:inline-block; background:#eef0fe; color:#6366f1; font-size:11px; font-weight:700; padding:3px 10px; border-radius:100px;">${escapeHtml(clientName || '')}</span>
-        ${cs.industry ? `<span style="display:inline-block; background:#f4f4f8; color:#555; font-size:11px; font-weight:600; padding:3px 10px; border-radius:100px;">${escapeHtml(cs.industry)}</span>` : ''}
-      </div>
-    </div>
-    ${cs.servicesProvided ? `<p style="font-size: 12px; color:#555; margin-bottom: 20px;"><strong>Services Provided:</strong> ${escapeHtml(cs.servicesProvided)}</p>` : ''}
-    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px; margin-bottom: 8px;">The Challenge</h3>
-    <p style="font-size: 13px; line-height: 1.6; margin-bottom: 18px;">${escapeHtml(cs.challenge) || '—'}</p>
-    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px; margin-bottom: 8px;">Our Solution</h3>
-    <p style="font-size: 13px; line-height: 1.6; margin-bottom: 18px;">${escapeHtml(cs.solution) || '—'}</p>
-    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px; margin-bottom: 8px;">The Results</h3>
-    <p style="font-size: 13px; line-height: 1.6; margin-bottom: 18px; font-weight:600;">${escapeHtml(cs.results) || '—'}</p>
-    ${cs.testimonial ? `
-    <div style="margin-top: 28px; padding: 16px 20px; background:#f9f9fc; border-left: 3px solid #6366f1; border-radius: 0 6px 6px 0;">
-      <p style="font-size: 13px; font-style: italic; margin:0;">"${escapeHtml(cs.testimonial)}"</p>
-      ${cs.testimonialAuthor ? `<p style="font-size: 12px; font-weight:700; margin: 8px 0 0; color:#6366f1;">— ${escapeHtml(cs.testimonialAuthor)}</p>` : ''}
-    </div>` : ''}
-    ${(cs.embedLinks || []).some(l => l.isImage || (l.url || '').startsWith('data:image')) ? `
-    <h3 style="font-size: 14px; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px; margin: 24px 0 12px;">Reference Images</h3>
-    <div style="display:flex; flex-wrap:wrap; gap:12px;">
-      ${cs.embedLinks.filter(l => l.isImage || (l.url || '').startsWith('data:image')).map(l => `
-        <div style="width: 47%;">
-          <img src="${l.url}" style="width:100%; border-radius:6px; border:1px solid #e5e5e5; display:block;">
-          <p style="font-size:11px; color:#888; margin:4px 0 0;">${escapeHtml(l.label)}</p>
-        </div>
-      `).join('')}
-    </div>` : ''}
-    <div style="margin-top: 48px; border-top: 1px solid #e5e5e5; padding-top: 12px; font-size: 11px; color:#888;">Revital Productions — revitalproductions.com</div>
-  `;
+  if (typeof window.RevitalPDF === 'undefined') {
+    if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', 'PDF library failed to load.');
+    return;
+  }
 
-  const opt = {
-    margin: 0,
-    filename: `${(clientName || 'Client').replace(/\s+/g, '_')}_${cs.title.replace(/\s+/g, '_')}_Case_Study.pdf`,
-    image: { type: 'jpeg', quality: 0.95 },
-    html2canvas: { scale: 2, letterRendering: true, useCORS: true, backgroundColor: getComputedStyle(document.body).backgroundColor !== 'rgba(0, 0, 0, 0)' ? getComputedStyle(document.body).backgroundColor : '#15130f' },
-    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-  };
+  try {
+    const r = RevitalPDF.create({ reportTitle: 'CASE STUDY', companyName: clientName || 'Client' });
+    const C = r.colors;
 
-  if (typeof html2pdf !== 'undefined') {
-    await html2pdf().set(opt).from(container).save();
-  } else if (isEmbedded && window.parent.showBanner) {
-    window.parent.showBanner('error', 'PDF library failed to load.');
+    r.coverPage({
+      title: cs.title,
+      subLine: [cs.industry, 'Revital Productions'].filter(Boolean).join('   |   '),
+      objective: cs.servicesProvided ? ('Services provided: ' + cs.servicesProvided) : undefined,
+      preparedFrom: 'Case study prepared for use in proposals and portfolio materials.',
+    });
+
+    r.newPage();
+    r.sectionHeader('The Challenge');
+    r.paragraph(cs.challenge || 'Not yet filled in.', { spaceAfter: 16 });
+    r.paragraph('Our Solution', { bold: true, size: 13, spaceAfter: 6 });
+    r.paragraph(cs.solution || 'Not yet filled in.', { spaceAfter: 16 });
+    r.paragraph('The Results', { bold: true, size: 13, spaceAfter: 6 });
+    r.paragraph(cs.results || 'Not yet filled in.', { bold: true, spaceAfter: 16 });
+
+    if (cs.testimonial) {
+      r.calloutBox('Client Testimonial', '"' + cs.testimonial + '"' + (cs.testimonialAuthor ? '\n— ' + cs.testimonialAuthor : ''));
+    }
+
+    const images = (cs.embedLinks || []).filter(l => l.isImage || (l.url || '').startsWith('data:image'));
+    if (images.length) {
+      r.newPage();
+      r.sectionHeader('Reference Images');
+      images.forEach(function (img) {
+        try {
+          const fmt = img.url.indexOf('data:image/png') === 0 ? 'PNG' : 'JPEG';
+          const props = r.doc.getImageProperties(img.url);
+          const w = r.CONTENT_W;
+          const h = Math.min(400, w * (props.height / props.width));
+          r.ensureSpace(h + 30);
+          r.doc.addImage(img.url, fmt, r.MARGIN, r.y, w, h);
+          r.y += h + 6;
+          if (img.label) {
+            r.paragraph(img.label, { size: 8.5, italic: true, color: C.GRAY, spaceAfter: 14 });
+          } else {
+            r.y += 14;
+          }
+        } catch (imgErr) {
+          console.warn('Skipping image in case study PDF:', imgErr);
+        }
+      });
+    }
+
+    const nonImageLinks = (cs.embedLinks || []).filter(l => !(l.isImage || (l.url || '').startsWith('data:image')));
+    if (nonImageLinks.length) {
+      r.paragraph('Reference Links', { bold: true, size: 10.5, spaceAfter: 6 });
+      r.bulletList(nonImageLinks.map(l => l.label + ': ' + l.url));
+    }
+
+    r.save(`${(clientName || 'Client').replace(/\s+/g, '_')}_${cs.title.replace(/\s+/g, '_')}_Case_Study.pdf`);
+  } catch (err) {
+    console.error('PDF generation failed:', err);
+    if (isEmbedded && window.parent.showBanner) window.parent.showBanner('error', 'PDF generation failed: ' + (err && err.message ? err.message : err));
   }
 }
 
