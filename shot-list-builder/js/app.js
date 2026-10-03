@@ -159,6 +159,38 @@ function downloadShotListPdf() {
   btn.disabled = false; btn.innerHTML = origHtml;
 }
 
+// ── Download CSV ──
+// Same filterClient/showAllStatuses state as the table and the PDF export
+// above, so all three ("what's on screen", "Download PDF", "Download CSV")
+// always agree with each other instead of CSV silently exporting
+// everything regardless of the active filter.
+function downloadShotListCsv() {
+  const filterClient = el('filterClientInput').value.trim().toLowerCase();
+  const showAllStatuses = el('showAllStatusesToggle').checked;
+  const rows = tracker.entries
+    .filter(e => !filterClient || e.clientName.toLowerCase().includes(filterClient))
+    .filter(e => showAllStatuses || e.status !== 'Captured');
+
+  if (!rows.length) {
+    if (window.parent.showBanner) window.parent.showBanner('error', 'No shots to export with the current filter.');
+    return;
+  }
+
+  const csv = AgencyTracker.rowsToCsv([
+    { label: 'Client', key: 'clientName' },
+    { label: 'Project', key: 'projectTitle' },
+    { label: 'Shot #', key: 'shotNumber' },
+    { label: 'Description', key: 'shotDescription' },
+    { label: 'Type', key: 'shotType' },
+    { label: 'Location', key: 'location' },
+    { label: 'Status', key: 'status' },
+    { label: 'Notes', key: 'notes' },
+  ], rows);
+
+  const companyName = filterClient ? rows[0].clientName : 'All_Clients';
+  AgencyTracker.downloadCsv(window, `Shot_List_${companyName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`, csv);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   tracker.populateClientDatalist('clientOptions');
   tracker.resetForm();
@@ -169,6 +201,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   el('filterClientInput').addEventListener('input', renderTable);
   el('showAllStatusesToggle').addEventListener('change', renderTable);
   el('downloadPdfBtn').addEventListener('click', downloadShotListPdf);
+  el('downloadCsvBtn').addEventListener('click', downloadShotListCsv);
 
   tracker.pollForClients('clientOptions');
 });

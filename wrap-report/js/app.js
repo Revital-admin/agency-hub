@@ -112,6 +112,37 @@ function renderTable() {
   document.querySelectorAll('.remove-btn').forEach(btn => btn.addEventListener('click', () => removeEntry(btn.getAttribute('data-id'))));
 }
 
+// ── Download CSV ──
+// Same filterClient/showAllStatuses state as the table, so the export
+// always matches whatever's currently on screen.
+function downloadWrapReportsCsv() {
+  const filterClient = el('filterClientInput').value.trim().toLowerCase();
+  const showAllStatuses = el('showAllStatusesToggle').checked;
+  const rows = tracker.entries
+    .filter(e => !filterClient || e.clientName.toLowerCase().includes(filterClient))
+    .filter(e => showAllStatuses || e.rating === 'Rough');
+
+  if (!rows.length) {
+    if (window.parent.showBanner) window.parent.showBanner('error', 'No wrap reports to export with the current filter.');
+    return;
+  }
+
+  const csv = AgencyTracker.rowsToCsv([
+    { label: 'Client', key: 'clientName' },
+    { label: 'Project', key: 'projectTitle' },
+    { label: 'Shoot Date', key: 'shootDate' },
+    { label: 'Rating', key: 'rating' },
+    { label: 'Schedule Notes', key: 'scheduleNotes' },
+    { label: 'What Went Well', key: 'whatWentWell' },
+    { label: 'What Went Wrong', key: 'whatWentWrong' },
+    { label: 'Vendor Issues', key: 'vendorIssues' },
+    { label: 'Action Items', key: 'actionItems' },
+  ], rows);
+
+  const companyName = filterClient ? rows[0].clientName : 'All_Clients';
+  AgencyTracker.downloadCsv(window, `Wrap_Reports_${companyName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`, csv);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   tracker.populateClientDatalist('clientOptions');
   tracker.resetForm();
@@ -119,6 +150,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderTable();
 
   el('saveEntryBtn').addEventListener('click', saveEntry);
+  el('downloadCsvBtn').addEventListener('click', downloadWrapReportsCsv);
   el('filterClientInput').addEventListener('input', renderTable);
   el('showAllStatusesToggle').addEventListener('change', renderTable);
 

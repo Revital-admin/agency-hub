@@ -370,5 +370,54 @@
     };
   }
 
-  global.AgencyTracker = { create: create };
+  // ── CSV export ──
+  // Shared by all five trackers' "Download CSV" buttons, same idea as
+  // shared/pdf-report.js centralizing PDF generation - one correct CSV
+  // encoder instead of five hand-rolled ones. Static helpers (not part of
+  // the tracker instance returned by create()) since they don't need any
+  // tracker state - a tool just builds its own column list and passes in
+  // whatever rows are currently on screen (same "export matches the active
+  // filter" convention Shot List Builder's PDF export already established).
+
+  // Quotes a single CSV field per RFC 4180: wrap in quotes (escaping any
+  // interior quotes by doubling them) whenever the value contains a comma,
+  // quote, or line break - the three characters that would otherwise break
+  // column alignment or truncate a cell when opened in Excel/Sheets.
+  function csvCell(value) {
+    const s = (value === null || value === undefined) ? '' : String(value);
+    if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  // `columns`: [{ label: 'Client', key: 'clientName' }, ...] - or use
+  // `value: (row) => ...` instead of `key` for a computed column (e.g.
+  // formatting a date, or combining two fields).
+  function rowsToCsv(columns, rows) {
+    const header = columns.map(c => csvCell(c.label)).join(',');
+    const lines = (rows || []).map(row =>
+      columns.map(c => csvCell(typeof c.value === 'function' ? c.value(row) : row[c.key])).join(',')
+    );
+    return [header, ...lines].join('\r\n');
+  }
+
+  // Triggers a browser download of the given CSV text. Uses a `data:` URL
+  // rather than Blob + URL.createObjectURL - these trackers' exports are
+  // always small (a few hundred rows at most), well within every browser's
+  // data-URL size limit, and a data URL needs no createObjectURL/
+  // revokeObjectURL cleanup bookkeeping. The UTF-8 BOM prefix is so Excel
+  // (which otherwise guesses Windows-1252) renders a client's accented
+  // name or a smart-quote correctly instead of as mojibake.
+  function downloadCsv(win, filename, csvString) {
+    const doc = win.document;
+    const withBom = '﻿' + csvString;
+    const url = 'data:text/csv;charset=utf-8,' + encodeURIComponent(withBom);
+    const a = doc.createElement('a');
+    a.href = url;
+    a.download = filename;
+    doc.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  global.AgencyTracker = { create: create, rowsToCsv: rowsToCsv, downloadCsv: downloadCsv };
 })(window);

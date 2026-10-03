@@ -92,6 +92,37 @@ function renderTable() {
   document.querySelectorAll('.remove-btn').forEach(btn => btn.addEventListener('click', () => removeEntry(btn.getAttribute('data-id'))));
 }
 
+// ── Download CSV ──
+// Same filterClient/showAllStatuses state as the table, so the export
+// always matches whatever's currently on screen.
+function downloadReleasesCsv() {
+  const filterClient = el('filterClientInput').value.trim().toLowerCase();
+  const showAllStatuses = el('showAllStatusesToggle').checked;
+  const rows = tracker.entries
+    .filter(e => !filterClient || e.clientName.toLowerCase().includes(filterClient))
+    .filter(e => showAllStatuses || e.status === 'Pending');
+
+  if (!rows.length) {
+    if (window.parent.showBanner) window.parent.showBanner('error', 'No release forms to export with the current filter.');
+    return;
+  }
+
+  const csv = AgencyTracker.rowsToCsv([
+    { label: 'Client', key: 'clientName' },
+    { label: 'Project', key: 'projectTitle' },
+    { label: 'Signee Name', key: 'signeeName' },
+    { label: 'Signee Type', key: 'signeeType' },
+    { label: 'Release Type', key: 'releaseType' },
+    { label: 'Status', key: 'status' },
+    { label: 'Date Signed', key: 'dateSigned' },
+    { label: 'Form Location', key: 'formLocation' },
+    { label: 'Notes', key: 'notes' },
+  ], rows);
+
+  const companyName = filterClient ? rows[0].clientName : 'All_Clients';
+  AgencyTracker.downloadCsv(window, `Release_Forms_${companyName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`, csv);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   tracker.populateClientDatalist('clientOptions');
   tracker.resetForm();
@@ -99,6 +130,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderTable();
 
   el('saveEntryBtn').addEventListener('click', saveEntry);
+  el('downloadCsvBtn').addEventListener('click', downloadReleasesCsv);
   el('filterClientInput').addEventListener('input', renderTable);
   el('showAllStatusesToggle').addEventListener('change', renderTable);
 

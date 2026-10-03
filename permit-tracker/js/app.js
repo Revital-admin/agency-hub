@@ -116,6 +116,38 @@ function renderTable() {
   document.querySelectorAll('.remove-btn').forEach(btn => btn.addEventListener('click', () => removeEntry(btn.getAttribute('data-id'))));
 }
 
+// ── Download CSV ──
+// Same filterClient/showAllStatuses state as the table, so the export
+// always matches whatever's currently on screen.
+function downloadPermitsCsv() {
+  const filterClient = el('filterClientInput').value.trim().toLowerCase();
+  const showAllStatuses = el('showAllStatusesToggle').checked;
+  const rows = tracker.entries
+    .filter(e => !filterClient || e.clientName.toLowerCase().includes(filterClient))
+    .filter(e => showAllStatuses || e.status !== 'Approved' || isExpiringSoon(e));
+
+  if (!rows.length) {
+    if (window.parent.showBanner) window.parent.showBanner('error', 'No permits to export with the current filter.');
+    return;
+  }
+
+  const csv = AgencyTracker.rowsToCsv([
+    { label: 'Client', key: 'clientName' },
+    { label: 'Project', key: 'projectTitle' },
+    { label: 'Permit Type', key: 'permitType' },
+    { label: 'Issuing Authority', key: 'issuingAuthority' },
+    { label: 'Location', key: 'location' },
+    { label: 'Status', key: 'status' },
+    { label: 'Application Date', key: 'applicationDate' },
+    { label: 'Expiration Date', key: 'expirationDate' },
+    { label: 'Permit Doc Link', key: 'permitDocLink' },
+    { label: 'Notes', key: 'notes' },
+  ], rows);
+
+  const companyName = filterClient ? rows[0].clientName : 'All_Clients';
+  AgencyTracker.downloadCsv(window, `Permits_${companyName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`, csv);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   tracker.populateClientDatalist('clientOptions');
   tracker.resetForm();
@@ -125,6 +157,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   el('saveEntryBtn').addEventListener('click', saveEntry);
   el('filterClientInput').addEventListener('input', renderTable);
   el('showAllStatusesToggle').addEventListener('change', renderTable);
+  el('downloadCsvBtn').addEventListener('click', downloadPermitsCsv);
 
   tracker.pollForClients('clientOptions');
 });

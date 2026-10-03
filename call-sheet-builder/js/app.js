@@ -217,6 +217,45 @@ function autofillVenueAddress() {
   if (match && match.address) addressInput.value = match.address;
 }
 
+// ── Download CSV ──
+// Same showCancelled/filterClient state as the table, so the export
+// always matches whatever's currently on screen.
+function downloadCallSheetsCsv() {
+  const showCancelled = el('showCancelledToggle').checked;
+  const filterClient = el('filterClientInput').value.trim().toLowerCase();
+  const rows = tracker.entries.filter(e => {
+    if (!showCancelled && e.status === 'Cancelled') return false;
+    if (filterClient && !e.clientName.toLowerCase().includes(filterClient)) return false;
+    return true;
+  });
+
+  if (!rows.length) {
+    if (window.parent.showBanner) window.parent.showBanner('error', 'No call sheets to export with the current filter.');
+    return;
+  }
+
+  const csv = AgencyTracker.rowsToCsv([
+    { label: 'Client', key: 'clientName' },
+    { label: 'Shoot Title', key: 'shootTitle' },
+    { label: 'Shoot Date', key: 'shootDate' },
+    { label: 'Call Time', key: 'callTime' },
+    { label: 'Wrap Time', key: 'wrapTime' },
+    { label: 'Status', key: 'status' },
+    { label: 'Location Name', key: 'locationName' },
+    { label: 'Location Address', key: 'locationAddress' },
+    { label: 'On-Site Contact', key: 'onSiteContactName' },
+    { label: 'On-Site Contact Phone', key: 'onSiteContactPhone' },
+    { label: 'Client Attendees', key: 'clientAttendees' },
+    { label: 'Weather / Backup Plan', key: 'weatherBackupPlan' },
+    { label: 'Crew Assigned', key: 'crewAssigned' },
+    { label: 'Equipment Needed', key: 'equipmentNeeded' },
+    { label: 'Shot List / Notes', key: 'shotListNotes' },
+  ], rows);
+
+  const companyName = filterClient ? rows[0].clientName : 'All_Clients';
+  AgencyTracker.downloadCsv(window, `Call_Sheets_${companyName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`, csv);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   tracker.populateClientDatalist('clientOptions');
   tracker.resetForm();
@@ -228,6 +267,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   el('showCancelledToggle').addEventListener('change', renderTable);
   el('filterClientInput').addEventListener('input', renderTable);
   el('locationName').addEventListener('change', autofillVenueAddress);
+  el('downloadCsvBtn').addEventListener('click', downloadCallSheetsCsv);
 
   tracker.pollForClients('clientOptions');
 });
