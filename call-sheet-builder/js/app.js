@@ -218,6 +218,7 @@ function renderTable() {
       <td>
         <div class="row-actions">
           <button class="edit-btn" data-id="${entry.id}">Edit</button>
+          <button class="pdf-btn" data-id="${entry.id}">PDF</button>
           <button class="remove-btn" data-id="${entry.id}">Remove</button>
         </div>
       </td>
@@ -226,7 +227,59 @@ function renderTable() {
   });
 
   document.querySelectorAll('.edit-btn').forEach(btn => btn.addEventListener('click', () => startEdit(btn.getAttribute('data-id'))));
+  document.querySelectorAll('.pdf-btn').forEach(btn => btn.addEventListener('click', () => downloadCallSheetPdf(btn.getAttribute('data-id'))));
   document.querySelectorAll('.remove-btn').forEach(btn => btn.addEventListener('click', () => removeEntry(btn.getAttribute('data-id'))));
+}
+
+// ── Download PDF ──
+// One call sheet = one printable page, since that's how these actually
+// get used on set - handed to crew as a single-shoot reference, not
+// bundled into a multi-shoot report. Exports whatever's saved for this
+// entry (not the live form), matching the Edit/Remove buttons next to it
+// which also act on the saved record. This is the only other Production
+// tracker that gets a PDF export besides Shot List Builder - both are
+// working documents meant to be carried on location, unlike Release
+// Forms/Permit Tracker/Wrap Report, which stay logs reviewed on screen.
+function pdfField(r, label, value) {
+  if (!value) return;
+  r.paragraph(label.toUpperCase(), { bold: true, size: 9, spaceAfter: 2, color: r.colors.ACCENT });
+  r.paragraph(value, { spaceAfter: 12 });
+}
+
+function downloadCallSheetPdf(id) {
+  const entry = entries.find(e => e.id === id);
+  if (!entry) return;
+
+  if (typeof window.RevitalPDF === 'undefined') {
+    alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
+    return;
+  }
+
+  try {
+    const r = RevitalPDF.create({ reportTitle: 'CALL SHEET', companyName: entry.clientName || 'Client' });
+
+    const timing = [entry.shootDate, entry.callTime ? `Call Time ${entry.callTime}` : null, entry.wrapTime ? `Est. Wrap ${entry.wrapTime}` : null]
+      .filter(Boolean).join('   •   ');
+
+    r.coverPage({
+      title: entry.shootTitle || 'Shoot',
+      subLine: timing,
+      objective: entry.status ? `Status: ${entry.status}` : undefined,
+    });
+
+    pdfField(r, 'Location', [entry.locationName, entry.locationAddress].filter(Boolean).join(' — '));
+    pdfField(r, 'On-Site Contact', [entry.onSiteContactName, entry.onSiteContactPhone].filter(Boolean).join(' — '));
+    pdfField(r, 'Client Attendees', entry.clientAttendees);
+    pdfField(r, 'Weather / Backup Plan', entry.weatherBackupPlan);
+    pdfField(r, 'Crew Assigned', entry.crewAssigned);
+    pdfField(r, 'Equipment Needed', entry.equipmentNeeded);
+    pdfField(r, 'Shot List / Notes', entry.shotListNotes);
+
+    r.save(`Call_Sheet_${(entry.clientName || 'Client').replace(/\s+/g, '_')}_${(entry.shootTitle || 'Shoot').replace(/\s+/g, '_')}_${entry.shootDate || ''}.pdf`);
+  } catch (e) {
+    console.error('Call sheet PDF error:', e);
+    alert('Something went wrong generating the PDF: ' + (e && e.message ? e.message : e));
+  }
 }
 
 // Venue Tech-Spec Library autofill - keyed by venue name so a repeat

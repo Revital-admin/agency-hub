@@ -56,6 +56,7 @@
 <label class="show-closed-toggle">
 <input type="checkbox" id="showAllStatusesToggle"> Show captured shots
 </label>
+<button id="downloadPdfBtn" class="btn-secondary" type="button">Download PDF</button>
 </div>
 </div>
 
@@ -80,6 +81,10 @@
 </div>
 
 </main>
-<script src="js/app.js?v=1"></script>
+<!-- Shared PDF report builder (see shared/pdf-report.js) - same jsPDF-based
+     pattern every other tool's "Download PDF" button uses. -->
+<script src="../shared/pdf-report.js?v=1"></script>
+<script src="js/app.js?v=2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </body>
 </html>

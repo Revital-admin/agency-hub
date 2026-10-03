@@ -218,6 +218,61 @@ function renderTable() {
   document.querySelectorAll('.remove-btn').forEach(btn => btn.addEventListener('click', () => removeEntry(btn.getAttribute('data-id'))));
 }
 
+// ── Download PDF ──
+// Exports exactly what's currently on screen - same filterClient/
+// showAllStatuses state the table itself uses - so "Download PDF" always
+// matches what you're looking at rather than silently exporting
+// everything regardless of the active filter. This is the one Production
+// tracker meant to be carried on set rather than just reviewed on a
+// screen, which is why it gets this and Release Forms/Permit Tracker/
+// Wrap Report don't.
+function downloadShotListPdf() {
+  const filterClient = el('filterClientInput').value.trim().toLowerCase();
+  const showAllStatuses = el('showAllStatusesToggle').checked;
+  const rows = entries
+    .filter(e => !filterClient || e.clientName.toLowerCase().includes(filterClient))
+    .filter(e => showAllStatuses || e.status !== 'Captured');
+
+  if (!rows.length) {
+    if (window.parent.showBanner) window.parent.showBanner('error', 'No shots to export with the current filter.');
+    return;
+  }
+
+  const btn = el('downloadPdfBtn');
+  const origHtml = btn.innerHTML;
+  btn.disabled = true; btn.textContent = 'Generating...';
+
+  try {
+    if (typeof window.RevitalPDF === 'undefined') {
+      alert('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
+      return;
+    }
+    const companyName = filterClient ? rows[0].clientName : 'All Clients';
+    const r = RevitalPDF.create({ reportTitle: 'SHOT LIST', companyName });
+
+    r.coverPage({
+      title: 'Shot List',
+      subLine: new Date().toLocaleDateString(),
+      objective: showAllStatuses ? undefined : 'Shots still needed - captured shots are hidden. Check "Show captured shots" before exporting for the full list.',
+    });
+
+    r.newPage();
+    r.sectionHeader('Shots');
+    r.tableBlock(
+      ['Client', 'Project', '#', 'Description', 'Type', 'Status'],
+      rows.map(e => [e.clientName, e.projectTitle || '--', e.shotNumber || '--', e.shotDescription, e.shotType || '--', e.status || 'Planned']),
+      [70, 85, 30, 150, 65, 65]
+    );
+
+    r.save(`Shot_List_${companyName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+  } catch (e) {
+    console.error('Shot list PDF error:', e);
+    alert('Something went wrong generating the PDF: ' + (e && e.message ? e.message : e));
+  }
+
+  btn.disabled = false; btn.innerHTML = origHtml;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   populateClientDatalist();
   resetForm();
@@ -227,6 +282,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   el('saveEntryBtn').addEventListener('click', saveEntry);
   el('filterClientInput').addEventListener('input', renderTable);
   el('showAllStatusesToggle').addEventListener('change', renderTable);
+  el('downloadPdfBtn').addEventListener('click', downloadShotListPdf);
 
   let pollAttempts = 0;
   const pollTimer = setInterval(() => {
