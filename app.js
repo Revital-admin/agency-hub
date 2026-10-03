@@ -958,6 +958,25 @@ function applyTeamAccessRestrictions(allowedSections) {
     businessInsuranceBtn.style.display = allowedSections ? 'none' : '';
   }
 
+  // Dashboard financial cards (Sales Pipeline Value, Lead Source ROI) -
+  // the Dashboard tab itself lives in the "core" nav-section, which is
+  // all-or-nothing (a restricted viewer either sees the whole dashboard
+  // or none of it), but these two specific cards surface real revenue
+  // numbers (Proposal Calculator totals, Contract & Invoice Tracker
+  // signed/paying data) pulled from tools already gated behind the
+  // 'sales-pipeline' section - so even a restricted viewer who DOES have
+  // 'core' access shouldn't see these two unless they also have
+  // 'sales-pipeline'. Same display:none convention as every other gate in
+  // this function, applied per-card instead of per-section since nothing
+  // else on the Dashboard is sales/financial data.
+  const canSeeSalesPipeline = !allowedSections || allowedSections.indexOf('sales-pipeline') !== -1;
+  const salesPipelineCard = document.getElementById('dashPipelineValue');
+  const salesPipelineCardEl = salesPipelineCard ? salesPipelineCard.closest('.tool-progress-card') : null;
+  if (salesPipelineCardEl) salesPipelineCardEl.style.display = canSeeSalesPipeline ? '' : 'none';
+  const leadSourceRoiCard = document.getElementById('leadSourceRoiList');
+  const leadSourceRoiCardEl = leadSourceRoiCard ? leadSourceRoiCard.closest('.tool-progress-card') : null;
+  if (leadSourceRoiCardEl) leadSourceRoiCardEl.style.display = canSeeSalesPipeline ? '' : 'none';
+
   // Financial Center used to also have a footer copy here (and, briefly,
   // a gating fix for it) - Ronald asked to just keep it in the Finance
   // section instead of both places, so the footer button was removed
