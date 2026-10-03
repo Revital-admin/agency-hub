@@ -2941,6 +2941,112 @@ async function renderNeedsAttention() {
     }
   }
 
+  // Production trackers (Shot List Builder, Permit Tracker, Release Forms
+  // Tracker, Call Sheet Builder): each already computes its own "what still
+  // needs action" filter for its own table (see each tool's renderTable),
+  // but that list was only ever visible by opening that specific tracker -
+  // nothing surfaced it here. Same agency-doc fetch pattern as the
+  // proposal-followups/revisions blocks above. Wrap Report is deliberately
+  // excluded - per its own header comment, a wrap report has nothing left
+  // to action once it's written, so there's no "needs attention" signal to
+  // raise for it.
+  if (window.firebaseDb && window.firebaseDb.collection) {
+    try {
+      const [shotSnap, permitSnap, releaseSnap, callSheetSnap] = await Promise.all([
+        window.firebaseDb.collection("agency").doc("shotList").get(),
+        window.firebaseDb.collection("agency").doc("permitTracker").get(),
+        window.firebaseDb.collection("agency").doc("releaseForms").get(),
+        window.firebaseDb.collection("agency").doc("callSheets").get(),
+      ]);
+
+      // Shot List: shots marked Needs Reshoot, grouped per client so one
+      // row per client (not one row per shot) matches the density of
+      // everything else in this list.
+      const shots = (shotSnap.exists && shotSnap.data().list) || [];
+      const reshootsByClient = {};
+      shots.forEach(s => {
+        if (s.status !== 'Needs Reshoot' || !s.clientName) return;
+        reshootsByClient[s.clientName] = (reshootsByClient[s.clientName] || 0) + 1;
+      });
+      Object.entries(reshootsByClient).forEach(([clientName, count]) => {
+        items.push({
+          name: clientName,
+          urgency: 850 + count,
+          message: count === 1 ? '1 shot needs a reshoot' : `${count} shots need a reshoot`,
+          goTab: 'tab-shotlist',
+        });
+      });
+
+      // Permit Tracker: same "expiring inside 30 days" window as the
+      // tracker's own isExpiringSoon, plus any permit stuck in Denied,
+      // since that's actively blocking a shoot rather than just pending.
+      const permits = (permitSnap.exists && permitSnap.data().list) || [];
+      const now = Date.now();
+      permits.forEach(p => {
+        if (!p.clientName) return;
+        if (p.status === 'Approved' && p.expirationDate) {
+          const expires = new Date(p.expirationDate + 'T00:00:00');
+          if (!isNaN(expires.getTime())) {
+            const daysUntil = (expires - now) / 86400000;
+            if (daysUntil >= 0 && daysUntil <= 30) {
+              items.push({
+                name: p.clientName,
+                urgency: 1400 + (30 - Math.floor(daysUntil)),
+                message: `${p.permitType || 'permit'} expires in ${Math.floor(daysUntil)}d`,
+                goTab: 'tab-permittracker',
+              });
+            }
+          }
+        } else if (p.status === 'Denied') {
+          items.push({
+            name: p.clientName,
+            urgency: 1300,
+            message: `${p.permitType || 'permit'} was denied - needs a new application`,
+            goTab: 'tab-permittracker',
+          });
+        }
+      });
+
+      // Release Forms: Pending entries, grouped per client - same density
+      // reasoning as the Shot List reshoot rollup above.
+      const releases = (releaseSnap.exists && releaseSnap.data().list) || [];
+      const pendingReleasesByClient = {};
+      releases.forEach(r => {
+        if (r.status !== 'Pending' || !r.clientName) return;
+        pendingReleasesByClient[r.clientName] = (pendingReleasesByClient[r.clientName] || 0) + 1;
+      });
+      Object.entries(pendingReleasesByClient).forEach(([clientName, count]) => {
+        items.push({
+          name: clientName,
+          urgency: 800 + count,
+          message: count === 1 ? '1 release form still pending' : `${count} release forms still pending`,
+          goTab: 'tab-releaseforms',
+        });
+      });
+
+      // Call Sheets: Confirmed shoots happening within 3 days - same "soon"
+      // window as the tracker's own row-soon highlight, surfaced here as a
+      // heads-up rather than a blocking item (hence the lower urgency band).
+      const callSheets = (callSheetSnap.exists && callSheetSnap.data().list) || [];
+      callSheets.forEach(c => {
+        if (c.status !== 'Confirmed' || !c.shootDate || !c.clientName) return;
+        const shootDate = new Date(c.shootDate + 'T00:00:00');
+        if (isNaN(shootDate.getTime())) return;
+        const daysOut = Math.round((shootDate - new Date(new Date().toDateString())) / 86400000);
+        if (daysOut >= 0 && daysOut <= 3) {
+          items.push({
+            name: c.clientName,
+            urgency: 1000 + (3 - daysOut),
+            message: daysOut === 0 ? `shoot is today (${c.shootTitle || 'untitled'})` : `shoot in ${daysOut}d (${c.shootTitle || 'untitled'})`,
+            goTab: 'tab-callsheet',
+          });
+        }
+      });
+    } catch (e) {
+      console.warn("Couldn't load production trackers for Needs Attention:", e);
+    }
+  }
+
   if (items.length === 0) {
     el.innerHTML = `<div style="color: var(--color-text-muted);">Nothing needs attention right now.</div>`;
     return;

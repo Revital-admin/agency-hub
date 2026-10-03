@@ -73,6 +73,53 @@
 (function (global) {
   const SANDBOX_NAME = "Quick Sandbox (One-Offs)";
 
+  // How long a Remove has to be undone before it's actually persisted.
+  const UNDO_WINDOW_MS = 6000;
+
+  // Self-contained floating toast - builds its own DOM/styles on demand,
+  // so adding the undo safety net didn't require touching any of the five
+  // tools' own index.html/CSS. Resolves true if the user clicked Undo
+  // before the window closed, false if it just timed out.
+  function showUndoToast(win, message) {
+    return new Promise((resolve) => {
+      const doc = win.document;
+      let wrap = doc.getElementById('agencyTrackerUndoToast');
+      if (!wrap) {
+        wrap = doc.createElement('div');
+        wrap.id = 'agencyTrackerUndoToast';
+        wrap.style.cssText = 'position:fixed; bottom:24px; right:24px; z-index:9999; display:flex; flex-direction:column; gap:8px; align-items:flex-end; pointer-events:none;';
+        doc.body.appendChild(wrap);
+      }
+
+      const toast = doc.createElement('div');
+      toast.style.cssText = 'pointer-events:auto; background:#201d17; border:1px solid rgba(255,255,255,0.12); color:#f5f1e8; font-family:"DM Sans",-apple-system,sans-serif; font-size:13px; padding:10px 14px; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,0.4); display:flex; align-items:center; gap:14px; min-width:220px; animation:none;';
+
+      const msgSpan = doc.createElement('span');
+      msgSpan.textContent = message;
+      msgSpan.style.cssText = 'flex:1;';
+
+      const undoBtn = doc.createElement('button');
+      undoBtn.textContent = 'Undo';
+      undoBtn.type = 'button';
+      undoBtn.style.cssText = 'background:none; border:none; color:#f68d5f; font-weight:700; font-size:13px; cursor:pointer; padding:0; font-family:inherit;';
+
+      toast.appendChild(msgSpan);
+      toast.appendChild(undoBtn);
+      wrap.appendChild(toast);
+
+      let done = false;
+      const finish = (undone) => {
+        if (done) return;
+        done = true;
+        toast.remove();
+        resolve(undone);
+      };
+
+      const timer = win.setTimeout(() => finish(false), UNDO_WINDOW_MS);
+      undoBtn.addEventListener('click', () => { win.clearTimeout(timer); finish(true); });
+    });
+  }
+
   function create(opts) {
     opts = opts || {};
     const docName = opts.docName;
@@ -261,20 +308,46 @@
       return true;
     }
 
+    // Remove used to be instant and permanent the moment you clicked past
+    // the confirm() dialog - no trash, no version history, nothing to
+    // recover from if it was the wrong row. confirm() still asks "are you
+    // sure" up front; this adds the other half - a few seconds afterward
+    // to catch "confirmed correctly, then realized it was wrong."
+    // cfg.onSuccess (every tool already passes `() => renderTable()`) is
+    // reused as the re-render callback for both the optimistic removal AND
+    // a restore, so no call-site changes were needed in any of the five
+    // tools when this was added - they already re-render off tracker.entries.
     async function removeEntry(id, cfg) {
       cfg = cfg || {};
       const entry = state.entries.find(e => e.id === id);
       if (!entry) return false;
       if (cfg.confirmMessage && !confirm(cfg.confirmMessage(entry))) return false;
-      const previous = state.entries;
+
+      const originalIndex = state.entries.indexOf(entry);
       state.entries = state.entries.filter(e => e.id !== id);
-      const ok = await persist();
-      if (!ok) {
-        state.entries = previous; // roll back on a failed write
+      if (state.editingId === id) resetForm();
+      if (cfg.onSuccess) cfg.onSuccess(entry); // optimistic re-render with the row gone
+
+      const undone = await showUndoToast(global, cfg.undoMessage ? cfg.undoMessage(entry) : 'Entry removed.');
+      if (undone) {
+        state.entries.splice(originalIndex, 0, entry); // put it back where it was
+        if (cfg.onSuccess) cfg.onSuccess(entry); // re-render with the row restored
+        // In case something else saved to Firestore while the undo window
+        // was open (e.g. an edit to a different row), make sure the
+        // restored row actually makes it back into that saved state too,
+        // not just the in-memory array.
+        await persist();
         return false;
       }
-      if (state.editingId === id) resetForm();
-      if (cfg.onSuccess) cfg.onSuccess(entry);
+
+      const ok = await persist();
+      if (!ok) {
+        // Persist failed after the undo window closed - put the row back
+        // so the failed delete doesn't silently stick as if it succeeded.
+        state.entries.splice(originalIndex, 0, entry);
+        if (cfg.onSuccess) cfg.onSuccess(entry);
+        return false;
+      }
       return true;
     }
 
