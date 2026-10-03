@@ -86,26 +86,54 @@ function findAllHtmlFiles() {
   return results;
 }
 
-// Finds every reference to `targetFile` (matched by basename) across every
-// html file, moves them all to one shared next version number (current
-// max + 1), and writes the files back. Returns null if the file isn't
-// referenced with a ?v= cache-bust anywhere (e.g. a .js file that's never
-// included directly, like a helper required by another script).
+// Matches ANY local src="...?v=N" / href="...?v=N" reference, regardless
+// of which file it points to - bumpReferencesTo below filters these down
+// to the one target file by resolving each match's actual path.
+const ANY_VERSIONED_REF_RE = /((?:src|href)=["'])([^"']+?)\?v=(\d+)(["'])/g;
+
+// Finds every reference to `targetFile` across every html file and moves
+// them all to one shared next version number (current max + 1).
+//
+// Matching is by RESOLVED PATH, not basename: an earlier version of this
+// script matched "pdf-report.js" against any src/href containing that
+// basename, which silently conflated shared/pdf-report.js with completely
+// unrelated per-tool files that happen to share a filename - most notably
+// every tool's own js/app.js next to the Hub's top-level app.js. Bumping
+// the top-level app.js matched (and bumped) all ~90 of those unrelated
+// js/app.js references too. Resolving each reference's href/src relative
+// to the HTML file it's written in, then comparing that resolved absolute
+// path to the target file's own absolute path, is what actually
+// disambiguates "this app.js" from "every file named app.js".
+//
+// Returns null if the file isn't referenced with a ?v= cache-bust anywhere
+// (e.g. a .js file that's never included directly, like a helper required
+// by another script rather than loaded via <script src>).
 function bumpReferencesTo(targetFile, htmlFiles) {
-  const basename = path.basename(targetFile);
-  const escaped = basename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`((?:src|href)=["'][^"']*${escaped})\\?v=(\\d+)(["'])`, 'g');
+  const targetAbs = path.resolve(targetFile);
+
+  function findMatches(htmlFile, content) {
+    const matches = [];
+    const re = new RegExp(ANY_VERSIONED_REF_RE.source, 'g');
+    let m;
+    while ((m = re.exec(content))) {
+      const refPath = m[2];
+      // Skip absolute URLs (http://, https://, //cdn...) - only local,
+      // relative references can possibly resolve to a file in this repo.
+      if (/^([a-z]+:)?\/\//i.test(refPath)) continue;
+      const resolved = path.resolve(path.dirname(htmlFile), refPath);
+      if (resolved === targetAbs) matches.push(m);
+    }
+    return matches;
+  }
 
   let maxVersion = 0;
   let matchCount = 0;
   htmlFiles.forEach(htmlFile => {
     const content = fs.readFileSync(htmlFile, 'utf8');
-    let m;
-    const localRe = new RegExp(re.source, 'g');
-    while ((m = localRe.exec(content))) {
-      maxVersion = Math.max(maxVersion, parseInt(m[2], 10));
+    findMatches(htmlFile, content).forEach(m => {
+      maxVersion = Math.max(maxVersion, parseInt(m[3], 10));
       matchCount++;
-    }
+    });
   });
 
   if (matchCount === 0) return null;
@@ -114,12 +142,21 @@ function bumpReferencesTo(targetFile, htmlFiles) {
 
   htmlFiles.forEach(htmlFile => {
     const content = fs.readFileSync(htmlFile, 'utf8');
-    const localRe = new RegExp(re.source, 'g');
-    const updated = content.replace(localRe, (match, prefix, version, quote) => `${prefix}?v=${nextVersion}${quote}`);
+    const matches = findMatches(htmlFile, content);
+    if (!matches.length) return;
+    // Rebuild the content by replacing only the matched ranges (by index),
+    // back to front so earlier replacements don't shift later offsets.
+    let updated = content;
+    matches.slice().reverse().forEach(m => {
+      const start = m.index;
+      const end = start + m[0].length;
+      const replacement = `${m[1]}${m[2]}?v=${nextVersion}${m[4]}`;
+      updated = updated.slice(0, start) + replacement + updated.slice(end);
+    });
     if (updated !== content) fs.writeFileSync(htmlFile, updated);
   });
 
-  return { basename, matchCount, newVersion: nextVersion };
+  return { basename: path.basename(targetFile), matchCount, newVersion: nextVersion };
 }
 
 function main() {
