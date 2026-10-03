@@ -84,7 +84,11 @@
 <!-- Shared PDF report builder (see shared/pdf-report.js) - same jsPDF-based
      pattern every other tool's "Download PDF" button uses. -->
 <script src="../shared/pdf-report.js?v=2"></script>
-<script src="js/app.js?v=5"></script>
+<!-- Shared load/persist/uid/form-CRUD plumbing for the "agency-wide flat-
+     list tracker" tools (see shared/agency-tracker.js) - must load before
+     js/app.js, which calls AgencyTracker.create() at the top. -->
+<script src="../shared/agency-tracker.js?v=1"></script>
+<script src="js/app.js?v=6"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </body>
 </html>
