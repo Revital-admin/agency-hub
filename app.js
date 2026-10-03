@@ -2090,6 +2090,7 @@ function initTabNavigation() {
       
       navButtons.forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
+      
 
       // Remember this tab so a page reload lands back here instead of
       // always resetting to the Dashboard - see restoreLastActiveTab()

@@ -93,7 +93,21 @@
       // real-world case so far.
       return String(s)
         .replace(/[←-⇿✓✔✗✘]/g, function (ch) { return ARROW_MAP[ch] || ''; })
-        .replace(/[⌀-➿]/g, ''); // misc technical / dingbats (BMP only)
+        .replace(/[⌀-➿]/g, '') // misc technical / dingbats (BMP only)
+        // Collapse embedded line breaks (common in textarea fields where
+        // someone pasted or typed multi-line source text, e.g. a value
+        // prop copied straight off a competitor's homepage with its own
+        // line wraps baked in) down to a single space. jsPDF's
+        // splitTextToSize() treats a literal "\n" as a forced line break,
+        // not just whitespace - left as-is, that turns one sentence into
+        // several short wrapped lines plus extra blank lines for any
+        // trailing "\n\n\n", inflating that cell/paragraph's height and
+        // throwing off the vertical rhythm of everything after it on the
+        // page. Normalizing here (once, for every caller) fixes it
+        // report-wide instead of each tool having to remember to do it.
+        .replace(/\s*\n\s*/g, ' ')
+        .replace(/[ \t]{2,}/g, ' ')
+        .trim();
     }
 
     function footer() {
