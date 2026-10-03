@@ -2091,6 +2091,11 @@ function initTabNavigation() {
       navButtons.forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
 
+      // Remember this tab so a page reload lands back here instead of
+      // always resetting to the Dashboard - see restoreLastActiveTab()
+      // below, called once at the end of initTabNavigation().
+      try { localStorage.setItem(ACTIVE_TAB_KEY, targetTab); } catch (e) {}
+
       // If this button lives inside a collapsed section (e.g. activated
       // programmatically via a dashboard quick link), expand it so the
       // user can see where they landed.
@@ -2175,6 +2180,32 @@ function initTabNavigation() {
       }
     });
   });
+
+  // Land back on whichever tab was open before the last reload, instead
+  // of always resetting to the Dashboard. Runs after the click listeners
+  // above are wired, since it works by clicking the real nav button -
+  // same trick navigateToTab() uses - so every bit of existing tab-switch
+  // logic (lazy iframe load, section expand, per-tab render calls) just
+  // runs normally. If the stored tab no longer exists (e.g. an old build)
+  // or is hidden by a team-access restriction, the click silently no-ops
+  // and the HTML-default Dashboard tab stays active.
+  restoreLastActiveTab();
+}
+
+// ── Remember & restore the last active tab (see the click listener
+// inside initTabNavigation() above, which writes ACTIVE_TAB_KEY) ──
+const ACTIVE_TAB_KEY = "REVITAL_HUB_ACTIVE_TAB";
+
+function restoreLastActiveTab() {
+  let storedTab;
+  try {
+    storedTab = localStorage.getItem(ACTIVE_TAB_KEY);
+  } catch (e) {
+    return; // localStorage unavailable (e.g. private browsing) - just keep the default tab
+  }
+  if (!storedTab || storedTab === "tab-dashboard") return; // already the default, nothing to do
+  const btn = document.querySelector(`.nav-item-btn[data-tab="${storedTab}"]`);
+  if (btn) btn.click();
 }
 
 // ── Collapsible Nav Sections ──
