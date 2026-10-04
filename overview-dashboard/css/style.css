@@ -415,3 +415,6 @@ input, select, textarea { max-width: 100%; }
 .ao-head { display: block; margin-bottom: 14px; }
 .ao-section-title { margin-top: 0; }
 .ao-legend { text-align: left; margin-top: 8px; }
+
+.ao-sub-label { margin-top: 22px; }
+.ao-progress-cards .ao-grade-card { gap: 12px; }

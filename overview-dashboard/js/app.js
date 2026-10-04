@@ -1161,13 +1161,41 @@ function renderAuditOverview() {
         </div>`;
     }).join('');
   }
+  // Tool progress: mirrors the % each workflow tool already computes in
+  // renderDashboard (read back from those cards so the numbers can never
+  // disagree with the detailed cards further down the page).
+  const prog = document.getElementById('aoToolProgress');
+  if (prog) {
+    const tools = [
+      ['dashOnboarding', 'Client Onboarding'],
+      ['dashBrandVault', 'Brand Identity Vault'],
+      ['dashCampaignLaunch', 'Campaign Launch QA'],
+      ['dashStrategy', 'Social & Digital Strategy'],
+      ['dashStrategyBuilder', 'Content Planning Blueprint'],
+      ['dashPersonalBrand', 'Personal Branding Builder'],
+    ];
+    prog.innerHTML = tools.map(([id, label]) => {
+      const valEl = document.getElementById(id + 'Val');
+      const barEl = document.getElementById(id + 'Progress');
+      const pct = Math.max(0, Math.min(100, parseInt(valEl && valEl.textContent, 10) || 0));
+      const color = pct >= 100 ? AO_COLORS.success : pct > 0 ? AO_COLORS.info : AO_COLORS.none;
+      return `
+        <div class="ao-grade-card" style="--c:${color}">
+          <div class="ao-grade-name">${esc(label)}</div>
+          <div>
+            <div class="ao-grade-row"><span>${pct > 0 ? 'Complete' : 'Not started'}</span><strong>${pct}%</strong></div>
+            <div class="ao-bar"><span style="width:${pct}%"></span></div>
+          </div>
+        </div>`;
+    }).join('');
+  }
   const foot = document.getElementById('aoFoot');
   if (foot) foot.textContent = 'Cards show the active workspace; activity and attention cover every client. Competitor % = analysis cells filled in.';
 }
 
 function renderAll() {
-  try { renderAuditOverview(); } catch (e) { console.error("Error in renderAuditOverview:", e); }
   try { renderDashboard(); } catch (e) { console.error("Error in renderDashboard:", e); }
+  try { renderAuditOverview(); } catch (e) { console.error("Error in renderAuditOverview:", e); }
   renderSalesPipelineValue().catch(e => console.error("Error in renderSalesPipelineValue:", e));
   renderWhosOutToday().catch(e => console.error("Error in renderWhosOutToday:", e));
   try { renderMoodBoardsAwaitingFeedback(); } catch (e) { console.error("Error in renderMoodBoardsAwaitingFeedback:", e); }
