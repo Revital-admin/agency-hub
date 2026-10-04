@@ -520,6 +520,12 @@ function attachEvents() {
           ],
           STEPS: STEPS,
           checked: state.checked,
+          failed: state.failed,
+          lens: {
+            intro: "What this audit evaluates: whether paid media is measured correctly, structured for the full funnel, aimed at the right people and backed by strong creative.",
+            closing: "Fix tracking first - every later decision depends on it.",
+            stepNotes: ["Without correct tracking, none of the other numbers can be trusted.", "Structure decides whether budget reaches the right funnel stage and platform.", "Targeting controls who sees the ads and how much spend is wasted.", "Creative and testing drive click-through and conversion once targeting is right."],
+          },
           notes: state.notes,
           filename: `Paid_Ads_Audit_${(companyName || 'Client').replace(/[^a-z0-9]+/gi, '_')}.pdf`,
         });

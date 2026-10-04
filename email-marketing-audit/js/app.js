@@ -512,6 +512,12 @@ function attachEvents() {
           ],
           STEPS: STEPS,
           checked: state.checked,
+          failed: state.failed,
+          lens: {
+            intro: "What this audit evaluates: whether emails reach the inbox, automated flows are earning revenue, campaigns are strategic and design is accessible.",
+            closing: "Deliverability comes first - great flows are wasted if they land in spam.",
+            stepNotes: ["Authentication and list hygiene decide whether email lands in the inbox at all.", "Automated flows (welcome, cart, post-purchase, winback) are the highest-return emails.", "Cadence, segmentation and testing separate strategy from blasts.", "Mobile, dark-mode and accessibility affect how every email renders and reads."],
+          },
           notes: state.notes,
           filename: `Email_Marketing_Audit_${(companyName || 'Client').replace(/[^a-z0-9]+/gi, '_')}.pdf`,
         });

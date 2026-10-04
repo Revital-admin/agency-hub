@@ -531,6 +531,12 @@ function attachEvents() {
           ],
           STEPS: STEPS,
           checked: state.checked,
+          failed: state.failed,
+          lens: {
+            intro: "What this audit evaluates: whether existing content is organised, discoverable, high quality and actually converting.",
+            closing: "Prune and consolidate weak content before producing new pieces.",
+            stepNotes: ["The inventory shows what exists, what is outdated and where the gaps are.", "SEO performance shows which content earns traffic and which competes with itself.", "Quality, formatting and trust signals decide whether readers stay and believe it.", "Engagement and conversion show whether content turns readers into leads."],
+          },
           notes: state.notes,
           filename: `Content_Audit_${(companyName || 'Client').replace(/[^a-z0-9]+/gi, '_')}.pdf`,
         });

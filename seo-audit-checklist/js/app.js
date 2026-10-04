@@ -481,6 +481,12 @@ function attachEvents() {
           stats: { pct: stats.pct, doneTasks: stats.doneTasks, totalTasks: stats.totalTasks },
           STEPS: STEPS,
           checked: state.checked,
+          failed: state.failed,
+          lens: {
+            intro: "What this audit evaluates: whether search engines can crawl, understand and rank the site - technical health, on-page signals, speed and click-through.",
+            closing: "Technical fixes (errors, speed, indexing) should come before content tweaks.",
+            stepNotes: ["Crawl errors and broken links waste crawl budget and send visitors to dead ends.", "Titles, descriptions and canonicals decide how pages appear in search.", "Heading structure and alt text help search engines and screen readers read the page.", "Heavy images are the most common cause of slow pages.", "Load speed affects rankings and bounce rate, especially on mobile.", "Sitemaps and indexing control which pages Google can find at all.", "Click-through rate shows whether listings earn the clicks they rank for.", "AI-assisted fixes speed up repetitive cleanup once the issues are known."],
+          },
           notes: state.notes,
           filename: `SEO_Audit_${(companyName || 'Client').replace(/[^a-z0-9]+/gi, '_')}.pdf`,
         });

@@ -474,6 +474,12 @@ function attachEvents() {
           stats: { pct: stats.pct, doneTasks: stats.doneTasks, totalTasks: stats.totalTasks },
           STEPS: STEPS,
           checked: state.checked,
+          failed: state.failed,
+          lens: {
+            intro: "What this audit evaluates: how consistent, engaging and conversion-ready the brand's social presence is across channels.",
+            closing: "Fix profile basics and posting consistency before investing in new formats.",
+            stepNotes: ["Bio and branding set the first impression on every profile.", "Cadence and content mix show whether the account feels active and intentional.", "Audience and engagement data show who is actually responding.", "Short-form video is the main reach driver on most platforms.", "Instagram-specific features (Highlights, Reels, links) affect discoverability and conversion.", "TikTok-specific features affect reach and the path to purchase.", "LinkedIn and X presence matters most for B2B credibility.", "Conversion tracking connects social activity to real business results."],
+          },
           notes: state.notes,
           filename: `Social_Media_Audit_${(companyName || 'Client').replace(/[^a-z0-9]+/gi, '_')}.pdf`,
         });

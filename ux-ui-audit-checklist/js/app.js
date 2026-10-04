@@ -477,6 +477,12 @@ function attachEvents() {
           stats: { pct: stats.pct, doneTasks: stats.doneTasks, totalTasks: stats.totalTasks },
           STEPS: STEPS,
           checked: state.checked,
+          failed: state.failed,
+          lens: {
+            intro: "What this audit evaluates: how clearly the site communicates, how easily people can use it, and whether the experience holds up on mobile and for all users.",
+            closing: "Start with clarity and mobile usability - they affect every other part of the experience.",
+            stepNotes: ["The first five seconds decide whether visitors understand the offer.", "Navigation determines whether people can find what they came for.", "Mobile layout and touch targets drive most real-world usage.", "Forms are where conversions are won or lost.", "Accessibility and readability affect every visitor and legal compliance.", "Visual hierarchy and typography guide attention to what matters.", "Interaction feedback and motion make the site feel responsive.", "Speed perception and error handling reduce frustration and abandonment."],
+          },
           notes: state.notes,
           filename: `UXUI_Audit_${(companyName || 'Client').replace(/[^a-z0-9]+/gi, '_')}.pdf`,
         });
