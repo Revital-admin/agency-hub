@@ -108,6 +108,7 @@ function initState() {
 function saveState() {
   if (isEmbedded && parentClient) {
     parentClient.paidAdsAudit.checked = state.checked;
+    parentClient.paidAdsAudit.updatedAt = new Date().toISOString();
     parentClient.paidAdsAudit.notes = state.notes;
     parentClient.paidAdsAudit.targetUrl = state.targetUrl;
     parentClient.paidAdsAudit.textInputs = state.textInputs;

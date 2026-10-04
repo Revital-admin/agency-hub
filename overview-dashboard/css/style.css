@@ -375,3 +375,39 @@ input, select, textarea { max-width: 100%; }
   border-color: var(--primary);
 }
 
+
+/* ============================================================
+   AUDITS & COMPETITOR ANALYSIS OVERVIEW (Oct 2026)
+   ============================================================ */
+.audit-overview { grid-column: 1 / -1; margin-top: 8px; }
+.ao-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.ao-title { font-family: var(--font-heading); font-weight: 500; font-size: 2rem; color: var(--text-title); margin: 6px 0 0; }
+.ao-title em { color: var(--primary); font-style: italic; }
+.ao-legend { font-size: 0.78rem; color: var(--text-muted); text-align: right; line-height: 1.5; }
+.ao-card { background: var(--bg-card-opaque); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 18px 20px; }
+.ao-card-label { font-size: 0.72rem; font-weight: 600; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 14px; }
+.ao-activity { margin-bottom: 18px; }
+.ao-timeline { position: relative; display: flex; justify-content: space-between; gap: 8px; padding-top: 4px; }
+.ao-timeline::before { content: ''; position: absolute; left: 0; right: 0; top: 15px; height: 2px; background: rgba(255,255,255,0.12); }
+.ao-node { position: relative; flex: 1; text-align: center; min-width: 0; }
+.ao-dot { position: relative; width: 14px; height: 14px; border-radius: 50%; margin: 8px auto 10px; background: var(--c, #8a887f); box-shadow: 0 0 0 5px color-mix(in srgb, var(--c, #8a887f) 25%, transparent); }
+.ao-node-day { font-size: 0.85rem; font-weight: 600; color: var(--text-bright); }
+.ao-node-text { font-size: 0.78rem; line-height: 1.35; margin-top: 4px; color: var(--c, var(--text-muted)); }
+.ao-empty { color: var(--text-muted); font-size: 0.85rem; padding: 6px 0; }
+.ao-main { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 18px; align-items: start; }
+.ao-attn-item { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; margin-bottom: 10px; border-radius: var(--radius-md); border-left: 3px solid var(--c); background: color-mix(in srgb, var(--c) 10%, #1c1a15); }
+.ao-attn-dot { flex: 0 0 14px; height: 14px; border-radius: 50%; background: var(--c); margin-top: 3px; }
+.ao-attn-title { font-size: 0.92rem; font-weight: 600; color: var(--text-bright); }
+.ao-attn-sub { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+.ao-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.ao-grade-card { background: var(--bg-card-opaque); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+.ao-grade-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.ao-grade-name { font-size: 0.7rem; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-muted); }
+.ao-grade-client { font-size: 1rem; font-weight: 600; color: var(--text-bright); margin-top: 4px; }
+.ao-ring { flex: 0 0 52px; width: 52px; height: 52px; border-radius: 50%; border: 3px solid var(--c); display: flex; align-items: center; justify-content: center; font-family: var(--font-heading); font-weight: 700; font-size: 1.25rem; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
+.ao-grade-row { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px; }
+.ao-grade-row strong { color: var(--text-bright); }
+.ao-bar { height: 6px; border-radius: 4px; background: rgba(255,255,255,0.08); overflow: hidden; }
+.ao-bar > span { display: block; height: 100%; border-radius: 4px; background: var(--c); }
+.ao-foot { margin: 14px 0 0; font-size: 0.75rem; color: var(--text-muted); text-align: center; }
+@media (max-width: 900px) { .ao-main { grid-template-columns: 1fr; } .ao-timeline { flex-wrap: wrap; } .ao-node { flex: 0 0 30%; } }

@@ -1026,7 +1026,147 @@ function renderDashboard() {
    and again any time the shell posts a refresh message (see
    setupRefreshListener below) - e.g. after a checkbox toggle in one
    of the ~16 tools that call window.parent.renderDashboard(). ── */
+
+/* ── Audits & Competitor Analysis Overview ───────────────────────
+   Activity strip + priority list read every client (agency-wide);
+   the grade cards show the active client, so they follow the
+   workspace switcher like the rest of the page. Audit tools stamp
+   <audit>.updatedAt on save (added Oct 2026) - audits last touched
+   before that show no activity date until they're next edited. ── */
+const AO_AUDITS = [
+  { key: 'seoAudit',     label: 'SEO Audit Checklist',        short: 'SEO audit',         total: 23 },
+  { key: 'paidAdsAudit', label: 'Paid Ads Audit',             short: 'Paid ads audit',    total: 16 },
+  { key: 'uxuiAudit',    label: 'UX/UI Audit Checklist',      short: 'UX/UI audit',       total: 40 },
+  { key: 'contentAudit', label: 'Content Audit',              short: 'Content audit',     total: 42 },
+  { key: 'emailAudit',   label: 'Email Marketing Audit',      short: 'Email marketing audit', total: 16 },
+  { key: 'socialAudit',  label: 'Social Media Audit',         short: 'Social media audit', total: 40 },
+];
+const AO_COMPS = [
+  { key: 'webComp',    label: 'Website Competitor Analysis', cells: 33 },
+  { key: 'socialComp', label: 'Social Competitor Analysis',  cells: 30 },
+];
+const AO_COLORS = { success: '#10b981', info: '#3b82f6', warning: '#f59e0b', danger: '#ef4444', none: '#8a887f' };
+
+function aoGrade(pct) {
+  if (pct >= 97) return { letter: 'A+', cls: 'success' };
+  if (pct >= 93) return { letter: 'A',  cls: 'success' };
+  if (pct >= 90) return { letter: 'A-', cls: 'success' };
+  if (pct >= 87) return { letter: 'B+', cls: 'info' };
+  if (pct >= 83) return { letter: 'B',  cls: 'info' };
+  if (pct >= 80) return { letter: 'B-', cls: 'info' };
+  if (pct >= 77) return { letter: 'C+', cls: 'warning' };
+  if (pct >= 73) return { letter: 'C',  cls: 'warning' };
+  if (pct >= 70) return { letter: 'C-', cls: 'warning' };
+  if (pct >= 67) return { letter: 'D+', cls: 'warning' };
+  if (pct >= 60) return { letter: 'D',  cls: 'warning' };
+  return { letter: 'F', cls: 'danger' };
+}
+
+function aoAuditPct(client, a) {
+  const checked = client && client[a.key] && client[a.key].checked;
+  if (!checked) return 0;
+  const done = Object.keys(checked).filter(k => checked[k]).length;
+  return Math.min(100, Math.round((done / a.total) * 100));
+}
+
+function aoCompPct(client, c) {
+  const d = client && client[c.key];
+  if (!d) return 0;
+  let filled = 0;
+  Object.values(d.rows || {}).forEach(arr => (arr || []).forEach(v => { if (v && String(v).trim()) filled++; }));
+  return Math.min(100, Math.round((filled / c.cells) * 100));
+}
+
+function aoDayLabel(d) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const that = new Date(d); that.setHours(0, 0, 0, 0);
+  const diff = Math.round((today - that) / 86400000);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Yesterday';
+  return that.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function renderAuditOverview() {
+  const root = document.getElementById('auditOverview');
+  if (!root) return;
+  const clientsDb = (window.parent.getClientsDb && window.parent.getClientsDb()) || {};
+  const active = window.parent.getActiveClient();
+  const sandbox = 'Quick Sandbox (One-Offs)';
+  const esc = escapeHtmlCore;
+  const now = Date.now();
+
+  // Agency-wide pass: activity + attention
+  const events = [];
+  const attention = [];
+  Object.entries(clientsDb).forEach(([name, client]) => {
+    if (!client || name === sandbox) return;
+    AO_AUDITS.forEach(a => {
+      const pct = aoAuditPct(client, a);
+      const g = aoGrade(pct);
+      const ts = client[a.key] && client[a.key].updatedAt ? new Date(client[a.key].updatedAt).getTime() : null;
+      if (ts) events.push({ ts, name, a, pct, g });
+      if (pct === 0 || pct >= 100) return;
+      const days = ts ? Math.floor((now - ts) / 86400000) : null;
+      if (days !== null && days >= 14) {
+        attention.push({ rank: 0, color: AO_COLORS.danger, title: `${a.short} stalled at ${pct}%`, sub: `${name} \u2014 untouched ${days} days` });
+      } else if (g.letter === 'F' || g.letter === 'D' || g.letter === 'D+') {
+        attention.push({ rank: 1, color: AO_COLORS.warning, title: `${a.short} \u2014 low score`, sub: `${name} \u2014 graded ${g.letter} (${pct}%)` });
+      }
+    });
+  });
+
+  // Timeline: most recent 7 audit saves
+  events.sort((x, y) => y.ts - x.ts);
+  const recent = events.slice(0, 7).reverse();
+  const tl = document.getElementById('aoTimeline');
+  if (tl) {
+    tl.innerHTML = recent.length ? recent.map(e => `
+      <div class="ao-node" style="--c:${AO_COLORS[e.g.cls]}">
+        <div class="ao-dot"></div>
+        <div class="ao-node-day">${esc(aoDayLabel(e.ts))}</div>
+        <div class="ao-node-text">${esc(e.a.short)} updated &mdash; ${esc(e.name)} (${e.g.letter}, ${e.pct}%)</div>
+      </div>`).join('') : '<div class="ao-empty">Activity shows up here as audits are updated.</div>';
+  }
+
+  // Needs attention
+  attention.sort((x, y) => x.rank - y.rank);
+  const al = document.getElementById('aoAttentionList');
+  if (al) {
+    al.innerHTML = attention.length ? attention.slice(0, 6).map(i => `
+      <div class="ao-attn-item" style="--c:${i.color}">
+        <div class="ao-attn-dot"></div>
+        <div><div class="ao-attn-title">${esc(i.title)}</div><div class="ao-attn-sub">${esc(i.sub)}</div></div>
+      </div>`).join('') : '<div class="ao-empty">Nothing stalled or scoring low across your clients.</div>';
+  }
+
+  // Grade cards (active client)
+  const cards = document.getElementById('aoGradeCards');
+  if (cards && active) {
+    const items = AO_AUDITS.map(a => ({ label: a.label, pct: aoAuditPct(active, a) }))
+      .concat(AO_COMPS.map(c => ({ label: c.label, pct: aoCompPct(active, c) })));
+    cards.innerHTML = items.map(it => {
+      const started = it.pct > 0;
+      const g = started ? aoGrade(it.pct) : { letter: '\u2014', cls: 'none' };
+      const color = AO_COLORS[g.cls];
+      return `
+        <div class="ao-grade-card" style="--c:${color}">
+          <div class="ao-grade-top">
+            <div><div class="ao-grade-name">${esc(it.label)}</div><div class="ao-grade-client">${esc(active.name)}</div></div>
+            <div class="ao-ring">${g.letter}</div>
+          </div>
+          <div>
+            <div class="ao-grade-row"><span>${started ? 'Checks passed' : 'Not started'}</span><strong>${it.pct}%</strong></div>
+            <div class="ao-bar"><span style="width:${it.pct}%"></span></div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+  const foot = document.getElementById('aoFoot');
+  if (foot) foot.textContent = 'Cards show the active workspace; activity and attention cover every client. Competitor % = analysis cells filled in.';
+}
+
 function renderAll() {
+  try { renderAuditOverview(); } catch (e) { console.error("Error in renderAuditOverview:", e); }
   try { renderDashboard(); } catch (e) { console.error("Error in renderDashboard:", e); }
   renderSalesPipelineValue().catch(e => console.error("Error in renderSalesPipelineValue:", e));
   renderWhosOutToday().catch(e => console.error("Error in renderWhosOutToday:", e));

@@ -125,6 +125,7 @@ function initState() {
 function saveState() {
   if (isEmbedded && parentClient) {
     parentClient.contentAudit.checked = state.checked;
+    parentClient.contentAudit.updatedAt = new Date().toISOString();
     parentClient.contentAudit.notes = state.notes;
     parentClient.contentAudit.targetUrl = state.targetUrl;
     parentClient.contentAudit.textInputs = state.textInputs;

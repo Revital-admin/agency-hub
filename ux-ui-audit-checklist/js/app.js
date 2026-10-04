@@ -96,6 +96,7 @@ function initState() {
 function saveState() {
   if (isEmbedded && parentClient) {
     parentClient.uxuiAudit.checked = state.checked;
+    parentClient.uxuiAudit.updatedAt = new Date().toISOString();
     parentClient.uxuiAudit.notes = state.notes;
     parentClient.uxuiAudit.targetUrl = state.targetUrl;
     window.parent.saveDatabase();

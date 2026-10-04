@@ -6,7 +6,7 @@
   <title>Overview Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="css/style.css?v=3" />
+  <link rel="stylesheet" href="css/style.css?v=5" />
 </head>
 <body>
 
@@ -51,6 +51,34 @@
 
 
           <!-- Activity Feed -->
+
+          <!-- Audits & Competitor Analysis Overview: activity strip +
+               priority list (agency-wide, all clients) + one grade card
+               per audit / competitor tool for the active client. See
+               renderAuditOverview in app.js. -->
+          <section class="audit-overview" id="auditOverview">
+            <div class="ao-head">
+              <div>
+                <div class="header-eyebrow"><span class="dot"></span><span>Internal Workspace Dashboard</span></div>
+                <h2 class="ao-title">Audits &amp; Competitor Analysis <em>Overview</em></h2>
+              </div>
+              <div class="ao-legend">% = checklist items passed/complete<br>Grade = letter translation of that %</div>
+            </div>
+
+            <div class="ao-card ao-activity">
+              <div class="ao-card-label">Recent audit activity</div>
+              <div class="ao-timeline" id="aoTimeline"></div>
+            </div>
+
+            <div class="ao-main">
+              <div class="ao-card ao-attention">
+                <div class="ao-card-label">Needs attention &mdash; priority order</div>
+                <div id="aoAttentionList"></div>
+              </div>
+              <div class="ao-cards" id="aoGradeCards"></div>
+            </div>
+            <p class="ao-foot" id="aoFoot"></p>
+          </section>
 
           <h3 class="dashboard-section-title">Agency-Wide</h3>
           <!-- Needs Attention: consolidates three signals that already
@@ -501,6 +529,6 @@
         </div>
   </main>
 
-  <script src="js/app.js?v=3"></script>
+  <script src="js/app.js?v=5"></script>
 </body>
 </html>

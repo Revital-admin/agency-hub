@@ -96,6 +96,7 @@ function initState() {
 function saveState() {
   if (isEmbedded && parentClient) {
     parentClient.seoAudit.checked = state.checked;
+    parentClient.seoAudit.updatedAt = new Date().toISOString();
     parentClient.seoAudit.notes = state.notes;
     parentClient.seoAudit.targetUrl = state.targetUrl;
     window.parent.saveDatabase();
