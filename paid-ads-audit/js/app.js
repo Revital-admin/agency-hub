@@ -19,7 +19,8 @@ try {
 /* ── State ──────────────────────────────────────────────────── */
 
 const state = {
-  checked: {}, // { taskId: boolean }
+  checked: {}, // { taskId: boolean } - item PASSES
+  failed: {},  // { taskId: boolean } - item reviewed and FAILS / needs work (neither = not reviewed yet)
   notes: {},   // { taskId: string }
   filter: 'all', // 'all' | 'incomplete' | 'complete'
   labelIndices: { steps: 0, tasks: 0, remaining: 0, score: 0 },
@@ -71,6 +72,8 @@ function initState() {
       state.notes[k] = parentClient.paidAdsAudit.notes[k];
     });
     state.targetUrl = parentClient.paidAdsAudit.targetUrl || "";
+    if (!parentClient.paidAdsAudit.failed) parentClient.paidAdsAudit.failed = {};
+    state.failed = parentClient.paidAdsAudit.failed;
     // Sync text inputs
     state.textInputs = parentClient.paidAdsAudit.textInputs;
   } else {
@@ -108,6 +111,7 @@ function initState() {
 function saveState() {
   if (isEmbedded && parentClient) {
     parentClient.paidAdsAudit.checked = state.checked;
+    parentClient.paidAdsAudit.failed = state.failed;
     parentClient.paidAdsAudit.updatedAt = new Date().toISOString();
     parentClient.paidAdsAudit.notes = state.notes;
     parentClient.paidAdsAudit.targetUrl = state.targetUrl;
@@ -165,7 +169,11 @@ function updateScoreCards() {
   // Grade badge — letter translation of the audit score %, so the dashboard
   // (and anyone glancing at this audit) gets a quick qualitative read, not
   // just a raw percentage.
-  const grade = gradeFromPct(pct);
+  // Grade = how WELL the audit is going (checks passed out of checks reviewed),
+  // not how much is done. Items nobody has reviewed yet don't drag it down.
+  const failedCount = Object.keys(state.failed).filter(id => state.failed[id] && !state.checked[id]).length;
+  const reviewed = doneTasks + failedCount;
+  const grade = reviewed > 0 ? gradeFromPct(Math.round((doneTasks / reviewed) * 100)) : { letter: '\u2014', cls: '' };
   setScoreValue('grade', grade.letter);
   const gradeEl = document.getElementById('val-grade');
   if (gradeEl) gradeEl.className = 'score-value ' + grade.cls;
@@ -269,8 +277,9 @@ function renderSteps() {
     // Sub-tasks HTML
     const subsHtml = step.subs.map(sub => {
       const checked = state.checked[sub.id];
+      const failed = !!state.failed[sub.id];
       return `
-        <div class="sub-item${checked ? ' checked' : ''}" data-sub-id="${sub.id}">
+        <div class="sub-item${checked ? ' checked' : ''}${failed ? ' failed' : ''}" data-sub-id="${sub.id}">
           <input
             type="checkbox"
             class="sub-checkbox"
@@ -285,6 +294,7 @@ function renderSteps() {
               <textarea class="sub-notes-input" placeholder="Add notes..." rows="1">${escHtml(state.notes[sub.id] || "")}</textarea>
             </div>
           </div>
+          <button type="button" class="sub-fail-btn" aria-pressed="${failed}" title="Mark as failing / needs work">Needs work</button>
         </div>`;
     }).join('');
 
@@ -338,11 +348,29 @@ function attachEvents() {
     const header = e.target.closest('.step-header');
     const subItem = e.target.closest('.sub-item');
     const checkbox = e.target.closest('.sub-checkbox');
+    const failBtn = e.target.closest('.sub-fail-btn');
+
+    if (failBtn && subItem) {
+      // Needs work: reviewed and failing. Mutually exclusive with "checked" (pass).
+      const subId = subItem.dataset.subId;
+      state.failed[subId] = !state.failed[subId];
+      if (state.failed[subId]) state.checked[subId] = false;
+      saveState();
+      updateScoreCards();
+      subItem.classList.toggle('failed', !!state.failed[subId]);
+      subItem.classList.toggle('checked', !!state.checked[subId]);
+      failBtn.setAttribute('aria-pressed', String(!!state.failed[subId]));
+      const cb2 = subItem.querySelector('.sub-checkbox');
+      if (cb2) cb2.checked = !!state.checked[subId];
+      refreshStepHeader(subItem.closest('.step-card'));
+      return;
+    }
 
     if (checkbox) {
       // Let checkbox handle itself, then sync state
       const subId = checkbox.id.replace('cb_', '');
       state.checked[subId] = checkbox.checked;
+      if (checkbox.checked) { state.failed[subId] = false; const si = checkbox.closest('.sub-item'); if (si) { si.classList.remove('failed'); const fb = si.querySelector('.sub-fail-btn'); if (fb) fb.setAttribute('aria-pressed','false'); } }
       saveState();
       updateScoreCards();
       refreshStepHeader(checkbox.closest('.step-card'));
@@ -352,6 +380,7 @@ function attachEvents() {
     if (subItem) {
       const subId = subItem.dataset.subId;
       state.checked[subId] = !state.checked[subId];
+      if (state.checked[subId]) { state.failed[subId] = false; subItem.classList.remove('failed'); const fb = subItem.querySelector('.sub-fail-btn'); if (fb) fb.setAttribute('aria-pressed','false'); }
       saveState();
       updateScoreCards();
       subItem.classList.toggle('checked', state.checked[subId]);
@@ -427,6 +456,7 @@ function attachEvents() {
   document.getElementById('resetBtn').addEventListener('click', () => {
     if (!confirm('Reset all checklist progress? This cannot be undone.')) return;
     state.checked = {};
+    state.failed = {};
     state.notes = {};
     if (state.textInputs) state.textInputs = {};
     document.querySelectorAll('.step-notes').forEach(el => el.value = '');

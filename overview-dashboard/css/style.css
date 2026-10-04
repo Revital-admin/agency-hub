@@ -436,3 +436,5 @@ input, select, textarea { max-width: 100%; }
 .tool-card-icon-wrap { background: transparent; opacity: 0.8; }
 .progress-fill { background: var(--primary); }
 .progress-bar-container { height: 6px; border-radius: 4px; background: rgba(255,255,255,0.08); }
+
+.ao-grade-sub { margin: 8px 0 0; font-size: 0.75rem; }

@@ -1062,11 +1062,22 @@ function aoGrade(pct) {
   return { letter: 'F', cls: 'danger' };
 }
 
-function aoAuditPct(client, a) {
-  const checked = client && client[a.key] && client[a.key].checked;
-  if (!checked) return 0;
-  const done = Object.keys(checked).filter(k => checked[k]).length;
-  return Math.min(100, Math.round((done / a.total) * 100));
+// Audit items have three states: passed (checked), failed ("Needs work"),
+// or not reviewed (neither). Grade = passed / reviewed (how well), while
+// completion = reviewed / total (how much is done).
+function aoAuditStats(client, a) {
+  const d = client && client[a.key];
+  const checked = (d && d.checked) || {};
+  const failedMap = (d && d.failed) || {};
+  const passed = Object.keys(checked).filter(k => checked[k]).length;
+  const failed = Object.keys(failedMap).filter(k => failedMap[k] && !checked[k]).length;
+  const reviewed = passed + failed;
+  return {
+    passed, failed, reviewed,
+    passRate: reviewed > 0 ? Math.round((passed / reviewed) * 100) : 0,
+    completion: Math.min(100, Math.round((reviewed / a.total) * 100)),
+    total: a.total
+  };
 }
 
 function aoCompPct(client, c) {
@@ -1101,16 +1112,17 @@ function renderAuditOverview() {
   Object.entries(clientsDb).forEach(([name, client]) => {
     if (!client || name === sandbox) return;
     AO_AUDITS.forEach(a => {
-      const pct = aoAuditPct(client, a);
-      const g = aoGrade(pct);
+      const st = aoAuditStats(client, a);
+      const pct = st.passRate;
+      const g = st.reviewed > 0 ? aoGrade(pct) : { letter: '\u2014', cls: 'none' };
       const ts = client[a.key] && client[a.key].updatedAt ? new Date(client[a.key].updatedAt).getTime() : null;
       if (ts) events.push({ ts, name, a, pct, g });
-      if (pct === 0 || pct >= 100) return;
+      if (st.reviewed === 0) return;
       const days = ts ? Math.floor((now - ts) / 86400000) : null;
-      if (days !== null && days >= 14) {
-        attention.push({ rank: 0, color: AO_COLORS.danger, title: `${a.short} stalled at ${pct}%`, sub: `${name} \u2014 untouched ${days} days` });
-      } else if (g.letter === 'F' || g.letter === 'D' || g.letter === 'D+') {
-        attention.push({ rank: 1, color: AO_COLORS.warning, title: `${a.short} \u2014 low score`, sub: `${name} \u2014 graded ${g.letter} (${pct}%)` });
+      if (days !== null && days >= 14 && st.completion < 100) {
+        attention.push({ rank: 0, color: AO_COLORS.danger, title: `${a.short} stalled at ${st.completion}% reviewed`, sub: `${name} \u2014 untouched ${days} days` });
+      } else if (st.reviewed >= 3 && pct < 70) {
+        attention.push({ rank: 1, color: AO_COLORS.warning, title: `${a.short} \u2014 low score`, sub: `${name} \u2014 graded ${g.letter}, ${st.failed} item${st.failed === 1 ? '' : 's'} need work` });
       }
     });
   });
@@ -1145,13 +1157,14 @@ function renderAuditOverview() {
     // Audits are graded on checks PASSED (quality). Competitor analyses are
     // research worksheets with no pass/fail - they only report how much is
     // filled in, so they get no letter grade.
-    const auditCards = AO_AUDITS.map(a => ({ label: a.label, pct: aoAuditPct(active, a), graded: true }));
+    const auditCards = AO_AUDITS.map(a => { const st = aoAuditStats(active, a); return { label: a.label, pct: st.passRate, graded: true, st }; });
     const compCards = AO_COMPS.map(c => ({ label: c.label, pct: aoCompPct(active, c), graded: false }));
     cards.innerHTML = auditCards.concat(compCards).map(it => {
-      const started = it.pct > 0;
+      const started = it.graded ? it.st.reviewed > 0 : it.pct > 0;
       const g = it.graded ? (started ? aoGrade(it.pct) : { letter: '\u2014', cls: 'none' }) : null;
       const color = g ? AO_COLORS[g.cls] : (it.pct >= 100 ? AO_COLORS.success : started ? AO_COLORS.info : AO_COLORS.none);
-      const rowLabel = it.graded ? (started ? 'Checks passed' : 'Not started') : (started ? 'Filled in' : 'Not started');
+      const rowLabel = it.graded ? (started ? `Passed ${it.st.passed} of ${it.st.reviewed} reviewed` : 'Not reviewed yet') : (started ? 'Filled in' : 'Not started');
+      const sub = it.graded ? `<div class="ao-grade-row ao-grade-sub"><span>${it.st.reviewed} of ${it.st.total} reviewed</span><span>${it.st.completion}% done</span></div>` : '';
       return `
         <div class="ao-grade-card" style="--c:${color}">
           <div class="ao-grade-top">
@@ -1161,6 +1174,7 @@ function renderAuditOverview() {
           <div>
             <div class="ao-grade-row"><span>${rowLabel}</span><strong>${it.pct}%</strong></div>
             <div class="ao-bar"><span style="width:${it.pct}%"></span></div>
+            ${sub}
           </div>
         </div>`;
     }).join('');
@@ -1194,7 +1208,7 @@ function renderAuditOverview() {
     }).join('');
   }
   const foot = document.getElementById('aoFoot');
-  if (foot) foot.textContent = 'Cards show the active workspace; activity and attention cover every client. Letter grades reflect checks passed; competitor analyses show how much is filled in (no grade).';
+  if (foot) foot.textContent = 'Cards show the active workspace; activity and attention cover every client. Audit grades = checks passed out of checks reviewed (mark failing items \u201cNeeds work\u201d); competitor analyses show how much is filled in (no grade).';
 }
 
 function renderAll() {

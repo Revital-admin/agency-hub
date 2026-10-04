@@ -678,3 +678,8 @@ body {
   background: rgba(246, 141, 95, 0.05); /* Accent tint */
   border-color: var(--color-accent);
 }
+/* Needs-work (fail) marker: item is reviewed and failing; unmarked + unchecked = not reviewed yet */
+.sub-fail-btn { flex: 0 0 auto; align-self: flex-start; margin-left: 10px; padding: 3px 10px; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.4px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); background: transparent; color: var(--color-text-muted, #8a887f); cursor: pointer; opacity: 0.7; }
+.sub-item:hover .sub-fail-btn { opacity: 1; }
+.sub-fail-btn[aria-pressed="true"] { opacity: 1; color: #fff; background: #ef4444; border-color: #ef4444; }
+.sub-item.failed { border-left: 3px solid #ef4444; }
