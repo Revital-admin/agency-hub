@@ -896,6 +896,20 @@ let isRestrictedTeamMember = false;
 
 function applyTeamAccessRestrictions(allowedSections) {
   isRestrictedTeamMember = !!allowedSections;
+  // Cached so the Overview Dashboard tool (its own iframe as of Oct 2026)
+  // can re-check the same 'sales-pipeline' gate this function already
+  // applies to the Sales Pipeline Value / Lead Source ROI cards below -
+  // those two cards now live in a different document and can't reach into
+  // this function's local `allowedSections` parameter directly.
+  window.currentAllowedSections = allowedSections;
+  // Security-relevant, not cosmetic: this resolves asynchronously (Firestore
+  // listener), so the dashboard iframe may already have rendered - with its
+  // own fail-open default - before this first fires, or teamAccess may
+  // change again later. Either way, ping it now so it re-applies its own
+  // applySalesPipelineCardGating() against the value just cached above
+  // (overview-dashboard/js/app.js has no other way to learn this changed,
+  // since it can't subscribe to the shell's Firestore listener itself).
+  if (typeof renderDashboard === "function") { try { renderDashboard(); } catch (e) {} }
   // Notifications may already be rendered from before this resolved (or
   // this may re-fire later if teamAccess changes) - re-filter now either way.
   try { renderAdminNotifications(); } catch (e) {}
@@ -1194,6 +1208,13 @@ function generateClientPDF() {
 let clientsDb = {};
 let activeClientName = "";
 let iframeNeedsReload = {
+  // Added Oct 2026 when Overview Dashboard was extracted into its own
+  // iframe tool (overview-dashboard/) - see renderOverviewDashboardTab()
+  // and the matching switch-case below. It's still the default active
+  // tab at boot, so refreshAllViews()'s own activeTab-defaults-to-
+  // "tab-dashboard" fallback is what triggers its first load, the same
+  // mechanism as any other iframe tab - no extra boot-time call needed.
+  "tab-dashboard": true,
   "tab-adaccountsetup": true,
   "tab-teamaccess": true,
   "tab-uxui": true,
@@ -1600,6 +1621,17 @@ function getActiveClient() {
   return clientsDb[activeClientName];
 }
 
+// Agency-wide accessor for the Overview Dashboard tool (overview-dashboard/
+// js/app.js), added Oct 2026 when that tool was extracted out of this file
+// into its own iframe. No other tool needed cross-client data before this -
+// every other embedded tool only ever reads getActiveClient() - so there
+// was nothing exposing the whole clientsDb map across the iframe boundary
+// until now. Read-only by convention: the dashboard tool never mutates this
+// or calls saveDatabase() itself.
+function getClientsDb() {
+  return clientsDb;
+}
+
 // Friendly-name fallback for the "who last edited this client" ambient
 // note (see renderClientLastEditedNote below) - there's no existing
 // login-email -> display-name mapping anywhere in the Hub (Team Roster's
@@ -1819,6 +1851,9 @@ function buildClientDropdown() {
 // ── Helper to reload iframe if needed ──
 function refreshIframeTab(tabId) {
   switch (tabId) {
+    case "tab-dashboard":
+      renderOverviewDashboardTab();
+      break;
     case "tab-uxui":
       renderUxuiAudit();
       break;
@@ -3326,356 +3361,30 @@ async function renderMyClients() {
 }
 
 function renderDashboard() {
-  const client = getActiveClient();
-  if (!client) return;
-
-  // Active client summary details
-  const hero = document.getElementById("dashHeroClientName"); if (hero) hero.textContent = client.name;
-  const heroUrl = document.getElementById("dashHeroTargetUrl"); if (heroUrl) heroUrl.textContent = client.targetUrl || "No website logged yet";
-  const heroDate = document.getElementById("dashHeroCreatedDate"); if (heroDate) heroDate.textContent = client.createdDate || "N/A";
-
-  const dashClickupUrl = document.getElementById("dashClickupUrl");
-  const dashClickupBtn = document.getElementById("dashClickupBtn");
-  if (dashClickupUrl && dashClickupBtn) {
-    dashClickupUrl.value = client.clickupUrl || "";
-    if (client.clickupUrl) {
-      dashClickupBtn.href = client.clickupUrl;
-      dashClickupBtn.style.display = "flex";
-    } else {
-      dashClickupBtn.style.display = "none";
+  // Was a ~350-line function that wrote directly into tab-dashboard's DOM
+  // (shared document, no iframe boundary - cheap, synchronous, no reload).
+  // Oct 2026: Overview Dashboard moved into its own iframe tool
+  // (overview-dashboard/), so this can no longer write into its DOM
+  // directly. Posting a message and letting that tool re-render itself
+  // keeps every one of the ~16 existing window.parent.renderDashboard()
+  // call sites across other tools working unchanged - only what happens
+  // inside this function changed. See overview-dashboard/js/app.js's
+  // setupRefreshListener() for the matching listener, and
+  // renderOverviewDashboardTab() above for the separate first-load/
+  // tab-click path (a full reload, not a message - that one needs the
+  // iframe's src set in the first place).
+  const iframe = document.querySelector('#tab-dashboard iframe');
+  if (iframe && iframe.contentWindow) {
+    try {
+      iframe.contentWindow.postMessage({ type: 'hub:refresh-overview-dashboard' }, window.location.origin);
+    } catch (e) {
+      // iframe mid-navigation (src just changed) or not same-origin yet -
+      // harmless to miss one refresh here since renderOverviewDashboardTab()
+      // already does a full reload on the next real tab visit anyway.
     }
   }
-
-  // Client Health — pulled from the latest Weekly Account Check-In, if any
-  const healthVal = document.getElementById("dashHealthVal");
-  const healthDesc = document.getElementById("dashHealthDesc");
-  const healthProgress = document.getElementById("dashHealthProgress");
-  if (healthVal && healthDesc && healthProgress) {
-    const checkins = Array.isArray(client.weeklyCheckins) ? client.weeklyCheckins : [];
-    const latest = checkins.length ? checkins[0] : null; // already kept newest-first
-    if (latest && latest.healthRating) {
-      const colors = { Green: "#22c55e", Yellow: "#eab308", Red: "#ef4444" };
-      const color = colors[latest.healthRating] || "var(--color-text-secondary)";
-      healthVal.textContent = latest.healthRating;
-      healthVal.style.color = color;
-      healthDesc.textContent = `Week of ${latest.date}${latest.q1_responsive ? ' — client ' + latest.q1_responsive.toLowerCase() : ''}`;
-      healthProgress.style.width = "100%";
-      healthProgress.style.background = color;
-    } else {
-      healthVal.textContent = "No check-in yet";
-      healthVal.style.color = "";
-      healthDesc.textContent = "Run a Weekly Account Check-In to populate this";
-      healthProgress.style.width = "0%";
-      healthProgress.style.background = "";
-    }
   }
 
-  // Calculate Onboarding completion %
-  let totalOb = 0;
-  let checkedOb = 0;
-  if (client.onboardingChecklist && Array.isArray(client.onboardingChecklist)) {
-    client.onboardingChecklist.forEach(cat => {
-      if (cat.items && Array.isArray(cat.items)) {
-        cat.items.forEach(item => {
-          totalOb++;
-          if (item.checked) checkedOb++;
-        });
-      }
-    });
-  }
-  const obPct = totalOb > 0 ? Math.round((checkedOb / totalOb) * 100) : 0;
-  document.getElementById("dashOnboardingVal").textContent = `${obPct}%`;
-  document.getElementById("dashOnboardingProgress").style.width = `${obPct}%`;
-
-  // Calculate UX/UI Checklist progress (40 items total)
-  let totalUx = 40;
-  let checkedUx = 0;
-  if (client.uxuiAudit && client.uxuiAudit.checked) {
-    Object.keys(client.uxuiAudit.checked).forEach(k => {
-      if (client.uxuiAudit.checked[k]) {
-        checkedUx++;
-      }
-    });
-  }
-  const uxPct = Math.round((checkedUx / totalUx) * 100);
-  const uxGrade = calculateUxuiLetterGrade(uxPct);
-  document.getElementById("dashUxuiVal").textContent = `${uxPct}% (${uxGrade})`;
-  document.getElementById("dashUxuiProgress").style.width = `${uxPct}%`;
-
-  // Calculate SEO checklist checked % (23 items total)
-  const seoTotal = 23;
-  let seoFilled = 0;
-  if (client.seoAudit && client.seoAudit.checked) {
-    Object.keys(client.seoAudit.checked).forEach(k => {
-      if (client.seoAudit.checked[k]) {
-        seoFilled++;
-      }
-    });
-  }
-  const seoPct = seoTotal > 0 ? Math.round((seoFilled / seoTotal) * 100) : 0;
-  document.getElementById("dashSeoVal").textContent = `${seoPct}%`;
-  document.getElementById("dashSeoProgress").style.width = `${seoPct}%`;
-  
-
-  // Calculate Campaign Launch Checklist
-  let totalCampaignLaunch = 23; // 23 items total
-  let checkedCampaignLaunch = 0;
-  if (client.campaignLaunch && client.campaignLaunch.checked) {
-    Object.keys(client.campaignLaunch.checked).forEach(k => {
-      if (client.campaignLaunch.checked[k]) {
-        checkedCampaignLaunch++;
-      }
-    });
-  }
-  const campaignLaunchPct = Math.round((checkedCampaignLaunch / totalCampaignLaunch) * 100);
-  document.getElementById("dashCampaignLaunchVal").textContent = `${campaignLaunchPct}%`;
-  document.getElementById("dashCampaignLaunchProgress").style.width = `${campaignLaunchPct}%`;
-
-  // Calculate Paid Ads Audit (16 items total)
-  const paTotal = 16;
-  let paFilled = 0;
-  if (client.paidAdsAudit && client.paidAdsAudit.checked) {
-    Object.keys(client.paidAdsAudit.checked).forEach(k => {
-      if (client.paidAdsAudit.checked[k]) {
-        paFilled++;
-      }
-    });
-  }
-  const dashPaAuditFill = document.getElementById('dashPaidAdsProgress');
-  const dashPaidAdsVal = document.getElementById('dashPaidAdsVal');
-  if (dashPaAuditFill && dashPaidAdsVal) {
-    const paPct = paTotal > 0 ? Math.round((paFilled / paTotal) * 100) : 0;
-    dashPaAuditFill.style.width = paPct + '%';
-    dashPaidAdsVal.textContent = paPct + '%';
-  }
-
-  // Calculate Email Audit (16 items total)
-  const emTotal = 16;
-  let emFilled = 0;
-  if (client.emailAudit && client.emailAudit.checked) {
-    Object.keys(client.emailAudit.checked).forEach(k => {
-      if (client.emailAudit.checked[k]) {
-        emFilled++;
-      }
-    });
-  }
-  const dashEmailAuditFill = document.getElementById('dashEmailStrategyProgress');
-  const dashEmailAuditVal = document.getElementById('dashEmailStrategyVal');
-  if (dashEmailAuditFill && dashEmailAuditVal) {
-    const emPct = emTotal > 0 ? Math.round((emFilled / emTotal) * 100) : 0;
-    dashEmailAuditFill.style.width = emPct + '%';
-    dashEmailAuditVal.textContent = emPct + '%';
-  }
-  // Calculate Content Audit (42 items total)
-  const caTotal = 42;
-  let caFilled = 0;
-  if (client.contentAudit && client.contentAudit.checked) {
-    Object.keys(client.contentAudit.checked).forEach(k => {
-      if (client.contentAudit.checked[k]) {
-        caFilled++;
-      }
-    });
-  }
-  const dashContentAuditFill = document.getElementById('dashContentAuditProgress');
-  const dashContentAuditVal = document.getElementById('dashContentAuditVal');
-  if (dashContentAuditFill && dashContentAuditVal) {
-    const caPct = caTotal > 0 ? Math.round((caFilled / caTotal) * 100) : 0;
-    dashContentAuditFill.style.width = caPct + '%';
-    dashContentAuditVal.textContent = caPct + '%';
-  }
-
-
-  // Calculate Content Strategy checklist progress (40 items total)
-  let totalStrategy = 40;
-  let checkedStrategy = 0;
-  if (client.contentStrategy && client.contentStrategy.checked) {
-    Object.keys(client.contentStrategy.checked).forEach(k => {
-      if (client.contentStrategy.checked[k]) {
-        checkedStrategy++;
-      }
-    });
-  }
-  const strategyPct = Math.round((checkedStrategy / totalStrategy) * 100);
-  document.getElementById("dashStrategyVal").textContent = `${strategyPct}%`;
-  document.getElementById("dashStrategyProgress").style.width = `${strategyPct}%`;
-
-  // Calculate Strategy Builder progress (56 + 3 * N fields total)
-  let strategyBuilderPct = 0;
-  if (client.strategyBuilder && client.strategyBuilder.data) {
-    const data = client.strategyBuilder.data;
-    const platforms = Array.isArray(data.platforms) ? data.platforms : [];
-    let totalFields = 56 + (platforms.length * 3);
-    let filledFields = 0;
-
-    const textKeys = [
-      'businessName', 'industry', 'primaryServices', 'brandMission', 'brandVision', 'coreValues', 'usp',
-      'goalsShortTerm', 'goalsLongTerm', 'marketingChallenges',
-      'audienceAge', 'audienceLocation', 'audienceIndustry', 'audienceIncome', 'audiencePainPoints', 'audienceDesires', 'audienceBuyingBehavior',
-      'brandVoice', 'brandColors', 'brandVisuals',
-      'mainCompetitors', 'competitorStrengths', 'competitorDifferentiate', 'brandsAdmire',
-      'pillar1Name', 'pillar1Topics', 'pillar2Name', 'pillar2Topics', 'pillar3Name', 'pillar3Topics', 'pillar4Name', 'pillar4Topics',
-      'ideasEducational', 'ideasPromotional', 'ideasSocialProof', 'ideasViral', 'ideasBehindScenes',
-      'kpisBenchmarks', 'commContact', 'commRevisions', 'commTimeline',
-      'finalFocus', 'notesSection'
-    ];
-    const checkboxKeys = [
-      'primaryGoals', 'brandPersonality', 'existingAssets', 'primaryContentGoals',
-      'workflowPre', 'workflowProd', 'workflowPost', 'workflowPub',
-      'kpisMetrics', 'kpisFrequency', 'commMethods', 'nextSteps'
-    ];
-
-    textKeys.forEach(key => {
-      const val = data[key];
-      if (val && typeof val === 'string' && val.trim() !== '') filledFields++;
-    });
-
-    checkboxKeys.forEach(key => {
-      const arr = data[key];
-      if (arr && Array.isArray(arr) && arr.length > 0) filledFields++;
-    });
-
-    const a1 = data['action1'] || '';
-    const a2 = data['action2'] || '';
-    const a3 = data['action3'] || '';
-    const a4 = data['action4'] || '';
-    if (a1.trim() !== '' || a2.trim() !== '' || a3.trim() !== '' || a4.trim() !== '') {
-      filledFields++;
-    }
-
-    // Dynamic platforms check (3 fields per platform)
-    platforms.forEach(p => {
-      if (p.purpose && p.purpose.trim() !== '') filledFields++;
-      if (p.frequency && p.frequency.trim() !== '') filledFields++;
-      if (p.contentTypes && Array.isArray(p.contentTypes) && p.contentTypes.length > 0) filledFields++;
-    });
-
-    strategyBuilderPct = totalFields > 0 ? Math.round((filledFields / totalFields) * 100) : 0;
-  }
-  document.getElementById("dashStrategyBuilderVal").textContent = `${strategyBuilderPct}%`;
-  document.getElementById("dashStrategyBuilderProgress").style.width = `${strategyBuilderPct}%`;
-
-
-  // Calculate Personal Branding Builder progress (approx 29 fields total)
-  let personalBrandPct = 0;
-  if (client.personalBranding && client.personalBranding.data) {
-    let filledPbFields = 0;
-    let totalPbFields = 0;
-    
-    // Simplistic check: count all string properties that are not empty.
-    // "platforms" is deliberately skipped here and counted separately below,
-    // because the builder auto-seeds a default (empty) LinkedIn platform row
-    // the moment the tab is opened -- counting the array itself as "filled"
-    // just because it's non-empty produced a false-positive percentage even
-    // when the user hadn't entered anything.
-    const countFields = (obj) => {
-      if (typeof obj === 'string') {
-        totalPbFields++;
-        if (obj.trim() !== '') filledPbFields++;
-      } else if (Array.isArray(obj)) {
-        totalPbFields++;
-        if (obj.length > 0) filledPbFields++;
-      } else if (typeof obj === 'object' && obj !== null) {
-        Object.entries(obj).forEach(([key, val]) => {
-          if (key === 'platforms') return;
-          countFields(val);
-        });
-      }
-    };
-    countFields(client.personalBranding.data);
-    
-    // Also add platforms manually like strategy builder
-    const pbPlatforms = client.personalBranding.data.platforms || [];
-    pbPlatforms.forEach(p => {
-      if (p.purpose && p.purpose.trim() !== '') filledPbFields++;
-      if (p.contentTypes && Array.isArray(p.contentTypes) && p.contentTypes.length > 0) filledPbFields++;
-    });
-    totalPbFields += pbPlatforms.length * 2;
-    
-    // In the actual builder it's out of ~29
-    personalBrandPct = totalPbFields > 0 ? Math.min(100, Math.round((filledPbFields / 29) * 100)) : 0;
-  }
-  document.getElementById("dashPersonalBrandVal").textContent = `${personalBrandPct}%`;
-  document.getElementById("dashPersonalBrandProgress").style.width = `${personalBrandPct}%`;
-
-  // Calculate Social Media Audit checklist progress (40 items total)
-  let totalSocialAudit = 40;
-  let checkedSocialAudit = 0;
-  if (client.socialAudit && client.socialAudit.checked) {
-    Object.keys(client.socialAudit.checked).forEach(k => {
-      if (client.socialAudit.checked[k]) {
-        checkedSocialAudit++;
-      }
-    });
-  }
-  const socialAuditPct = Math.round((checkedSocialAudit / totalSocialAudit) * 100);
-  document.getElementById("dashSocialAuditVal").textContent = `${socialAuditPct}%`;
-  document.getElementById("dashSocialAuditProgress").style.width = `${socialAuditPct}%`;
-
-  // Logged Website Competitors count
-  // client.webComp may be entirely absent for restricted Team Access users
-  // whose filtered clientsDb data omits the strategy-competition section -
-  // guard instead of assuming it's always present (was crashing the whole
-  // sync/render cycle for those users, see "Couldn't sync with the cloud
-  // database" banner bug).
-  let loggedWebComps = 0;
-  (client.webComp && Array.isArray(client.webComp.names) ? client.webComp.names : []).forEach(name => {
-    if (name && name !== "Competitor A" && name !== "Competitor B" && name !== "Competitor C" && name.trim() !== "") {
-      loggedWebComps++;
-    }
-  });
-  document.getElementById("dashWebCompetitorVal").textContent = `${loggedWebComps} / 3`;
-  document.getElementById("dashWebCompetitorProgress").style.width = `${(loggedWebComps / 3) * 100}%`;
-
-  let loggedSocialComps = 0;
-  (client.socialComp && Array.isArray(client.socialComp.names) ? client.socialComp.names : []).forEach(name => {
-    if (name && name !== "Competitor A" && name !== "Competitor B" && name !== "Competitor C" && name.trim() !== "") {
-      loggedSocialComps++;
-    }
-  });
-  document.getElementById("dashSocialCompetitorVal").textContent = `${loggedSocialComps} / 3`;
-  document.getElementById("dashSocialCompetitorProgress").style.width = `${(loggedSocialComps / 3) * 100}%`;
-
-  // Calculate Copywriting Assistant stats
-  let copyWords = 0;
-  if (client.copywriting && client.copywriting.notes) {
-    const text = client.copywriting.notes.trim();
-    copyWords = text === "" ? 0 : text.split(/\s+/).length;
-  }
-  document.getElementById("dashCopywritingVal").textContent = `${copyWords} words`;
-  
-  // Calculate Brand Vault completion
-  let bvTotal = 14; // 3 assets, 2 typo, 2 voice, 2 audience, 5 colors
-  let bvFilled = 0;
-  if (client.brandVault) {
-    const bv = client.brandVault;
-    if (bv.assets) {
-      if (bv.assets.logoUrl?.trim()) bvFilled++;
-      if (bv.assets.driveLink?.trim()) bvFilled++;
-      if (bv.assets.canvaLink?.trim()) bvFilled++;
-    }
-    if (bv.typography) {
-      if (bv.typography.primaryFont?.trim()) bvFilled++;
-      if (bv.typography.secondaryFont?.trim()) bvFilled++;
-    }
-    if (bv.brandVoice) {
-      if (bv.brandVoice.adjectives?.trim()) bvFilled++;
-      if (bv.brandVoice.missionStatement?.trim()) bvFilled++;
-    }
-    if (bv.targetAudience) {
-      if (bv.targetAudience.demographic?.trim()) bvFilled++;
-      if (bv.targetAudience.painPoints?.trim()) bvFilled++;
-    }
-    if (bv.colors && Array.isArray(bv.colors)) {
-      bv.colors.forEach(c => {
-        // Count a color as filled if it's not default black and has a name
-        if (c.hex && c.hex !== "#000000") bvFilled++;
-      });
-    }
-  }
-  const bvPct = Math.round((bvFilled / bvTotal) * 100);
-  document.getElementById("dashBrandVaultVal").textContent = `${bvPct}%`;
-  document.getElementById("dashBrandVaultProgress").style.width = `${bvPct > 100 ? 100 : bvPct}%`;
-  }
 
 // Helper to determine letter grade
 function calculateLetterGrade(score) {
@@ -4223,6 +3932,16 @@ function renderRedFlagChecklist() {
 // ── Agency Health Dashboard Controller ──
 function renderHealthDashboard() {
   setIframeAbsoluteSrc('#tab-healthdashboard iframe', "agency-health-dashboard/index.html");
+}
+
+// ── Overview Dashboard Controller ──
+// Same pattern as Agency Health Dashboard above - this only handles the
+// "tab was just navigated to" first-load/reload path. The "something
+// changed, refresh in place" path (called from ~16 other tools after a
+// save) goes through renderDashboard() further down, which postMessages
+// this same iframe instead of doing a full reload.
+function renderOverviewDashboardTab() {
+  setIframeAbsoluteSrc('#tab-dashboard iframe', "overview-dashboard/index.html");
 }
 
 // ── Change Order Generator Controller ──
@@ -5851,9 +5570,12 @@ function initParentEventListeners() {
       const client = getActiveClient();
       client.targetUrl = e.target.value;
       saveDatabase();
-      // Keep dashboard hero in sync
-      const heroUrl = document.getElementById("dashHeroTargetUrl");
-      if (heroUrl) heroUrl.textContent = e.target.value || "No website logged yet";
+      // Keep dashboard hero in sync. Used to write dashHeroTargetUrl's
+      // textContent directly (same document, instant) - now that Overview
+      // Dashboard is its own iframe (Oct 2026), renderDashboard() posts it
+      // a refresh message instead, which re-renders everything there, not
+      // just this one field.
+      renderDashboard();
     });
   }
 
