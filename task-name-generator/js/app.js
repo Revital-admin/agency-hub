@@ -12,6 +12,9 @@
 //   date     - <input type="date">, formatted to "Month D" (e.g. "July 5")
 //   roundnum - <input type="number">, formatted to "Round N"
 //   fixed    - not a field at all, a literal word/phrase spliced in as-is
+// Oct/Nov 2026: templates for lists archived in ClickUp's Hub/HubSpot
+// consolidation (old CRM space, Growth content/lead-gen/partner folders, empty
+// sales-pipeline lists) were removed - only lists still in use remain.
 const TASK_NAME_TEMPLATES = [
   // ── Delivery Space ──
   { space: 'Delivery', list: 'Campaign Briefs', segments: [
@@ -57,33 +60,12 @@ const TASK_NAME_TEMPLATES = [
   // below). An earlier version of this file duplicated it here by mistake.
 
   // ── CRM Space ──
-  { space: 'CRM', list: 'Deals', segments: [
-    { type: 'text', label: 'Company Name', placeholder: 'e.g. Acme Wellness' },
-    { type: 'text', label: 'Services', placeholder: 'e.g. Paid Social + SEO' },
-  ], example: 'Acme Wellness — Paid Social + SEO' },
-  { space: 'CRM', list: 'Contacts', segments: [
-    { type: 'text', label: 'Full Name', placeholder: 'e.g. Jane Smith' },
-    { type: 'text', label: 'Company', placeholder: 'e.g. Acme Wellness' },
-  ], example: 'Jane Smith — Acme Wellness' },
-  { space: 'CRM', list: 'Companies', segments: [
-    { type: 'text', label: 'Company Name', placeholder: 'e.g. Acme Wellness' },
-    { type: 'text', label: 'Industry', placeholder: 'e.g. Health & Fitness' },
-  ], example: 'Acme Wellness — Health & Fitness' },
 
   // ── Growth Space - Pipeline Management ──
   { space: 'Growth', list: 'Leads List', segments: [
     { type: 'text', label: 'Company Name', placeholder: 'e.g. Black Bird' },
     { type: 'text', label: 'Industry', placeholder: 'e.g. Restaurant' },
   ], example: 'Black Bird — Restaurant' },
-  { space: 'Growth', list: 'Sales Pipeline', segments: [
-    { type: 'text', label: 'Company Name', placeholder: 'e.g. Acme Wellness' },
-    { type: 'text', label: 'Services Interested In', placeholder: 'e.g. Paid Social + SEO' },
-  ], example: 'Acme Wellness — Paid Social + SEO' },
-  { space: 'Growth', list: 'Proposals & Quotes', segments: [
-    { type: 'text', label: 'Company Name', placeholder: 'e.g. Acme Wellness' },
-    { type: 'fixed', value: 'Proposal' },
-    { type: 'month', label: 'Month Year' },
-  ], example: 'Acme Wellness — Proposal — July 2026' },
   { space: 'Growth', list: 'Follow-Up Tasks', segments: [
     { type: 'text', label: 'Company Name', placeholder: 'e.g. Acme Wellness' },
     { type: 'text', label: 'Follow-Up Type', placeholder: 'e.g. Follow-Up #1' },
@@ -91,55 +73,10 @@ const TASK_NAME_TEMPLATES = [
   ], example: 'Acme Wellness — Follow-Up #1 — July 8' },
 
   // ── Growth Space - Closing & Onboarding Handoff ──
-  { space: 'Growth', list: 'Contracts Pending Signature', segments: [
-    { type: 'text', label: 'Company Name', placeholder: 'e.g. Acme Wellness' },
-    { type: 'fixed', value: 'Contract' },
-    { type: 'month', label: 'Month Year' },
-  ], example: 'Acme Wellness — Contract — July 2026' },
-  { space: 'Growth', list: 'Onboarding Handoff', segments: [
-    { type: 'text', label: 'Company Name', placeholder: 'e.g. Acme Wellness' },
-    { type: 'fixed', value: 'Onboarding Handoff' },
-    { type: 'month', label: 'Month Year' },
-  ], example: 'Acme Wellness — Onboarding Handoff — July 2026' },
 
   // ── Growth Space - Content & Social ──
-  { space: 'Growth', list: 'Revital Social Media Calendar', segments: [
-    { type: 'text', label: 'Platform + Format', placeholder: 'e.g. IG Reel' },
-    { type: 'text', label: 'Topic', placeholder: 'e.g. 3 Content Mistakes to Avoid' },
-    { type: 'date', label: 'Date' },
-  ], example: 'IG Reel — 3 Content Mistakes to Avoid — July 5' },
-  { space: 'Growth', list: 'Content Ideas', segments: [
-    { type: 'text', label: 'Content Type', placeholder: 'e.g. Reel' },
-    { type: 'text', label: 'Topic or Hook', placeholder: 'e.g. 5 Signs You Need a Rebrand' },
-  ], example: 'Reel — 5 Signs You Need a Rebrand' },
-  { space: 'Growth', list: 'Blog & Thought Leadership', segments: [
-    { type: 'text', label: 'Content Type', placeholder: 'e.g. Blog Post' },
-    { type: 'text', label: 'Title', placeholder: 'e.g. Why SEO Still Matters' },
-    { type: 'month', label: 'Month Year' },
-  ], example: 'Blog Post — Why SEO Still Matters — July 2026' },
-  { space: 'Growth', list: 'Video & Reels Production', segments: [
-    { type: 'text', label: 'Video Type', placeholder: 'e.g. Reel' },
-    { type: 'text', label: 'Title', placeholder: 'e.g. 3 Content Mistakes to Avoid' },
-    { type: 'date', label: 'Date' },
-  ], example: 'Reel — 3 Content Mistakes to Avoid — July 5' },
 
   // ── Growth Space - Lead Generation ──
-  { space: 'Growth', list: 'Lead Magnets & Freebies', segments: [
-    { type: 'text', label: 'Type', placeholder: 'e.g. Free Audit' },
-    { type: 'text', label: 'Name', placeholder: 'e.g. Social Media Audit' },
-    { type: 'month', label: 'Launch Month Year' },
-  ], example: 'Free Audit — Social Media Audit — July 2026' },
-  { space: 'Growth', list: 'Email Marketing Campaigns', segments: [
-    { type: 'text', label: 'Email Type', placeholder: 'e.g. Newsletter' },
-    { type: 'text', label: 'Subject or Theme', placeholder: 'e.g. Marketing Tips' },
-    { type: 'month', label: 'Send Month Year' },
-  ], example: 'Newsletter — Marketing Tips — July 2026' },
-  { space: 'Growth', list: 'Paid Ads — Company Campaigns', segments: [
-    { type: 'text', label: 'Platform', placeholder: 'e.g. Meta Ads' },
-    { type: 'text', label: 'Objective', placeholder: 'e.g. Lead Gen' },
-    { type: 'text', label: 'Campaign Theme', placeholder: 'e.g. Free Audit Offer' },
-    { type: 'month', label: 'Month Year' },
-  ], example: 'Meta Ads — Lead Gen — Free Audit Offer — July 2026' },
 
   // ── Growth Space - Other Folders ──
   // Note: the SOP doc's old "Lead Magnets" and "Monthly Business Metrics"
@@ -153,11 +90,6 @@ const TASK_NAME_TEMPLATES = [
     { type: 'text', label: 'Platform', placeholder: 'e.g. Google' },
     { type: 'month', label: 'Month Year' },
   ], example: 'Acme Wellness — Google — July 2026' },
-  { space: 'Growth', list: 'Agency Partners', segments: [
-    { type: 'text', label: 'Name', placeholder: 'e.g. Jane Smith' },
-    { type: 'text', label: 'Company', placeholder: 'e.g. Creative Co' },
-    { type: 'text', label: 'Relationship Type', placeholder: 'e.g. Agency Partner' },
-  ], example: 'Jane Smith — Creative Co — Agency Partner' },
 ];
 
 document.addEventListener('DOMContentLoaded', () => {
