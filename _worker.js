@@ -3284,10 +3284,18 @@ async function handlePipelineSyncClickUp(request, env) {
   } catch (e) {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
-  const { taskId, name, stage, contactEmail, source, notes, assigneeEmail } = payload || {};
-  if (!name || !stage) return jsonResponse({ error: "name and stage are required" }, 400);
+  const { taskId, name: leadName, industry, stage, contactEmail, source, notes, assigneeEmail } = payload || {};
+  if (!leadName || !stage) return jsonResponse({ error: "name and stage are required" }, 400);
+
+  // ClickUp task naming convention for the Leads List: "Company Name — Industry"
+  // (SOP Wiki Section 23). Falls back to just the company name when the lead
+  // has no industry yet. HubSpot keeps the plain company name on purpose -
+  // client-workspace matching depends on it.
+  const cleanIndustry = (industry || "").trim();
+  const name = cleanIndustry ? `${leadName.trim()} — ${cleanIndustry}` : leadName.trim();
 
   const descriptionParts = [];
+  if (cleanIndustry) descriptionParts.push(`**Industry:** ${cleanIndustry}`);
   if (contactEmail) descriptionParts.push(`**Contact:** ${contactEmail}`);
   if (source) descriptionParts.push(`**Source:** ${source}`);
   if (notes) descriptionParts.push(`**Notes:**\n${notes}`);

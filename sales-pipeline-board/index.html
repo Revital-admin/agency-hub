@@ -54,6 +54,25 @@
         <input type="text" id="leadName" class="form-control" placeholder="Acme Co." />
       </div>
       <div class="form-group">
+        <label for="leadIndustry">Industry</label>
+        <input type="text" id="leadIndustry" class="form-control" list="industryOptions" placeholder="Restaurant, Real Estate, Fitness..." />
+        <datalist id="industryOptions">
+          <option value="Restaurant & Food"></option>
+          <option value="Real Estate"></option>
+          <option value="Health & Wellness"></option>
+          <option value="Fitness"></option>
+          <option value="Beauty & Salon"></option>
+          <option value="Retail & E-commerce"></option>
+          <option value="Professional Services"></option>
+          <option value="Home Services"></option>
+          <option value="Automotive"></option>
+          <option value="Education & Coaching"></option>
+          <option value="Nonprofit"></option>
+          <option value="Events & Entertainment"></option>
+          <option value="Technology"></option>
+        </datalist>
+      </div>
+      <div class="form-group">
         <label for="leadEmail">Contact Email</label>
         <input type="email" id="leadEmail" class="form-control" placeholder="jane@acme.com" />
       </div>
@@ -79,6 +98,6 @@
     </div>
   </div>
 
-  <script src="js/app.js?v=6"></script>
+  <script src="js/app.js?v=7"></script>
 </body>
 </html>

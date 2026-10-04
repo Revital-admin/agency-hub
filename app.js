@@ -4716,7 +4716,7 @@ async function addLeadToSalesPipeline({ name, source, notes, stage }) {
   fetch("/api/pipeline/sync-clickup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ taskId: null, name: newLead.name, stage: newLead.stage, contactEmail: "", source: newLead.source, notes: newLead.notes })
+    body: JSON.stringify({ taskId: null, name: newLead.name, industry: newLead.industry || "", stage: newLead.stage, contactEmail: "", source: newLead.source, notes: newLead.notes })
   }).catch(err => console.error("ClickUp sync failed for auto-created pipeline lead:", err));
 
   // Same fire-and-forget HubSpot sync Sales Pipeline Board's own save
@@ -4768,7 +4768,7 @@ async function syncAccountManagerToClickUpAssignee(clientName, amEmail) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        taskId: lead.clickupTaskId, name: lead.name, stage: lead.stage,
+        taskId: lead.clickupTaskId, name: lead.name, industry: lead.industry || "", stage: lead.stage,
         contactEmail: lead.contactEmail, source: lead.source, notes: lead.notes,
         assigneeEmail: amEmail
       })
@@ -4996,7 +4996,7 @@ async function syncPipelineLeadStage(prospectName, outcome) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      taskId: lead.clickupTaskId, name: lead.name, stage: lead.stage,
+      taskId: lead.clickupTaskId, name: lead.name, industry: lead.industry || "", stage: lead.stage,
       contactEmail: lead.contactEmail, source: lead.source, notes: lead.notes
     })
   }).catch(err => console.error("ClickUp sync failed for pipeline stage sync:", err));

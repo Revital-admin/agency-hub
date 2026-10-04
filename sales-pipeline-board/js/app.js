@@ -219,6 +219,7 @@ function buildLeadCard(lead) {
   card.innerHTML = `
     <div class="lead-name">${escapeHtml(lead.name)}</div>
     ${lead.contactEmail ? `<div class="lead-email">${escapeHtml(lead.contactEmail)}</div>` : ''}
+    ${lead.industry ? `<div class="lead-source">${escapeHtml(lead.industry)}</div>` : ''}
     ${lead.source ? `<div class="lead-source">${escapeHtml(lead.source)}</div>` : ''}
     ${lead.clickupTaskId ? `<div class="lead-synced">&#10003; Synced to ClickUp</div>` : `<div class="lead-syncing">Syncing to ClickUp&hellip;</div>`}
     ${lead.hubspotDealId ? `<div class="lead-synced">&#10003; Synced to HubSpot</div>` : `<div class="lead-syncing">Syncing to HubSpot&hellip;</div>`}
@@ -238,6 +239,7 @@ function openLeadModal(id) {
   const lead = id ? leads.find(l => l.id === id) : null;
   el('modalTitle').textContent = lead ? 'Edit Lead' : 'Add Lead';
   el('leadName').value = lead ? lead.name : '';
+  el('leadIndustry').value = lead ? (lead.industry || '') : '';
   el('leadEmail').value = lead ? (lead.contactEmail || '') : '';
   el('leadSource').value = lead ? (lead.source || '') : '';
   el('leadNotes').value = lead ? (lead.notes || '') : '';
@@ -265,6 +267,7 @@ async function syncToClickUp(lead) {
       body: JSON.stringify({
         taskId: lead.clickupTaskId || null,
         name: lead.name,
+        industry: lead.industry || '',
         stage: lead.stage,
         contactEmail: lead.contactEmail,
         source: lead.source,
@@ -334,6 +337,7 @@ el('saveLeadBtn').addEventListener('click', async () => {
   const stage = el('leadStage').value;
   const contactEmail = el('leadEmail').value.trim();
   const source = el('leadSource').value.trim();
+  const industry = el('leadIndustry').value.trim();
   const notes = el('leadNotes').value.trim();
 
   let lead;
@@ -345,14 +349,14 @@ el('saveLeadBtn').addEventListener('click', async () => {
     lead = leads.find(l => l.id === editingLeadId);
     previousLeadState = { ...lead }; // snapshot so we can roll back if the save fails
     justWon = stage === WON_STAGE && lead.stage !== WON_STAGE;
-    needsSync = lead.stage !== stage || lead.name !== name; // resync on stage or name change
-    Object.assign(lead, { name, contactEmail, source, notes, stage, updatedDate: todayStr() });
+    needsSync = lead.stage !== stage || lead.name !== name || (lead.industry || '') !== industry; // resync on stage, name or industry change
+    Object.assign(lead, { name, industry, contactEmail, source, notes, stage, updatedDate: todayStr() });
   } else {
     isNewLead = true;
     justWon = stage === WON_STAGE;
     lead = {
       id: 'lead_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
-      name, contactEmail, source, notes, stage,
+      name, industry, contactEmail, source, notes, stage,
       clickupTaskId: null,
       hubspotDealId: null,
       createdDate: todayStr(),
