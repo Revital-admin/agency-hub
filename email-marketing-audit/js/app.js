@@ -161,6 +161,14 @@ function updateScoreCards() {
   const scoreEl = document.getElementById('val-score');
   scoreEl.style.color = pct === 100 ? 'var(--color-success)' : pct >= 50 ? '' : '';
 
+  // Grade badge — letter translation of the audit score %, so the dashboard
+  // (and anyone glancing at this audit) gets a quick qualitative read, not
+  // just a raw percentage.
+  const grade = gradeFromPct(pct);
+  setScoreValue('grade', grade.letter);
+  const gradeEl = document.getElementById('val-grade');
+  if (gradeEl) gradeEl.className = 'score-value ' + grade.cls;
+
   // Progress bar
   document.getElementById('progFill').style.width = pct + '%';
   document.getElementById('progText').textContent = `${doneTasks} of ${totalTasks} tasks complete`;
@@ -170,6 +178,25 @@ function updateScoreCards() {
 function setScoreValue(key, value) {
   const el = document.getElementById(`val-${key}`);
   if (el) el.textContent = value;
+}
+
+/* ── Grade scale ────────────────────────────────────────────────
+   Standard school-style letter bands applied to the checklist
+   completion %. Used here and read by the Overview Dashboard tool
+   to show a grade + % per audit at a glance. ── */
+function gradeFromPct(pct) {
+  if (pct >= 97) return { letter: 'A+', cls: 'success' };
+  if (pct >= 93) return { letter: 'A',  cls: 'success' };
+  if (pct >= 90) return { letter: 'A-', cls: 'success' };
+  if (pct >= 87) return { letter: 'B+', cls: 'info' };
+  if (pct >= 83) return { letter: 'B',  cls: 'info' };
+  if (pct >= 80) return { letter: 'B-', cls: 'info' };
+  if (pct >= 77) return { letter: 'C+', cls: 'warning' };
+  if (pct >= 73) return { letter: 'C',  cls: 'warning' };
+  if (pct >= 70) return { letter: 'C-', cls: 'warning' };
+  if (pct >= 67) return { letter: 'D+', cls: 'warning' };
+  if (pct >= 60) return { letter: 'D',  cls: 'warning' };
+  return { letter: 'F', cls: 'danger' };
 }
 
 /* ── Metric Label Rotation ──────────────────────────────────── */

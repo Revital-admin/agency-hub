@@ -284,6 +284,8 @@ body {
 
 .score-value.warning { color: var(--color-warning); }
 .score-value.success { color: var(--color-success); }
+.score-value.info    { color: var(--color-info); }
+.score-value.danger  { color: var(--color-danger, #f5735a); }
 
 .score-card.accent .score-value {
   color: var(--color-accent);
