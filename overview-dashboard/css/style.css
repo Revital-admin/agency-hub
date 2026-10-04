@@ -418,3 +418,6 @@ input, select, textarea { max-width: 100%; }
 
 .ao-sub-label { margin-top: 22px; }
 .ao-progress-cards .ao-grade-card { gap: 12px; }
+
+/* Superseded by the Audits & Competitor Analysis section + tool progress cards. Kept in the DOM (hidden) so renderDashboard keeps working. */
+.ao-legacy { display: none !important; }
