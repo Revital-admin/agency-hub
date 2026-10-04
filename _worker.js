@@ -3399,7 +3399,19 @@ async function findHubSpotPipelineStage(token, stageLabel) {
     || pipelines[0];
   if (!pipeline) throw new Error("No deal pipelines found in HubSpot");
 
-  const stage = (pipeline.stages || []).find(s => (s.label || "").trim() === (stageLabel || "").trim());
+  // The Hub's own STAGES list (sales-pipeline-board/js/app.js) carries a
+  // leading emoji on most keys for the board's column headers (e.g.
+  // "🆕 new lead", "📧 outreach sent") - HubSpot deal stage labels don't,
+  // so a plain exact-string match here failed for every stage except
+  // "discovery call scheduled" (the one key with no emoji prefix),
+  // silently breaking every HubSpot sync since this was built. Strip any
+  // leading emoji/symbol/whitespace and compare case-insensitively so the
+  // two lists only need to agree on the words, not the decoration.
+  const normalizeStageLabel = (s) => (s || "")
+    .replace(/^[^\p{L}\p{N}]+/u, "")
+    .trim()
+    .toLowerCase();
+  const stage = (pipeline.stages || []).find(s => normalizeStageLabel(s.label) === normalizeStageLabel(stageLabel));
   if (!stage) throw new Error(`No HubSpot stage labeled "${stageLabel}" in pipeline "${pipeline.label}" - check the two stage lists still match`);
 
   return { pipelineId: pipeline.id, stageId: stage.id };
