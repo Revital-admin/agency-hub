@@ -139,6 +139,7 @@ function renderBoard() {
   });
 
   renderSourceStats();
+  renderIndustryStats();
 }
 
 // ── Win rate by source ──
@@ -191,6 +192,43 @@ function computeSourceStats() {
       return { bucket, ...stats, resolved, winRate };
     })
     .sort((a, b) => b.total - a.total);
+}
+
+// ── Win rate by industry ──
+// Same won / (won + lost) math as the source table. Industry is free text,
+// so values are grouped case-insensitively (the first-seen spelling is shown);
+// leads without an industry fall into "Unspecified".
+function computeIndustryStats() {
+  const byIndustry = {};
+  leads.forEach(lead => {
+    const raw = (lead.industry || '').trim();
+    const key = raw ? raw.toLowerCase() : '__unspecified';
+    if (!byIndustry[key]) byIndustry[key] = { label: raw || 'Unspecified', total: 0, won: 0, lost: 0 };
+    byIndustry[key].total++;
+    if (lead.stage === WON_STAGE) byIndustry[key].won++;
+    else if (lead.stage === LOST_STAGE) byIndustry[key].lost++;
+  });
+  return Object.values(byIndustry)
+    .map(s => {
+      const resolved = s.won + s.lost;
+      return { ...s, resolved, winRate: resolved > 0 ? Math.round((s.won / resolved) * 100) : null };
+    })
+    .sort((a, b) => (a.label === 'Unspecified') - (b.label === 'Unspecified') || b.total - a.total);
+}
+
+function renderIndustryStats() {
+  const wrap = el('industryStatsBody');
+  if (!wrap) return;
+  const stats = computeIndustryStats();
+  wrap.innerHTML = stats.map(s => `
+    <tr>
+      <td class="source-cell">${escapeHtml(s.label)}</td>
+      <td>${s.total}</td>
+      <td>${s.won}</td>
+      <td>${s.lost}</td>
+      <td>${s.winRate === null ? '<span class="source-stat-pending">No closed deals yet</span>' : `${s.winRate}%`}</td>
+    </tr>
+  `).join('');
 }
 
 function renderSourceStats() {
@@ -300,6 +338,7 @@ async function syncToHubSpot(lead) {
       body: JSON.stringify({
         dealId: lead.hubspotDealId || null,
         name: lead.name,
+        industry: lead.industry || '',
         stage: lead.stage,
         contactEmail: lead.contactEmail
       })

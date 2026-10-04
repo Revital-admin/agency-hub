@@ -3545,6 +3545,25 @@ async function createHubSpotDealNote(token, dealId, source, notes) {
   }
 }
 
+async function ensureHubSpotDealIndustryProperty(token) {
+  try {
+    await fetch(`${HUBSPOT_API_BASE}/crm/v3/properties/deals`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "lead_industry",
+        label: "Industry",
+        type: "string",
+        fieldType: "text",
+        groupName: "dealinformation",
+        description: "Synced from the Hub's Sales Pipeline Board"
+      })
+    });
+  } catch (e) {
+    console.warn("Ensuring HubSpot lead_industry property failed:", e);
+  }
+}
+
 async function handlePipelineSyncHubSpot(request, env) {
   const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
   if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
@@ -3563,7 +3582,7 @@ async function handlePipelineSyncHubSpot(request, env) {
   } catch (e) {
     return jsonResponse({ error: "Invalid JSON body" }, 400);
   }
-  const { dealId, name, stage, contactEmail, source, notes, ownerEmail, clientHealth, billingStatus, onboardingStatus, objective } = payload || {};
+  const { dealId, name, industry, stage, contactEmail, source, notes, ownerEmail, clientHealth, billingStatus, onboardingStatus, objective } = payload || {};
   if (!name || !stage) return jsonResponse({ error: "name and stage are required" }, 400);
 
   try {
@@ -3601,26 +3620,48 @@ async function handlePipelineSyncHubSpot(request, env) {
     if (onboardingStatus) properties.onboarding_status = onboardingStatus;
     if (objective) properties.objective = objective;
 
+    // lead_industry: custom free-text Deal property mirroring the Hub lead's
+    // Industry field (Sales Pipeline Board). Created on demand the first time
+    // an industry is synced (409 = already exists, ignored). Fully best-effort:
+    // if the token lacks schema-write scope or the property can't be set, the
+    // deal still syncs without it (industrySynced: false in the response)
+    // rather than failing the whole stage/name sync.
+    const cleanIndustry = (industry || "").trim();
+    if (cleanIndustry) {
+      await ensureHubSpotDealIndustryProperty(token);
+      properties.lead_industry = cleanIndustry;
+    }
+
     const isNewDeal = !dealId;
-    let resolvedDealId;
-    if (dealId) {
-      const res = await fetch(`${HUBSPOT_API_BASE}/crm/v3/objects/deals/${encodeURIComponent(dealId)}`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ properties })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || `HubSpot deal update failed (${res.status})`);
-      resolvedDealId = data.id || dealId;
-    } else {
+    const writeDeal = async (props) => {
+      if (dealId) {
+        const res = await fetch(`${HUBSPOT_API_BASE}/crm/v3/objects/deals/${encodeURIComponent(dealId)}`, {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ properties: props })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || `HubSpot deal update failed (${res.status})`);
+        return data.id || dealId;
+      }
       const res = await fetch(`${HUBSPOT_API_BASE}/crm/v3/objects/deals`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ properties })
+        body: JSON.stringify({ properties: props })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || `HubSpot deal create failed (${res.status})`);
-      resolvedDealId = data.id;
+      return data.id;
+    };
+    let resolvedDealId;
+    let industrySynced = cleanIndustry ? true : undefined;
+    try {
+      resolvedDealId = await writeDeal(properties);
+    } catch (e) {
+      if (!cleanIndustry) throw e;
+      const { lead_industry, ...withoutIndustry } = properties;
+      resolvedDealId = await writeDeal(withoutIndustry);
+      industrySynced = false;
     }
 
     const contactResult = contactEmail
@@ -3638,7 +3679,8 @@ async function handlePipelineSyncHubSpot(request, env) {
       ok: true,
       dealId: resolvedDealId,
       contactLinked: contactResult ? contactResult.ok : undefined,
-      ownerMatched: ownerEmail ? !!ownerId : undefined
+      ownerMatched: ownerEmail ? !!ownerId : undefined,
+      industrySynced
     });
   } catch (e) {
     return jsonResponse({ error: `HubSpot sync failed: ${e.message}` }, 500);
