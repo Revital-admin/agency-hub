@@ -1142,20 +1142,24 @@ function renderAuditOverview() {
   // Grade cards (active client)
   const cards = document.getElementById('aoGradeCards');
   if (cards && active) {
-    const items = AO_AUDITS.map(a => ({ label: a.label, pct: aoAuditPct(active, a) }))
-      .concat(AO_COMPS.map(c => ({ label: c.label, pct: aoCompPct(active, c) })));
-    cards.innerHTML = items.map(it => {
+    // Audits are graded on checks PASSED (quality). Competitor analyses are
+    // research worksheets with no pass/fail - they only report how much is
+    // filled in, so they get no letter grade.
+    const auditCards = AO_AUDITS.map(a => ({ label: a.label, pct: aoAuditPct(active, a), graded: true }));
+    const compCards = AO_COMPS.map(c => ({ label: c.label, pct: aoCompPct(active, c), graded: false }));
+    cards.innerHTML = auditCards.concat(compCards).map(it => {
       const started = it.pct > 0;
-      const g = started ? aoGrade(it.pct) : { letter: '\u2014', cls: 'none' };
-      const color = AO_COLORS[g.cls];
+      const g = it.graded ? (started ? aoGrade(it.pct) : { letter: '\u2014', cls: 'none' }) : null;
+      const color = g ? AO_COLORS[g.cls] : (it.pct >= 100 ? AO_COLORS.success : started ? AO_COLORS.info : AO_COLORS.none);
+      const rowLabel = it.graded ? (started ? 'Checks passed' : 'Not started') : (started ? 'Filled in' : 'Not started');
       return `
         <div class="ao-grade-card" style="--c:${color}">
           <div class="ao-grade-top">
             <div><div class="ao-grade-name">${esc(it.label)}</div><div class="ao-grade-client">${esc(active.name)}</div></div>
-            <div class="ao-ring">${g.letter}</div>
+            ${g ? `<div class="ao-ring">${g.letter}</div>` : ''}
           </div>
           <div>
-            <div class="ao-grade-row"><span>${started ? 'Checks passed' : 'Not started'}</span><strong>${it.pct}%</strong></div>
+            <div class="ao-grade-row"><span>${rowLabel}</span><strong>${it.pct}%</strong></div>
             <div class="ao-bar"><span style="width:${it.pct}%"></span></div>
           </div>
         </div>`;
@@ -1190,7 +1194,7 @@ function renderAuditOverview() {
     }).join('');
   }
   const foot = document.getElementById('aoFoot');
-  if (foot) foot.textContent = 'Cards show the active workspace; activity and attention cover every client. Competitor % = analysis cells filled in.';
+  if (foot) foot.textContent = 'Cards show the active workspace; activity and attention cover every client. Letter grades reflect checks passed; competitor analyses show how much is filled in (no grade).';
 }
 
 function renderAll() {
