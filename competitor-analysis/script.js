@@ -412,22 +412,61 @@ function downloadPDF() {
       objective: focus || undefined,
     });
 
+    const C = r.colors;
+    const val = (mi, pi) => ((cellData[mi] && cellData[mi][pi]) || '').toString().trim();
+    const filledPlatforms = platforms.filter((_, pi) => METRICS.some((__, mi) => val(mi, pi)));
+
+    // ---- EXECUTIVE SUMMARY ----
+    r.newPage();
+    r.sectionHeader('Executive Summary');
+    r.paragraph('How ' + clientName + ' performed' + (dateVal ? ' - ' + dateVal : ''), { size: 10.5, italic: true, color: C.GRAY, spaceAfter: 12 });
+    if (focus) r.calloutBox('Focus This Period', focus);
+    if (wins) r.calloutBox('Key Wins', wins, C.GREEN);
+
+    // Headline numbers per platform: followers, growth, engagement (metric indexes 0, 1, 3)
+    r.paragraph('At a glance', { bold: true, size: 12, spaceAfter: 8 });
+    r.tableBlock(
+      ['Platform', 'Followers', 'New this period', 'Engagement'],
+      platforms.map((pf, pi) => [pf.name, val(0, pi) || '-', val(1, pi) || '-', val(3, pi) || '-']),
+      [r.CONTENT_W * 0.28, r.CONTENT_W * 0.24, r.CONTENT_W * 0.26, r.CONTENT_W * 0.22]
+    );
+
+    // ---- PERFORMANCE METRICS (full comparison) ----
     r.newPage();
     r.sectionHeader('Performance Metrics');
+    r.paragraph('Every tracked metric, side by side across platforms.', { size: 10.5, italic: true, color: C.GRAY, spaceAfter: 10 });
     const metricColW = r.CONTENT_W * 0.3;
     const platformColW = (r.CONTENT_W - metricColW) / Math.max(platforms.length, 1);
     r.tableBlock(
       ['Metric', ...platforms.map(p => p.name)],
       METRICS.map((m, metricIdx) => [
         m.label,
-        ...platforms.map((_, platformIdx) => (cellData[metricIdx] && cellData[metricIdx][platformIdx]) || '—'),
+        ...platforms.map((_, platformIdx) => val(metricIdx, platformIdx) || '-'),
       ]),
       [metricColW, ...platforms.map(() => platformColW)]
     );
 
-    if (wins) {
-      r.sectionHeader('Monthly Highlights');
-      r.paragraph(wins, { spaceAfter: 10 });
+    // ---- PLATFORM BREAKDOWN ----
+    if (filledPlatforms.length) {
+      r.newPage();
+      r.sectionHeader('Platform Breakdown');
+      r.paragraph('A closer look at each platform.', { size: 10.5, italic: true, color: C.GRAY, spaceAfter: 10 });
+      platforms.forEach((pf, pi) => {
+        if (!METRICS.some((_, mi) => val(mi, pi))) return;
+        r.paragraph(pf.name, { bold: true, size: 13, spaceAfter: 6 });
+        r.bulletList(METRICS
+          .map((m, mi) => val(mi, pi) ? (m.label + ': ' + val(mi, pi)) : null)
+          .filter(Boolean));
+        const top = val(5, pi);
+        if (top) r.calloutBox(pf.name + ' top performer', top);
+      });
+    }
+
+    // ---- TOP CONTENT ----
+    const topRows = platforms.map((pf, pi) => [pf.name, val(5, pi)]).filter(row => row[1]);
+    if (topRows.length) {
+      r.sectionHeader('Top Performing Content');
+      r.tableBlock(['Platform', 'Best performing post'], topRows, [r.CONTENT_W * 0.28, r.CONTENT_W * 0.72]);
     }
 
     r.save(`${clientName.replace(/\s+/g, '_')}_Monthly_Report.pdf`);

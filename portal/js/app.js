@@ -1024,25 +1024,53 @@ if (btnDownloadReportPdf) {
         objective: report.focus || undefined,
       });
 
-      if (report.wins) {
-        r.newPage();
-        r.sectionHeader('Key Wins This Month');
-        r.paragraph(report.wins, { spaceAfter: 16 });
+      const C = r.colors;
+      const val = (key, idx) => ((cellData[key] && cellData[key][idx]) || '').toString().trim();
+      const pName = (p) => p.name || 'Platform';
+
+      // ---- EXECUTIVE SUMMARY ----
+      r.newPage();
+      r.sectionHeader('Executive Summary');
+      r.paragraph('How ' + (clientName || 'your brand') + ' performed' + (report.date ? ' - ' + report.date : ''), { size: 10.5, italic: true, color: C.GRAY, spaceAfter: 12 });
+      if (report.focus) r.calloutBox('Focus This Period', report.focus);
+      if (report.wins) r.calloutBox('Key Wins This Month', report.wins, C.GREEN);
+      if (platforms.length > 0) {
+        r.paragraph('At a glance', { bold: true, size: 12, spaceAfter: 8 });
+        r.tableBlock(
+          ['Platform', 'Followers', 'New this period', 'Engagement'],
+          platforms.map((p, idx) => [pName(p), val('followers_total', idx) || '-', val('followers_new', idx) || '-', val('engagement', idx) || '-']),
+          [r.CONTENT_W * 0.28, r.CONTENT_W * 0.24, r.CONTENT_W * 0.26, r.CONTENT_W * 0.22]
+        );
       }
 
       if (platforms.length > 0) {
-        if (!report.wins) r.newPage();
+        // ---- PERFORMANCE METRICS ----
+        r.newPage();
         r.sectionHeader('Performance Metrics');
+        r.paragraph('Every tracked metric, side by side across platforms.', { size: 10.5, italic: true, color: C.GRAY, spaceAfter: 10 });
         const metricColW = r.CONTENT_W * 0.3;
         const platformColW = (r.CONTENT_W - metricColW) / platforms.length;
         r.tableBlock(
-          ['Metric', ...platforms.map(p => p.name || 'Platform')],
+          ['Metric', ...platforms.map(pName)],
           metricKeys.map((key) => [
             REPORT_METRIC_LABELS[key],
-            ...platforms.map((_, idx) => (cellData[key] && cellData[key][idx]) || '—'),
+            ...platforms.map((_, idx) => val(key, idx) || '-'),
           ]),
           [metricColW, ...platforms.map(() => platformColW)]
         );
+
+        // ---- PLATFORM BREAKDOWN ----
+        const active = platforms.map((p, idx) => ({ p, idx })).filter(x => metricKeys.some(k => val(k, x.idx)));
+        if (active.length) {
+          r.newPage();
+          r.sectionHeader('Platform Breakdown');
+          r.paragraph('A closer look at each platform.', { size: 10.5, italic: true, color: C.GRAY, spaceAfter: 10 });
+          active.forEach(({ p, idx }) => {
+            r.paragraph(pName(p), { bold: true, size: 13, spaceAfter: 6 });
+            r.bulletList(metricKeys.filter(k => val(k, idx) && k !== 'top_post').map(k => REPORT_METRIC_LABELS[k] + ': ' + val(k, idx)));
+            if (val('top_post', idx)) r.calloutBox(pName(p) + ' top performer', val('top_post', idx));
+          });
+        }
       }
 
       r.save(fileName);
