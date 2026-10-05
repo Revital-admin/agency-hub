@@ -1264,13 +1264,13 @@ function initViewToggle() {
     if (hint) {
       let name = '';
       try { const c = window.parent.getActiveClient(); name = c && c.name ? c.name : ''; } catch (e) {}
-      hint.textContent = view === 'agency' ? 'All clients' : (name ? 'Showing ' + name : 'Active workspace');
+      hint.textContent = view === 'all' ? 'Agency and client together' : view === 'agency' ? 'All clients' : (name ? 'Showing ' + name : 'Active workspace');
     }
-    try { localStorage.setItem('hub:overview-view', view); } catch (e) {}
+    try { localStorage.setItem('hub:overview-view-v2', view); } catch (e) {}
   };
   buttons.forEach(b => b.addEventListener('click', () => set(b.dataset.setView)));
-  let saved = 'agency';
-  try { saved = localStorage.getItem('hub:overview-view') === 'client' ? 'client' : 'agency'; } catch (e) {}
+  let saved = 'all';
+  try { const v = localStorage.getItem('hub:overview-view-v2'); saved = (v === 'client' || v === 'agency' || v === 'all') ? v : 'all'; } catch (e) {}
   set(saved);
   window.__setOverviewView = set; // lets renderAll refresh the hint text after a client switch
 }

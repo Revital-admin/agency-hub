@@ -6,7 +6,7 @@
   <title>Overview Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="css/style.css?v=14" />
+  <link rel="stylesheet" href="css/style.css?v=15" />
 </head>
 <body>
 
@@ -23,12 +23,13 @@
         </div>
 
                 <div class="view-toggle" role="tablist" aria-label="Dashboard view">
-          <button type="button" class="view-toggle-btn active" data-set-view="agency" role="tab">Agency Overview</button>
+          <button type="button" class="view-toggle-btn active" data-set-view="all" role="tab">Everything</button>
+          <button type="button" class="view-toggle-btn" data-set-view="agency" role="tab">Agency Overview</button>
           <button type="button" class="view-toggle-btn" data-set-view="client" role="tab">Client Overview</button>
-          <span class="view-toggle-hint" id="viewToggleHint">All clients</span>
+          <span class="view-toggle-hint" id="viewToggleHint">Agency and client together</span>
         </div>
 
-        <div class="dashboard-grid" id="dashboardGrid" data-active-view="agency">
+        <div class="dashboard-grid" id="dashboardGrid" data-active-view="all">
           <!-- Hero Active Client Stat -->
           <div class="dashboard-hero-card" data-view="client">
             <h2 id="dashHeroClientName">Loading Client...</h2>
@@ -532,6 +533,6 @@
         </div>
   </main>
 
-  <script src="js/app.js?v=12"></script>
+  <script src="js/app.js?v=13"></script>
 </body>
 </html>
