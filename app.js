@@ -2384,9 +2384,9 @@ function defaultRailSlug() {
   const activeBtn = document.querySelector(".nav-item-btn.active");
   const activeSection = activeBtn ? activeBtn.closest(".nav-section[data-section]") : null;
   if (activeSection) return activeSection.getAttribute("data-section");
-  // Overview Dashboard sits outside the sections now - open CORE's flyout
-  // alongside it so its neighbours (My Clients, Onboarding...) stay in reach.
-  if (activeBtn && activeBtn.id === "sidebarPinOverview" && document.querySelector('.nav-section[data-section="core"]')) return "core";
+  // Overview Dashboard sits outside the sections: no flyout should be open
+  // for it ("" matches no section, so setRailActiveSection closes them all).
+  if (activeBtn && activeBtn.id === "sidebarPinOverview") return "";
   const firstSection = document.querySelector(".nav-section[data-section]");
   return firstSection ? firstSection.getAttribute("data-section") : null;
 }
@@ -2414,7 +2414,7 @@ function initSidebarRailMode() {
     }
     if (isRail) {
       const slug = defaultRailSlug();
-      if (slug) setRailActiveSection(slug);
+      if (slug !== null && slug !== undefined) setRailActiveSection(slug);
     }
   }
 
@@ -2428,23 +2428,12 @@ function initSidebarRailMode() {
     });
   }
 
-  // Clicking Overview Dashboard opens the CORE group next to it: its flyout
-  // in rail mode, or expands the CORE section in list mode.
+  // Clicking Overview Dashboard closes any open category flyout (rail mode) -
+  // it's a standalone page, so no category should stay open next to it.
   const pinOverview = document.getElementById("sidebarPinOverview");
   if (pinOverview) {
     pinOverview.addEventListener("click", () => {
-      const core = document.querySelector('.nav-section[data-section="core"]');
-      if (!core) return;
-      if (sidebar.classList.contains("rail-mode")) {
-        setRailActiveSection("core");
-      } else if (core.classList.contains("collapsed")) {
-        core.classList.remove("collapsed");
-        const t = core.querySelector(".nav-section-toggle");
-        if (t) t.setAttribute("aria-expanded", "true");
-        const current = new Set(effectiveCollapsedNavSections());
-        current.delete("core");
-        saveCollapsedNavSections(Array.from(current));
-      }
+      if (sidebar.classList.contains("rail-mode")) setRailActiveSection("");
     });
   }
 
