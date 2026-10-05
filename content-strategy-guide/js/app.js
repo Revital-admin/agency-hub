@@ -439,6 +439,7 @@ function attachEvents() {
           targetValue: targetValue,
           dateVal: new Date().toLocaleDateString(),
           stats: { pct: stats.pct, doneTasks: stats.doneTasks, totalTasks: stats.totalTasks },
+          mode: 'progress',
           STEPS: STEPS,
           checked: state.checked,
           notes: state.notes,

@@ -461,6 +461,7 @@ function attachEvents() {
             { label: 'Launch Notes', text: ti.notes || '' },
             { label: 'Approvals', text: ti.approvals || '' },
           ],
+          mode: 'progress',
           STEPS: STEPS,
           checked: state.checked,
           notes: state.notes,
