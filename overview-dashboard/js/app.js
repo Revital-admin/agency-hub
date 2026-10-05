@@ -623,12 +623,18 @@ async function renderNeedsAttention() {
 
   items.sort((a, b) => b.urgency - a.urgency);
 
-  el.innerHTML = items.map(item => `
-    <div class="needs-attention-row" data-client="${escapeHtmlCore(item.name)}" data-go-tab="${escapeHtmlCore(item.goTab || 'tab-dashboard')}" style="padding:5px 0; cursor:pointer; display:flex; justify-content:space-between; gap:10px; align-items:baseline; border-bottom:1px solid var(--border-color, rgba(255,255,255,0.06));">
-      <span><strong>${escapeHtmlCore(item.name)}</strong> &middot; ${escapeHtmlCore(item.message)}</span>
-      <span style="color:var(--color-text-muted); font-size:0.72rem; white-space:nowrap;">Open &rarr;</span>
-    </div>
-  `).join("");
+  el.innerHTML = items.map(item => {
+    const color = item.urgency >= 1000 ? AO_COLORS.danger : item.urgency >= 500 ? AO_COLORS.warning : AO_COLORS.info;
+    return `
+    <div class="needs-attention-row ao-attn-item" style="--c:${color}; cursor:pointer;" data-client="${escapeHtmlCore(item.name)}" data-go-tab="${escapeHtmlCore(item.goTab || 'tab-dashboard')}">
+      <div class="ao-attn-dot"></div>
+      <div style="flex:1; min-width:0;">
+        <div class="ao-attn-title">${escapeHtmlCore(item.name)}</div>
+        <div class="ao-attn-sub">${escapeHtmlCore(item.message)}</div>
+      </div>
+      <span class="ao-attn-open">Open &rarr;</span>
+    </div>`;
+  }).join("");
 
   el.querySelectorAll(".needs-attention-row").forEach(row => {
     row.addEventListener("click", () => {
@@ -1205,21 +1211,55 @@ function renderAuditOverview() {
             <div class="ao-bar"><span style="width:${pct}%"></span></div>
           </div>
         </div>`;
-    }).join('');
+    }).join('') + (() => {
+      const words = parseInt(((document.getElementById('dashCopywritingVal') || {}).textContent || '').replace(/[^0-9]/g, ''), 10) || 0;
+      return `
+        <div class="ao-grade-card" style="--c:${words > 0 ? AO_COLORS.info : AO_COLORS.none}">
+          <div class="ao-grade-name">Copywriting Assistant</div>
+          <div>
+            <div class="ao-grade-row"><span>${words > 0 ? 'Words drafted' : 'Not started'}</span><strong>${words.toLocaleString('en-US')}</strong></div>
+            <div class="ao-bar"><span style="width:${Math.min(100, words / 10)}%"></span></div>
+          </div>
+        </div>`;
+    })();
   }
   const foot = document.getElementById('aoFoot');
   if (foot) foot.textContent = 'Cards show the active workspace; activity and attention cover every client. Audit grades = checks passed out of checks reviewed (mark failing items \u201cNeeds work\u201d); competitor analyses show how much is filled in (no grade).';
 }
 
+/* Status accents on the agency-wide cards, so they read at a glance like the
+   audit cards above: green = clear, amber/red = needs a look, gray = no data. */
+function paintAgencyCards() {
+  const card = id => { const n = document.getElementById(id); return n ? n.closest('.tool-progress-card') : null; };
+  const paint = (id, level) => {
+    const c = card(id); if (!c) return;
+    c.dataset.status = level;
+    c.style.setProperty('--c', AO_COLORS[level] || AO_COLORS.none);
+  };
+  const num = id => parseInt((document.getElementById(id) || {}).textContent, 10) || 0;
+  const rows = document.querySelectorAll('#needsAttentionList .needs-attention-row').length;
+  paint('needsAttentionList', rows > 0 ? 'danger' : 'success');
+  paint('dashPipelineValue', num('dashPipelineCount') > 0 ? 'info' : 'none');
+  paint('leadSourceRoiList', 'none');
+  paint('dashMoodBoardsAwaitingVal', num('dashMoodBoardsAwaitingVal') > 0 ? 'warning' : 'success');
+  paint('dashProductionBoardVal', num('dashProductionBoardVal') > 0 ? 'warning' : 'success');
+  paint('whosOutTodayList', 'none');
+  const health = ((document.getElementById('dashHealthVal') || {}).textContent || '').toLowerCase();
+  paint('dashHealthVal', /no check-in/.test(health) ? 'none' : /red|risk|poor/.test(health) ? 'danger' : /yellow|watch|fair/.test(health) ? 'warning' : 'success');
+}
+
 function renderAll() {
   try { renderDashboard(); } catch (e) { console.error("Error in renderDashboard:", e); }
   try { renderAuditOverview(); } catch (e) { console.error("Error in renderAuditOverview:", e); }
-  renderSalesPipelineValue().catch(e => console.error("Error in renderSalesPipelineValue:", e));
-  renderWhosOutToday().catch(e => console.error("Error in renderWhosOutToday:", e));
+  const asyncRenders = [];
+  asyncRenders.push(renderSalesPipelineValue().catch(e => console.error("Error in renderSalesPipelineValue:", e)));
+  asyncRenders.push(renderWhosOutToday().catch(e => console.error("Error in renderWhosOutToday:", e)));
   try { renderMoodBoardsAwaitingFeedback(); } catch (e) { console.error("Error in renderMoodBoardsAwaitingFeedback:", e); }
   try { renderProductionBoardAttention(); } catch (e) { console.error("Error in renderProductionBoardAttention:", e); }
-  renderNeedsAttention().catch(e => console.error("Error in renderNeedsAttention:", e));
-  renderLeadSourceRoi().catch(e => console.error("Error in renderLeadSourceRoi:", e));
+  asyncRenders.push(renderNeedsAttention().catch(e => console.error("Error in renderNeedsAttention:", e)));
+  asyncRenders.push(renderLeadSourceRoi().catch(e => console.error("Error in renderLeadSourceRoi:", e)));
+  Promise.all(asyncRenders).then(() => { try { paintAgencyCards(); } catch (e) { console.error("paintAgencyCards:", e); } });
+  try { paintAgencyCards(); } catch (e) {}
   try { applySalesPipelineCardGating(); } catch (e) { console.error("Error in applySalesPipelineCardGating:", e); }
 }
 
