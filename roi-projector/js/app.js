@@ -139,6 +139,55 @@ document.addEventListener('DOMContentLoaded', () => {
         note: 'Note: this is a planning projection based on the inputs provided, not a guaranteed outcome.',
       });
 
+      // Recompute from the raw inputs so the report can break the lift down
+      // by source (traffic vs. conversion) instead of only echoing totals.
+      const T = parseFloat(currentTrafficIn.value) || 0;
+      const cr = parseFloat(currentConvRateIn.value) || 0;
+      const aov = parseFormattedNumber(currentAOVIn.value);
+      const ti = parseFloat(projTrafficIncIn.value) || 0;
+      const ci = parseFloat(projConvIncIn.value) || 0;
+      const feeVal = parseFormattedNumber(monthlyFeeIn.value);
+      const money = n => '$' + Math.round(n).toLocaleString('en-US');
+      const baseRev = T * (cr / 100) * aov;
+      const projRev = T * (1 + ti / 100) * ((cr + ci) / 100) * aov;
+      const trafficOnly = T * (1 + ti / 100) * (cr / 100) * aov - baseRev;
+      const convOnly = T * ((cr + ci) / 100) * aov - baseRev;
+      const gross = projRev - baseRev;
+      const interaction = gross - trafficOnly - convOnly;
+      const net = gross - feeVal;
+      const roiPct = feeVal > 0 ? (net / feeVal) * 100 : 0;
+      const breakEvenPct = baseRev > 0 ? (feeVal / baseRev) * 100 : 0;
+
+      // ---- EXECUTIVE OVERVIEW ----
+      r.newPage();
+      r.sectionHeader('Executive Overview');
+      r.paragraph('What this engagement could be worth to ' + cName, { size: 10.5, italic: true, color: C.GRAY, spaceAfter: 12 });
+      r.calloutBox('Projected Net Return',
+        `A +${ti}% traffic lift and +${ci.toFixed(1)}pt conversion improvement adds about ${money(gross)} in monthly revenue. After the ${money(feeVal)} monthly fee, that is ${net >= 0 ? 'a net gain of ' : 'a net shortfall of '}${money(Math.abs(net))} per month (${Math.round(roiPct).toLocaleString('en-US')}% ROI).`,
+        net >= 0 ? C.GREEN : C.RED);
+      r.paragraph('Headline numbers', { bold: true, size: 10.5, spaceAfter: 6 });
+      r.tableBlock(['Measure', 'Per month', 'Per year'], [
+        ['Gross revenue lift', money(gross), money(gross * 12)],
+        ['Service fee', money(feeVal), money(feeVal * 12)],
+        ['Net return', money(net), money(net * 12)],
+      ], [r.CONTENT_W * 0.4, r.CONTENT_W * 0.3, r.CONTENT_W * 0.3]);
+
+      // ---- INPUTS & ASSUMPTIONS ----
+      r.sectionHeader('Inputs & Assumptions');
+      r.paragraph('Everything below was entered for ' + cName + '. Change an input and the whole projection moves with it.', { size: 10.5, italic: true, color: C.GRAY, spaceAfter: 10 });
+      r.tableBlock(['Baseline today', 'Value'], [
+        ['Monthly website traffic', Math.round(T).toLocaleString('en-US')],
+        ['Conversion rate', cr.toFixed(1) + '%'],
+        ['Average order value', money(aov)],
+        ['Current monthly revenue', money(baseRev)],
+      ], [r.CONTENT_W * 0.6, r.CONTENT_W * 0.4]);
+      r.tableBlock(['Projected improvement', 'Value'], [
+        ['Traffic lift', '+' + ti + '%'],
+        ['Conversion rate improvement', '+' + ci.toFixed(1) + ' percentage points'],
+        ['Average order value', 'Held flat at ' + money(aov)],
+      ], [r.CONTENT_W * 0.6, r.CONTENT_W * 0.4]);
+
+      // ---- CURRENT VS PROJECTED ----
       r.newPage();
       r.sectionHeader('Current vs. Projected Performance');
       r.tableBlock(
@@ -152,17 +201,32 @@ document.addEventListener('DOMContentLoaded', () => {
         [r.CONTENT_W * 0.4, r.CONTENT_W * 0.3, r.CONTENT_W * 0.3]
       );
 
-      r.paragraph('Return on Investment', { bold: true, size: 10.5, spaceAfter: 6 });
-      r.tableBlock(
-        ['Line Item', 'Value'],
-        [
-          ['Gross Monthly Revenue Lift', outGrossLift.innerText],
-          ['Monthly Service Fee', outFee.innerText],
-          ['Net ROI', outNetROI.innerText],
-        ],
-        [r.CONTENT_W * 0.6, r.CONTENT_W * 0.4]
-      );
-      r.calloutBox('Bottom Line', `At these inputs, ${cName} is projected to see a net ROI of ${outNetROI.innerText} on the monthly fee of ${outFee.innerText.replace('-', '')}.`);
+      r.paragraph('Where the lift comes from', { bold: true, size: 12, spaceAfter: 8 });
+      r.tableBlock(['Source', 'Monthly revenue added', 'Share of lift'], [
+        ['More traffic (same conversion)', money(trafficOnly), gross > 0 ? Math.round(trafficOnly / gross * 100) + '%' : '-'],
+        ['Better conversion (same traffic)', money(convOnly), gross > 0 ? Math.round(convOnly / gross * 100) + '%' : '-'],
+        ['Compounding of both', money(interaction), gross > 0 ? Math.round(interaction / gross * 100) + '%' : '-'],
+        ['Total', money(gross), '100%'],
+      ], [r.CONTENT_W * 0.5, r.CONTENT_W * 0.3, r.CONTENT_W * 0.2]);
+      r.paragraph('Traffic and conversion gains multiply, so improving both together is worth more than the sum of each alone.', { italic: true, size: 9, color: C.GRAY });
+
+      // ---- RETURN ON INVESTMENT ----
+      r.paragraph('Return on Investment', { bold: true, size: 12, spaceAfter: 8 });
+      r.tableBlock(['Line item', 'Value'], [
+        ['Gross monthly revenue lift', money(gross)],
+        ['Monthly service fee', money(feeVal)],
+        ['Net monthly return', money(net)],
+        ['ROI', Math.round(roiPct).toLocaleString('en-US') + '%'],
+        ['Revenue lift needed just to cover the fee', money(feeVal) + ' (' + breakEvenPct.toFixed(1) + '% of current revenue)'],
+      ], [r.CONTENT_W * 0.55, r.CONTENT_W * 0.45]);
+
+      // ---- BOTTOM LINE ----
+      r.sectionHeader('Bottom Line');
+      r.calloutBox('What this means',
+        net >= 0
+          ? `The engagement pays for itself if revenue grows by just ${breakEvenPct.toFixed(1)}%. The projection assumes ${(gross / (baseRev || 1) * 100).toFixed(0)}% growth, so there is room for results to come in well under plan and still clear the fee.`
+          : `At these inputs the fee is higher than the projected lift. Either the improvement targets need to be more ambitious or the engagement needs to be scoped differently before it makes financial sense.`);
+      r.paragraph('This is a planning projection from the inputs above, not a guaranteed outcome. Results depend on execution, seasonality and market conditions.', { italic: true, size: 8.5, color: C.GRAY, spaceAfter: 0 });
 
       r.save(`ROI_Projection_${cName.replace(/\s+/g, '_')}.pdf`);
     } catch (err) {

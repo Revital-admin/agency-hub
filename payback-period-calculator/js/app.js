@@ -131,6 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       const r = RevitalPDF.create({ reportTitle: 'PAYBACK PERIOD CALCULATOR', companyName: cName });
+      const C = r.colors;
 
       r.coverPage({
         title: 'Payback Period Analysis',
@@ -140,15 +141,59 @@ document.addEventListener('DOMContentLoaded', () => {
         note: 'Note: this is a planning projection based on the inputs provided, not a guaranteed outcome.',
       });
 
-      r.newPage();
-      r.sectionHeader('Payback Summary');
-      r.calloutBox('Payback Period', `${el('outPayback').innerText} — total invested by that point: ${el('outTotalInvested').innerText}.`);
+      // Rebuild the same model the on-screen calculator uses so the report
+      // can show year-one totals and ROI, not just the payback figure.
+      const money = n => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('en-US');
+      const setupC = Math.max(0, parseFormattedNumber(setupCostIn.value));
+      const feeC = Math.max(0, parseFormattedNumber(monthlyFeeIn.value));
+      const fullV = Math.max(0, parseFormattedNumber(monthlyValueIn.value));
+      const rampM = Math.max(0, parseInt(rampMonthsIn.value) || 0);
+      let valueY1 = 0, cumY1 = -setupC, breakEvenRow = null;
+      for (let m = 1; m <= 12; m++) {
+        const v = fullV * (rampM <= 0 ? 1 : Math.min(1, m / rampM));
+        valueY1 += v;
+        const prev = cumY1; cumY1 += v - feeC;
+        if (breakEvenRow === null && prev < 0 && cumY1 >= 0) breakEvenRow = m;
+      }
+      const spendY1 = setupC + feeC * 12;
+      const roiY1 = spendY1 > 0 ? ((valueY1 - spendY1) / spendY1) * 100 : 0;
+      const paybackText = el('outPayback').innerText;
+      const noPayback = paybackText === 'No payback';
 
+      // ---- EXECUTIVE OVERVIEW ----
+      r.newPage();
+      r.sectionHeader('Executive Overview');
+      r.paragraph('How quickly ' + cName + ' gets its money back', { size: 10.5, italic: true, color: C.GRAY, spaceAfter: 12 });
+      r.calloutBox('Payback Period', noPayback
+        ? 'At these inputs the monthly value never exceeds the monthly fee, so the investment is not recovered.'
+        : `${paybackText} - total invested by that point: ${el('outTotalInvested').innerText}.`,
+        noPayback ? C.RED : C.GREEN);
+      r.paragraph('Year-one at a glance', { bold: true, size: 10.5, spaceAfter: 6 });
+      r.tableBlock(['Measure', 'Value'], [
+        ['Total invested in year one (setup + 12 months of fees)', money(spendY1)],
+        ['Value delivered in year one', money(valueY1)],
+        ['Net position after 12 months', money(cumY1)],
+        ['Year-one return on investment', Math.round(roiY1).toLocaleString('en-US') + '%'],
+      ], [r.CONTENT_W * 0.65, r.CONTENT_W * 0.35]);
+
+      // ---- INPUTS & ASSUMPTIONS ----
+      r.sectionHeader('Inputs & Assumptions');
+      r.tableBlock(['Input', 'Value'], [
+        ['One-time setup cost', money(setupC)],
+        ['Monthly fee', money(feeC)],
+        ['Monthly value at full run-rate', money(fullV)],
+        ['Time to reach full value', el('outRampLabel').innerText],
+      ], [r.CONTENT_W * 0.6, r.CONTENT_W * 0.4]);
+      r.paragraph('Setup cost is treated as spent before month one. The fee is charged every month, including while results are still ramping up, which is the honest picture of payback.', { italic: true, size: 9, color: C.GRAY });
+
+      // ---- CASH FLOW ----
+      r.newPage();
+      r.sectionHeader('Month-by-Month Cash Flow');
       const rows = Array.from(document.querySelectorAll('#cashFlowTableBody tr')).map(tr =>
         Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim())
       );
       if (rows.length && rows[0].length === 5) {
-        r.paragraph('Month-by-month cash flow (first 12 months)', { bold: true, size: 10.5, spaceAfter: 6 });
+        r.paragraph('First 12 months', { bold: true, size: 10.5, spaceAfter: 6 });
         r.tableBlock(
           ['Month', 'Value', 'Fee', 'Net', 'Cumulative'],
           rows,
@@ -157,6 +202,13 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         r.paragraph(rows.length ? rows[0].join(' ') : 'No cash-flow data available at these inputs.', { italic: true });
       }
+
+      // ---- BOTTOM LINE ----
+      r.sectionHeader('Bottom Line');
+      r.calloutBox('What this means', noPayback
+        ? 'Raise the expected monthly value, lower the fee, or shorten the ramp before presenting this - as modelled, the engagement does not pay back.'
+        : `By month ${breakEvenRow || 12} the engagement has recovered its costs, and after 12 months ${cName} is ${cumY1 >= 0 ? 'ahead by ' + money(cumY1) : 'still ' + money(Math.abs(cumY1)) + ' short of break-even'}. ${rampM > 0 ? 'A slower ramp pushes payback later - the ramp assumption is the number to pressure-test first.' : ''}`);
+      r.paragraph('This is a planning projection based on the inputs provided, not a guaranteed outcome.', { italic: true, size: 8.5, color: C.GRAY, spaceAfter: 0 });
 
       r.save(`Payback_Period_${cName.replace(/\s+/g, '_')}.pdf`);
     } catch (err) {

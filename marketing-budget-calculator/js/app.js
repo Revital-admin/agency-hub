@@ -137,8 +137,28 @@ document.addEventListener('DOMContentLoaded', () => {
         note: 'Note: these are directional planning figures based on published industry benchmark surveys, not a guarantee of performance.',
       });
 
+      const money = n => '$' + Math.round(n).toLocaleString('en-US');
+      const revenueV = Math.max(0, parseFormattedNumber(annualRevenueIn.value));
+      const indV = INDUSTRY_BENCHMARKS[industryIn.value] || INDUSTRY_BENCHMARKS.other;
+      const stageV = STAGE_MULTIPLIERS[growthStageIn.value] || STAGE_MULTIPLIERS.steady;
+      const rawPct = indV.pct * stageV.mult;
+      const recPctV = Math.min(30, Math.max(2, rawPct));
+      const annualV = revenueV * (recPctV / 100);
+      const CHANNEL_ROLES = {
+        chPaidMedia: 'Buys reach and conversions fast; the most directly measurable line.',
+        chCreative: 'Funds the ads, posts and assets every other channel runs on.',
+        chSeo: 'Compounds over time and lowers cost per customer in the long run.',
+        chEmail: 'Retains and re-sells to people who already know the brand.',
+        chTools: 'Software for analytics, automation and reporting.',
+        chContingency: 'Held back to test new channels or react to what is working.',
+      };
+
+      // ---- EXECUTIVE OVERVIEW ----
       r.newPage();
-      r.sectionHeader('Recommended Budget');
+      r.sectionHeader('Executive Overview');
+      r.paragraph('What ' + cName + ' should plan to invest in marketing', { size: 10.5, italic: true, color: r.colors.GRAY, spaceAfter: 12 });
+      r.calloutBox('Recommended Budget',
+        `${money(annualV)} per year (${money(annualV / 12)} per month), or ${recPctV.toFixed(1)}% of ${money(revenueV)} annual revenue. A reasonable range is ${el('outRange').innerText}.`);
       r.tableBlock(
         ['Metric', 'Value'],
         [
@@ -149,20 +169,38 @@ document.addEventListener('DOMContentLoaded', () => {
         ],
         [r.CONTENT_W * 0.6, r.CONTENT_W * 0.4]
       );
-      r.calloutBox('Benchmark Note', el('industryBenchmarkNote').innerText);
 
+      // ---- HOW THE NUMBER WAS BUILT ----
+      r.sectionHeader('How the Number Was Built');
+      r.tableBlock(['Step', 'Value'], [
+        ['Annual revenue', money(revenueV)],
+        ['Industry benchmark (' + indV.label + ')', indV.pct.toFixed(1) + '% of revenue'],
+        ['Growth stage adjustment (' + stageV.label + ')', 'x' + stageV.mult.toFixed(2)],
+        ['Recommended share of revenue', recPctV.toFixed(1) + '%' + (rawPct !== recPctV ? ' (capped to a 2-30% planning range)' : '')],
+      ], [r.CONTENT_W * 0.6, r.CONTENT_W * 0.4]);
+      r.calloutBox('Benchmark Note', el('industryBenchmarkNote').innerText + ' The growth-stage multiplier moves spend up for launches and aggressive growth, and down for mature accounts defending share.');
+
+      // ---- CHANNEL SPLIT ----
+      r.newPage();
+      r.sectionHeader('Recommended Channel Split');
       const rows = Array.from(document.querySelectorAll('#channelTableBody tr')).map(tr =>
         Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim())
       );
       if (rows.length) {
-        r.paragraph('Recommended Channel Split', { bold: true, size: 10.5, spaceAfter: 6 });
         r.tableBlock(
           ['Channel', '% of Budget', 'Monthly', 'Annual'],
           rows,
           [r.CONTENT_W * 0.4, r.CONTENT_W * 0.18, r.CONTENT_W * 0.21, r.CONTENT_W * 0.21]
         );
         r.paragraph(el('channelTotalNote').innerText, { italic: true, size: 8.5, color: r.colors.GRAY });
+        r.paragraph('What each line does', { bold: true, size: 12, spaceAfter: 8 });
+        r.bulletList(CHANNEL_FIELDS.map(ch => ch.label + ' - ' + CHANNEL_ROLES[ch.id]));
       }
+
+      // ---- BOTTOM LINE ----
+      r.sectionHeader('Bottom Line');
+      r.calloutBox('What this means', `Planning around ${money(annualV / 12)} a month puts ${cName} in line with published benchmark spend for ${indV.label.toLowerCase()} at the ${stageV.label.toLowerCase()} stage. Treat the split above as a starting point and shift budget toward whichever channels prove they pay back.`);
+      r.paragraph('These are directional planning figures based on published industry benchmark surveys, not a guarantee of performance.', { italic: true, size: 8.5, color: r.colors.GRAY, spaceAfter: 0 });
 
       r.save(`Marketing_Budget_${cName.replace(/\s+/g, '_')}.pdf`);
     } catch (err) {
