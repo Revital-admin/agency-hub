@@ -6,7 +6,7 @@
   <title>Overview Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="css/style.css?v=13" />
+  <link rel="stylesheet" href="css/style.css?v=14" />
 </head>
 <body>
 
@@ -22,9 +22,15 @@
           <p class="site-subtitle">Standardized onboarding checklists, audits, competitor list comparison sheets, and monthly reporting profiles.</p>
         </div>
 
-        <div class="dashboard-grid">
+                <div class="view-toggle" role="tablist" aria-label="Dashboard view">
+          <button type="button" class="view-toggle-btn active" data-set-view="agency" role="tab">Agency Overview</button>
+          <button type="button" class="view-toggle-btn" data-set-view="client" role="tab">Client Overview</button>
+          <span class="view-toggle-hint" id="viewToggleHint">All clients</span>
+        </div>
+
+        <div class="dashboard-grid" id="dashboardGrid" data-active-view="agency">
           <!-- Hero Active Client Stat -->
-          <div class="dashboard-hero-card">
+          <div class="dashboard-hero-card" data-view="client">
             <h2 id="dashHeroClientName">Loading Client...</h2>
             <p>Active profile containing onboarding phases, digital audits, and competitor grids. Switch workspaces in the left dropdown menu to change profiles.</p>
             <div class="client-info-pills">
@@ -52,40 +58,46 @@
 
           <!-- Activity Feed -->
 
-          <!-- Audits & Competitor Analysis Overview: activity strip +
-               priority list (agency-wide, all clients) + one grade card
-               per audit / competitor tool for the active client. See
-               renderAuditOverview in app.js. -->
-          <section class="audit-overview" id="auditOverview">
+          <h3 class="dashboard-section-title" data-view="client">Account Health</h3>
+          <!-- Client Health (from Weekly Account Check-In) -->
+          <div class="tool-progress-card" data-view="client">
+            <div class="tool-card-header">
+              <span class="tool-card-title">Client Health</span>
+              <div class="tool-card-icon-wrap icon-purple">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+              </div>
+            </div>
+            <div class="tool-card-stat">
+              <div id="dashHealthVal" class="tool-stat-value">No check-in yet</div>
+              <div id="dashHealthDesc" class="tool-stat-desc">Run a Weekly Account Check-In to populate this</div>
+            </div>
+            <div class="progress-bar-container">
+              <div class="progress-fill" style="width: 0%;" id="dashHealthProgress"></div>
+            </div>
+            <div class="tool-card-actions">
+              <button class="btn-card-go" data-go="tab-weeklycheckin">Go to Weekly Check-In &rarr;</button>
+            </div>
+          </div>
+
+          <!-- Client view: grade cards + tool progress for the active workspace -->
+          <section class="audit-overview" data-view="client" id="auditOverview">
             <div class="ao-head">
               <h3 class="dashboard-section-title ao-section-title">Audits &amp; Competitor Analysis</h3>
               <div class="ao-legend">Audit grade = checks passed out of checks reviewed (quality), not how much is done &middot; Competitor analyses and tool cards show progress only</div>
             </div>
-
-            <div class="ao-card ao-activity">
-              <div class="ao-card-label">Recent audit activity</div>
-              <div class="ao-timeline" id="aoTimeline"></div>
-            </div>
-
-            <div class="ao-main">
-              <div class="ao-card ao-attention">
-                <div class="ao-card-label">Needs attention &mdash; priority order</div>
-                <div id="aoAttentionList"></div>
-              </div>
-              <div class="ao-cards" id="aoGradeCards"></div>
-            </div>
+            <div class="ao-cards" id="aoGradeCards"></div>
             <div class="ao-card-label ao-sub-label">Tool progress &mdash; active workspace</div>
             <div class="ao-cards ao-progress-cards" id="aoToolProgress"></div>
             <p class="ao-foot" id="aoFoot"></p>
           </section>
 
-          <h3 class="dashboard-section-title">Agency-Wide</h3>
+          <h3 class="dashboard-section-title" data-view="agency">Agency-Wide</h3>
           <!-- Needs Attention: consolidates three signals that already
                exist as separate mechanisms elsewhere (stale-portal nudge,
                upcoming-renewal nudge, mood boards awaiting feedback) into
                one glanceable list instead of three places to check. See
                renderNeedsAttention in app.js. -->
-          <div class="tool-progress-card">
+          <div class="tool-progress-card" data-view="agency">
             <div class="tool-card-header">
               <span class="tool-card-title">Needs Attention</span>
               <div class="tool-card-icon-wrap icon-purple">
@@ -100,7 +112,7 @@
                sums Proposal Calculator's computedMonthly across every
                client that isn't yet a signed contract in Contract &
                Invoice Tracker. See renderSalesPipelineValue in app.js. -->
-          <div class="tool-progress-card">
+          <div class="tool-progress-card" data-view="agency">
             <div class="tool-card-header">
               <span class="tool-card-title">Sales Pipeline Value</span>
               <div class="tool-card-icon-wrap icon-purple">
@@ -122,7 +134,7 @@
                which lead sources actually turn into revenue - closes the
                loop those two tools never connected before. See
                renderLeadSourceRoi in app.js. -->
-          <div class="tool-progress-card">
+          <div class="tool-progress-card" data-view="agency">
             <div class="tool-card-header">
               <span class="tool-card-title">Lead Source ROI</span>
               <div class="tool-card-icon-wrap icon-purple">
@@ -140,7 +152,7 @@
                across every client with no entry yet in
                client.moodBoardStyleFeedback. See
                renderMoodBoardsAwaitingFeedback in app.js. -->
-          <div class="tool-progress-card">
+          <div class="tool-progress-card" data-view="agency">
             <div class="tool-card-header">
               <span class="tool-card-title">Mood Boards Awaiting Feedback</span>
               <div class="tool-card-icon-wrap icon-purple">
@@ -162,7 +174,7 @@
                targetDate) or stuck (no activity in
                PRODUCTION_BOARD_STUCK_DAYS_THRESHOLD+ days). See
                renderProductionBoardAttention in app.js. -->
-          <div class="tool-progress-card">
+          <div class="tool-progress-card" data-view="agency">
             <div class="tool-card-header">
               <span class="tool-card-title">Production Board</span>
               <div class="tool-card-icon-wrap icon-purple">
@@ -184,7 +196,7 @@
                people actually look each morning instead of requiring a
                click into Team Roster to check. See renderWhosOutToday
                in app.js. -->
-          <div class="tool-progress-card">
+          <div class="tool-progress-card" data-view="agency">
             <div class="tool-card-header">
               <span class="tool-card-title">Who's Out Today</span>
               <div class="tool-card-icon-wrap icon-purple">
@@ -197,26 +209,18 @@
             </div>
           </div>
 
-          <h3 class="dashboard-section-title">Account Health</h3>
-          <!-- Client Health (from Weekly Account Check-In) -->
-          <div class="tool-progress-card">
-            <div class="tool-card-header">
-              <span class="tool-card-title">Client Health</span>
-              <div class="tool-card-icon-wrap icon-purple">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
-              </div>
+          <!-- Agency view: audit activity + priority list across every client -->
+          <section class="audit-overview" data-view="agency" id="auditOverviewAgency">
+            <h3 class="dashboard-section-title ao-section-title">Audit Activity &amp; Priorities</h3>
+            <div class="ao-card ao-activity">
+              <div class="ao-card-label">Recent audit activity</div>
+              <div class="ao-timeline" id="aoTimeline"></div>
             </div>
-            <div class="tool-card-stat">
-              <div id="dashHealthVal" class="tool-stat-value">No check-in yet</div>
-              <div id="dashHealthDesc" class="tool-stat-desc">Run a Weekly Account Check-In to populate this</div>
+            <div class="ao-card ao-attention">
+              <div class="ao-card-label">Needs attention &mdash; priority order</div>
+              <div id="aoAttentionList"></div>
             </div>
-            <div class="progress-bar-container">
-              <div class="progress-fill" style="width: 0%;" id="dashHealthProgress"></div>
-            </div>
-            <div class="tool-card-actions">
-              <button class="btn-card-go" data-go="tab-weeklycheckin">Go to Weekly Check-In &rarr;</button>
-            </div>
-          </div>
+          </section>
 
           <h3 class="dashboard-section-title ao-legacy">Core Setup</h3>
           <!-- Onboarding Progress -->
@@ -528,6 +532,6 @@
         </div>
   </main>
 
-  <script src="js/app.js?v=10"></script>
+  <script src="js/app.js?v=12"></script>
 </body>
 </html>

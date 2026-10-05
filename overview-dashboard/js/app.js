@@ -1248,6 +1248,33 @@ function paintAgencyCards() {
   paint('dashHealthVal', /no check-in/.test(health) ? 'none' : /red|risk|poor/.test(health) ? 'danger' : /yellow|watch|fair/.test(health) ? 'warning' : 'success');
 }
 
+/* ── Agency / Client view toggle ──
+   Agency view = everything that spans all clients (pipeline, production,
+   who's out, needs attention, audit activity). Client view = the active
+   workspace only (client header, Client Health, audit grades, tool progress).
+   The choice is remembered per browser. ── */
+function initViewToggle() {
+  const grid = document.getElementById('dashboardGrid');
+  const buttons = document.querySelectorAll('.view-toggle-btn');
+  const hint = document.getElementById('viewToggleHint');
+  if (!grid || !buttons.length) return;
+  const set = (view) => {
+    grid.dataset.activeView = view;
+    buttons.forEach(b => b.classList.toggle('active', b.dataset.setView === view));
+    if (hint) {
+      let name = '';
+      try { const c = window.parent.getActiveClient(); name = c && c.name ? c.name : ''; } catch (e) {}
+      hint.textContent = view === 'agency' ? 'All clients' : (name ? 'Showing ' + name : 'Active workspace');
+    }
+    try { localStorage.setItem('hub:overview-view', view); } catch (e) {}
+  };
+  buttons.forEach(b => b.addEventListener('click', () => set(b.dataset.setView)));
+  let saved = 'agency';
+  try { saved = localStorage.getItem('hub:overview-view') === 'client' ? 'client' : 'agency'; } catch (e) {}
+  set(saved);
+  window.__setOverviewView = set; // lets renderAll refresh the hint text after a client switch
+}
+
 function renderAll() {
   try { renderDashboard(); } catch (e) { console.error("Error in renderDashboard:", e); }
   try { renderAuditOverview(); } catch (e) { console.error("Error in renderAuditOverview:", e); }
@@ -1258,6 +1285,7 @@ function renderAll() {
   try { renderProductionBoardAttention(); } catch (e) { console.error("Error in renderProductionBoardAttention:", e); }
   asyncRenders.push(renderNeedsAttention().catch(e => console.error("Error in renderNeedsAttention:", e)));
   asyncRenders.push(renderLeadSourceRoi().catch(e => console.error("Error in renderLeadSourceRoi:", e)));
+  try { const g = document.getElementById('dashboardGrid'); if (g && window.__setOverviewView) window.__setOverviewView(g.dataset.activeView); } catch (e) {}
   Promise.all(asyncRenders).then(() => { try { paintAgencyCards(); } catch (e) { console.error("paintAgencyCards:", e); } });
   try { paintAgencyCards(); } catch (e) {}
   try { applySalesPipelineCardGating(); } catch (e) { console.error("Error in applySalesPipelineCardGating:", e); }
@@ -1395,5 +1423,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initQuickLinks();
   setupRefreshListener();
   applySalesPipelineCardGating();
+  initViewToggle();
   renderAll();
 });
