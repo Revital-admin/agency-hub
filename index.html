@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Revital Hub</title>
-  <link rel="stylesheet" href="style.css?v=24">
+  <link rel="stylesheet" href="style.css?v=25">
   <!-- Firebase SDK Compat, config, central references, and the app
        controller - all `defer`red (perf fix, Aug 2026). These used to
        load synchronously with no defer/async, which meant the browser
@@ -40,7 +40,7 @@
        the time app.js's own init runs. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
   <script src="shared/pdf-report.js?v=2" defer></script>
-  <script src="app.js?v=179" defer></script>
+  <script src="app.js?v=180" defer></script>
 
 </head>
 <body>
@@ -224,12 +224,14 @@
       <div class="sidebar-mode-toggle-row">
         <button id="sidebarModeToggle" class="sidebar-mode-toggle" type="button" title="Switch to list view" aria-label="Switch to list view"></button>
       </div>
-      <!-- Pinned: Overview Dashboard is the page you land on, but it lives inside
-           the CORE section, which in rail mode is hidden behind a flyout. This
-           button sits outside the sections so it is always one click away in
-           both rail and list mode (see initSidebarPinnedOverview in app.js). -->
+      <!-- Overview Dashboard: the page you land on. It is the ONLY nav entry for
+           the dashboard (it used to sit inside CORE, hidden behind the rail
+           flyout) - it is a normal .nav-item-btn so all tab navigation, restore
+           and command-palette code works unchanged, just outside any section
+           so it's always visible. Team Access still gates it with 'core'
+           (see applyTeamAccessRestrictions). -->
       <div class="sidebar-pin-row">
-        <button id="sidebarPinOverview" class="sidebar-pin-btn" type="button" data-tooltip="OVERVIEW DASHBOARD" aria-label="Overview Dashboard">
+        <button id="sidebarPinOverview" class="nav-item-btn sidebar-pin-btn active" type="button" data-tab="tab-dashboard" data-tooltip="OVERVIEW DASHBOARD" aria-label="Overview Dashboard">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
           <span>Overview Dashboard</span>
         </button>
@@ -355,12 +357,6 @@
               <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
             <ul class="nav-section-items">
-          <li>
-            <button class="nav-item-btn active" data-tab="tab-dashboard">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
-              <span>Overview Dashboard</span>
-            </button>
-          </li>
           <li>
             <button class="nav-item-btn" data-tab="tab-myclients">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>

@@ -925,6 +925,15 @@ function applyTeamAccessRestrictions(allowedSections) {
   const navSections = document.querySelectorAll('.nav-section[data-section]');
   let activeItemHidden = false;
 
+  // The Overview Dashboard button now lives outside the sections (pinned at
+  // the top of the sidebar) but is still part of the 'core' grant.
+  const dashPinBtn = document.getElementById('sidebarPinOverview');
+  if (dashPinBtn) {
+    const coreAllowed = !allowedSections || allowedSections.indexOf('core') !== -1;
+    dashPinBtn.style.display = coreAllowed ? '' : 'none';
+    if (!coreAllowed && dashPinBtn.classList.contains('active')) activeItemHidden = true;
+  }
+
   navSections.forEach(sectionEl => {
     const key = sectionEl.getAttribute('data-section');
     const allowed = !allowedSections || allowedSections.indexOf(key) !== -1;
@@ -1109,7 +1118,6 @@ function boot() {
   try { initTabNavigation(); } catch(e) { console.error("TabNav Error:", e); }
   try { initNavSectionToggles(); } catch(e) { console.error("NavSectionToggles Error:", e); }
   try { initSidebarRailMode(); } catch(e) { console.error("SidebarRailMode Error:", e); }
-  try { initSidebarPinnedOverview(); } catch(e) { console.error("SidebarPinnedOverview Error:", e); }
   try { initSidebarFooterToggle(); } catch(e) { console.error("SidebarFooterToggle Error:", e); }
   try { initMobileNavigation(); } catch(e) { console.error("MobileNav Error:", e); }
   try { initParentEventListeners(); } catch(e) { console.error("ParentListeners Error:", e); }
@@ -2382,20 +2390,6 @@ function defaultRailSlug() {
 
 const SIDEBAR_LIST_ICON_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>';
 const SIDEBAR_RAIL_ICON_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="18" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg>';
-
-// Pinned "Overview Dashboard" button above the sidebar sections - always
-// visible in rail and list mode. Navigates via the same nav-item-btn click
-// every other path uses (navigateToTab), and mirrors the dashboard tab's
-// active state so it lights up whenever the dashboard is showing.
-function initSidebarPinnedOverview() {
-  const pin = document.getElementById("sidebarPinOverview");
-  const section = document.getElementById("tab-dashboard");
-  if (!pin || !section) return;
-  pin.addEventListener("click", () => navigateToTab("tab-dashboard"));
-  const sync = () => pin.classList.toggle("active", section.classList.contains("active"));
-  new MutationObserver(sync).observe(section, { attributes: true, attributeFilter: ["class"] });
-  sync();
-}
 
 function initSidebarRailMode() {
   const sidebar = document.getElementById("sidebar");

@@ -3966,3 +3966,8 @@ textarea {
   opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--transition-fast); z-index: 20;
 }
 .sidebar.rail-mode .sidebar-pin-btn:hover::after { opacity: 1; visibility: visible; transition-delay: 0.15s; }
+
+/* Pinned button is now the real nav button - keep its own look over .nav-item-btn defaults */
+.sidebar-pin-btn.nav-item-btn { border: 1px solid rgba(246, 141, 95, 0.25); border-radius: var(--radius-md); }
+.sidebar-pin-btn.nav-item-btn.active { background: var(--primary); border: 1px solid var(--primary); border-radius: var(--radius-md); color: #1a1208; }
+.sidebar-pin-btn.nav-item-btn.active svg { color: #1a1208; }
