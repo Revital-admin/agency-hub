@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Revital Hub</title>
-  <link rel="stylesheet" href="style.css?v=23">
+  <link rel="stylesheet" href="style.css?v=24">
   <!-- Firebase SDK Compat, config, central references, and the app
        controller - all `defer`red (perf fix, Aug 2026). These used to
        load synchronously with no defer/async, which meant the browser
@@ -40,7 +40,7 @@
        the time app.js's own init runs. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
   <script src="shared/pdf-report.js?v=2" defer></script>
-  <script src="app.js?v=178" defer></script>
+  <script src="app.js?v=179" defer></script>
 
 </head>
 <body>
@@ -223,6 +223,16 @@
            client, so a second search box was redundant clutter.) -->
       <div class="sidebar-mode-toggle-row">
         <button id="sidebarModeToggle" class="sidebar-mode-toggle" type="button" title="Switch to list view" aria-label="Switch to list view"></button>
+      </div>
+      <!-- Pinned: Overview Dashboard is the page you land on, but it lives inside
+           the CORE section, which in rail mode is hidden behind a flyout. This
+           button sits outside the sections so it is always one click away in
+           both rail and list mode (see initSidebarPinnedOverview in app.js). -->
+      <div class="sidebar-pin-row">
+        <button id="sidebarPinOverview" class="sidebar-pin-btn" type="button" data-tooltip="OVERVIEW DASHBOARD" aria-label="Overview Dashboard">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+          <span>Overview Dashboard</span>
+        </button>
       </div>
       <nav class="sidebar-nav">
         <ul class="nav-menu">
