@@ -460,3 +460,33 @@ input, select, textarea { max-width: 100%; }
 .dashboard-grid[data-active-view="all"] [data-view="client"] { order: 2; }
 .dashboard-grid[data-active-view="all"] [data-view="agency"].audit-overview,
 .dashboard-grid[data-active-view="all"] [data-view="client"].audit-overview { grid-column: 1 / -1; }
+
+/* ── Mobile (Oct 2026) ── */
+@media (max-width: 768px) {
+  .container { padding: 16px 12px; }
+  .site-title { font-size: clamp(1.7rem, 8vw, 2.4rem); }
+  .site-subtitle { font-size: 0.9rem; }
+  .view-toggle { flex-wrap: wrap; gap: 6px; }
+  .view-toggle-btn { padding: 9px 14px; font-size: 0.8rem; flex: 1 1 auto; text-align: center; }
+  .view-toggle-hint { flex: 1 0 100%; margin: 4px 0 0; }
+  .dashboard-hero-card { padding: 18px; }
+  .dashboard-hero-card h2 { font-size: 1.5rem; }
+  .client-info-pills { flex-direction: column; align-items: stretch; gap: 10px; }
+  .info-pill { width: 100%; box-sizing: border-box; flex-wrap: wrap; }
+  .clickup-input-wrap { width: 100%; }
+  .clickup-input { min-width: 0; flex: 1; }
+  .ao-title { font-size: 1.6rem; }
+  .ao-card { padding: 14px 14px; }
+  .ao-timeline { flex-wrap: wrap; row-gap: 16px; }
+  .ao-timeline::before { display: none; }
+  .ao-node { flex: 0 0 calc(50% - 4px); }
+  .ao-cards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .ao-grade-card { padding: 14px; }
+  .btn-card-go { width: 100%; justify-content: center; }
+  .tool-card-actions { justify-content: stretch; }
+  .tool-progress-card { padding: 14px 16px; }
+}
+@media (max-width: 420px) {
+  .ao-cards { grid-template-columns: 1fr 1fr; }
+  .ao-node { flex: 0 0 100%; }
+}

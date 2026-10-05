@@ -1,0 +1,59 @@
+/* ============================================================
+   shared/mobile-base.css - conservative mobile baseline for every
+   Hub tool page (Oct 2026). Linked AFTER each tool's own stylesheet.
+   Only acts at phone/small-tablet widths and only touches things that
+   are broken on mobile in almost any layout: horizontal overflow,
+   tiny tap targets, iOS input-zoom, wide tables and multi-column
+   grids. A tool's own @media rules still win where they are more
+   specific; this just fills the gaps (23 tools had no mobile rules at
+   all). Edit here once instead of per tool.
+   ============================================================ */
+@media (max-width: 768px) {
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  body { overflow-x: hidden; }
+
+  /* Page gutters: tools use .container / .container-wide with desktop padding */
+  .container, .container-wide { max-width: 100% !important; padding-left: 14px !important; padding-right: 14px !important; }
+
+  img, video, canvas { max-width: 100%; height: auto; }
+  pre, code { max-width: 100%; overflow-x: auto; }
+
+  /* iOS Safari zooms the whole page on focus when an input is under 16px */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select, textarea { font-size: 16px !important; max-width: 100%; }
+
+  /* Comfortable tap targets for the primary action styles used across tools */
+  .btn-primary, .btn-secondary, .download-pdf-btn, select,
+  input[type="text"], input[type="email"], input[type="url"], input[type="number"], input[type="date"], input[type="password"] {
+    min-height: 42px;
+  }
+
+  /* Wide data tables scroll sideways inside themselves instead of
+     stretching the whole page. Opt out with a .no-mobile-scroll ancestor. */
+  table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .no-mobile-scroll table { display: table; overflow-x: visible; }
+
+  /* Multi-column form / layout grids stack to one column */
+  .form-grid, .split-layout, .split-layout-wide-right, .checkbox-grid, .section-checkbox-grid,
+  .booking-grid, .metrics-grid, .stats-grid, .services-grid, .kp-form-grid, .cp-info-grid,
+  .call-header-grid, .renewal-info-grid, .postcall-grid, .policy-grid, .workspace-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .score-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 12px !important; }
+
+  /* Modals / dialogs fit the screen and scroll internally */
+  .modal-box, .modal-content { width: auto !important; max-width: calc(100vw - 24px) !important; max-height: 88vh; overflow-y: auto; }
+
+  /* Page headers wrap instead of overflowing */
+  .site-header { flex-wrap: wrap; gap: 12px; }
+  .site-title { font-size: clamp(1.6rem, 7.5vw, 2.4rem); line-height: 1.15; }
+
+  /* Horizontally scrolling boards: nicer touch scrolling */
+  .pipeline-board, .kanban-board, .board-columns { -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
+  .pipeline-column { scroll-snap-align: start; }
+}
+
+@media (max-width: 480px) {
+  .score-grid { grid-template-columns: 1fr !important; }
+  .container, .container-wide { padding-left: 10px !important; padding-right: 10px !important; }
+}

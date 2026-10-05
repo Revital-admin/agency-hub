@@ -3981,3 +3981,44 @@ textarea {
 /* Align the pinned button with the section icons / list items (no extra side inset) */
 .sidebar-pin-row { padding: 0 0 12px; }
 .sidebar.rail-mode .sidebar-pin-row { padding: 0 0 4px; }
+
+/* ============================================================
+   MOBILE POLISH (Oct 2026) - shell
+   The drawer/overlay mechanism already existed; these fix what made
+   it awkward on a phone: rail mode inside the drawer, a header that
+   wasn't centered, 100vh iframes overshooting the visible area (mobile
+   browser toolbars + the sticky header + utility bar), a crowded
+   utility bar, and missing safe-area padding on notched phones.
+   ============================================================ */
+@media (max-width: 1024px) {
+  .sidebar {
+    width: min(300px, 86vw);
+    padding-top: max(20px, env(safe-area-inset-top));
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .mobile-header { padding-top: calc(12px + env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  .mobile-header > div[style*="width: 24px"] { width: 44px !important; }
+  .mobile-brand { min-width: 0; }
+
+  /* Rail mode is a desktop idea (icon column + hover flyout); inside the
+     drawer always show the plain scrollable list. The saved rail
+     preference is untouched, so desktop still honours it. */
+  .sidebar.rail-mode .sidebar-mode-toggle-row { display: none; }
+
+  .main-content:has(> .tab-fullbleed.active) { padding: 0 !important; }
+  .top-utils-bar { padding: 10px 12px !important; gap: 10px !important; }
+  .top-utils-bar #exportPdfBtn { padding: 8px 12px !important; font-size: 0.8rem !important; }
+  .top-utils-bar #userEmail { display: none; }
+  .top-utils-bar #userProfileUI { margin-left: 0 !important; padding-left: 10px !important; }
+
+  /* 100vh includes the area behind mobile browser toolbars; dvh tracks the
+     visible viewport. Subtract the sticky header + utility bar. */
+  .tab-section.active[style*="height: 100vh"] { height: calc(100dvh - 135px) !important; min-height: 460px; }
+  .tab-section.active[style*="height: 90vh"] { height: calc(100dvh - 150px) !important; min-height: 460px; }
+}
+@media (max-width: 480px) {
+  .top-utils-bar #exportPdfBtn .icon { display: none; }
+  .main-content { padding-left: 10px; padding-right: 10px; }
+}

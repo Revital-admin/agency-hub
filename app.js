@@ -2400,9 +2400,14 @@ function initSidebarRailMode() {
   if (!sidebar) return;
 
   let isRail = getSidebarRailMode();
+  // Phones/tablets use the slide-out drawer: force the plain list there (rail
+  // mode's icon column + flyout doesn't fit a 300px drawer). The saved
+  // preference is left alone, so desktop still gets rail mode back.
+  const mobileMQ = window.matchMedia ? window.matchMedia("(max-width: 1024px)") : null;
+  const railActive = () => isRail && !(mobileMQ && mobileMQ.matches);
 
   function applyMode() {
-    sidebar.classList.toggle("rail-mode", isRail);
+    sidebar.classList.toggle("rail-mode", railActive());
     if (toggleBtn) {
       const label = isRail ? "Switch to list view" : "Switch to rail view";
       toggleBtn.setAttribute("aria-label", label);
@@ -2412,13 +2417,14 @@ function initSidebarRailMode() {
       // while in light mode.
       toggleBtn.innerHTML = isRail ? SIDEBAR_LIST_ICON_SVG : SIDEBAR_RAIL_ICON_SVG;
     }
-    if (isRail) {
+    if (railActive()) {
       const slug = defaultRailSlug();
       if (slug !== null && slug !== undefined) setRailActiveSection(slug);
     }
   }
 
   applyMode();
+  if (mobileMQ && mobileMQ.addEventListener) mobileMQ.addEventListener("change", applyMode);
 
   if (toggleBtn) {
     toggleBtn.addEventListener("click", () => {
