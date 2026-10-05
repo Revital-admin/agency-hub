@@ -3967,7 +3967,13 @@ textarea {
 }
 .sidebar.rail-mode .sidebar-pin-btn:hover::after { opacity: 1; visibility: visible; transition-delay: 0.15s; }
 
-/* Pinned button is now the real nav button - keep its own look over .nav-item-btn defaults */
-.sidebar-pin-btn.nav-item-btn { border: 1px solid rgba(246, 141, 95, 0.25); border-radius: var(--radius-md); }
-.sidebar-pin-btn.nav-item-btn.active { background: var(--primary); border: 1px solid var(--primary); border-radius: var(--radius-md); color: #1a1208; }
-.sidebar-pin-btn.nav-item-btn.active svg { color: #1a1208; }
+/* Pinned button is now the real nav button - keep its own look over .nav-item-btn defaults.
+   Active = tinted fill + orange icon (same treatment as the rail's active section icon).
+   The earlier solid-orange fill hid the icon: .nav-item-btn.active svg strokes orange. */
+.sidebar-pin-btn.nav-item-btn { box-sizing: border-box; border: 1px solid rgba(246, 141, 95, 0.25); border-radius: var(--radius-md); background: rgba(246, 141, 95, 0.06); color: var(--primary); }
+.sidebar-pin-btn.nav-item-btn svg { stroke: currentColor; }
+.sidebar-pin-btn.nav-item-btn.active { background: rgba(246, 141, 95, 0.18); border: 1px solid var(--primary); border-radius: var(--radius-md); color: var(--primary); }
+.sidebar-pin-btn.nav-item-btn.active svg { stroke: var(--primary); filter: none; }
+.sidebar.rail-mode .sidebar-pin-btn.nav-item-btn { width: 34px; height: 34px; min-width: 34px; padding: 0; margin: 0 0 4px; justify-content: center; border-radius: var(--radius-sm); }
+.sidebar.rail-mode .sidebar-pin-btn.nav-item-btn.active { border-radius: var(--radius-sm); }
+.sidebar.rail-mode .sidebar-pin-row { padding-bottom: 4px; }
