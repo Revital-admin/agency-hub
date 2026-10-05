@@ -3977,3 +3977,7 @@ textarea {
 .sidebar.rail-mode .sidebar-pin-btn.nav-item-btn { width: 34px; height: 34px; min-width: 34px; padding: 0; margin: 0 0 4px; justify-content: center; border-radius: var(--radius-sm); }
 .sidebar.rail-mode .sidebar-pin-btn.nav-item-btn.active { border-radius: var(--radius-sm); }
 .sidebar.rail-mode .sidebar-pin-row { padding-bottom: 4px; }
+
+/* Align the pinned button with the section icons / list items (no extra side inset) */
+.sidebar-pin-row { padding: 0 0 12px; }
+.sidebar.rail-mode .sidebar-pin-row { padding: 0 0 4px; }
