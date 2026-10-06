@@ -351,6 +351,7 @@ if (isEmbedded) {
     { id: 'contentSystemField', key: 'contentSystem' },
     { id: 'planField', key: 'plan' },
     { id: 'evidenceField', key: 'evidence' },
+    { id: 'swotImplicationField', key: 'swotImplication' },
     { id: 'prioritiesField', key: 'priorities' },
     { id: 'conclusionField', key: 'conclusion' },
   ];
@@ -548,18 +549,16 @@ function downloadPDF() {
     }
     r.newPage();
     r.sectionHeader('SWOT — Gaps & Opportunities');
-    r.ensureSpace(140);
-    r.quadrantRow([
-      { title: 'Strengths (You vs. Them)', text: swot.s, accent: C.GREEN },
-      { title: 'Weaknesses (To Address)', text: swot.w, accent: C.RED },
-    ]);
-    r.y += 14;
-    r.ensureSpace(140);
-    r.quadrantRow([
-      { title: 'Opportunities (Market Gaps)', text: swot.o, accent: C.BLUE },
-      { title: 'Threats (To Watch)', text: swot.t, accent: C.PINK },
-    ]);
-    r.y += 24;
+    r.paragraph('A strategic synthesis of the competitor findings. Internal observations are a baseline, not a fresh performance assessment.', { spaceAfter: 12 });
+    const swotBullets = function(t) { return String(t || '').split('\n').map(function(x) { return x.trim().replace(/^[-•*]\s*/, ''); }).filter(Boolean); };
+    [['Strengths (you vs. them)', swot.s], ['Weaknesses (to address)', swot.w], ['Opportunities (market gaps)', swot.o], ['Threats (to watch)', swot.t]].forEach(function(g) {
+      const items = swotBullets(g[1]);
+      r.ensureSpace(70); r.y += 4;
+      r.paragraph(g[0], { bold: true, size: 11.5, spaceAfter: 4 });
+      r.bulletList(items.length ? items : ['Not yet filled in.']);
+    });
+    const implication = rf('swotImplication');
+    if (implication) { r.ensureSpace(70); r.y += 6; r.paragraph('Strategic implication', { bold: true, size: 11.5, spaceAfter: 4 }); r.paragraph(implication, { spaceAfter: 8 }); }
 
     // APPENDIX: FULL CATEGORY COMPARISON
     r.newPage();
@@ -634,7 +633,7 @@ function clearAll() {
     socialComp.posts = ["", "", ""];
     socialComp.insight = "";
     socialComp.objective = ""; socialComp.priorities = ""; socialComp.conclusion = "";
-    socialComp.positioning = ""; socialComp.qa = ""; socialComp.targets = ""; socialComp.direction = ""; socialComp.message = ""; socialComp.contentSystem = ""; socialComp.plan = ""; socialComp.evidence = "";
+    socialComp.positioning = ""; socialComp.qa = ""; socialComp.targets = ""; socialComp.direction = ""; socialComp.message = ""; socialComp.contentSystem = ""; socialComp.plan = ""; socialComp.evidence = ""; socialComp.swotImplication = "";
     socialComp.objective = "";
     socialComp.priorities = "";
     socialComp.conclusion = "";
