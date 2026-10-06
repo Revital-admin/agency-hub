@@ -287,6 +287,16 @@
         doc.text(lines, MARGIN + 92, y);
         y += lines.length * 13 + 10;
       }
+      if (o.direction) {
+        y += 6;
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor.apply(doc, ACCENT);
+        doc.text('STRATEGIC DIRECTION', MARGIN, y);
+        y += 20;
+        doc.setFontSize(17); doc.setTextColor.apply(doc, DARK);
+        const dl = doc.splitTextToSize(sanitizeText(o.direction), CONTENT_W);
+        doc.text(dl, MARGIN, y);
+        y += dl.length * 22 + 8;
+      }
       if (o.note) {
         doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5); doc.setTextColor.apply(doc, GRAY);
         doc.text(doc.splitTextToSize(sanitizeText(o.note), CONTENT_W), MARGIN, y);

@@ -348,6 +348,9 @@ if (isEmbedded) {
     { id: 'targetsField', key: 'targets' },
     { id: 'directionField', key: 'direction' },
     { id: 'messageField', key: 'message' },
+    { id: 'contentSystemField', key: 'contentSystem' },
+    { id: 'planField', key: 'plan' },
+    { id: 'evidenceField', key: 'evidence' },
     { id: 'prioritiesField', key: 'priorities' },
     { id: 'conclusionField', key: 'conclusion' },
   ];
@@ -416,8 +419,10 @@ function downloadPDF() {
     const siteLabel = function(s) { return s.replace(/^https?:\/\//i, '').replace(/\/$/, ''); };
     const siteHref = function(s) { return /^https?:\/\//i.test(s) ? s : 'https://' + s; };
 
+    let secNo = 0;
     const r = RevitalPDF.create({ reportTitle: 'SOCIAL MEDIA COMPETITOR ANALYSIS', companyName: companyName });
     const doc = r.doc; const C = r.colors;
+    const _sh = r.sectionHeader; r.sectionHeader = function(t) { secNo++; _sh.call(r, (secNo < 10 ? '0' : '') + secNo + ' ' + t); };
 
     // COVER
     function drawContactLine(i, extra) {
@@ -444,6 +449,7 @@ function downloadPDF() {
       title: 'Social Media Competitor Analysis',
       subLine: [nicheVal, dateVal].filter(Boolean).join('   |   '),
       objective: objective || ('Identify the strongest social-media practices in the competitive set and translate them into a focused, ownable strategy for ' + companyName + '.'),
+      direction: insightText,
       preparedFrom: 'Social media competitor research for ' + companyName + ' against ' + names.filter(Boolean).join(', ') + '.',
       note: 'Note: this is a qualitative social-presence audit synthesized from manual review, not an automated analytics report.',
     });
@@ -491,14 +497,12 @@ function downloadPDF() {
         r.y += 18;
       }
 
-      const highlightRows = ['frequency', 'engagement', 'top-content', 'identity'];
-      const bullets = highlightRows.map(function(key) {
+      const dimRows = ['frequency', 'engagement', 'top-content', 'identity'].map(function(key) {
         const row = TABLE_ROWS.find(function(rr) { return rr.key === key; });
-        const label = row ? row.label : key;
         const text = rowText(key, i);
-        return text ? (label + ': ' + text) : null;
+        return text ? [row ? row.label : key, text] : null;
       }).filter(Boolean);
-      r.bulletList(bullets);
+      if (dimRows.length) r.tableBlock(['Dimension', 'Observed evidence'], dimRows, [r.CONTENT_W * 0.26, r.CONTENT_W * 0.74]);
 
       const lines = function(key) { return rowText(key, i).split('\n').map(function(x) { return x.trim().replace(/^[-•*]\s*/, ''); }).filter(Boolean); };
       if (lines('strengths').length) { r.paragraph('Strengths', { bold: true, size: 10.5, spaceAfter: 4 }); r.bulletList(lines('strengths')); }
@@ -509,7 +513,7 @@ function downloadPDF() {
       }
 
       const takeaway = rowText('takeaway', i);
-      if (takeaway) r.calloutBox(name.toUpperCase() + ' TAKEAWAY', takeaway);
+      if (takeaway) r.calloutBox((companyName + ' takeaway').toUpperCase(), takeaway);
       if (rowText('source', i)) r.paragraph('Source: ' + rowText('source', i), { size: 8.5, italic: true, color: C.GRAY, spaceAfter: 6 });
       r.y = r.y + 6;
     });
@@ -532,6 +536,13 @@ function downloadPDF() {
       if (messageText) r.calloutBox('Working message to test', messageText);
     }
 
+    const pipeRows = function(t) { return rf(t).split('\n').map(function(l) { return l.split('|').map(function(x) { return x.trim(); }); }).filter(function(b) { return b.length > 1 && b[0]; }).map(function(b) { return [b[0], b[1] || '', b.slice(2).join(' | ')]; }); };
+    const csRows = pipeRows('contentSystem'), planRows = pipeRows('plan'), evidenceText = rf('evidence');
+    if (csRows.length) {
+      r.newPage();
+      r.sectionHeader('Content & Conversion System');
+      r.tableBlock(['Series', 'Purpose', 'Example'], csRows, [r.CONTENT_W * 0.24, r.CONTENT_W * 0.26, r.CONTENT_W * 0.5]);
+    }
     r.newPage();
     r.sectionHeader('SWOT — Gaps & Opportunities');
     r.ensureSpace(140);
@@ -561,6 +572,12 @@ function downloadPDF() {
     r.tableBlock(['Borrow', 'From'], borrowRows, [r.CONTENT_W * 0.68, r.CONTENT_W * 0.32]);
     if (conclusion) r.calloutBox('Bottom Line', conclusion);
     r.paragraph('Prepared for internal strategy discussion.', { italic: true, size: 9, color: C.GRAY });
+    if (planRows.length || evidenceText) {
+      r.newPage();
+      r.sectionHeader('30-Day Action Plan & Evidence Notes');
+      if (planRows.length) r.tableBlock(['Week', 'Focus', 'Concrete output'], planRows, [r.CONTENT_W * 0.12, r.CONTENT_W * 0.28, r.CONTENT_W * 0.6]);
+      if (evidenceText) { r.paragraph('Evidence and limitations', { bold: true, size: 12, spaceAfter: 6 }); r.paragraph(evidenceText, { size: 9.5, spaceAfter: 8 }); }
+    }
 
     r.save((companyName.replace(/[^a-z0-9]+/gi, '_') || 'Social') + '_Competitor_Analysis.pdf');
   } catch (err) {
@@ -614,7 +631,7 @@ function clearAll() {
     socialComp.posts = ["", "", ""];
     socialComp.insight = "";
     socialComp.objective = ""; socialComp.priorities = ""; socialComp.conclusion = "";
-    socialComp.positioning = ""; socialComp.qa = ""; socialComp.targets = ""; socialComp.direction = ""; socialComp.message = "";
+    socialComp.positioning = ""; socialComp.qa = ""; socialComp.targets = ""; socialComp.direction = ""; socialComp.message = ""; socialComp.contentSystem = ""; socialComp.plan = ""; socialComp.evidence = "";
     socialComp.objective = "";
     socialComp.priorities = "";
     socialComp.conclusion = "";
