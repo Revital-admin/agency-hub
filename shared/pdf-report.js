@@ -296,6 +296,18 @@
           doc.addImage(global.REVITAL_LOGO_PNG, 'PNG', MARGIN, 34, lw, lh);
         } catch (e) { /* decorative */ }
       }
+      if (LIGHT_STYLE) {
+        let ty = 150;
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(30); doc.setTextColor.apply(doc, DARK);
+        const nl = doc.splitTextToSize(sanitizeText(companyName), CONTENT_W);
+        doc.text(nl, MARGIN, ty); ty += nl.length * 34 - 6;
+        doc.setFontSize(14); doc.setTextColor.apply(doc, ACCENT);
+        doc.text(sanitizeText((o.title || reportTitle)), MARGIN, ty + 8); ty += 24;
+        if (o.subLine) { doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor.apply(doc, GRAY); doc.text(sanitizeText(o.subLine), MARGIN, ty + 6); ty += 16; }
+        doc.setDrawColor.apply(doc, ACCENT); doc.setLineWidth(1.5);
+        doc.line(MARGIN, ty + 10, MARGIN + CONTENT_W, ty + 10);
+        y = ty + 40;
+      } else {
       doc.setFillColor.apply(doc, DARK);
       doc.rect(MARGIN, 100, CONTENT_W, 92, 'F');
       doc.setFont('helvetica', 'bold'); doc.setFontSize(25); doc.setTextColor.apply(doc, WHITE);
@@ -306,6 +318,7 @@
       if (o.subLine) doc.text(sanitizeText(o.subLine), MARGIN + 20, 100 + 80);
 
       y = 100 + 92 + 50;
+      }
       if (o.objective) calloutBox('Objective', o.objective, ACCENT);
       if (o.preparedFrom) {
         doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor.apply(doc, DARK);
