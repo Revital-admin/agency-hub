@@ -420,7 +420,7 @@ function downloadPDF() {
     const siteHref = function(s) { return /^https?:\/\//i.test(s) ? s : 'https://' + s; };
 
     let secNo = 0;
-    const r = RevitalPDF.create({ reportTitle: 'SOCIAL MEDIA COMPETITOR ANALYSIS', companyName: companyName });
+    const r = RevitalPDF.create({ reportTitle: 'SOCIAL MEDIA COMPETITOR ANALYSIS', companyName: companyName, light: true });
     const doc = r.doc; const C = r.colors;
     const _sh = r.sectionHeader; r.sectionHeader = function(t) { secNo++; _sh.call(r, (secNo < 10 ? '0' : '') + secNo + ' ' + t); };
 

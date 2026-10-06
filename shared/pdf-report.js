@@ -64,6 +64,7 @@
 
     const reportTitle = (opts.reportTitle || 'REPORT').toUpperCase();
     const companyName = opts.companyName || 'Client';
+    const LIGHT_STYLE = !!opts.light; // softer header/table look (opt-in)
 
     // jsPDF's standard fonts (Helvetica etc.) use WinAnsiEncoding (cp1252),
     // which happens to special-case common "smart" punctuation - em/en
@@ -136,6 +137,12 @@
     function sectionHeader(title) {
       title = sanitizeText(title);
       ensureSpace(70);
+      if (LIGHT_STYLE) {
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+        doc.setTextColor.apply(doc, ACCENT);
+        doc.text(reportTitle + '  /  ' + companyName.toUpperCase().slice(0, 40), MARGIN, y + 8);
+        y += 8 + 22;
+      } else {
       doc.setFillColor.apply(doc, DARK);
       doc.rect(MARGIN, y, CONTENT_W * 0.62, 24, 'F');
       doc.setFillColor.apply(doc, ACCENT);
@@ -146,6 +153,7 @@
       doc.setTextColor.apply(doc, DARK);
       doc.text(('PREPARED FOR ' + companyName).toUpperCase().slice(0, 48), MARGIN + CONTENT_W * 0.62 + 10, y + 15.5);
       y += 24 + 20;
+      }
       doc.setFont('helvetica', 'bold'); doc.setFontSize(21); doc.setTextColor.apply(doc, DARK);
       doc.text(title, MARGIN, y);
       y += 6;
@@ -216,9 +224,17 @@
       rowsArr = (rowsArr || []).map(function (row) { return row.map(sanitizeText); });
       ensureSpace(26);
       doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
-      doc.setFillColor.apply(doc, DARK);
-      doc.rect(MARGIN, y, CONTENT_W, 22, 'F');
-      doc.setTextColor.apply(doc, WHITE);
+      if (LIGHT_STYLE) {
+        doc.setFillColor.apply(doc, CREAM);
+        doc.rect(MARGIN, y, CONTENT_W, 22, 'F');
+        doc.setDrawColor.apply(doc, ACCENT); doc.setLineWidth(1);
+        doc.line(MARGIN, y + 22, MARGIN + CONTENT_W, y + 22);
+        doc.setTextColor.apply(doc, DARK);
+      } else {
+        doc.setFillColor.apply(doc, DARK);
+        doc.rect(MARGIN, y, CONTENT_W, 22, 'F');
+        doc.setTextColor.apply(doc, WHITE);
+      }
       let cx = MARGIN + 8;
       headers.forEach(function (h, i) { doc.text(String(h).toUpperCase(), cx, y + 14); cx += colWidths[i]; });
       y += 22;
@@ -228,7 +244,7 @@
         const maxLines = Math.max.apply(null, wrapped.map(function (w) { return w.length; }));
         const rowH = Math.max(24, maxLines * 12.5 + 12);
         ensureSpace(rowH);
-        if (ri % 2 === 1) { doc.setFillColor.apply(doc, CREAM); doc.rect(MARGIN, y, CONTENT_W, rowH, 'F'); }
+        if (!LIGHT_STYLE && ri % 2 === 1) { doc.setFillColor.apply(doc, CREAM); doc.rect(MARGIN, y, CONTENT_W, rowH, 'F'); }
         doc.setTextColor.apply(doc, DARK);
         cx = MARGIN + 8;
         wrapped.forEach(function (w, ci) { doc.text(w, cx, y + 14); cx += colWidths[ci]; });
