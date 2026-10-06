@@ -85,9 +85,14 @@ if (isEmbedded) {
   if (isEmbedded && socialComp) {
     if (!Array.isArray(socialComp.sites)) socialComp.sites = ['', '', ''];
     if (!Array.isArray(socialComp.handles)) socialComp.handles = ['', '', ''];
+    if (!Array.isArray(socialComp.posts)) socialComp.posts = ['', '', ''];
     siteInputs.forEach(function(input, idx) {
       input.value = socialComp.sites[idx] || '';
       input.addEventListener('input', function() { socialComp.sites[idx] = input.value; window.parent.saveDatabase(); });
+    });
+    document.querySelectorAll('.comp-posts').forEach(function(input, idx) {
+      input.value = socialComp.posts[idx] || '';
+      input.addEventListener('input', function() { socialComp.posts[idx] = input.value; window.parent.saveDatabase(); });
     });
     handleInputs.forEach(function(input, idx) {
       input.value = socialComp.handles[idx] || '';
@@ -402,6 +407,7 @@ function downloadPDF() {
       const v = listVal(socialComp && socialComp.handles, '.comp-handle', i);
       return v && !/^@/.test(v) && !/[\/.]/.test(v) ? '@' + v : v;
     });
+    const posts = [0, 1, 2].map(function(i) { return listVal(socialComp && socialComp.posts, '.comp-posts', i); });
     const siteLabel = function(s) { return s.replace(/^https?:\/\//i, '').replace(/\/$/, ''); };
     const siteHref = function(s) { return /^https?:\/\//i.test(s) ? s : 'https://' + s; };
 
@@ -412,7 +418,7 @@ function downloadPDF() {
     function drawContactLine(i, extra) {
       const parts = [];
       if (handles[i]) parts.push({ t: handles[i] });
-      if (extra) parts.push({ t: extra });
+      [].concat(extra || []).forEach(function(e) { if (e) parts.push({ t: e }); });
       if (sites[i]) parts.push({ t: siteLabel(sites[i]), url: siteHref(sites[i]) });
       if (!parts.length) return;
       r.ensureSpace(22);
@@ -472,7 +478,7 @@ function downloadPDF() {
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
       doc.text([tiers[i], starLabel].filter(Boolean).join('   |   '), r.MARGIN + r.CONTENT_W - 10, r.y + 15, { align: 'right' });
       r.y = r.y + 22 + 10;
-      drawContactLine(i, rowText('followers', i) ? (rowText('followers', i) + ' followers') : '');
+      drawContactLine(i, [rowText('followers', i) ? (rowText('followers', i) + ' followers') : '', posts[i] ? (posts[i] + ' posts') : ''].filter(Boolean));
 
       const highlightRows = ['followers', 'frequency', 'engagement', 'top-content', 'identity'];
       const bullets = highlightRows.map(function(key) {
@@ -568,6 +574,7 @@ function clearAll() {
     socialComp.names = ["Competitor A", "Competitor B", "Competitor C"];
     socialComp.sites = ["", "", ""];
     socialComp.handles = ["", "", ""];
+    socialComp.posts = ["", "", ""];
     socialComp.insight = "";
     socialComp.objective = "";
     socialComp.priorities = "";

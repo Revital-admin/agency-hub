@@ -590,10 +590,10 @@
 }
 
 /* Competitor handle + website fields under each competitor name (shown in the PDF report) */
-.comp-handle, .comp-site {
+.comp-handle, .comp-site, .comp-posts {
   display: block; width: 80%; margin: 3px auto 0; border: none;
   border-bottom: 1px dashed var(--color-border-md); background: transparent;
   font-family: var(--font-body, var(--font-sans)); font-size: 11px;
   color: var(--color-text-secondary, var(--color-text-primary)); text-align: center; outline: none; padding: 2px 0;
 }
-.comp-handle:focus, .comp-site:focus { border-bottom: 1px solid var(--color-accent); }
+.comp-handle:focus, .comp-site:focus, .comp-posts:focus { border-bottom: 1px solid var(--color-accent); }
