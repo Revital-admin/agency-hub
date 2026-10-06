@@ -1048,8 +1048,8 @@ const AO_AUDITS = [
   { key: 'socialAudit',  label: 'Social Media Audit',         short: 'Social media audit', total: 40 },
 ];
 const AO_COMPS = [
-  { key: 'webComp',    label: 'Website Competitor Analysis', cells: 33 },
-  { key: 'socialComp', label: 'Social Competitor Analysis',  cells: 30 },
+  { key: 'webComp',    label: 'Website Competitor Analysis', cells: 48 },
+  { key: 'socialComp', label: 'Social Competitor Analysis',  cells: 45 },
 ];
 const AO_COLORS = { success: '#10b981', info: '#3b82f6', warning: '#f59e0b', danger: '#ef4444', none: '#8a887f' };
 

@@ -20,6 +20,15 @@ const TABLE_ROWS = [
   { key: 'tech-stack',    label: 'Technology Stack',        placeholder: 'e.g. Webflow, WordPress, Shopify...' },
   { key: 'social-proof',  label: 'Social Proof & Trust',    placeholder: 'e.g. Testimonials, logos, case studies...' },
   { key: 'navigation',    label: 'Navigation & Structure',  placeholder: 'e.g. Simple, intuitive menu, internal links...' },
+  // Added Oct 2026 so the PDF can give each competitor a full write-up
+  // (positioning tag, strengths, gaps, what is visibly working, sources) -
+  // not just a few bullets. Strengths/Gaps take one point per line.
+  { key: 'positioning-tag', label: 'Positioning Tag',        placeholder: 'e.g. Product spectacle + local personality' },
+  { key: 'strengths',       label: 'Strengths',              placeholder: 'One strength per line' },
+  { key: 'gaps',            label: 'Gaps / Opportunities',   placeholder: 'One gap or opportunity per line' },
+  { key: 'visible-evidence', label: 'Visible evidence',  placeholder: 'What you can actually see (likes, comments, shares, load speed...). A snapshot, not a ranking.' },
+  { key: 'source',          label: 'Source / Capture Notes', placeholder: 'e.g. screenshots, screen recording, date captured' },
+
   // Added for the client-presentable PDF report (Oct 2026): this is the one
   // row that's an actual conclusion rather than raw audit data - what to
   // borrow or avoid from each competitor. Feeds the "Competitor Findings"

@@ -343,6 +343,11 @@ if (isEmbedded) {
 (function initReportFields() {
   const fields = [
     { id: 'objectiveField', key: 'objective' },
+    { id: 'positioningField', key: 'positioning' },
+    { id: 'qaField', key: 'qa' },
+    { id: 'targetsField', key: 'targets' },
+    { id: 'directionField', key: 'direction' },
+    { id: 'messageField', key: 'message' },
     { id: 'prioritiesField', key: 'priorities' },
     { id: 'conclusionField', key: 'conclusion' },
   ];
@@ -479,8 +484,14 @@ function downloadPDF() {
       doc.text([tiers[i], starLabel].filter(Boolean).join('   |   '), r.MARGIN + r.CONTENT_W - 10, r.y + 15, { align: 'right' });
       r.y = r.y + 22 + 10;
       drawContactLine(i, [rowText('followers', i) ? (rowText('followers', i) + ' followers') : '', posts[i] ? (posts[i] + ' posts') : ''].filter(Boolean));
+      if (rowText('positioning-tag', i)) {
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor.apply(doc, C.ACCENT);
+        r.ensureSpace(16);
+        doc.text(r.sanitizeText(rowText('positioning-tag', i)).toUpperCase(), r.MARGIN, r.y + 8);
+        r.y += 18;
+      }
 
-      const highlightRows = ['followers', 'frequency', 'engagement', 'top-content', 'identity'];
+      const highlightRows = ['frequency', 'engagement', 'top-content', 'identity'];
       const bullets = highlightRows.map(function(key) {
         const row = TABLE_ROWS.find(function(rr) { return rr.key === key; });
         const label = row ? row.label : key;
@@ -489,12 +500,38 @@ function downloadPDF() {
       }).filter(Boolean);
       r.bulletList(bullets);
 
+      const lines = function(key) { return rowText(key, i).split('\n').map(function(x) { return x.trim().replace(/^[-•*]\s*/, ''); }).filter(Boolean); };
+      if (lines('strengths').length) { r.paragraph('Strengths', { bold: true, size: 10.5, spaceAfter: 4 }); r.bulletList(lines('strengths')); }
+      if (lines('gaps').length) { r.paragraph('Gaps / opportunities', { bold: true, size: 10.5, spaceAfter: 4 }); r.bulletList(lines('gaps')); }
+      if (rowText('visible-evidence', i)) {
+        r.paragraph('Visible engagement', { bold: true, size: 10.5, spaceAfter: 4 });
+        r.paragraph(rowText('visible-evidence', i), { size: 9, color: C.GRAY, spaceAfter: 8 });
+      }
+
       const takeaway = rowText('takeaway', i);
       if (takeaway) r.calloutBox(name.toUpperCase() + ' TAKEAWAY', takeaway);
+      if (rowText('source', i)) r.paragraph('Source: ' + rowText('source', i), { size: 8.5, italic: true, color: C.GRAY, spaceAfter: 6 });
       r.y = r.y + 6;
     });
 
     // SWOT / POSITIONING
+    const rf = function(key) { return (socialComp && socialComp[key]) ? String(socialComp[key]).trim() : ((document.getElementById(key + 'Field') || {}).value || '').trim(); };
+    const posText = rf('positioning'), qaLines = rf('qa').split('\n').map(function(x) { return x.trim(); }).filter(Boolean),
+      targetLines = rf('targets').split('\n').map(function(x) { return x.trim().replace(/^[-•*]\s*/, ''); }).filter(Boolean),
+      directionText = rf('direction'), messageText = rf('message');
+    if (posText || qaLines.length || targetLines.length || directionText || messageText) {
+      r.newPage();
+      r.sectionHeader('Positioning & Target Audience');
+      if (posText) r.paragraph(posText, { size: 10.5, italic: true, color: C.GRAY, spaceAfter: 12 });
+      if (qaLines.length) {
+        r.paragraph('What the customer should understand', { bold: true, size: 12, spaceAfter: 8 });
+        r.tableBlock(['Question', 'Recommended answer'], qaLines.map(function(l) { const bits = l.split('|'); return [(bits[0] || '').trim(), bits.slice(1).join('|').trim()]; }), [r.CONTENT_W * 0.38, r.CONTENT_W * 0.62]);
+      }
+      if (targetLines.length) { r.paragraph('Target first', { bold: true, size: 12, spaceAfter: 6 }); r.bulletList(targetLines); }
+      if (directionText) { r.paragraph('Making it practical', { bold: true, size: 12, spaceAfter: 6 }); r.paragraph(directionText, { spaceAfter: 10 }); }
+      if (messageText) r.calloutBox('Working message to test', messageText);
+    }
+
     r.newPage();
     r.sectionHeader('SWOT — Gaps & Opportunities');
     r.ensureSpace(140);
@@ -513,7 +550,7 @@ function downloadPDF() {
     // APPENDIX: FULL CATEGORY COMPARISON
     r.newPage();
     r.sectionHeader('Appendix: Full Category Comparison');
-    const appendixRows = TABLE_ROWS.filter(function(rr) { return rr.key !== 'takeaway'; })
+    const appendixRows = TABLE_ROWS.filter(function(rr) { return ['takeaway', 'positioning-tag', 'strengths', 'gaps', 'visible-evidence', 'source'].indexOf(rr.key) === -1; })
       .map(function(rr) { return [rr.label, rowText(rr.key, 0), rowText(rr.key, 1), rowText(rr.key, 2)]; });
     r.tableBlock(['Category', names[0], names[1], names[2]], appendixRows, [r.CONTENT_W * 0.22, r.CONTENT_W * 0.26, r.CONTENT_W * 0.26, r.CONTENT_W * 0.26]);
 
@@ -576,6 +613,8 @@ function clearAll() {
     socialComp.handles = ["", "", ""];
     socialComp.posts = ["", "", ""];
     socialComp.insight = "";
+    socialComp.objective = ""; socialComp.priorities = ""; socialComp.conclusion = "";
+    socialComp.positioning = ""; socialComp.qa = ""; socialComp.targets = ""; socialComp.direction = ""; socialComp.message = "";
     socialComp.objective = "";
     socialComp.priorities = "";
     socialComp.conclusion = "";
