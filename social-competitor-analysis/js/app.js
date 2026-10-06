@@ -466,12 +466,14 @@ function downloadPDF() {
     r.tableBlock(['Brand', 'What it does especially well', 'Lesson for ' + companyName], lessonsRows, [r.CONTENT_W * 0.22, r.CONTENT_W * 0.4, r.CONTENT_W * 0.38]);
 
     if (sites.some(Boolean) || handles.some(Boolean)) {
-      r.paragraph('Who we reviewed', { size: 13, bold: true, spaceAfter: 8 });
+      r.y += 10;
+      r.paragraph('Who we reviewed', { size: 12, bold: true, spaceAfter: 8 });
       r.tableBlock(['Tier', 'Brand', 'Handle', 'Website'],
         names.map(function(n, i) { return [tiers[i], n, handles[i] || '-', sites[i] ? siteLabel(sites[i]) : '-']; }),
         [r.CONTENT_W * 0.18, r.CONTENT_W * 0.28, r.CONTENT_W * 0.24, r.CONTENT_W * 0.30]);
     }
     if (priorities.length) {
+      r.y += 8;
       r.paragraph('Immediate priorities', { bold: true, size: 10.5, spaceAfter: 6 });
       r.bulletList(priorities);
     }
@@ -480,7 +482,7 @@ function downloadPDF() {
     r.newPage();
     r.sectionHeader('Competitor Findings');
     names.forEach(function(name, i) {
-      r.ensureSpace(60);
+      r.ensureSpace(190);
       doc.setFillColor.apply(doc, C.DARK);
       doc.rect(r.MARGIN, r.y, r.CONTENT_W, 22, 'F');
       doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor.apply(doc, C.WHITE);
@@ -488,13 +490,13 @@ function downloadPDF() {
       const starLabel = stars[i] ? (stars[i] + ' / 5') : '';
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
       doc.text([tiers[i], starLabel].filter(Boolean).join('   |   '), r.MARGIN + r.CONTENT_W - 10, r.y + 15, { align: 'right' });
-      r.y = r.y + 22 + 10;
+      r.y = r.y + 22 + 12;
       drawContactLine(i, [rowText('followers', i) ? (rowText('followers', i) + ' followers') : '', posts[i] ? (posts[i] + ' posts') : ''].filter(Boolean));
       if (rowText('positioning-tag', i)) {
         doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor.apply(doc, C.ACCENT);
         r.ensureSpace(16);
         doc.text(r.sanitizeText(rowText('positioning-tag', i)).toUpperCase(), r.MARGIN, r.y + 8);
-        r.y += 18;
+        r.y += 24;
       }
 
       const dimRows = ['frequency', 'engagement', 'top-content', 'identity'].map(function(key) {
@@ -502,12 +504,13 @@ function downloadPDF() {
         const text = rowText(key, i);
         return text ? [row ? row.label : key, text] : null;
       }).filter(Boolean);
-      if (dimRows.length) r.tableBlock(['Dimension', 'Observed evidence'], dimRows, [r.CONTENT_W * 0.26, r.CONTENT_W * 0.74]);
+      if (dimRows.length) { r.y += 2; r.tableBlock(['Dimension', 'Observed evidence'], dimRows, [r.CONTENT_W * 0.26, r.CONTENT_W * 0.74]); r.y += 8; }
 
       const lines = function(key) { return rowText(key, i).split('\n').map(function(x) { return x.trim().replace(/^[-•*]\s*/, ''); }).filter(Boolean); };
-      if (lines('strengths').length) { r.paragraph('Strengths', { bold: true, size: 10.5, spaceAfter: 4 }); r.bulletList(lines('strengths')); }
-      if (lines('gaps').length) { r.paragraph('Gaps / opportunities', { bold: true, size: 10.5, spaceAfter: 4 }); r.bulletList(lines('gaps')); }
+      if (lines('strengths').length) { r.ensureSpace(70); r.y += 4; r.paragraph('Strengths', { bold: true, size: 10.5, spaceAfter: 4 }); r.bulletList(lines('strengths')); }
+      if (lines('gaps').length) { r.ensureSpace(70); r.y += 4; r.paragraph('Gaps / opportunities', { bold: true, size: 10.5, spaceAfter: 4 }); r.bulletList(lines('gaps')); }
       if (rowText('visible-evidence', i)) {
+        r.ensureSpace(60); r.y += 4;
         r.paragraph('Visible engagement', { bold: true, size: 10.5, spaceAfter: 4 });
         r.paragraph(rowText('visible-evidence', i), { size: 9, color: C.GRAY, spaceAfter: 8 });
       }
@@ -515,7 +518,7 @@ function downloadPDF() {
       const takeaway = rowText('takeaway', i);
       if (takeaway) r.calloutBox((companyName + ' takeaway').toUpperCase(), takeaway);
       if (rowText('source', i)) r.paragraph('Source: ' + rowText('source', i), { size: 8.5, italic: true, color: C.GRAY, spaceAfter: 6 });
-      r.y = r.y + 6;
+      r.y = r.y + 16;
     });
 
     // SWOT / POSITIONING

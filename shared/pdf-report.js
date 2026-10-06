@@ -123,6 +123,12 @@
       }
       startedFirstPage = true;
       y = MARGIN;
+      if (pageNum > 1 && global.REVITAL_LOGO_PNG) {
+        try {
+          const lw = 84, lh = lw / global.REVITAL_LOGO_RATIO;
+          doc.addImage(global.REVITAL_LOGO_PNG, 'PNG', PAGE_W - MARGIN - lw, 12, lw, lh);
+        } catch (e) { /* logo is decorative - never block the report */ }
+      }
     }
     function ensureSpace(h) {
       if (y + h > PAGE_H - MARGIN - 16) newPage();
@@ -268,6 +274,12 @@
     function coverPage(o) {
       o = o || {};
       newPage();
+      if (global.REVITAL_LOGO_PNG) {
+        try {
+          const lw = 150, lh = lw / global.REVITAL_LOGO_RATIO;
+          doc.addImage(global.REVITAL_LOGO_PNG, 'PNG', MARGIN, 34, lw, lh);
+        } catch (e) { /* decorative */ }
+      }
       doc.setFillColor.apply(doc, DARK);
       doc.rect(MARGIN, 100, CONTENT_W, 92, 'F');
       doc.setFont('helvetica', 'bold'); doc.setFontSize(25); doc.setTextColor.apply(doc, WHITE);
