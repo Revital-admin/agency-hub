@@ -143,6 +143,19 @@
     <div class="section-label">SWOT — Gaps &amp; Opportunities</div>
 
     <div class="swot-grid" id="swotGrid"></div>
+    <div class="insight-box" style="margin-bottom: 1.5rem;">
+      <strong>Strategic implication (optional, appears under the SWOT in the PDF — write one bullet per line in each SWOT box above):</strong>
+      <textarea id="swotImplicationField" class="swot-ta" rows="3" placeholder="e.g. Make the offer and proof easy to recognize, then give visitors one clear path to book."></textarea>
+    </div>
+    <div class="section-label">30-Day Action Plan &amp; Evidence (optional PDF section)</div>
+    <div class="insight-box" style="margin-bottom: 1.5rem;">
+      <strong>30-day action plan (one &quot;Week | Focus | Concrete output&quot; per line):</strong>
+      <textarea id="planField" class="swot-ta" rows="4" placeholder="1 | Foundation | Rewrite homepage headline and CTA&#10;2 | Proof | Add testimonials and case studies&#10;3 | Speed | Compress images, fix mobile nav"></textarea>
+    </div>
+    <div class="insight-box" style="margin-bottom: 1.5rem;">
+      <strong>Evidence &amp; limitations (paragraph):</strong>
+      <textarea id="evidenceField" class="swot-ta" rows="3" placeholder="e.g. Based on manual review of public pages on the capture date. No analytics, traffic or conversion data were available."></textarea>
+    </div>
 
     <!-- ── Immediate Priorities (client-presentable PDF report, Oct 2026) ──
          One line per priority - rendered as a bulleted list on the PDF's
@@ -178,8 +191,9 @@
        original jsPDF rebuild so every other tool's "Download PDF" can reuse
        the same primitives/colors instead of re-implementing them. See
        shared/pdf-report.js for the full history. -->
-  <script src="../shared/pdf-report.js?v=2"></script>
-  <script src="js/app.js?v=8"></script>
+  <script src="../shared/pdf-logo.js?v=1"></script>
+  <script src="../shared/pdf-report.js?v=5"></script>
+  <script src="js/app.js?v=9"></script>
   <!-- Oct 2026 rebuild: PDF export switched from html2canvas/html2pdf (a
        screenshot of the on-screen tool) to native jsPDF vector text. Two
        independent, confirmed bugs in the screenshot approach are structurally

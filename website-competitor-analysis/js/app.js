@@ -347,6 +347,9 @@ if (isEmbedded) {
     { id: 'messageField', key: 'message' },
     { id: 'prioritiesField', key: 'priorities' },
     { id: 'conclusionField', key: 'conclusion' },
+    { id: 'planField', key: 'plan' },
+    { id: 'evidenceField', key: 'evidence' },
+    { id: 'swotImplicationField', key: 'swotImplication' },
   ];
   fields.forEach(function(f) {
     const el = document.getElementById(f.id);
@@ -418,9 +421,11 @@ function downloadPDF() {
     const siteLabel = function(s) { return s.replace(/^https?:\/\//i, '').replace(/\/$/, ''); };
     const siteHref = function(s) { return /^https?:\/\//i.test(s) ? s : 'https://' + s; };
 
-    const r = RevitalPDF.create({ reportTitle: 'WEBSITE COMPETITOR ANALYSIS', companyName: companyName });
+    const r = RevitalPDF.create({ reportTitle: 'WEBSITE COMPETITOR ANALYSIS', companyName: companyName, light: true });
     const doc = r.doc;
     const C = r.colors;
+    let secNo = 0;
+    const _sh = r.sectionHeader; r.sectionHeader = function(t) { secNo++; _sh.call(r, (secNo < 10 ? '0' : '') + secNo + ' ' + t); };
 
     // ================= COVER =================
     function drawContactLine(i, extra) {
@@ -447,6 +452,7 @@ function downloadPDF() {
       title: 'Website Competitor Analysis',
       subLine: [marketVal, dateVal].filter(Boolean).join('   |   '),
       objective: objective || ('Identify the strongest website practices in the local competitive set and translate them into a focused, ownable strategy for ' + companyName + '.'),
+      direction: insightText,
       preparedFrom: 'Website competitor research for ' + companyName + ' against ' + names.filter(Boolean).join(', ') + '.',
       note: 'Note: this is a qualitative website audit synthesized from manual review, not an automated analytics report.',
     });
@@ -464,14 +470,16 @@ function downloadPDF() {
     r.tableBlock(['Brand', 'What it does especially well', 'Lesson for ' + companyName], lessonsRows, [r.CONTENT_W * 0.2, r.CONTENT_W * 0.42, r.CONTENT_W * 0.38]);
 
     if (sites.some(Boolean) || handles.some(Boolean)) {
-      r.paragraph('Who we reviewed', { size: 13, bold: true, spaceAfter: 8 });
+      r.y += 10;
+      r.paragraph('Who we reviewed', { size: 12, bold: true, spaceAfter: 8 });
       r.tableBlock(['Tier', 'Brand', 'Handle', 'Website'],
         names.map(function(n, i) { return [tiers[i], n, handles[i] || '-', sites[i] ? siteLabel(sites[i]) : '-']; }),
         [r.CONTENT_W * 0.18, r.CONTENT_W * 0.28, r.CONTENT_W * 0.24, r.CONTENT_W * 0.30]);
     }
 
     if (priorities.length) {
-      r.paragraph('Immediate priorities', { size: 13, bold: true, spaceAfter: 8 });
+      r.y += 8;
+      r.paragraph('Immediate priorities', { size: 12, bold: true, spaceAfter: 8 });
       r.bulletList(priorities);
     }
 
@@ -481,7 +489,7 @@ function downloadPDF() {
     r.paragraph(names.length + ' competitors, ' + names.length + ' different lessons', { size: 10.5, italic: true, color: C.GRAY, spaceAfter: 10 });
 
     names.forEach(function(name, i) {
-      r.ensureSpace(60);
+      r.ensureSpace(190);
       const barH = 22;
       doc.setFillColor.apply(doc, C.DARK);
       doc.rect(r.MARGIN, r.y, r.CONTENT_W, barH, 'F');
@@ -489,35 +497,35 @@ function downloadPDF() {
       doc.text(name, r.MARGIN + 10, r.y + 15);
       doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor.apply(doc, C.ACCENT);
       doc.text((tiers[i] || '').toUpperCase(), r.MARGIN + r.CONTENT_W - 10, r.y + 15, { align: 'right' });
-      r.y = r.y + barH + 10;
+      r.y = r.y + barH + 12;
       drawContactLine(i, '');
       if (rowText('positioning-tag', i)) {
         doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor.apply(doc, C.ACCENT);
         r.ensureSpace(16);
         doc.text(r.sanitizeText(rowText('positioning-tag', i)).toUpperCase(), r.MARGIN, r.y + 8);
-        r.y += 18;
+        r.y += 24;
       }
 
-      const highlightRows = ['value-prop', 'tech-stack', 'social-proof', 'load-speed'];
-      const bullets = highlightRows.map(function(key) {
-        const label = (TABLE_ROWS.find(function(rr) { return rr.key === key; }) || {}).label || key;
+      const dimRows = ['value-prop', 'cta-funnel', 'social-proof', 'tech-stack', 'load-speed'].map(function(key) {
+        const row = TABLE_ROWS.find(function(rr) { return rr.key === key; });
         const text = rowText(key, i);
-        return text ? (label + ': ' + text) : null;
+        return text ? [row ? row.label : key, text] : null;
       }).filter(Boolean);
-      r.bulletList(bullets);
+      if (dimRows.length) { r.y += 2; r.tableBlock(['Dimension', 'Observed evidence'], dimRows, [r.CONTENT_W * 0.26, r.CONTENT_W * 0.74]); r.y += 8; }
 
       const lines = function(key) { return rowText(key, i).split('\n').map(function(x) { return x.trim().replace(/^[-•*]\s*/, ''); }).filter(Boolean); };
-      if (lines('strengths').length) { r.paragraph('Strengths', { bold: true, size: 10.5, spaceAfter: 4 }); r.bulletList(lines('strengths')); }
-      if (lines('gaps').length) { r.paragraph('Gaps / opportunities', { bold: true, size: 10.5, spaceAfter: 4 }); r.bulletList(lines('gaps')); }
+      if (lines('strengths').length) { r.ensureSpace(70); r.y += 4; r.paragraph('Strengths', { bold: true, size: 10.5, spaceAfter: 4 }); r.bulletList(lines('strengths')); }
+      if (lines('gaps').length) { r.ensureSpace(70); r.y += 4; r.paragraph('Gaps / opportunities', { bold: true, size: 10.5, spaceAfter: 4 }); r.bulletList(lines('gaps')); }
       if (rowText('visible-evidence', i)) {
+        r.ensureSpace(60); r.y += 4;
         r.paragraph('Visible evidence', { bold: true, size: 10.5, spaceAfter: 4 });
         r.paragraph(rowText('visible-evidence', i), { size: 9, color: C.GRAY, spaceAfter: 8 });
       }
 
       const takeaway = rowText('takeaway', i);
-      if (takeaway) r.calloutBox(name.toUpperCase() + ' TAKEAWAY', takeaway);
+      if (takeaway) r.calloutBox((companyName + ' takeaway').toUpperCase(), takeaway);
       if (rowText('source', i)) r.paragraph('Source: ' + rowText('source', i), { size: 8.5, italic: true, color: C.GRAY, spaceAfter: 6 });
-      r.y = r.y + 6;
+      r.y = r.y + 16;
     });
 
     // ================= SWOT / POSITIONING =================
@@ -540,18 +548,19 @@ function downloadPDF() {
 
     r.newPage();
     r.sectionHeader('SWOT — Gaps & Opportunities');
-    r.ensureSpace(140);
-    r.quadrantRow([
-      { title: 'Strengths (You vs. Them)', text: swot.s, accent: C.GREEN },
-      { title: 'Weaknesses (To Address)', text: swot.w, accent: C.RED },
-    ]);
-    r.y = r.y + 14;
-    r.ensureSpace(140);
-    r.quadrantRow([
-      { title: 'Opportunities (Market Gaps)', text: swot.o, accent: C.BLUE },
-      { title: 'Threats (To Watch)', text: swot.t, accent: C.PINK },
-    ]);
-    r.y = r.y + 24;
+    r.paragraph('A strategic synthesis of the competitor findings. Internal observations are a baseline, not a fresh performance assessment.', { spaceAfter: 12 });
+    const swotBullets = function(t) { return String(t || '').split('\n').map(function(x) { return x.trim().replace(/^[-•*]\s*/, ''); }).filter(Boolean); };
+    [['Strengths (you vs. them)', swot.s], ['Weaknesses (to address)', swot.w], ['Opportunities (market gaps)', swot.o], ['Threats (to watch)', swot.t]].forEach(function(g) {
+      const items = swotBullets(g[1]);
+      r.ensureSpace(70); r.y += 4;
+      r.paragraph(g[0], { bold: true, size: 11.5, spaceAfter: 4 });
+      r.bulletList(items.length ? items : ['Not yet filled in.']);
+    });
+    const implication = rf('swotImplication');
+    if (implication) { r.ensureSpace(70); r.y += 6; r.paragraph('Strategic implication', { bold: true, size: 11.5, spaceAfter: 4 }); r.paragraph(implication, { spaceAfter: 8 }); }
+
+    const planRows = rf('plan').split('\n').map(function(l) { return l.split('|').map(function(x) { return x.trim(); }); }).filter(function(b) { return b.length > 1 && b[0]; }).map(function(b) { return [b[0], b[1] || '', b.slice(2).join(' | ')]; });
+    const evidenceText = rf('evidence');
 
     // ================= APPENDIX: FULL CATEGORY COMPARISON =================
     r.newPage();
@@ -570,6 +579,12 @@ function downloadPDF() {
     r.tableBlock(['Borrow', 'From'], borrowRows, [r.CONTENT_W * 0.68, r.CONTENT_W * 0.32]);
     if (conclusion) r.calloutBox('Bottom Line', conclusion);
     r.paragraph('Prepared for internal strategy discussion.', { size: 8.5, italic: true, color: C.GRAY, spaceAfter: 0 });
+    if (planRows.length || evidenceText) {
+      r.newPage();
+      r.sectionHeader('30-Day Action Plan & Evidence Notes');
+      if (planRows.length) r.tableBlock(['Week', 'Focus', 'Concrete output'], planRows, [r.CONTENT_W * 0.12, r.CONTENT_W * 0.28, r.CONTENT_W * 0.6]);
+      if (evidenceText) { r.paragraph('Evidence and limitations', { bold: true, size: 12, spaceAfter: 6 }); r.paragraph(evidenceText, { size: 9.5, spaceAfter: 8 }); }
+    }
 
     r.save((companyName.replace(/[^a-z0-9]+/gi, '_') || 'Website') + '_Competitor_Analysis.pdf');
   } catch (err) {
@@ -622,7 +637,7 @@ function clearAll() {
     webComp.handles = ["", "", ""];
     webComp.insight = "";
     webComp.objective = ""; webComp.priorities = ""; webComp.conclusion = "";
-    webComp.positioning = ""; webComp.qa = ""; webComp.targets = ""; webComp.direction = ""; webComp.message = "";
+    webComp.positioning = ""; webComp.qa = ""; webComp.targets = ""; webComp.direction = ""; webComp.message = ""; webComp.plan = ""; webComp.evidence = ""; webComp.swotImplication = "";
     webComp.swot = { s: "", w: "", o: "", t: "" };
     webComp.stars = [0, 0, 0];
     
