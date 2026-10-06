@@ -79,6 +79,22 @@ if (isEmbedded) {
     });
   }
 
+  // Competitor website + social handle (shown in the PDF report)
+  const siteInputs = document.querySelectorAll('.comp-site');
+  const handleInputs = document.querySelectorAll('.comp-handle');
+  if (isEmbedded && webComp) {
+    if (!Array.isArray(webComp.sites)) webComp.sites = ['', '', ''];
+    if (!Array.isArray(webComp.handles)) webComp.handles = ['', '', ''];
+    siteInputs.forEach(function(input, idx) {
+      input.value = webComp.sites[idx] || '';
+      input.addEventListener('input', function() { webComp.sites[idx] = input.value; window.parent.saveDatabase(); });
+    });
+    handleInputs.forEach(function(input, idx) {
+      input.value = webComp.handles[idx] || '';
+      input.addEventListener('input', function() { webComp.handles[idx] = input.value; window.parent.saveDatabase(); });
+    });
+  }
+
   TABLE_ROWS.forEach(function(row) {
     const tr = document.createElement('tr');
 
@@ -382,11 +398,46 @@ function downloadPDF() {
       return (rowsData[key] && rowsData[key][idx]) ? rowsData[key][idx].trim() : '';
     }
 
+    // Competitor website + handle (entered under each competitor name)
+    function listVal(arr, sel, i) {
+      const v = (arr && arr[i]) ? String(arr[i]).trim() : '';
+      if (v) return v;
+      const els = document.querySelectorAll(sel);
+      return els[i] ? els[i].value.trim() : '';
+    }
+    const sites = [0, 1, 2].map(function(i) { return listVal(webComp && webComp.sites, '.comp-site', i); });
+    const handles = [0, 1, 2].map(function(i) {
+      const v = listVal(webComp && webComp.handles, '.comp-handle', i);
+      return v && !/^@/.test(v) && !/[\/.]/.test(v) ? '@' + v : v;
+    });
+    const siteLabel = function(s) { return s.replace(/^https?:\/\//i, '').replace(/\/$/, ''); };
+    const siteHref = function(s) { return /^https?:\/\//i.test(s) ? s : 'https://' + s; };
+
     const r = RevitalPDF.create({ reportTitle: 'WEBSITE COMPETITOR ANALYSIS', companyName: companyName });
     const doc = r.doc;
     const C = r.colors;
 
     // ================= COVER =================
+    function drawContactLine(i, extra) {
+      const parts = [];
+      if (handles[i]) parts.push({ t: handles[i] });
+      if (extra) parts.push({ t: extra });
+      if (sites[i]) parts.push({ t: siteLabel(sites[i]), url: siteHref(sites[i]) });
+      if (!parts.length) return;
+      r.ensureSpace(22);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+      let x = r.MARGIN;
+      const sep = '  |  ';
+      parts.forEach(function(p, k) {
+        if (k) { doc.setTextColor.apply(doc, C.GRAY); doc.text(sep, x, r.y + 9); x += doc.getTextWidth(sep); }
+        const txt = r.sanitizeText(p.t);
+        if (p.url) { doc.setTextColor.apply(doc, C.ACCENT); doc.textWithLink(txt, x, r.y + 9, { url: p.url }); }
+        else { doc.setTextColor.apply(doc, C.DARK); doc.text(txt, x, r.y + 9); }
+        x += doc.getTextWidth(txt);
+      });
+      r.y += 20;
+    }
+
     r.coverPage({
       title: 'Website Competitor Analysis',
       subLine: [marketVal, dateVal].filter(Boolean).join('   |   '),
@@ -406,6 +457,13 @@ function downloadPDF() {
       return [name, rowText('value-prop', i) || rowText('tech-stack', i), rowText('takeaway', i)];
     });
     r.tableBlock(['Brand', 'What it does especially well', 'Lesson for ' + companyName], lessonsRows, [r.CONTENT_W * 0.2, r.CONTENT_W * 0.42, r.CONTENT_W * 0.38]);
+
+    if (sites.some(Boolean) || handles.some(Boolean)) {
+      r.paragraph('Who we reviewed', { size: 13, bold: true, spaceAfter: 8 });
+      r.tableBlock(['Tier', 'Brand', 'Handle', 'Website'],
+        names.map(function(n, i) { return [tiers[i], n, handles[i] || '-', sites[i] ? siteLabel(sites[i]) : '-']; }),
+        [r.CONTENT_W * 0.18, r.CONTENT_W * 0.28, r.CONTENT_W * 0.24, r.CONTENT_W * 0.30]);
+    }
 
     if (priorities.length) {
       r.paragraph('Immediate priorities', { size: 13, bold: true, spaceAfter: 8 });
@@ -427,6 +485,7 @@ function downloadPDF() {
       doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor.apply(doc, C.ACCENT);
       doc.text((tiers[i] || '').toUpperCase(), r.MARGIN + r.CONTENT_W - 10, r.y + 15, { align: 'right' });
       r.y = r.y + barH + 10;
+      drawContactLine(i, '');
 
       const highlightRows = ['value-prop', 'tech-stack', 'social-proof', 'load-speed'];
       const bullets = highlightRows.map(function(key) {
@@ -522,6 +581,8 @@ function clearAll() {
     webComp.market = "";
     webComp.date = today;
     webComp.names = ["Competitor A", "Competitor B", "Competitor C"];
+    webComp.sites = ["", "", ""];
+    webComp.handles = ["", "", ""];
     webComp.insight = "";
     webComp.swot = { s: "", w: "", o: "", t: "" };
     webComp.stars = [0, 0, 0];
