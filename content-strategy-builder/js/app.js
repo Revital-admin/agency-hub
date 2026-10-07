@@ -726,7 +726,7 @@ function setupEventHandlers() {
       const d = state.data;
 
       try {
-        const r = RevitalPDF.create({ reportTitle: 'CONTENT PLANNING BLUEPRINT', companyName: state.targetUrl || 'Client' });
+        const r = RevitalPDF.create({ numbered: true, reportTitle: 'CONTENT PLANNING BLUEPRINT', companyName: state.targetUrl || 'Client' });
         const C = r.colors;
 
         function block(label, value) {
@@ -746,7 +746,7 @@ function setupEventHandlers() {
         });
 
         r.newPage();
-        r.sectionHeader('1. Company Overview');
+        r.sectionHeader('Company Overview');
         block('Business Name', d.businessName);
         block('Industry', d.industry);
         block('Primary Services/Products', d.primaryServices);
@@ -754,34 +754,34 @@ function setupEventHandlers() {
         block('Core Values', d.coreValues);
         block('Unique Selling Proposition (USP)', d.usp);
 
-        r.sectionHeader('2. Business Goals');
+        r.sectionHeader('Business Goals');
         block('Short-Term Goals', d.goalsShortTerm);
         block('Long-Term Goals', d.goalsLongTerm);
         listBlock('Primary Objectives', d.primaryGoals);
 
         r.newPage();
-        r.sectionHeader('3. Target Audience');
+        r.sectionHeader('Target Audience');
         block('Demographics', [d.audienceAge, d.audienceLocation, d.audienceIndustry].filter(Boolean).join(' | '));
         block('Pain Points', d.audiencePainPoints);
         block('Desired Outcomes', d.audienceDesires);
 
-        r.sectionHeader('4. Brand Identity');
+        r.sectionHeader('Brand Identity');
         listBlock('Brand Personality', d.brandPersonality);
         block('Brand Voice', d.brandVoice);
         listBlock('Visual Assets', d.existingAssets);
 
         r.newPage();
-        r.sectionHeader('5. Competitor Analysis');
+        r.sectionHeader('Competitor Analysis');
         block('Main Competitors', d.mainCompetitors);
         block('What They Do Well', d.competitorStrengths);
         block('Our Differentiator', d.competitorDifferentiate);
 
-        r.sectionHeader('6. Content Strategy');
+        r.sectionHeader('Content Strategy');
         [['Pillar 1', d.pillar1Name, d.pillar1Topics], ['Pillar 2', d.pillar2Name, d.pillar2Topics], ['Pillar 3', d.pillar3Name, d.pillar3Topics], ['Pillar 4', d.pillar4Name, d.pillar4Topics]]
           .forEach(([label, name, topics]) => r.calloutBox(`${label}: ${name || 'Untitled'}`, topics || 'Not provided'));
 
         r.newPage();
-        r.sectionHeader('7. Platform Strategy');
+        r.sectionHeader('Platform Strategy');
         if (d.platforms && d.platforms.length > 0) {
           d.platforms.forEach(p => {
             r.paragraph(p.name || 'Untitled Platform', { bold: true, size: 11, spaceAfter: 4 });
@@ -795,13 +795,13 @@ function setupEventHandlers() {
         }
 
         r.newPage();
-        r.sectionHeader('8. Workflow & Production');
+        r.sectionHeader('Workflow & Production');
         listBlock('Pre-Production', d.workflowPre);
         listBlock('Production', d.workflowProd);
         listBlock('Post-Production', d.workflowPost);
         listBlock('Publishing', d.workflowPub);
 
-        r.sectionHeader('9. Content Ideas');
+        r.sectionHeader('Content Ideas');
         block('Educational', d.ideasEducational);
         block('Promotional', d.ideasPromotional);
         block('Social Proof', d.ideasSocialProof);
@@ -809,7 +809,7 @@ function setupEventHandlers() {
         block('Behind-The-Scenes', d.ideasBehindScenes);
 
         r.newPage();
-        r.sectionHeader('9b. Viral Content Framework');
+        r.sectionHeader('Viral Content Framework');
         block('Hook Formulas & Openers', d.viralHookFormulas);
         block('Trending Audio / Sounds To Watch', d.viralTrendingAudio);
         block('Trend-Jacking Process', d.viralTrendJackProcess);
@@ -817,17 +817,17 @@ function setupEventHandlers() {
         listBlock('Pre-Post Viral Checklist', d.viralChecklist);
 
         r.newPage();
-        r.sectionHeader('10. KPI & Tracking');
+        r.sectionHeader('KPI & Tracking');
         listBlock('Metrics to Track', d.kpisMetrics);
         listBlock('Reporting Frequency', d.kpisFrequency);
         block('Benchmarks', d.kpisBenchmarks);
 
-        r.sectionHeader('11. Client Communication');
+        r.sectionHeader('Client Communication');
         listBlock('Methods', d.commMethods);
         block('Timeline Expectations', d.commTimeline);
 
         r.newPage();
-        r.sectionHeader('12. Action Plan');
+        r.sectionHeader('Action Plan');
         r.paragraph('Action Items', { bold: true, size: 10, spaceAfter: 6 });
         r.bulletList([d.action1, d.action2, d.action3, d.action4].filter(Boolean).length ? [d.action1, d.action2, d.action3, d.action4].filter(Boolean) : ['Not provided']);
         listBlock('Next Steps', d.nextSteps);

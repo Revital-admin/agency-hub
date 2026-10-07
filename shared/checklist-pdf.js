@@ -169,11 +169,13 @@
       r.paragraph(progress ? failedN + ' item' + (failedN === 1 ? '' : 's') + ' still to do, sections with the most work left first.' : failedN + ' item' + (failedN === 1 ? '' : 's') + ' to fix, weakest sections first. High-impact items are listed first within a section.', { size: 10.5, italic: true, color: C.GRAY, spaceAfter: 10 });
       worst.forEach(function (a) {
         r.ensureSpace(130); // keep the section header with its first item
-        doc.setFillColor.apply(doc, C.DARK);
+        doc.setFillColor.apply(doc, C.CREAM);
         doc.rect(r.MARGIN, r.y, r.CONTENT_W, 22, 'F');
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor.apply(doc, C.WHITE);
-        doc.text(r.sanitizeText(a.step.title), r.MARGIN + 10, r.y + 15);
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+        doc.setFillColor.apply(doc, C.ACCENT);
+        doc.rect(r.MARGIN, r.y, 3.5, 22, 'F');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor.apply(doc, C.DARK);
+        doc.text(r.sanitizeText(a.step.title), r.MARGIN + 12, r.y + 15);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor.apply(doc, C.GRAY);
         doc.text(progress ? a.grade + ' done  |  ' + a.failed.length + ' remaining' : 'Grade ' + a.grade + '  |  ' + a.failed.length + ' to fix', r.MARGIN + r.CONTENT_W - 10, r.y + 15, { align: 'right' });
         r.y += 22 + 10;
         if (a.note) r.paragraph(a.note, { size: 9, italic: true, color: C.GRAY, spaceAfter: 8 });

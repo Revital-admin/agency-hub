@@ -527,36 +527,36 @@ function setupEventHandlers() {
         });
 
         r.newPage();
-        r.sectionHeader('1. Core Identity');
+        r.sectionHeader('Core Identity');
         block('Origin Story', d.originStory);
         block('Vision & Mission', d.vision);
         block('Core Values', d.coreValues);
         block('Superpower', d.superpower);
 
-        r.sectionHeader('2. Target Audience');
+        r.sectionHeader('Target Audience');
         block('Primary Audience', d.primaryAudience);
         block('Pain Points', d.audiencePainPoints);
         block('Desired Outcomes', d.audienceOutcomes);
 
         r.newPage();
-        r.sectionHeader('3. Goals & "Why"');
+        r.sectionHeader('Goals & "Why"');
         block('Personal Goals', d.personalGoals);
         block('Business Goals', d.businessGoals);
 
-        r.sectionHeader('4. Brand Voice');
+        r.sectionHeader('Brand Voice');
         listBlock('Archetype', d.archetype);
         listBlock('Tone of Voice', d.toneOfVoice);
         block('Visual Aesthetic', d.visualAesthetic);
 
         r.newPage();
-        r.sectionHeader('5. Content Pillars');
+        r.sectionHeader('Content Pillars');
         [['Pillar 1', d.pillar1Name, d.pillar1Topics], ['Pillar 2', d.pillar2Name, d.pillar2Topics], ['Pillar 3', d.pillar3Name, d.pillar3Topics]]
           .forEach(([label, name, topics]) => {
             r.calloutBox(`${label}: ${name || 'Untitled'}`, topics || 'Not provided');
           });
 
         r.newPage();
-        r.sectionHeader('6. Platform Strategy');
+        r.sectionHeader('Platform Strategy');
         if (d.platforms && d.platforms.length > 0) {
           d.platforms.forEach(p => {
             r.paragraph(p.name || 'Untitled Platform', { bold: true, size: 11, spaceAfter: 4 });
@@ -570,20 +570,20 @@ function setupEventHandlers() {
         }
 
         r.newPage();
-        r.sectionHeader('7. Production Workflow');
+        r.sectionHeader('Production Workflow');
         block('Ideation', d.ideation);
         block('Production', d.production);
 
-        r.sectionHeader('8. Engagement');
+        r.sectionHeader('Engagement');
         block('Networking Strategy', d.engagement);
         block('Target Communities', d.communities);
 
         r.newPage();
-        r.sectionHeader('9. Monetization');
+        r.sectionHeader('Monetization');
         block('Core Offers', d.offers);
         listBlock('Primary Calls-to-Action', d.ctas);
 
-        r.sectionHeader('10. Action Plan');
+        r.sectionHeader('Action Plan');
         block('Immediate Next Steps', d.nextSteps);
         block('KPIs / Success Metrics', d.kpis);
 
