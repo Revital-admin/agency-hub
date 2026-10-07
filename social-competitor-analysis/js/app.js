@@ -644,6 +644,7 @@ function clearAll() {
 
     window.parent.saveDatabase();
     window.parent.renderDashboard();
+    if (window.updateFillTags) window.updateFillTags();
     
     // Refresh date input to today
     const dateEl = document.getElementById('date');
@@ -652,3 +653,29 @@ function clearAll() {
     if (companyEl) companyEl.value = parentClient.name;
   }
 }
+
+/* ── Analysis / Report details tabs + fill markers ── */
+(function initTabs() {
+  const btns = document.querySelectorAll('.tab-btn');
+  btns.forEach(function(b) {
+    b.addEventListener('click', function() {
+      btns.forEach(function(x) { x.classList.toggle('on', x === b); });
+      document.querySelectorAll('.tab-panel').forEach(function(p) { p.hidden = (p.id !== b.getAttribute('data-panel')); });
+    });
+  });
+  window.updateFillTags = function() {
+    let groups = 0, done = 0;
+    document.querySelectorAll('.fill-tag[data-for]').forEach(function(tag) {
+      const ids = tag.getAttribute('data-for').split(',');
+      const n = ids.filter(function(id) { const el = document.getElementById(id); return el && el.value.trim(); }).length;
+      groups++;
+      tag.className = 'fill-tag' + (n === ids.length ? ' full' : (n ? ' part' : ''));
+      tag.textContent = n === ids.length ? 'Filled' : (n ? n + ' of ' + ids.length + ' filled' : 'Empty');
+      if (n === ids.length) done++;
+    });
+    const badge = document.getElementById('detailsBadge');
+    if (badge) { badge.className = 'fill-tag' + (done === groups ? ' full' : (done ? ' part' : '')); badge.textContent = done + ' of ' + groups; }
+  };
+  document.addEventListener('input', function() { window.updateFillTags(); });
+  window.addEventListener('load', function() { window.updateFillTags(); setTimeout(window.updateFillTags, 400); });
+})();

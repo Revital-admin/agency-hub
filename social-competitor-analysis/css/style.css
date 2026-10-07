@@ -597,3 +597,15 @@
   color: var(--color-text-secondary, var(--color-text-primary)); text-align: center; outline: none; padding: 2px 0;
 }
 .comp-handle:focus, .comp-site:focus, .comp-posts:focus { border-bottom: 1px solid var(--color-accent); }
+
+/* ── Analysis / Report details tabs ── */
+.tabbar { display:flex; gap:6px; margin:0 0 1.25rem; border-bottom:1px solid var(--border, rgba(255,255,255,.12)); }
+.tab-btn { background:none; border:none; color:var(--text-muted, #9a978d); font:inherit; font-size:.9rem; padding:.6rem 1rem; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; }
+.tab-btn:hover { color:var(--text-bright, #fff); }
+.tab-btn.on { color:var(--color-accent, #f68d5f); border-bottom-color:var(--color-accent, #f68d5f); font-weight:600; }
+.tab-panel[hidden] { display:none; }
+.panel-hint { color:var(--text-muted, #9a978d); font-size:.85rem; margin:0 0 1rem; }
+.fill-tag { font-size:.7rem; font-weight:500; letter-spacing:.02em; text-transform:none; padding:2px 8px; border-radius:10px; margin-left:8px; background:rgba(255,255,255,.08); color:var(--text-muted, #9a978d); vertical-align:middle; }
+.fill-tag.full { background:rgba(62,122,76,.25); color:#7fc592; }
+.fill-tag.part { background:rgba(246,141,95,.2); color:var(--color-accent, #f68d5f); }
+@media (max-width: 640px) { .tab-btn { flex:1; padding:.7rem .4rem; font-size:.85rem; } }
