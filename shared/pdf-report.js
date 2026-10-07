@@ -64,7 +64,7 @@
 
     const reportTitle = (opts.reportTitle || 'REPORT').toUpperCase();
     const companyName = opts.companyName || 'Client';
-    const LIGHT_STYLE = !!opts.light; // softer header/table look (opt-in)
+    const LIGHT_STYLE = opts.light !== false; // softer header/table look (default; pass light:false for the old dark bars)
 
     // jsPDF's standard fonts (Helvetica etc.) use WinAnsiEncoding (cp1252),
     // which happens to special-case common "smart" punctuation - em/en
