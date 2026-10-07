@@ -266,7 +266,7 @@ function buildQbrReport(clientName) {
   if (typeof window.RevitalPDF === 'undefined') {
     throw new Error('PDF generator library failed to load. Please check your internet connection or disable ad-blockers.');
   }
-  const r = RevitalPDF.create({ reportTitle: 'QUARTERLY BUSINESS REVIEW', companyName: clientName });
+  const r = RevitalPDF.create({ numbered: true,  reportTitle: 'QUARTERLY BUSINESS REVIEW', companyName: clientName });
   const period = new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
   r.coverPage({

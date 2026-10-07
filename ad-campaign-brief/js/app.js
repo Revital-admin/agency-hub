@@ -191,7 +191,7 @@ ${specialNotes}
       const specialNotes = document.getElementById('specialNotes').value;
 
       try {
-        const r = RevitalPDF.create({ reportTitle: 'AD CAMPAIGN BRIEF', companyName: clientName });
+        const r = RevitalPDF.create({ numbered: true,  reportTitle: 'AD CAMPAIGN BRIEF', companyName: clientName });
         const C = r.colors;
 
         r.coverPage({

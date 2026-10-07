@@ -128,7 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const cName = clientNameIn.value || 'Client';
 
     try {
-      const r = RevitalPDF.create({ reportTitle: 'MARKETING ROI PROJECTOR', companyName: cName });
+      const r = RevitalPDF.create({ numbered: true,  reportTitle: 'MARKETING ROI PROJECTOR', companyName: cName });
       const C = r.colors;
 
       r.coverPage({

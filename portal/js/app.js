@@ -1016,7 +1016,7 @@ if (btnDownloadReportPdf) {
     const fileName = `${(clientName || "Client").replace(/\s+/g, "_")}_Report_${(report.date || "report").replace(/[^a-z0-9]+/gi, "_")}.pdf`;
 
     try {
-      const r = RevitalPDF.create({ reportTitle: 'MONTHLY REPORT', companyName: clientName || 'Client' });
+      const r = RevitalPDF.create({ numbered: true,  reportTitle: 'MONTHLY REPORT', companyName: clientName || 'Client' });
 
       r.coverPage({
         title: report.date || 'Report',

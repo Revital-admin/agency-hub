@@ -244,7 +244,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const loomLink = document.getElementById('loomLink').value.trim();
     const services = Array.from(document.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
 
-    const r = RevitalPDF.create({ reportTitle: 'CLIENT WELCOME GUIDE', companyName: clientName });
+    const r = RevitalPDF.create({ numbered: true,  reportTitle: 'CLIENT WELCOME GUIDE', companyName: clientName });
     const C = r.colors;
 
     r.coverPage({
@@ -296,7 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function buildNinetyDayPlanPdfForAttachment(clientName, plan) {
     const p = plan || {};
     const name = clientName || 'Client';
-    const r = RevitalPDF.create({ reportTitle: '90-DAY MARKETING ROADMAP', companyName: name });
+    const r = RevitalPDF.create({ numbered: true,  reportTitle: '90-DAY MARKETING ROADMAP', companyName: name });
     r.coverPage({
       title: '90-Day Marketing Roadmap',
       subLine: `${name} — Your First Quarter Plan`,

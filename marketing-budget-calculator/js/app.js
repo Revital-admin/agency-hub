@@ -127,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const cName = clientNameIn.value || 'Client';
 
     try {
-      const r = RevitalPDF.create({ reportTitle: 'MARKETING BUDGET CALCULATOR', companyName: cName });
+      const r = RevitalPDF.create({ numbered: true,  reportTitle: 'MARKETING BUDGET CALCULATOR', companyName: cName });
 
       r.coverPage({
         title: 'Marketing Budget Recommendation',

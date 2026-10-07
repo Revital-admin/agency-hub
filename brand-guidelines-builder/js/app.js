@@ -429,7 +429,7 @@ function downloadGuidelinePdf() {
       btn.disabled = false; btn.innerHTML = origHtml;
       return;
     }
-    const r = RevitalPDF.create({ reportTitle: 'BRAND GUIDELINES', companyName: clientName });
+    const r = RevitalPDF.create({ numbered: true,  reportTitle: 'BRAND GUIDELINES', companyName: clientName });
 
     r.coverPage({
       title: 'Brand Guidelines',

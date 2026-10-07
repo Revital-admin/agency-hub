@@ -106,7 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function buildNinetyDayPlanPdf(clientName, planData) {
     const p = planData || {};
     const name = clientName || 'Client';
-    const r = RevitalPDF.create({ reportTitle: '90-DAY MARKETING ROADMAP', companyName: name });
+    const r = RevitalPDF.create({ numbered: true,  reportTitle: '90-DAY MARKETING ROADMAP', companyName: name });
     const C = r.colors;
 
     r.coverPage({

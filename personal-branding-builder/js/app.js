@@ -507,7 +507,7 @@ function setupEventHandlers() {
       // (screenshotted by html2canvas/html2pdf) to the shared RevitalPDF
       // module - see ../shared/pdf-report.js for the full rationale.
       try {
-        const r = RevitalPDF.create({ reportTitle: 'PERSONAL BRANDING STRATEGY', companyName: state.targetUrl || 'Client' });
+        const r = RevitalPDF.create({ numbered: true,  reportTitle: 'PERSONAL BRANDING STRATEGY', companyName: state.targetUrl || 'Client' });
         const C = r.colors;
 
         function block(label, value) {

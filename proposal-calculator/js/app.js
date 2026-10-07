@@ -886,7 +886,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
       }
 
-      const r = RevitalPDF.create({ reportTitle: 'MARKETING PROPOSAL', companyName: clientName });
+      const r = RevitalPDF.create({ numbered: true,  reportTitle: 'MARKETING PROPOSAL', companyName: clientName });
       const C = r.colors;
 
       r.coverPage({

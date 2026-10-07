@@ -130,7 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const cName = clientNameIn.value || 'Client';
 
     try {
-      const r = RevitalPDF.create({ reportTitle: 'PAYBACK PERIOD CALCULATOR', companyName: cName });
+      const r = RevitalPDF.create({ numbered: true,  reportTitle: 'PAYBACK PERIOD CALCULATOR', companyName: cName });
       const C = r.colors;
 
       r.coverPage({

@@ -404,7 +404,7 @@ function downloadPDF() {
     const winsText = winsEl ? winsEl.textContent.trim() : '';
     const wins = (winsText === placeholderText) ? '' : winsText;
 
-    const r = RevitalPDF.create({ reportTitle: 'MONTHLY REPORT', companyName: clientName });
+    const r = RevitalPDF.create({ numbered: true,  reportTitle: 'MONTHLY REPORT', companyName: clientName });
 
     r.coverPage({
       title: 'Monthly Report',

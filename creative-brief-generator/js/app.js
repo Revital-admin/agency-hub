@@ -150,7 +150,7 @@ ${references}
       const references = document.getElementById('references').value;
 
       try {
-        const r = RevitalPDF.create({ reportTitle: 'CREATIVE BRIEF', companyName: clientName });
+        const r = RevitalPDF.create({ numbered: true,  reportTitle: 'CREATIVE BRIEF', companyName: clientName });
         const C = r.colors;
 
         r.coverPage({

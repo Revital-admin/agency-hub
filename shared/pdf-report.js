@@ -64,6 +64,8 @@
 
     const reportTitle = (opts.reportTitle || 'REPORT').toUpperCase();
     const companyName = opts.companyName || 'Client';
+    let secNo = 0;
+    const NUMBERED = !!opts.numbered; // auto-number section headers (01, 02...)
     const LIGHT_STYLE = opts.light !== false; // softer header/table look (default; pass light:false for the old dark bars)
 
     // jsPDF's standard fonts (Helvetica etc.) use WinAnsiEncoding (cp1252),
@@ -136,7 +138,9 @@
     }
     function sectionHeader(title) {
       title = sanitizeText(title);
-      ensureSpace(70);
+      if (NUMBERED && !/^\d+[.)]?\s/.test(title)) { secNo++; title = (secNo < 10 ? '0' : '') + secNo + ' ' + title; }
+      if (y > MARGIN + 40) y += 18; // breathing room after the previous block
+      ensureSpace(150); // keep the header with some content, never stranded at a page foot
       if (LIGHT_STYLE) {
         doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
         doc.setTextColor.apply(doc, ACCENT);

@@ -88,7 +88,7 @@
     const completion = progress ? passRate : (total ? Math.round(reviewedN / total * 100) : 0);
     const overallGrade = progress ? passRate + '% complete' : (passRate === null ? 'Not graded yet' : gradeFromPct(passRate));
 
-    const r = global.RevitalPDF.create({ reportTitle: opts.reportTitle || 'AUDIT REPORT', companyName: companyName });
+    const r = global.RevitalPDF.create({ numbered: true, reportTitle: opts.reportTitle || 'AUDIT REPORT', companyName: companyName });
     const doc = r.doc;
     const C = r.colors;
 

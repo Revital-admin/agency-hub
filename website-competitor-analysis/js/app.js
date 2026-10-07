@@ -421,11 +421,9 @@ function downloadPDF() {
     const siteLabel = function(s) { return s.replace(/^https?:\/\//i, '').replace(/\/$/, ''); };
     const siteHref = function(s) { return /^https?:\/\//i.test(s) ? s : 'https://' + s; };
 
-    const r = RevitalPDF.create({ reportTitle: 'WEBSITE COMPETITOR ANALYSIS', companyName: companyName, light: true });
+    const r = RevitalPDF.create({ reportTitle: 'WEBSITE COMPETITOR ANALYSIS', companyName: companyName, light: true, numbered: true });
     const doc = r.doc;
     const C = r.colors;
-    let secNo = 0;
-    const _sh = r.sectionHeader; r.sectionHeader = function(t) { secNo++; _sh.call(r, (secNo < 10 ? '0' : '') + secNo + ' ' + t); };
 
     // ================= COVER =================
     function drawContactLine(i, extra) {
