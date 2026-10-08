@@ -608,3 +608,18 @@
 .fill-tag.full { background:rgba(62,122,76,.25); color:#7fc592; }
 .fill-tag.part { background:rgba(246,141,95,.2); color:var(--color-accent, #f68d5f); }
 @media (max-width: 640px) { .tab-btn { flex:1; padding:.7rem .4rem; font-size:.85rem; } }
+
+/* ── Research assistant (shared/research-assist.js) ── */
+.ra-box { border:1px dashed var(--color-accent, #f68d5f); border-radius:10px; padding:1rem 1.1rem; margin:0 0 1.5rem; }
+.ra-title { font-weight:600; margin-bottom:.4rem; }
+.ra-sub { font-weight:400; font-size:.8rem; color:var(--text-muted, #9a978d); margin-left:6px; }
+.ra-steps { margin:.4rem 0 .9rem 1.1rem; padding:0; font-size:.88rem; color:var(--text-muted, #9a978d); line-height:1.5; }
+.ra-steps b { color:var(--text-bright, #fff); font-weight:600; }
+.ra-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:.5rem 0; }
+.ra-btn { background:var(--color-accent, #f68d5f); color:#1a1a17; border:none; border-radius:8px; padding:.55rem 1rem; font:inherit; font-weight:600; font-size:.88rem; cursor:pointer; }
+.ra-btn:hover { filter:brightness(1.08); }
+.ra-msg, .ra-result { font-size:.85rem; color:var(--text-muted, #9a978d); }
+.ra-result { margin-top:.5rem; }
+.ra-label { display:block; margin:.9rem 0 .35rem; font-size:.85rem; font-weight:600; }
+.ra-chk { font-size:.85rem; color:var(--text-muted, #9a978d); display:flex; align-items:center; gap:6px; }
+.ra-manual[hidden] { display:none; }

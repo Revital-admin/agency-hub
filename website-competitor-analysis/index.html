@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Website Competitor Analysis — Revital Hub</title>
   <link rel="stylesheet" href="../style.css?v=29" />
-  <link rel="stylesheet" href="css/style.css?v=3" />
+  <link rel="stylesheet" href="css/style.css?v=4" />
   <link rel="stylesheet" href="../shared/mobile-base.css?v=2">
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 </head>
@@ -155,6 +155,7 @@
   </div>
   <div class="tab-panel" id="panelDetails" hidden>
     <p class="panel-hint">Everything here feeds the PDF. Empty groups are skipped in the report.</p>
+    <div id="researchAssistMount"></div>
     <!-- ── Positioning & Target Audience (PDF report section, Oct 2026) - all optional ── -->
     <div class="section-label">Positioning &amp; Target Audience <span class="fill-tag" data-for="positioningField,qaField,targetsField,directionField,messageField"></span></div>
     <div class="insight-box" style="margin-bottom: 1.5rem;">
@@ -205,9 +206,10 @@
        original jsPDF rebuild so every other tool's "Download PDF" can reuse
        the same primitives/colors instead of re-implementing them. See
        shared/pdf-report.js for the full history. -->
+  <script src="../shared/research-assist.js?v=1"></script>
   <script src="../shared/pdf-logo.js?v=1"></script>
   <script src="../shared/pdf-report.js?v=9"></script>
-  <script src="js/app.js?v=10"></script>
+  <script src="js/app.js?v=11"></script>
   <!-- Oct 2026 rebuild: PDF export switched from html2canvas/html2pdf (a
        screenshot of the on-screen tool) to native jsPDF vector text. Two
        independent, confirmed bugs in the screenshot approach are structurally

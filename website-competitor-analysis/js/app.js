@@ -681,3 +681,6 @@ function clearAll() {
   document.addEventListener('input', function() { window.updateFillTags(); });
   window.addEventListener('load', function() { window.updateFillTags(); setTimeout(window.updateFillTags, 400); });
 })();
+
+/* ── Research assistant (copy prompt / paste reply) ── */
+(function() { if (window.RevitalResearchAssist) RevitalResearchAssist.init({ kind: 'website', mount: document.getElementById('researchAssistMount') }); })();
