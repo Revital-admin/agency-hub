@@ -6873,8 +6873,25 @@ function startClientWorkspacesSync() {
       }
     });
 
-    const freshStr = JSON.stringify(fresh);
     const localStr = JSON.stringify(clientsDb);
+    // Oct 2026 fix - keep the ACTIVE client's object identity across a sync.
+    // Several tools (website/social competitor analysis, etc.) grab
+    // getActiveClient() once when their iframe loads and keep editing that
+    // same object. Before this, any snapshot (including the very first one
+    // after boot, which swaps the localStorage-cache objects for cloud
+    // ones) replaced the whole clientsDb with brand-new objects, leaving
+    // an already-open tool editing a detached copy: its edits showed on
+    // screen but never reached clientsDb, so they were never saved. When
+    // this client has unsaved local edits the code above already keeps the
+    // existing object; otherwise update the existing object IN PLACE with
+    // the cloud data instead of swapping it out.
+    const activeBefore = activeClientName && clientsDb[activeClientName];
+    if (activeBefore && fresh[activeClientName] && fresh[activeClientName] !== activeBefore) {
+      syncObjectInPlace(activeBefore, fresh[activeClientName]);
+      fresh[activeClientName] = activeBefore;
+    }
+    const freshStr = JSON.stringify(fresh);
+    const isFirstClientWorkspacesSync = !clientWorkspacesSyncReady;
     clientsDb = fresh;
     clientWorkspacesSyncReady = true;
 
@@ -6895,9 +6912,34 @@ function startClientWorkspacesSync() {
     // tab just because a remote change (to any client, not necessarily
     // theirs) came in through this listener. REGRESSION FIX (Sep 2026):
     // this option was missing here too.
-    refreshAllViews({ skipActiveIframeReload: true });
+    // Exception: the very first snapshot after boot, when the open tool was
+    // rendered from the localStorage cache and nobody has had time to edit
+    // anything yet - reload it once so it shows the confirmed cloud data.
+    const reloadActiveToolNow = isFirstClientWorkspacesSync && !pendingLocalClientEdits.has(activeClientName);
+    refreshAllViews({ skipActiveIframeReload: !reloadActiveToolNow });
     renderDashboard();
   });
+}
+
+// Updates `target` to match `source` without replacing `target` or any
+// nested object/array that already exists in both (so references other
+// code is holding stay live). Plain JSON data only (what clientsDb holds).
+function syncObjectInPlace(target, source) {
+  const isObj = v => v && typeof v === "object";
+  if (Array.isArray(target) && Array.isArray(source)) {
+    target.length = source.length;
+    for (let i = 0; i < source.length; i++) {
+      if (isObj(target[i]) && isObj(source[i]) && Array.isArray(target[i]) === Array.isArray(source[i])) syncObjectInPlace(target[i], source[i]);
+      else target[i] = source[i];
+    }
+    return target;
+  }
+  Object.keys(target).forEach(k => { if (!(k in source)) delete target[k]; });
+  Object.keys(source).forEach(k => {
+    if (isObj(target[k]) && isObj(source[k]) && Array.isArray(target[k]) === Array.isArray(source[k])) syncObjectInPlace(target[k], source[k]);
+    else target[k] = source[k];
+  });
+  return target;
 }
 
 // Greedily bin-packs clientsDb's entries into shard-sized chunks, each
