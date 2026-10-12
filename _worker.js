@@ -5731,12 +5731,34 @@ async function handleRestrictedClientDataWrite(request, env) {
         break;
       }
     }
-    if (targetShardIndex === -1) {
+
+    // Bug fix (Oct 2026 - "the stuff filled in the Social Competitor List
+    // isn't showing up again", reported by a restricted teammate): the base
+    // this merge started from was the dormant SHARD copy of the client,
+    // and that merged shard-derived record was then written over the whole
+    // authoritative clientWorkspaces document below. The shard copy is
+    // best-effort and can lag the real document (see the dormant shard
+    // safety-net write in app.js), so a teammate saving ONE field could
+    // silently roll every OTHER field on that client back to whatever the
+    // stale shard held - including data an admin had just filled in. Now
+    // the merge base is the real, fresh clientWorkspaces document (the
+    // source of truth since the Sep 2026 cutover); the shard is only used
+    // as a fallback if that document doesn't exist, and is refreshed from
+    // the merged result so it stays a faithful rollback copy.
+    const workspaceDocPath = `clientWorkspaces/${encodeURIComponent(clientName)}`;
+    const freshWorkspaceDoc = await firestoreGetDoc(accessToken, projectId, workspaceDocPath);
+    if (!freshWorkspaceDoc && targetShardIndex === -1) {
       return jsonResponse({ error: `Client "${clientName}" not found` }, 404);
     }
-
-    targetShardData[clientName] = Object.assign({}, targetShardData[clientName], fields);
-    await firestoreSetDoc(accessToken, projectId, `agency/clientsDb-shard-${targetShardIndex}`, targetShardData);
+    const baseClient = freshWorkspaceDoc
+      ? Object.assign({}, freshWorkspaceDoc)
+      : Object.assign({}, targetShardData[clientName]);
+    delete baseClient[CLIENT_DOC_VERSION_FIELD];
+    const mergedClient = Object.assign({}, baseClient, fields);
+    if (targetShardIndex !== -1) {
+      targetShardData[clientName] = mergedClient;
+      await firestoreSetDoc(accessToken, projectId, `agency/clientsDb-shard-${targetShardIndex}`, targetShardData);
+    }
 
     // Originally written as a Phase 2 parallel-write (see
     // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md) alongside the "real" shard
@@ -5772,7 +5794,7 @@ async function handleRestrictedClientDataWrite(request, env) {
       const currentClientDocVersion = currentWorkspaceDoc && typeof currentWorkspaceDoc[CLIENT_DOC_VERSION_FIELD] === "number"
         ? currentWorkspaceDoc[CLIENT_DOC_VERSION_FIELD] : 0;
       await firestoreSetDoc(accessToken, projectId, `clientWorkspaces/${encodeURIComponent(clientName)}`,
-        Object.assign({}, targetShardData[clientName], { [CLIENT_DOC_VERSION_FIELD]: currentClientDocVersion + 1 }));
+        Object.assign({}, mergedClient, { [CLIENT_DOC_VERSION_FIELD]: currentClientDocVersion + 1 }));
     } catch (parallelWriteErr) {
       console.error("clientWorkspaces parallel-write failed (Phase 2 refactor, non-blocking):", parallelWriteErr);
     }
@@ -5860,7 +5882,7 @@ async function handleRestrictedClientDataWrite(request, env) {
     // follow-up rather than porting untested logic in this same pass.
     const touchedPortalFields = PORTAL_SYNCED_FIELDS.filter(key => Object.prototype.hasOwnProperty.call(fields, key));
     if (touchedPortalFields.length) {
-      const savedClient = targetShardData[clientName];
+      const savedClient = mergedClient;
       const token = savedClient && savedClient.portalConfig && savedClient.portalConfig.magicToken;
       if (token) {
         try {
