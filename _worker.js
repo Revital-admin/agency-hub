@@ -6546,14 +6546,34 @@ function buildOverdueSubscriptionSignatures(subscriptions) {
   const sig = {};
   (subscriptions || []).forEach(s => {
     if (!s.id || s.status === "Cancelled" || !s.renewalDate) return;
-    // Monthly/Annual rows auto-roll to their next date whenever Subscription
-    // Tracker is opened, so a passed date there isn't a lapse signal.
-    if (s.billingCycle === "Monthly" || s.billingCycle === "Annual") return;
     const days = healthDigestDaysBetween(today, s.renewalDate); // renewalDate - today: negative = already past
     if (days < 0) sig[s.id] = { toolName: s.toolName || "(unnamed tool)", renewalDate: s.renewalDate, daysOverdue: -days };
   });
   return sig;
 }
+
+// Server-side twin of rollRenewalDate in subscription-tracker/js/app.js
+// (keep in sync by hand): Monthly/Annual subscriptions renew on their own,
+// so a passed date moves to the next future occurrence, keeping the day of
+// month (clamped for short months). "No Cycle"/Cancelled rows are untouched.
+function rollSubscriptionRenewalDate(s, today) {
+  if (!s || !s.renewalDate || s.status === "Cancelled") return s && s.renewalDate;
+  if (s.billingCycle !== "Monthly" && s.billingCycle !== "Annual") return s.renewalDate;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s.renewalDate) || s.renewalDate >= today) return s.renewalDate;
+  const [y, m, d] = s.renewalDate.split("-").map(Number);
+  const per = s.billingCycle === "Annual" ? 12 : 1;
+  for (let steps = 1; steps < 600; steps++) {
+    const total = (m - 1) + per * steps;
+    const ny = y + Math.floor(total / 12);
+    const nm = total % 12;
+    const lastDay = new Date(Date.UTC(ny, nm + 1, 0)).getUTCDate();
+    const next = ny + "-" + String(nm + 1).padStart(2, "0") + "-" + String(Math.min(d, lastDay)).padStart(2, "0");
+    if (next >= today) return next;
+  }
+  return s.renewalDate;
+}
+
+const UPCOMING_ANNUAL_RENEWAL_DAYS = 14;
 
 async function runOverdueSubscriptionCheck(env) {
   const recipients = (env.HEALTH_DIGEST_RECIPIENTS || "admin@revitalproductions.com")
@@ -6566,6 +6586,43 @@ async function runOverdueSubscriptionCheck(env) {
       firestoreGetDoc(accessToken, projectId, OVERDUE_SUBSCRIPTION_STATE_DOC_PATH)
     ]);
     const subscriptions = subDoc && Array.isArray(subDoc.list) ? subDoc.list : [];
+
+    // Keep Monthly/Annual dates current even if nobody opens the tracker:
+    // roll passed dates forward and save (version bumped like a client save).
+    const today = healthDigestTodayStr();
+    let rolledAny = false;
+    subscriptions.forEach(s => {
+      const next = rollSubscriptionRenewalDate(s, today);
+      if (next && next !== s.renewalDate) { s.renewalDate = next; rolledAny = true; }
+    });
+    if (rolledAny) {
+      await firestoreSetDoc(accessToken, projectId, "agency/subscriptionTracker", {
+        list: subscriptions,
+        version: ((subDoc && subDoc.version) || 0) + 1
+      });
+    }
+
+    // Heads-up for ANNUAL renewals coming up (domain, design tool, etc.) -
+    // once per renewal date. Since dates auto-roll, a passed date can no
+    // longer signal a lapse, so this is the "check the card on file" nudge.
+    const upcomingSent = Object.assign({}, (alertStateDoc && alertStateDoc.upcomingSent) || {});
+    const upcoming = subscriptions.filter(s => {
+      if (!s.id || s.status === "Cancelled" || s.billingCycle !== "Annual" || !s.renewalDate) return false;
+      const days = healthDigestDaysBetween(today, s.renewalDate);
+      return days >= 0 && days <= UPCOMING_ANNUAL_RENEWAL_DAYS && upcomingSent[s.id] !== s.renewalDate;
+    });
+    if (upcoming.length) {
+      const lines = upcoming.map(s => `${s.toolName || "(unnamed tool)"} - renews ${s.renewalDate} (in ${healthDigestDaysBetween(today, s.renewalDate)}d)${s.monthlyCost ? ", $" + Math.round(Number(s.monthlyCost) || 0) : ""}`);
+      const html = `<div style="font-family: Arial, sans-serif; color:#1e293b; max-width:600px;">
+           <h2 style="margin-bottom:4px;">Annual Renewals Coming Up</h2>
+           <p style="color:#64748b; margin-top:0;">Make sure the card on file is current so these don't lapse:</p>
+           <ul style="padding-left:20px;">${lines.map(l => `<li style="margin-bottom:6px;">${escapeHtmlForDigest(l)}</li>`).join("")}</ul>
+         </div>`;
+      await sendHealthDigestEmail(env, recipients, `Annual renewal coming up - ${upcoming.length} subscription${upcoming.length === 1 ? "" : "s"}`, html,
+        ["ANNUAL RENEWALS COMING UP", "Make sure the card on file is current:", "", ...lines.map(l => "- " + l)].join("\n"));
+      upcoming.forEach(s => { upcomingSent[s.id] = s.renewalDate; });
+    }
+
     const currentSig = buildOverdueSubscriptionSignatures(subscriptions);
     const previousById = (alertStateDoc && alertStateDoc.byTool) || {};
 
@@ -6598,6 +6655,7 @@ async function runOverdueSubscriptionCheck(env) {
 
     await firestoreSetDoc(accessToken, projectId, OVERDUE_SUBSCRIPTION_STATE_DOC_PATH, {
       byTool: currentSig,
+      upcomingSent,
       lastCheckedAt: new Date().toISOString()
     });
   } catch (e) {
