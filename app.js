@@ -1750,6 +1750,32 @@ function createNewClient() {
   setUpNewClientFolders(name).catch(e => console.warn("Could not set up new client folders:", e));
 }
 
+// Closed Won -> Hub profile. Called by Sales Pipeline Board's notifyDealWon
+// (window.parent.createClientFromWonDeal) so a won deal no longer waits on
+// someone remembering to create the workspace. Unlike createNewClient above it
+// asks nothing and does NOT switch the active workspace (the person who marked
+// the deal won is mid-task in the pipeline board). Returns "created",
+// "exists" (a workspace with that name is already there - nothing touched) or
+// "skipped" (unusable name). Seeds only what the lead already knows: the
+// name and the contact email.
+function createClientFromWonDeal(lead) {
+  const name = ((lead && lead.name) || "").trim();
+  if (!name) return "skipped";
+  const taken = Object.keys(clientsDb).some(k => k.trim().toLowerCase() === name.toLowerCase());
+  if (taken) return "exists";
+
+  const fresh = createClientBlankState(name);
+  if (lead.contactEmail && fresh.portalConfig) fresh.portalConfig.clientContactEmail = String(lead.contactEmail).trim();
+  clientsDb[name] = fresh;
+  pendingLocalClientEdits.add(name);
+  saveDatabase();
+  buildClientDropdown();
+  logAdminActivity("Client created (from Closed Won deal)", name);
+  generateNewClientOnboardingEmails(clientsDb[name], name).catch(e => console.warn("Could not draft onboarding emails:", e));
+  setUpNewClientFolders(name).catch(e => console.warn("Could not set up new client folders:", e));
+  return "created";
+}
+
 function renameActiveClient() {
   const sandboxName = "Quick Sandbox (One-Offs)";
   if (activeClientName === sandboxName) {
