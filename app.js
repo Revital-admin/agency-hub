@@ -7187,7 +7187,11 @@ const CLIENT_FIELD_SECTIONS_MIRROR = {
   // against the account manager's own Weekly Check-In read. Mapped to
   // account-ops per Ronald (Oct 2026) so AMs/account-ops teammates can see
   // what a client actually said, not just the rolled-up health score.
-  clientPulseFeedback: "account-ops"
+  clientPulseFeedback: "account-ops",
+  // clientRequests: revision / content requests submitted from the client's
+  // portal forms (submitClientRequest in portal/js/app.js). Same section as
+  // the pulse feedback - what the client actually asked for.
+  clientRequests: "account-ops"
 };
 // Never writable through /api/restricted-client-data regardless of
 // section - see handleRestrictedClientDataWrite in _worker.js.
@@ -8170,6 +8174,25 @@ function foldInClientPulseFeedback(target, publicData) {
   return changed;
 }
 
+// Revision / content requests the client submits from their portal forms
+// (submitClientRequest in portal/js/app.js). Same append-only, merge-by-id
+// shape as foldInClientPulseFeedback above - needed for the same reason
+// (syncPublicPortalDocs' non-merge .set() would otherwise wipe a request).
+// An existing entry keeps its locally-set `reported` flag.
+function foldInClientRequests(target, publicData) {
+  if (!target || !publicData || !Array.isArray(publicData.clientRequests)) return false;
+  if (!Array.isArray(target.clientRequests)) target.clientRequests = [];
+  const existingIds = new Set(target.clientRequests.map(r => r.id));
+  let changed = false;
+  publicData.clientRequests.forEach(r => {
+    if (!existingIds.has(r.id)) {
+      target.clientRequests.push(r);
+      changed = true;
+    }
+  });
+  return changed;
+}
+
 // Appends one entry to a client's notification feed (the bell icon on
 // their portal). Admin-only to create - called from wherever the hub
 // pushes something the client needs to know about (a new approval request,
@@ -8372,6 +8395,88 @@ function emailAccountManagerLowPulseAlert(client, name, pulseEntry) {
   }).catch(e => {
     console.warn("Low-pulse alert email failed to send (in-Hub notification still fired):", e);
   });
+}
+
+// Looks up the HubSpot deal id for a client by name via the Sales Pipeline
+// list (same lookup syncClientHealthToHubSpot does). Returns "" when the
+// client has no synced deal, which is the norm for most clients.
+async function findHubSpotDealIdForClient(clientName) {
+  try {
+    if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) return "";
+    const snap = await window.firebaseGetDoc(window.firebaseDoc(window.firebaseDb, "agency", "salesPipeline"));
+    const data = snap && snap.exists ? snap.data() : null;
+    const want = (clientName || "").trim().toLowerCase();
+    const lead = ((data && data.list) || []).find(l => (l.name || "").trim().toLowerCase() === want);
+    return (lead && lead.hubspotDealId) || "";
+  } catch (e) {
+    return "";
+  }
+}
+
+// One place every client-portal event goes through: emails the account
+// manager, then mirrors to ClickUp (task, for items the team must act on) and
+// HubSpot (deal timeline note) via /api/client-activity. Each leg is
+// fire-and-forget and failures only surface as an admin notification - the
+// event itself is already saved in the Hub, which stays the record of truth.
+// event: approval_decision | revision_request | content_request | report_delivered
+async function reportClientActivity(clientName, event, details) {
+  const client = clientsDb[clientName];
+  if (!client) return;
+  const d = details || {};
+  const config = client.portalConfig || {};
+  const decisionLabels = { approved: "Approved", minor: "Approved with Minor Corrections", revision: "Revision Required" };
+  const eventLabel = event === "approval_decision"
+    ? (decisionLabels[d.decision] || "Response received")
+    : event === "revision_request" ? "Revision requested"
+    : event === "content_request" ? "New content request"
+    : event === "report_delivered" ? "Monthly report delivered"
+    : "Activity";
+
+  // 1) Account manager email (same /api/send-email path as the handoff email).
+  if (event !== "report_delivered" && config.accountManagerEmail && window.firebaseAuthReady) {
+    const amFirst = config.accountManagerName ? config.accountManagerName.split(" ")[0] : "there";
+    const subject = `${clientName}: ${eventLabel}${d.title ? ` - ${d.title}` : ""}`;
+    const needsAction = event !== "approval_decision" || d.decision === "revision" || d.decision === "minor";
+    const lines = [
+      `Hi ${amFirst},`, "",
+      `${clientName} just responded in their portal: ${eventLabel}${d.title ? ` on "${d.title}"` : ""}.`
+    ];
+    if (d.notes) lines.push("", "Their notes:", d.notes);
+    lines.push("", needsAction
+      ? "Next step: action it, then re-run QC and send the revised version back for approval. A task was added to this client's ClickUp folder (if the folder is linked)."
+      : "No action needed - this is logged on their record.", "", "— Revital Hub");
+    fetch("/api/send-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: config.accountManagerEmail, subject, body: lines.join("\n") })
+    }).catch(e => console.warn("Client activity email failed:", e));
+  }
+
+  // 2) ClickUp task + HubSpot note.
+  try {
+    const hubspotDealId = await findHubSpotDealIdForClient(clientName);
+    const res = await fetch("/api/client-activity", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event, clientName,
+        title: d.title || "", decision: d.decision || "", notes: d.notes || "",
+        previewLink: d.previewLink || "", urgency: d.urgency || "",
+        clickupFolderId: client.clickupFolderId || "", hubspotDealId
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+    const failed = [];
+    if (data.clickup && !data.clickup.ok) failed.push(`ClickUp (${data.clickup.reason})`);
+    if (data.hubspot && !data.hubspot.ok) failed.push(`HubSpot (${data.hubspot.reason})`);
+    if (failed.length) {
+      pushAdminNotification("client_activity_sync_failed", `${clientName}: couldn't mirror "${eventLabel}" to ${failed.join(" and ")}. It's saved in the Hub - add it there by hand.`, clientName, null);
+    }
+  } catch (e) {
+    console.warn("Client activity sync failed:", e);
+    pushAdminNotification("client_activity_sync_failed", `${clientName}: couldn't mirror "${eventLabel}" to ClickUp/HubSpot (${e.message}). It's saved in the Hub.`, clientName, null);
+  }
 }
 
 // Sales → Delivery handoff notification - mirrors the documented process's
@@ -9766,6 +9871,7 @@ async function syncPublicPortalDocs(dbSnapshot) {
         // the next time anything else gets saved in the Hub.
         foldInMoodBoardAnnotations(client, existingData);
         foldInClientPulseFeedback(client, existingData);
+        foldInClientRequests(client, existingData);
         foldInNotificationReadState(localNotifications, existingData.notifications);
         // lastVisitedAt is written directly by the portal on load (see
         // portal/js/app.js) and read back into clientsDb by
@@ -9857,6 +9963,11 @@ async function syncPublicPortalDocs(dbSnapshot) {
       // hides what isn't shared" pattern already used for moodBoards'
       // per-board sharedWithClient flag.
       brandRoadmap: client.brandRoadmap || null,
+      // Client-written, append-only (portal forms / pulse widget) - folded in
+      // from the existing public doc above, then carried forward here so this
+      // non-merge .set() never wipes them.
+      clientPulseFeedback: client.clientPulseFeedback || [],
+      clientRequests: client.clientRequests || [],
       // Carried forward as-is (see preservedLastVisitedAt above) - the
       // admin never writes this, only preserves whatever the portal itself
       // already recorded so a Hub save doesn't erase it.
@@ -9922,6 +10033,16 @@ function ensureClientPortalListeners() {
           .forEach(entry => {
             const label = decisionLabels[entry.decision] || entry.decision || "responded";
             pushAdminNotification("approval", `${name}: "${entry.title}" — ${label}`);
+            // Email the account manager + mirror to ClickUp/HubSpot, once per
+            // decision (activityReported guards against a second admin tab or a
+            // later snapshot re-firing it).
+            if (!entry.activityReported) {
+              entry.activityReported = true;
+              pendingLocalClientEdits.add(name);
+              reportClientActivity(name, "approval_decision", {
+                title: entry.title, decision: entry.decision, notes: entry.notes, previewLink: entry.previewLink
+              });
+            }
           });
       }
 
@@ -10018,6 +10139,22 @@ function ensureClientPortalListeners() {
         });
       }
 
+      // Revision / content requests from the portal forms: notify the admin,
+      // then email the AM + mirror to ClickUp/HubSpot once per request
+      // (`reported` guards against a second admin tab re-firing it).
+      const changedClientRequests = foldInClientRequests(currentClient, data);
+      if (changedClientRequests) {
+        (currentClient.clientRequests || []).forEach(r => {
+          if (r.reported) return;
+          r.reported = true;
+          const isRevision = r.type === "revision";
+          pushAdminNotification("client_request", `${name} submitted a ${isRevision ? "revision" : "content"} request: "${r.title}"`, name);
+          reportClientActivity(name, isRevision ? "revision_request" : "content_request", {
+            title: r.title, notes: r.details, urgency: r.urgency
+          });
+        });
+      }
+
       // Portal last-visited tracking - the portal writes lastVisitedAt to
       // its own public doc on load (see portal/js/app.js); pull it into
       // clientsDb here the same way everything else client-driven arrives,
@@ -10028,7 +10165,7 @@ function ensureClientPortalListeners() {
         currentClient.portalLastVisitedAt = data.lastVisitedAt;
       }
 
-      if (changedOnboarding || changedClientChecklist || changedApprovals || changedTestimonial || changedVisit || changedMoodBoardViews || changedMoodBoardStyleFeedback || changedMoodBoardAnnotations || changedPendingComments) {
+      if (changedOnboarding || changedClientChecklist || changedApprovals || changedClientRequests || changedTestimonial || changedVisit || changedMoodBoardViews || changedMoodBoardStyleFeedback || changedMoodBoardAnnotations || changedPendingComments) {
         // Bug fix: this used to only call localStorage.setItem, never an
         // actual cloud write - meaning every fold-in above (onboarding,
         // approvals, testimonials, moodBoardViews/StyleFeedback/

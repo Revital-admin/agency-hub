@@ -194,6 +194,12 @@ function saveReport() {
 
   persist();
 
+  // Log the delivery on the client's HubSpot deal timeline (no-op if the
+  // client has no synced deal) so sales/AMs can see reports went out.
+  if (isEmbedded && window.parent.reportClientActivity) {
+    window.parent.reportClientActivity(clientName, 'report_delivered', { title: `${monthYear} report`, previewLink: url, notes });
+  }
+
   // Reset form
   el('newUrl').value = '';
   el('newNotes').value = '';

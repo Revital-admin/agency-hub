@@ -334,6 +334,7 @@ function init() {
   const token = config.magicToken;
   const clientNameRaw = client.id || client.name || "Client";
   magicLinkInput.value = `${baseUrl}?c=${encodeURIComponent(clientNameRaw)}&t=${token}`;
+  renderReadiness();
 
   // Load Color
   primaryColorInput.value = config.primaryColor || "#10b981";
@@ -747,7 +748,66 @@ function updateConfig(key, value) {
   if (client && client.portalConfig) {
     client.portalConfig[key] = value;
     if (parentSave) parentSave();
+    renderReadiness();
   }
+}
+
+// Portal Readiness: what's still blank before the Welcome Email goes out.
+// "Required" = the client can't be reached / the Hub can't route to the
+// account manager without it. "Recommended" = the portal section or button
+// silently disappears for the client when blank (a blank form link just hides
+// its Quick Action button, so nothing else would flag it).
+const READINESS_REQUIRED = [
+  { key: "clientContactName", label: "Client contact name" },
+  { key: "clientContactEmail", label: "Client contact email" },
+  { key: "accountManagerName", label: "Account manager name" },
+  { key: "accountManagerEmail", label: "Account manager email" }
+];
+const READINESS_RECOMMENDED = [
+  { key: "projectsEmbedUrl", label: "Active Projects shared view" },
+  { key: "calendarEmbedUrl", label: "Content Calendar shared view" },
+  { key: "campaignBriefUrl", label: "Campaign Briefs shared view" },
+  { key: "completedWorkUrl", label: "Completed Work shared view" },
+  { key: "brandAssetsUrl", label: "Assets & Brand Files shared view" },
+  { key: "monthlyReportsUrl", label: "Reports & Analytics shared view" },
+  { key: "driveFolderUrl", label: "Google Drive folder" },
+  { key: "clientLogoUrl", label: "Client logo" },
+  { key: "objective", label: "Client objective" }
+];
+
+function computeReadiness(config) {
+  const c = config || {};
+  const has = k => typeof c[k] === "string" ? c[k].trim() !== "" : !!c[k];
+  const missingRequired = READINESS_REQUIRED.filter(i => !has(i.key));
+  const missingRecommended = READINESS_RECOMMENDED.filter(i => !has(i.key));
+  return {
+    ready: missingRequired.length === 0,
+    missingRequired,
+    missingRecommended,
+    total: READINESS_REQUIRED.length + READINESS_RECOMMENDED.length,
+    done: (READINESS_REQUIRED.length - missingRequired.length) + (READINESS_RECOMMENDED.length - missingRecommended.length)
+  };
+}
+
+function renderReadiness() {
+  const summaryEl = document.getElementById("readinessSummary");
+  const listEl = document.getElementById("readinessList");
+  if (!summaryEl || !listEl) return;
+  const client = getActiveClient();
+  if (!client || !client.portalConfig) return;
+  const r = computeReadiness(client.portalConfig);
+  const complete = r.missingRequired.length === 0 && r.missingRecommended.length === 0;
+  summaryEl.style.color = r.ready ? (complete ? "#22c55e" : "#eab308") : "#ef4444";
+  summaryEl.textContent = complete
+    ? "Fully set up - ready to send the Welcome Email."
+    : r.ready
+      ? `Can send the Welcome Email, but ${r.missingRecommended.length} item${r.missingRecommended.length === 1 ? "" : "s"} still blank (${r.done}/${r.total} done).`
+      : `Not ready: ${r.missingRequired.length} required item${r.missingRequired.length === 1 ? "" : "s"} missing (${r.done}/${r.total} done).`;
+  const row = (item, color, mark) =>
+    `<div style="color:${color};">${mark} ${escapeHtmlLocal(item.label)}</div>`;
+  listEl.innerHTML =
+    r.missingRequired.map(i => row(i, "#ef4444", "&#10007; Required:")).join("") +
+    r.missingRecommended.map(i => row(i, "#eab308", "&#9679; Blank:")).join("");
 }
 
 // Keeps the "Calendly Link" field showing this client's real, working

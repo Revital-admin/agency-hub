@@ -190,6 +190,10 @@ export default {
       return handlePipelineSyncHubSpot(request, env);
     }
 
+    if (url.pathname === "/api/client-activity" && request.method === "POST") {
+      return handleClientActivity(request, env);
+    }
+
     if (url.pathname === "/api/pipeline/sync-onboarding-handoff-assignee" && request.method === "POST") {
       return handleOnboardingHandoffAssigneeSync(request, env);
     }
@@ -3687,6 +3691,141 @@ async function handlePipelineSyncHubSpot(request, env) {
   }
 }
 
+// ── Client activity → ClickUp task + HubSpot note ──
+//
+// Called by the shell (app.js, reportClientActivity) whenever something
+// happens in a client's portal that the delivery team has to act on or sales
+// should be able to see: an approval decision (esp. Revision Required / Minor
+// Corrections), a revision request, a content request. The Hub stays the
+// record of truth - ClickUp and HubSpot are mirrors fed from here, same as the
+// Closed Won sync. Each side is best-effort and independent: a ClickUp failure
+// never blocks the HubSpot note and vice versa, and the response says which
+// worked so the caller can surface it.
+const CLIENT_ACTIVITY_EVENTS = {
+  approval_decision: { label: "Approval decision" },
+  revision_request: { label: "Revision request" },
+  content_request: { label: "Content request" },
+  report_delivered: { label: "Monthly report delivered" }
+};
+
+// Which of the client's 8 template lists a task belongs in, or null if this
+// event only gets a HubSpot note (e.g. a plain "Approved").
+function clientActivityClickUpListHint(event, decision) {
+  if (event === "revision_request") return "feedback & revisions";
+  if (event === "content_request") return "campaign briefs";
+  if (event === "approval_decision" && (decision === "revision" || decision === "minor")) return "feedback & revisions";
+  return null;
+}
+
+async function createHubSpotDealTextNote(token, dealId, bodyText) {
+  try {
+    const noteRes = await fetch(`${HUBSPOT_API_BASE}/crm/v3/objects/notes`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ properties: { hs_note_body: bodyText, hs_timestamp: Date.now() } })
+    });
+    const noteData = await noteRes.json().catch(() => ({}));
+    if (!noteRes.ok) throw new Error(noteData.message || `HubSpot note create failed (${noteRes.status})`);
+    const assocRes = await fetch(`${HUBSPOT_API_BASE}/crm/v4/objects/notes/${noteData.id}/associations/default/deals/${dealId}`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!assocRes.ok) {
+      const assocData = await assocRes.json().catch(() => ({}));
+      throw new Error(assocData.message || `HubSpot note association failed (${assocRes.status})`);
+    }
+    return { ok: true };
+  } catch (e) {
+    console.warn("HubSpot client-activity note failed:", e);
+    return { ok: false, reason: e.message };
+  }
+}
+
+async function createClientActivityClickUpTask(apiToken, folderId, listHint, name, markdown) {
+  try {
+    const listsRes = await fetch(`https://api.clickup.com/api/v2/folder/${encodeURIComponent(folderId)}/list?archived=false`, {
+      headers: { Authorization: apiToken }
+    });
+    const listsData = await listsRes.json().catch(() => ({}));
+    if (!listsRes.ok) throw new Error(listsData.err || `ClickUp list lookup failed (${listsRes.status})`);
+    const list = (listsData.lists || []).find(l => (l.name || "").toLowerCase().includes(listHint));
+    if (!list) throw new Error(`No "${listHint}" list found in that ClickUp folder`);
+
+    const make = async (withStatus) => {
+      const body = { name, markdown_description: markdown };
+      if (withStatus) body.status = "Brief Received"; // documented intake status in the System Flows doc
+      const res = await fetch(`https://api.clickup.com/api/v2/list/${list.id}/task`, {
+        method: "POST",
+        headers: { Authorization: apiToken, "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json().catch(() => ({}));
+      return { res, data };
+    };
+    let { res, data } = await make(true);
+    // That status may not exist on a given list - fall back to the list's default.
+    if (!res.ok) ({ res, data } = await make(false));
+    if (!res.ok) throw new Error(data.err || `ClickUp task create failed (${res.status})`);
+    return { ok: true, taskId: data.id, taskUrl: data.url };
+  } catch (e) {
+    console.warn("ClickUp client-activity task failed:", e);
+    return { ok: false, reason: e.message };
+  }
+}
+
+async function handleClientActivity(request, env) {
+  const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
+  if (!accessEmail || !accessEmail.toLowerCase().endsWith("@" + ADMIN_EMAIL_DOMAIN)) {
+    return jsonResponse({ error: "Not authorized" }, 403);
+  }
+  let p;
+  try { p = await request.json(); } catch (e) { return jsonResponse({ error: "Invalid JSON body" }, 400); }
+  const event = p && p.event;
+  const clientName = ((p && p.clientName) || "").trim();
+  if (!CLIENT_ACTIVITY_EVENTS[event] || !clientName) {
+    return jsonResponse({ error: "valid event and clientName are required" }, 400);
+  }
+  const title = ((p.title || "").trim()).slice(0, 200) || "(untitled)";
+  const decision = p.decision || "";
+  const notes = (p.notes || "").toString().slice(0, 4000);
+  const previewLink = (p.previewLink || "").toString().slice(0, 500);
+  const decisionLabels = { approved: "Approved", minor: "Approved with Minor Corrections", revision: "Revision Required" };
+  const what = event === "approval_decision"
+    ? `${CLIENT_ACTIVITY_EVENTS[event].label}: ${decisionLabels[decision] || decision || "responded"}`
+    : CLIENT_ACTIVITY_EVENTS[event].label;
+
+  const detailLines = [`Client: ${clientName}`, `Item: ${title}`, `Event: ${what}`];
+  if (p.urgency) detailLines.push(`Urgency: ${p.urgency}`);
+  if (previewLink) detailLines.push(`Preview: ${previewLink}`);
+  if (notes) detailLines.push("", "Client notes:", notes);
+
+  const out = { ok: true, clickup: null, hubspot: null };
+
+  const listHint = clientActivityClickUpListHint(event, decision);
+  if (listHint && p.clickupFolderId) {
+    const apiToken = env.CLICKUP_API_TOKEN;
+    if (!apiToken) {
+      out.clickup = { ok: false, reason: "Server missing CLICKUP_API_TOKEN secret" };
+    } else {
+      const prefix = listHint === "campaign briefs" ? "[Request]" : (decision === "minor" ? "[Minor corrections]" : "[Revision]");
+      out.clickup = await createClientActivityClickUpTask(
+        apiToken, p.clickupFolderId, listHint,
+        `${prefix} ${clientName} - ${title}`.slice(0, 240),
+        detailLines.join("\n") + "\n\n_Created by the Hub from the client portal._"
+      );
+    }
+  }
+
+  if (p.hubspotDealId) {
+    const token = env.HUBSPOT_ACCESS_TOKEN;
+    out.hubspot = token
+      ? await createHubSpotDealTextNote(token, p.hubspotDealId, `${what} - ${title}${notes ? `\n\n${notes}` : ""}\n\n_Logged by the Hub client portal._`)
+      : { ok: false, reason: "Server missing HUBSPOT_ACCESS_TOKEN secret" };
+  }
+
+  return jsonResponse(out);
+}
+
 // ── QuickBooks Online (Financial Center) ──
 //
 // Unlike every other integration in this file (ClickUp's static token,
@@ -5405,7 +5544,11 @@ const CLIENT_FIELD_SECTIONS = {
   // Read-only for restricted teammates in practice - no Hub tool lets them
   // edit it, only the public portal writes it - so this only affects what
   // their GET response includes, not the write-merge path noted above.
-  clientPulseFeedback: "account-ops"
+  clientPulseFeedback: "account-ops",
+  // clientRequests: revision / content requests submitted from the client's
+  // portal forms. Same section as the pulse feedback; read-only for
+  // restricted teammates (only the public portal writes it).
+  clientRequests: "account-ops"
 };
 
 // Bug fix (Sep 2026) - keep in sync with ATTRIBUTION_ONLY_FIELDS in

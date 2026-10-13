@@ -337,9 +337,12 @@ service cloud.firestore {
       // in portal/js/app.js), append-only from their side (each submission
       // gets its own id; see foldInClientPulseFeedback in app.js for the
       // merge-by-id logic that keeps a non-merge admin .set() from wiping
-      // one out).
+      // one out). clientRequests (Oct 2026) is the same append-only shape:
+      // the "Submit a Revision" / "Submit a Content Request" forms in the
+      // portal (submitClientRequest in portal/js/app.js), each entry with its
+      // own id, folded in by foldInClientRequests in app.js.
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
-                        .hasOnly(['clientChecklist', 'pendingApprovals', 'approvalHistory', 'testimonialSubmission', 'notifications', 'lastVisitedAt', 'moodBoardViews', 'moodBoardStyleFeedback', 'moodBoardAnnotations', 'clientPulseFeedback']);
+                        .hasOnly(['clientChecklist', 'pendingApprovals', 'approvalHistory', 'testimonialSubmission', 'notifications', 'lastVisitedAt', 'moodBoardViews', 'moodBoardStyleFeedback', 'moodBoardAnnotations', 'clientPulseFeedback', 'clientRequests']);
     }
 
     // Contractor Portal - same magic-token-as-document-ID model as

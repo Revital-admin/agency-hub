@@ -302,16 +302,19 @@ function renderPortal() {
   }
 
   let hasQuickActions = false;
-  if (config.revisionFormUrl) {
-    btnRevision.style.display = "inline-flex";
-    btnRevision.href = config.revisionFormUrl;
-    hasQuickActions = true;
-  }
-  if (config.contentRequestFormUrl) {
-    btnContentRequest.style.display = "inline-flex";
-    btnContentRequest.href = config.contentRequestFormUrl;
-    hasQuickActions = true;
-  }
+  // Revision / content requests are native forms now (saved to the Hub, which
+  // emails the account manager and creates the ClickUp task) - the old
+  // external ClickUp form URLs are no longer used, so a blank URL can't
+  // silently hide these buttons anymore.
+  btnRevision.style.display = "inline-flex";
+  btnRevision.removeAttribute("target");
+  btnRevision.href = "#";
+  btnRevision.onclick = (e) => { e.preventDefault(); openClientRequestModal("revision"); };
+  btnContentRequest.style.display = "inline-flex";
+  btnContentRequest.removeAttribute("target");
+  btnContentRequest.href = "#";
+  btnContentRequest.onclick = (e) => { e.preventDefault(); openClientRequestModal("content"); };
+  hasQuickActions = true;
   if (config.fileUploadUrl) {
     btnUploadFiles.style.display = "inline-flex";
     btnUploadFiles.href = config.fileUploadUrl;
@@ -2299,6 +2302,71 @@ function submitPulseFeedback() {
     console.error("Error submitting pulse feedback:", err);
   });
 }
+
+// ── Client requests (Submit a Revision / Submit a Content Request) ──
+// Appends one entry to clientData.clientRequests on the client's public doc
+// (rules whitelist: clientRequests). The Hub folds it in, notifies the team,
+// emails the account manager and mirrors it to ClickUp/HubSpot.
+let clientRequestType = "revision";
+
+function openClientRequestModal(type) {
+  clientRequestType = type;
+  const isRevision = type === "revision";
+  document.getElementById("clientRequestHeading").textContent = isRevision ? "Submit a Revision" : "Submit a Content Request";
+  document.getElementById("clientRequestTitleLabel").textContent = isRevision ? "Which deliverable?" : "What would you like us to create?";
+  document.getElementById("clientRequestDetailsLabel").textContent = isRevision ? "What needs to change?" : "Tell us more (goal, audience, anything we should know)";
+  document.getElementById("clientRequestWhenLabel").textContent = isRevision ? "How urgent is it? (optional)" : "Timeline or deadline (optional)";
+  document.getElementById("clientRequestTitle").value = "";
+  document.getElementById("clientRequestDetails").value = "";
+  document.getElementById("clientRequestWhen").value = "";
+  document.getElementById("clientRequestError").textContent = "";
+  document.getElementById("clientRequestForm").style.display = "block";
+  document.getElementById("clientRequestThanks").style.display = "none";
+  document.getElementById("clientRequestModal").style.display = "flex";
+}
+
+function closeClientRequestModal() {
+  document.getElementById("clientRequestModal").style.display = "none";
+}
+
+function submitClientRequest() {
+  const title = (document.getElementById("clientRequestTitle").value || "").trim();
+  const details = (document.getElementById("clientRequestDetails").value || "").trim();
+  const urgency = (document.getElementById("clientRequestWhen").value || "").trim();
+  if (!title || !details) {
+    document.getElementById("clientRequestError").textContent = "Please fill in both fields so we can get started.";
+    return;
+  }
+  const entry = {
+    id: "req-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+    type: clientRequestType,
+    title: title.slice(0, 200),
+    details: details.slice(0, 4000),
+    urgency: urgency.slice(0, 200),
+    submittedAt: new Date().toISOString()
+  };
+  if (!Array.isArray(clientData.clientRequests)) clientData.clientRequests = [];
+  clientData.clientRequests.push(entry);
+
+  document.getElementById("clientRequestForm").style.display = "none";
+  document.getElementById("clientRequestThanks").style.display = "block";
+
+  db.collection("clients").doc(clientToken).set({
+    clientRequests: JSON.parse(JSON.stringify(clientData.clientRequests))
+  }, { merge: true }).catch(err => {
+    console.error("Error submitting request:", err);
+    document.getElementById("clientRequestForm").style.display = "block";
+    document.getElementById("clientRequestThanks").style.display = "none";
+    document.getElementById("clientRequestError").textContent = "Something went wrong sending that. Please try again or email your account manager.";
+    clientData.clientRequests = clientData.clientRequests.filter(r => r.id !== entry.id);
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const submitBtn = document.getElementById("clientRequestSubmitBtn");
+  if (submitBtn) submitBtn.addEventListener("click", submitClientRequest);
+  document.querySelectorAll(".client-request-close").forEach(b => b.addEventListener("click", closeClientRequestModal));
+});
 
 function dismissPulseWidget() {
   try { localStorage.setItem(pulseLocalStorageKey(), new Date().toISOString()); } catch (e) {}
