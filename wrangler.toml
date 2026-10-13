@@ -83,7 +83,11 @@ bucket_name = "revital-media"
 # but change-triggered and daily so a missing W-9 or newly-expiring
 # policy gets caught same-day instead of waiting up to a week. See
 # runDailyComplianceCheck in _worker.js.
-crons = ["0 13 * * 1", "0 12 * * *"]
+# "17 * * * *" - Hourly client-activity sweep (Oct 2026): emails the account
+# manager and mirrors to ClickUp/HubSpot for portal approvals, revision and
+# content requests nobody had the Hub open to report. See
+# runClientActivitySweep in _worker.js.
+crons = ["0 13 * * 1", "0 12 * * *", "17 * * * *"]
 
 # Financial Center's QuickBooks Online sync (/api/quickbooks/* in
 # _worker.js). Unlike this file's other integrations, QuickBooks needs an

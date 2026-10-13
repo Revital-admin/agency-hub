@@ -31,7 +31,9 @@ export default {
   // always running the same job - see runWeeklyHealthDigest and
   // runDailyComplianceCheck below for what each actually does.
   async scheduled(event, env, ctx) {
-    if (event.cron === "0 12 * * *") {
+    if (event.cron === "17 * * * *") {
+      ctx.waitUntil(runClientActivitySweep(env));
+    } else if (event.cron === "0 12 * * *") {
       ctx.waitUntil(runDailyComplianceCheck(env));
       ctx.waitUntil(runStalePipelineCheck(env));
       ctx.waitUntil(runOverdueSubscriptionCheck(env));
@@ -3785,6 +3787,15 @@ async function handleClientActivity(request, env) {
   if (!CLIENT_ACTIVITY_EVENTS[event] || !clientName) {
     return jsonResponse({ error: "valid event and clientName are required" }, 400);
   }
+  return jsonResponse(await runClientActivity(env, p));
+}
+
+// Shared by the Hub-triggered route above and the hourly sweep below:
+// creates the ClickUp task (when the event calls for one) and the HubSpot
+// deal note. Never throws - each leg reports its own { ok, reason }.
+async function runClientActivity(env, p) {
+  const event = p.event;
+  const clientName = (p.clientName || "").trim();
   const title = ((p.title || "").trim()).slice(0, 200) || "(untitled)";
   const decision = p.decision || "";
   const notes = (p.notes || "").toString().slice(0, 4000);
@@ -3823,7 +3834,121 @@ async function handleClientActivity(request, env) {
       : { ok: false, reason: "Server missing HUBSPOT_ACCESS_TOKEN secret" };
   }
 
-  return jsonResponse(out);
+  return out;
+}
+
+// ── Hourly sweep: client portal activity nobody reported yet ──
+//
+// The Hub reports an approval decision / revision / content request the
+// moment an admin has it open (reportClientActivity in app.js). If nobody
+// opens the Hub, those would sit unannounced. This hourly job covers that
+// gap: it finds portal items older than ACTIVITY_SWEEP_MIN_AGE_MIN minutes
+// that the Hub hasn't already reported (flag on the client's workspace copy)
+// and the sweep hasn't already handled (agency/clientActivitySweepState),
+// then emails the account manager and does the ClickUp/HubSpot mirror.
+// The Hub checks the same state doc before reporting, so nothing is sent
+// twice. Only items from ACTIVITY_SWEEP_SINCE onward are considered, so
+// the history that predates this feature is never re-announced.
+const ACTIVITY_SWEEP_STATE_DOC = "agency/clientActivitySweepState";
+const ACTIVITY_SWEEP_SINCE = "2026-10-13T00:00:00.000Z";
+const ACTIVITY_SWEEP_MIN_AGE_MIN = 30;
+
+function collectUnreportedClientActivity(clientName, workspace, publicDoc, done, nowMs) {
+  const out = [];
+  const cutoff = Date.parse(ACTIVITY_SWEEP_SINCE);
+  const minAge = ACTIVITY_SWEEP_MIN_AGE_MIN * 60000;
+  const eligible = (iso) => {
+    const t = Date.parse(iso || "");
+    return !isNaN(t) && t >= cutoff && nowMs - t >= minAge;
+  };
+
+  (Array.isArray(publicDoc.clientRequests) ? publicDoc.clientRequests : []).forEach(r => {
+    if (!r || !r.id || done[r.id] || !eligible(r.submittedAt)) return;
+    const local = (Array.isArray(workspace.clientRequests) ? workspace.clientRequests : []).find(x => x && x.id === r.id);
+    if (local && local.reported) return; // the Hub already handled it
+    out.push({
+      id: r.id, event: r.type === "revision" ? "revision_request" : "content_request",
+      clientName, title: r.title, notes: r.details, urgency: r.urgency
+    });
+  });
+
+  (Array.isArray(publicDoc.approvalHistory) ? publicDoc.approvalHistory : []).forEach(a => {
+    if (!a || !a.id || done[a.id] || !eligible(a.decidedAt)) return;
+    const local = (Array.isArray(workspace.approvalHistory) ? workspace.approvalHistory : []).find(x => x && x.id === a.id);
+    if (local && local.activityReported) return;
+    out.push({
+      id: a.id, event: "approval_decision", clientName,
+      title: a.title, decision: a.decision, notes: a.notes, previewLink: a.previewLink
+    });
+  });
+  return out;
+}
+
+async function runClientActivitySweep(env) {
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const [clients, stateDoc, pipelineDoc] = await Promise.all([
+      fetchAllClientsFromFirestore(accessToken, projectId),
+      firestoreGetDoc(accessToken, projectId, ACTIVITY_SWEEP_STATE_DOC),
+      firestoreGetDoc(accessToken, projectId, "agency/salesPipeline")
+    ]);
+    const done = Object.assign({}, (stateDoc && stateDoc.done) || {});
+    const leads = (pipelineDoc && Array.isArray(pipelineDoc.list)) ? pipelineDoc.list : [];
+    const nowMs = Date.now();
+    let changed = false;
+
+    for (const [clientName, workspace] of Object.entries(clients)) {
+      const config = (workspace && workspace.portalConfig) || {};
+      if (!config.magicToken) continue;
+      let publicDoc;
+      try {
+        publicDoc = await firestoreGetDoc(accessToken, projectId, `clients/${encodeURIComponent(config.magicToken)}`);
+      } catch (e) { continue; }
+      if (!publicDoc) continue;
+
+      const items = collectUnreportedClientActivity(clientName, workspace, publicDoc, done, nowMs);
+      for (const item of items) {
+        const lead = leads.find(l => (l.name || "").trim().toLowerCase() === clientName.trim().toLowerCase());
+        const result = await runClientActivity(env, Object.assign({}, item, {
+          clickupFolderId: workspace.clickupFolderId || "",
+          hubspotDealId: (lead && lead.hubspotDealId) || ""
+        }));
+
+        // Account-manager email (same wording as the Hub's own).
+        if (config.accountManagerEmail) {
+          const decisionLabels = { approved: "Approved", minor: "Approved with Minor Corrections", revision: "Revision Required" };
+          const label = item.event === "approval_decision" ? (decisionLabels[item.decision] || "Response received")
+            : item.event === "revision_request" ? "Revision requested" : "New content request";
+          const needsAction = item.event !== "approval_decision" || item.decision === "revision" || item.decision === "minor";
+          const amFirst = config.accountManagerName ? config.accountManagerName.split(" ")[0] : "there";
+          const lines = [
+            `Hi ${amFirst},`, "",
+            `${clientName} responded in their portal: ${label}${item.title ? ` on "${item.title}"` : ""}.`
+          ];
+          if (item.notes) lines.push("", "Their notes:", item.notes);
+          lines.push("", needsAction
+            ? "Next step: action it, then re-run QC and send the revised version back for approval. A task was added to this client's ClickUp folder (if the folder is linked)."
+            : "No action needed - this is logged on their record.", "", "— Revital Hub (automatic hourly check)");
+          try {
+            await sendHealthDigestEmail(env, [config.accountManagerEmail], `${clientName}: ${label}${item.title ? ` - ${item.title}` : ""}`, null, lines.join("\n"));
+          } catch (e) { console.warn("Activity sweep email failed:", e); }
+        }
+
+        console.log("Activity sweep reported", clientName, item.event, JSON.stringify(result));
+        done[item.id] = new Date(nowMs).toISOString();
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      // Prune entries older than 120 days so the state doc doesn't grow forever.
+      const keepAfter = nowMs - 120 * 86400000;
+      Object.keys(done).forEach(k => { if (Date.parse(done[k]) < keepAfter) delete done[k]; });
+      await firestoreSetDoc(accessToken, projectId, ACTIVITY_SWEEP_STATE_DOC, { done, lastRunAt: new Date(nowMs).toISOString() });
+    }
+  } catch (e) {
+    console.error("Client activity sweep failed:", e);
+  }
 }
 
 // ── QuickBooks Online (Financial Center) ──

@@ -1521,8 +1521,6 @@ copywriting: {
       campaignBriefUrl: "",
       completedWorkUrl: "",
       feedbackFormUrl: "",
-      revisionFormUrl: "",
-      contentRequestFormUrl: "",
       brandAssetsUrl: "",
       liveAnalyticsUrl: "",
       clientLogoUrl: "",
@@ -8424,6 +8422,18 @@ async function reportClientActivity(clientName, event, details) {
   if (!client) return;
   const d = details || {};
   const config = client.portalConfig || {};
+
+  // The hourly Worker sweep (runClientActivitySweep in _worker.js) reports
+  // anything that sat unannounced while the Hub was closed. If it already
+  // handled this item, don't send a second email/task.
+  if (d.id && window.firebaseDb && window.firebaseDoc && window.firebaseGetDoc) {
+    try {
+      const snap = await window.firebaseGetDoc(window.firebaseDoc(window.firebaseDb, "agency", "clientActivitySweepState"));
+      const done = snap && snap.exists ? (snap.data().done || {}) : {};
+      if (done[d.id]) return;
+    } catch (e) { /* can't read the state doc - fall through and report */ }
+  }
+
   const decisionLabels = { approved: "Approved", minor: "Approved with Minor Corrections", revision: "Revision Required" };
   const eventLabel = event === "approval_decision"
     ? (decisionLabels[d.decision] || "Response received")
@@ -10040,7 +10050,7 @@ function ensureClientPortalListeners() {
               entry.activityReported = true;
               pendingLocalClientEdits.add(name);
               reportClientActivity(name, "approval_decision", {
-                title: entry.title, decision: entry.decision, notes: entry.notes, previewLink: entry.previewLink
+                id: entry.id, title: entry.title, decision: entry.decision, notes: entry.notes, previewLink: entry.previewLink
               });
             }
           });
@@ -10150,7 +10160,7 @@ function ensureClientPortalListeners() {
           const isRevision = r.type === "revision";
           pushAdminNotification("client_request", `${name} submitted a ${isRevision ? "revision" : "content"} request: "${r.title}"`, name);
           reportClientActivity(name, isRevision ? "revision_request" : "content_request", {
-            title: r.title, notes: r.details, urgency: r.urgency
+            id: r.id, title: r.title, notes: r.details, urgency: r.urgency
           });
         });
       }
