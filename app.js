@@ -5011,6 +5011,26 @@ async function syncAccountManagerToOnboardingHandoff(clientName, amEmail) {
 // never added to Sales Pipeline Board - most proposals for brand-new
 // prospects won't have a pipeline card yet, and that's fine; this is a
 // best-effort sync, not a requirement that every proposal have one.
+// The one "a deal just closed won" handler - shared by Sales Pipeline Board
+// (notifyDealWon) and syncPipelineLeadStage below (Proposal Follow-Up Tracker
+// closing a proposal), so winning a deal from EITHER place does the same
+// things: activity log, auto-created Hub profile, and the bell prompt to
+// complete the Sales -> Delivery Handoff.
+function handleDealClosedWon(lead) {
+  if (!lead || !lead.name) return;
+  logAdminActivity('Deal marked Closed Won', lead.name);
+  let profileResult = "unavailable";
+  try { profileResult = createClientFromWonDeal(lead); } catch (e) { console.warn('Auto-create client profile failed:', e); }
+  const profileNote = profileResult === 'created'
+    ? "Their Hub client profile was created automatically (ClickUp + Drive folders are being set up)."
+    : "Create their Hub client profile if it doesn't exist yet.";
+  pushAdminNotification(
+    'deal_won',
+    `${lead.name} marked Closed Won. ${profileNote} Next: complete the Sales → Delivery Handoff in Kickoff Prep & Deck to assign the account manager.`,
+    lead.name
+  );
+}
+
 async function syncPipelineLeadStage(prospectName, outcome) {
   if (!window.firebaseDb || !window.firebaseDoc || !window.firebaseGetDoc) {
     return { ok: false, reason: "not_ready" };
@@ -5060,6 +5080,13 @@ async function syncPipelineLeadStage(prospectName, outcome) {
       contactEmail: lead.contactEmail
     })
   }).catch(err => console.error("HubSpot sync failed for pipeline stage sync:", err));
+
+  // Closing a proposal as won in the Follow-Up Tracker used to move the
+  // pipeline card but skip everything the Pipeline Board does on a win
+  // (profile creation, handoff prompt) - same handler now.
+  if (outcome === "won") {
+    try { handleDealClosedWon(lead); } catch (e) { console.warn("Closed Won handling failed:", e); }
+  }
 
   return { ok: true, lead };
 }

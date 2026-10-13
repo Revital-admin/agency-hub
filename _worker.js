@@ -5115,6 +5115,27 @@ async function applyStripeEventToContractInvoices(env, event, billingMode) {
     }
   }
 
+  // First payment received (checkout completed): until now only FAILURES
+  // alerted anyone, so a client paying their first invoice - the real
+  // "they're in" moment in the Payment Flow - happened silently. Goes to the
+  // client's account manager when one is set (plus the invoices@ alias for
+  // the billing trail); monthly invoice.paid renewals stay quiet on purpose.
+  if (event.type === "checkout.session.completed") {
+    try {
+      const clients = await fetchAllClientsFromFirestore(accessToken, projectId);
+      const config = ((clients[record.clientName] || {}).portalConfig) || {};
+      const recipients = ["invoices@revitalproductions.com"];
+      if (config.accountManagerEmail) recipients.push(config.accountManagerEmail);
+      const amount = typeof obj.amount_total === "number" ? (obj.amount_total / 100).toFixed(2) : null;
+      const modeTag = billingMode === "live" ? "" : "[TEST] ";
+      const subject = `${modeTag}Payment received: ${record.clientName}${amount ? ` ($${amount})` : ""}`;
+      const text = `Payment received: ${record.clientName}${amount ? ` ($${amount} ${(obj.currency || "usd").toUpperCase()})` : ""}\nMode: ${billingMode === "live" ? "Live" : "Test"}\n\nThe Contract & Invoice Tracker record is now ${record.recurringBilling.status === "paid" ? "Paid" : "Active"}. Stripe will sync it into QuickBooks (Integration transactions → Stripe).${config.accountManagerEmail ? "" : "\n\nNo account manager is assigned yet - complete the Sales → Delivery Handoff in Kickoff Prep & Deck."}`;
+      await sendHealthDigestEmail(env, recipients, subject, null, text);
+    } catch (notifyErr) {
+      console.error("Payment-received email failed (billing status update itself still succeeded):", notifyErr);
+    }
+  }
+
   // Subscription canceled (all Stripe retries exhausted, or manually
   // canceled in the Stripe dashboard) - the doc's Payment Flow calls for
   // "services suspended | Account manager notified" at this point, but

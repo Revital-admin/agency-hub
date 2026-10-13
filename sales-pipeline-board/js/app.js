@@ -436,22 +436,10 @@ el('saveLeadBtn').addEventListener('click', async () => {
 // exists for who that should be, so a human still makes that call).
 function notifyDealWon(lead) {
   if (!isEmbedded) return;
-  if (window.parent.logAdminActivity) window.parent.logAdminActivity('Deal marked Closed Won', lead.name);
-  // The Hub profile (workspace + ClickUp/Drive folders + portal token) is
-  // created here automatically; only the account-manager pick stays human.
-  let profileResult = "unavailable";
-  if (typeof window.parent.createClientFromWonDeal === 'function') {
-    try { profileResult = window.parent.createClientFromWonDeal(lead); } catch (e) { console.warn('Auto-create client profile failed:', e); }
-  }
-  const profileNote = profileResult === 'created'
-    ? "Their Hub client profile was created automatically (ClickUp + Drive folders are being set up)."
-    : "Create their Hub client profile if it doesn't exist yet.";
-  if (window.parent.pushAdminNotification) {
-    window.parent.pushAdminNotification(
-      'deal_won',
-      `${lead.name} marked Closed Won. ${profileNote} Next: complete the Sales → Delivery Handoff in Kickoff Prep & Deck to assign the account manager.`,
-      lead.name
-    );
+  // Shared handler in the shell (activity log, auto-created Hub profile,
+  // handoff prompt) - same one Proposal Follow-Up Tracker triggers.
+  if (typeof window.parent.handleDealClosedWon === 'function') {
+    window.parent.handleDealClosedWon(lead);
   }
 }
 

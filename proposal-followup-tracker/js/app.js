@@ -248,6 +248,12 @@ function wireRowListeners() {
       else if (STAGE_SEQUENCE.includes(sel.value)) p.status = 'open';
       await persist();
       renderTable();
+      // Picking Closed Won/Lost from this dropdown used to skip the pipeline
+      // sync the Mark as Won/Lost buttons do - same sync here.
+      if (isEmbedded && window.parent.syncPipelineLeadStage && (p.status === 'won' || p.status === 'lost')) {
+        window.parent.syncPipelineLeadStage(p.prospectName, p.status).catch(err =>
+          console.error("Couldn't sync closed status to Sales Pipeline Board:", err));
+      }
     });
   });
 
