@@ -3710,7 +3710,8 @@ const CLIENT_ACTIVITY_EVENTS = {
   approval_decision: { label: "Approval decision" },
   revision_request: { label: "Revision request" },
   content_request: { label: "Content request" },
-  report_delivered: { label: "Monthly report delivered" }
+  report_delivered: { label: "Monthly report delivered" },
+  offboarding_complete: { label: "Offboarding complete" }
 };
 
 // Which of the client's 8 template lists a task belongs in, or null if this
@@ -3827,6 +3828,39 @@ async function runClientActivity(env, p) {
         `${prefix} ${clientName} - ${title}`.slice(0, 240),
         detailLines.join("\n") + "\n\n_Created by the Hub from the client portal._"
       );
+    }
+  }
+
+  // Offboarding done: ClickUp's public API can't archive a folder, so the
+  // client's folder is renamed "[Archived] <name>" - it sorts out of the way
+  // and nobody keeps working in it by mistake; the real archive is one click
+  // in ClickUp. (Not repeated if it's already prefixed.)
+  if (event === "offboarding_complete" && p.clickupFolderId) {
+    const apiToken = env.CLICKUP_API_TOKEN;
+    if (!apiToken) {
+      out.clickup = { ok: false, reason: "Server missing CLICKUP_API_TOKEN secret" };
+    } else {
+      try {
+        const cur = await fetch(`https://api.clickup.com/api/v2/folder/${encodeURIComponent(p.clickupFolderId)}`, { headers: { Authorization: apiToken } });
+        const curData = await cur.json().catch(() => ({}));
+        if (!cur.ok) throw new Error(curData.err || `ClickUp folder lookup failed (${cur.status})`);
+        const curName = curData.name || clientName;
+        if (/^\[archived\]/i.test(curName)) {
+          out.clickup = { ok: true, note: "already archived" };
+        } else {
+          const res = await fetch(`https://api.clickup.com/api/v2/folder/${encodeURIComponent(p.clickupFolderId)}`, {
+            method: "PUT",
+            headers: { Authorization: apiToken, "Content-Type": "application/json" },
+            body: JSON.stringify({ name: `[Archived] ${curName}` })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.err || `ClickUp folder rename failed (${res.status})`);
+          out.clickup = { ok: true };
+        }
+      } catch (e) {
+        console.warn("ClickUp folder archive-rename failed:", e);
+        out.clickup = { ok: false, reason: e.message };
+      }
     }
   }
 

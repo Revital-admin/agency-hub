@@ -8466,10 +8466,11 @@ async function reportClientActivity(clientName, event, details) {
     : event === "revision_request" ? "Revision requested"
     : event === "content_request" ? "New content request"
     : event === "report_delivered" ? "Monthly report delivered"
+    : event === "offboarding_complete" ? "Offboarding complete"
     : "Activity";
 
   // 1) Account manager email (same /api/send-email path as the handoff email).
-  if (event !== "report_delivered" && config.accountManagerEmail && window.firebaseAuthReady) {
+  if (event !== "report_delivered" && event !== "offboarding_complete" && config.accountManagerEmail && window.firebaseAuthReady) {
     const amFirst = config.accountManagerName ? config.accountManagerName.split(" ")[0] : "there";
     const subject = `${clientName}: ${eventLabel}${d.title ? ` - ${d.title}` : ""}`;
     const needsAction = event !== "approval_decision" || d.decision === "revision" || d.decision === "minor";

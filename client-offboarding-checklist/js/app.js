@@ -74,7 +74,18 @@ function completeOffboarding(client, state) {
   client.portalConfig.disabled = true;
   client.portalConfig.disabledAt = state.completedAt;
   client.portalConfig.disabledReason = "Offboarding checklist completed";
+  // CRM status follows the checklist: the client is no longer active.
+  client.portalConfig.onboardingStatus = "Inactive";
   persist();
+  // Mirror out: HubSpot deal status + timeline note, ClickUp folder marked
+  // "[Archived]". Fire-and-forget; failures raise an admin notification.
+  if (window.parent.syncOnboardingDetailsToHubSpot) {
+    window.parent.syncOnboardingDetailsToHubSpot(client.name, "Inactive", client.portalConfig.objective)
+      .catch(err => console.warn("HubSpot status sync failed:", err));
+  }
+  if (window.parent.reportClientActivity) {
+    window.parent.reportClientActivity(client.name, 'offboarding_complete', { title: 'Offboarding checklist completed' });
+  }
   if (window.parent.logAdminActivity) window.parent.logAdminActivity('Client offboarding completed', `${client.name} — portal deactivated`);
   if (window.parent.pushAdminNotification) {
     window.parent.pushAdminNotification('offboarding_complete', `${client.name}'s offboarding checklist is complete. Their Hub portal has been deactivated.`, client.name);
