@@ -6546,6 +6546,9 @@ function buildOverdueSubscriptionSignatures(subscriptions) {
   const sig = {};
   (subscriptions || []).forEach(s => {
     if (!s.id || s.status === "Cancelled" || !s.renewalDate) return;
+    // Monthly/Annual rows auto-roll to their next date whenever Subscription
+    // Tracker is opened, so a passed date there isn't a lapse signal.
+    if (s.billingCycle === "Monthly" || s.billingCycle === "Annual") return;
     const days = healthDigestDaysBetween(today, s.renewalDate); // renewalDate - today: negative = already past
     if (days < 0) sig[s.id] = { toolName: s.toolName || "(unnamed tool)", renewalDate: s.renewalDate, daysOverdue: -days };
   });

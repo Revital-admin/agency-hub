@@ -212,6 +212,47 @@ function daysUntil(dateStr) {
   return Math.round((target - today) / (1000 * 60 * 60 * 24));
 }
 
+// Monthly/Annual subscriptions renew on their own, so a renewal date that
+// has passed just means "the charge happened" - roll it forward to the next
+// occurrence instead of flagging it overdue. Keeps the original day-of-month
+// (clamped for short months, e.g. the 31st -> Feb 28) and never moves a date
+// that is still in the future. "No Cycle" and Cancelled rows are untouched.
+function addCycleToDate(dateStr, cycle, steps) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const monthsToAdd = (cycle === 'Annual' ? 12 : 1) * steps;
+  const total = (m - 1) + monthsToAdd;
+  const ny = y + Math.floor(total / 12);
+  const nm = ((total % 12) + 12) % 12;
+  const lastDay = new Date(ny, nm + 1, 0).getDate();
+  const nd = Math.min(d, lastDay);
+  return ny + '-' + String(nm + 1).padStart(2, '0') + '-' + String(nd).padStart(2, '0');
+}
+
+function rollRenewalDate(entry) {
+  if (!entry.renewalDate || entry.status === 'Cancelled') return entry.renewalDate;
+  if (entry.billingCycle !== 'Monthly' && entry.billingCycle !== 'Annual') return entry.renewalDate;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.renewalDate)) return entry.renewalDate;
+  const today = todayStr();
+  if (entry.renewalDate >= today) return entry.renewalDate;
+  let steps = 1;
+  let next = addCycleToDate(entry.renewalDate, entry.billingCycle, steps);
+  while (next < today && steps < 600) {
+    steps++;
+    next = addCycleToDate(entry.renewalDate, entry.billingCycle, steps);
+  }
+  return next;
+}
+
+// Returns true if any date moved (caller saves).
+function rollAllRenewals() {
+  let changed = false;
+  entries.forEach(e => {
+    const next = rollRenewalDate(e);
+    if (next !== e.renewalDate) { e.renewalDate = next; changed = true; }
+  });
+  return changed;
+}
+
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str || '';
@@ -331,6 +372,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   resetForm();
   el('renewalDate').value = '';
   await loadEntries();
+  if (rollAllRenewals()) {
+    // Persist the rolled dates so they stay put (and the daily overdue
+    // email in _worker.js sees the same dates).
+    const rolled = await persist();
+    if (rolled && window.parent && window.parent.showBanner) {
+      window.parent.showBanner('success', 'Past renewal dates were rolled forward to their next billing date.');
+    }
+  }
   renderTable();
 
   el('saveEntryBtn').addEventListener('click', saveEntry);
