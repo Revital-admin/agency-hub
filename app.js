@@ -8389,7 +8389,7 @@ function emailAccountManagerLowPulseAlert(client, name, pulseEntry) {
   fetch("/api/send-email", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ to: config.accountManagerEmail, subject, body })
+    body: JSON.stringify({ to: config.accountManagerEmail, from: "Revital Hub <alerts@revitalproductions.com>", subject, body })
   }).catch(e => {
     console.warn("Low-pulse alert email failed to send (in-Hub notification still fired):", e);
   });
@@ -8458,7 +8458,7 @@ async function reportClientActivity(clientName, event, details) {
     fetch("/api/send-email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ to: config.accountManagerEmail, subject, body: lines.join("\n") })
+      body: JSON.stringify({ to: config.accountManagerEmail, from: "Revital Hub <alerts@revitalproductions.com>", subject, body: lines.join("\n") })
     }).catch(e => console.warn("Client activity email failed:", e));
   }
 
@@ -8508,7 +8508,7 @@ function emailAccountManagerHandoffNotification(client, notes, clientNameOverrid
   fetch("/api/send-email", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ to: config.accountManagerEmail, subject, body })
+    body: JSON.stringify({ to: config.accountManagerEmail, from: "Revital Hub <alerts@revitalproductions.com>", subject, body })
   }).catch(e => {
     console.warn("Handoff notification email failed to send (handoff still logged):", e);
   });

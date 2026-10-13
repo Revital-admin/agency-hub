@@ -388,6 +388,9 @@ async function handleMintFirebaseToken(request, env) {
 // which already sits behind Cloudflare Access, so this is a defense-in-depth
 // check, not the only thing standing between this route and the internet.
 const SEND_EMAIL_DOMAIN = "revitalproductions.com";
+// Sender for internal, automated alerts (never client-facing). The alerts@
+// alias is set up in Google Workspace; the domain is already verified in Resend.
+const INTERNAL_ALERT_FROM = `Revital Hub <alerts@${SEND_EMAIL_DOMAIN}>`;
 
 async function handleSendEmail(request, env) {
   if (request.method !== "POST") {
@@ -6496,7 +6499,10 @@ async function sendHealthDigestEmail(env, recipients, subject, html, text) {
   const apiKey = env.RESEND_API_KEY;
   if (!apiKey) throw new Error("Server missing RESEND_API_KEY secret");
   const body = {
-    from: `Revital Productions <hello@${SEND_EMAIL_DOMAIN}>`,
+    // Internal alerts (health digest, compliance, overdue/renewal, activity
+    // sweep, Stripe alerts) come from alerts@ so they stay out of
+    // hello@'s client-facing mail and are easy to filter.
+    from: INTERNAL_ALERT_FROM,
     to: recipients,
     subject,
     text
