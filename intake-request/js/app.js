@@ -47,6 +47,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Internal-only shortcut to the form's responses (not part of the PDF).
+  const RESPONSES_KEY = 'revital-intake-responses-link';
+  const responsesInput = document.getElementById('responsesLink');
+  const openResponsesBtn = document.getElementById('openResponsesBtn');
+  if (responsesInput) {
+    try { responsesInput.value = localStorage.getItem(RESPONSES_KEY) || ''; } catch (e) {}
+    responsesInput.addEventListener('input', () => {
+      try { localStorage.setItem(RESPONSES_KEY, responsesInput.value.trim()); } catch (e) {}
+    });
+  }
+  if (openResponsesBtn) {
+    openResponsesBtn.addEventListener('click', () => {
+      const url = (responsesInput && responsesInput.value || '').trim();
+      if (!/^https:\/\/(docs|forms)\.google\.com\//i.test(url)) {
+        const msg = 'Paste the Google Form Responses link first (it starts with https://docs.google.com/forms/).';
+        if (window.parent && window.parent.showBanner) window.parent.showBanner('error', msg); else alert(msg);
+        return;
+      }
+      window.open(url, '_blank', 'noopener');
+    });
+  }
+
   function renderPreview() {
     const clientName = document.getElementById('clientName').value || 'Acme Corp';
     const intakeLink = document.getElementById('intakeLink').value || 'https://forms.gle/...';
