@@ -33,7 +33,7 @@ The ClickUp client folder (8 lists) is created by the Hub. There is no tracker-t
 
 ## 6. Reporting (Section 4)
 
-Logging a report in Monthly Report Archive adds a note to the client's HubSpot deal. The "by the 5th" deadline is not tracked; the only reminder is the 35-day stale-report flag.
+Logging a report in Monthly Report Archive adds a note to the client's HubSpot deal. **By-the-5th deadline (Oct 2026):** each day the Worker checks every client whose CRM status (Client Portal Manager) is **Active**. From the 5th, a client with no report for the previous month gets a nudge email to their account manager (once per month); from the 8th, anything still missing is escalated in one email to the digest recipients. The 35-day stale-report flag still exists as a backstop.
 
 ## 7. Payment (Section 5)
 

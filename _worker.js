@@ -37,6 +37,7 @@ export default {
       ctx.waitUntil(runDailyComplianceCheck(env));
       ctx.waitUntil(runStalePipelineCheck(env));
       ctx.waitUntil(runOverdueSubscriptionCheck(env));
+      ctx.waitUntil(runMonthlyReportDueCheck(env));
     } else {
       ctx.waitUntil(runWeeklyHealthDigest(env));
     }
@@ -6903,6 +6904,98 @@ function rollSubscriptionRenewalDate(s, today) {
 }
 
 const UPCOMING_ANNUAL_RENEWAL_DAYS = 14;
+
+// ── Monthly report due check ──
+//
+// The documented flow delivers every Active client's report by the 5th. Until
+// now the only reminder was "no new report for 35+ days", which never catches
+// a client whose FIRST report was missed, and said nothing about the 5th.
+// Daily (with the other 12:00 UTC jobs): from the 5th on, any client with CRM
+// status "Active" (Client Portal Manager) who has no report for the previous
+// month gets a nudge to their account manager (once per client per month);
+// from the 8th, still-missing ones are escalated in one email to the digest
+// recipients. A report counts for a month if its sortKey/monthYear is that
+// month, or it was added (dateAdded) during the current month.
+const REPORT_DUE_STATE_DOC = "agency/reportDueAlertState";
+const REPORT_DUE_DAY = 5;
+const REPORT_ESCALATE_DAY = 8;
+
+function reportMonthKey(date) {
+  return date.getUTCFullYear() + "-" + String(date.getUTCMonth() + 1).padStart(2, "0");
+}
+
+function clientHasReportForMonth(client, prevKey, currentKey) {
+  const archive = Array.isArray(client.reportArchive) ? client.reportArchive : [];
+  return archive.some(r => {
+    if (!r) return false;
+    const sk = (r.sortKey || "").toString().slice(0, 7);
+    if (sk === prevKey) return true;
+    const added = (r.dateAdded || "").toString().slice(0, 7);
+    return added === currentKey;
+  });
+}
+
+async function runMonthlyReportDueCheck(env) {
+  try {
+    const now = new Date();
+    const day = now.getUTCDate();
+    if (day < REPORT_DUE_DAY) return;
+    const currentKey = reportMonthKey(now);
+    const prev = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+    const prevKey = reportMonthKey(prev);
+    const prevLabel = prev.toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const [clients, stateDoc] = await Promise.all([
+      fetchAllClientsFromFirestore(accessToken, projectId),
+      firestoreGetDoc(accessToken, projectId, REPORT_DUE_STATE_DOC)
+    ]);
+    const sent = Object.assign({}, (stateDoc && stateDoc.sent) || {});
+    const recipients = (env.HEALTH_DIGEST_RECIPIENTS || "admin@revitalproductions.com").split(",").map(s => s.trim()).filter(Boolean);
+
+    const missing = Object.entries(clients)
+      .filter(([, c]) => c && c.portalConfig && c.portalConfig.onboardingStatus === "Active" && !clientHasReportForMonth(c, prevKey, currentKey))
+      .map(([name, c]) => ({ name, config: c.portalConfig }));
+    let changed = false;
+
+    // 5th onward: nudge each client's account manager once per month.
+    for (const m of missing) {
+      const key = `${currentKey}|${m.name}|am`;
+      if (sent[key]) continue;
+      const to = m.config.accountManagerEmail ? [m.config.accountManagerEmail] : recipients;
+      const amFirst = m.config.accountManagerName ? String(m.config.accountManagerName).split(" ")[0] : "team";
+      const text = `Hi ${amFirst},\n\n${m.name}'s ${prevLabel} report isn't logged in the Hub yet, and reports are due to clients by the ${REPORT_DUE_DAY}th.\n\nBuild it, QC it, then add it in Monthly Report Archive (that also posts it to their portal and HubSpot). If it's already been sent another way, log it there so this stops.\n\n— Revital Hub`;
+      try {
+        await sendHealthDigestEmail(env, to, `${prevLabel} report due: ${m.name}`, null, text);
+        sent[key] = now.toISOString();
+        changed = true;
+      } catch (e) { console.warn("Report-due nudge failed:", e); }
+    }
+
+    // 8th onward: one escalation to the digest recipients for the still-missing.
+    if (day >= REPORT_ESCALATE_DAY && missing.length) {
+      const key = `${currentKey}|escalated`;
+      if (!sent[key]) {
+        const lines = missing.map(m => `- ${m.name}${m.config.accountManagerName ? ` (AM: ${m.config.accountManagerName})` : " (no account manager assigned)"}`);
+        const text = `${prevLabel} reports still missing after the ${REPORT_ESCALATE_DAY}th:\n\n${lines.join("\n")}\n\nEach account manager was nudged on the ${REPORT_DUE_DAY}th.`;
+        try {
+          await sendHealthDigestEmail(env, recipients, `${missing.length} ${prevLabel} report${missing.length === 1 ? "" : "s"} still missing`, null, text);
+          sent[key] = now.toISOString();
+          changed = true;
+        } catch (e) { console.warn("Report-due escalation failed:", e); }
+      }
+    }
+
+    if (changed) {
+      // Keep only the last ~6 months of keys.
+      const keepFrom = reportMonthKey(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 6, 1)));
+      Object.keys(sent).forEach(k => { if (k.slice(0, 7) < keepFrom) delete sent[k]; });
+      await firestoreSetDoc(accessToken, projectId, REPORT_DUE_STATE_DOC, { sent, lastRunAt: now.toISOString() });
+    }
+  } catch (e) {
+    console.error("Monthly report due check failed:", e);
+  }
+}
 
 async function runOverdueSubscriptionCheck(env) {
   const recipients = (env.HEALTH_DIGEST_RECIPIENTS || "admin@revitalproductions.com")
