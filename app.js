@@ -3174,7 +3174,7 @@ async function renderNeedsAttention() {
   });
 }
 
-// Tracks Phase 1 ("Prove It") of reference-docs/business_phase_roadmap.pdf
+// Tracks Phase 1 ("Prove It") of reference-docs/business_phase_roadmap.docx
 // against its own exit trigger wording: "1-2 polished case studies with
 // testimonials, plus a real Portfolio Showcase PDF ready to hand to a
 // prospect." Deliberately NOT a literal checklist of that doc's numbered
@@ -10493,7 +10493,7 @@ let restrictedClientsDbPollTimer = null;
 // before the first fetch arrived, its payload's moodBoards field was
 // whatever the stale local cache had (empty), and the server dutifully
 // merged that empty value over a real, populated moodBoards array. See
-// reference-docs/Team_Access_Restricted_Sync_Verification.md.
+// reference-docs/_archive/Team_Access_Restricted_Sync_Verification.pdf.
 let restrictedClientsDbFirstSyncPromise = null;
 
 // The last snapshot actually confirmed by the server for each client,

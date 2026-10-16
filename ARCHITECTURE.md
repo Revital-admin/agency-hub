@@ -109,7 +109,7 @@ There's no shared component library beyond CSS (`style.css`, `vars.css`, `shared
 
 ## Related docs (don't duplicate — read these instead)
 
-- **`reference-docs/where_to_log_what_hub_vs_clickup.pdf`** — the *external* system boundary: which lifecycle events belong in the Hub vs. ClickUp. Complements this doc, which is about the *internal* boundary (core vs. tool).
+- **`reference-docs/_archive/where_to_log_what_hub_vs_clickup.pdf`** (also in the SOP Wiki as "Where to Log What", with an Oct 2026 note) — the *external* system boundary: which lifecycle events belong in the Hub vs. ClickUp. Complements this doc, which is about the *internal* boundary (core vs. tool).
 - **`data-loss-prevention-plan.md`** — accurate, still current. The full story behind the shard-load-completeness guard described above.
 - **`BACKUP_RESTORE_RUNBOOK.md`** — accurate, still current. What Firestore/app-level backups exist, how to verify they're current, and how to restore from one.
 - **`CLOUDFLARE_RATE_LIMITING.md`** — accurate, still current. What's rate-limited on the two unauthenticated public endpoints (Booking, Contractor Portal), why only one has a rule (Cloudflare Free plan's 1-rule-per-zone cap), and what to add once that's lifted.

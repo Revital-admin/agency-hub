@@ -1,6 +1,6 @@
 # System Flows — Corrections & Updates (October 2026)
 
-Addendum to *Complete System Flows & Process Map* (July 2026) and the Hub Automation Addendum. Where this disagrees with those, this wins.
+Addendum to *Complete System Flows & Process Map* (July 2026, now in `_archive/`) and the Hub Automation Addendum. Where this disagrees with those, this wins.
 
 ## 1. Zapier: only one Zap exists
 

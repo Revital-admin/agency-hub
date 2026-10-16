@@ -28,22 +28,21 @@ The **Hub is the source of truth**. ClickUp and HubSpot are mirrors fed from it;
 | Email | Automatic internal email comes from Revital Hub `alerts@revitalproductions.com`. |
 | Subscriptions | Subscription Tracker rolls Monthly/Annual renewal dates forward itself; annual renewals get a 14-day heads-up email. |
 
-## Reference documents — what to trust
+## Reference documents
 
-**Replaced by the System Map / this handbook (don't follow their process steps)**
-- *Revital_Productions_System_Flows_Branded.pdf* — Sections 1–2, 5, 9, 10 are out of date (Zaps, tracker, intake status, QuickBooks "pending", "(coming)" tags). Sections 3, 4, 6, 7, 8 are right in spirit; see the corrections addendum.
-- *where_to_log_what_hub_vs_clickup.pdf* — still useful for *what* lives where; ignore any instruction to re-enter approvals/revisions in ClickUp or HubSpot by hand.
+Cleaned up Oct 2026. Finished or replaced documents moved to `_archive/` (see its README); duplicate PDFs of documents that also have an editable copy were removed — regenerate a PDF from the editable file when you need to share one.
 
-**Accurate but incomplete — read together with this handbook**
-- *Hub_Automation_Addendum.pdf*, *Sales_to_Delivery_Handoff_Hub_Automation.pdf* — still correct; Closed Won now also auto-creates the profile, and offboarding now also updates HubSpot/ClickUp.
-- *Hub_Integration_Roadmap.pdf*, *Revital_Systems_Ownership_Map.pdf* — still a fair architecture view; add HubSpot/alerts@ to the integration lists.
+**Current and in use (`reference-docs/`)**
+- *Handbook set:* this handbook, `System_Flows_Corrections_Oct2026.md`, `bookkeeping-accounting-workflow-sop.md`
+- *Team & access:* Team Access SOP, Role Access Breakdown, Password & Bitwarden Guide (.docx), Bitwarden Rollout Plan
+- *Client work:* Paid Client Checklist, Free Client Wrap-Up Checklist, Client Folder Setup guide + SOP (.docx), Report Archive Field Guide, Data Studio Setup Guide
+- *Contracts & pricing:* Contractor/Vendor Information Sheet, Freelancer Contractor Agreement Template, Service Pricing Draft, Website & Branding Packages, E-Signature Setup Guide (.docx — DocuSign)
+- *Marketing & legal:* Privacy Policy, Google Business Profile Checklist (.md), 5 Things Before Your Brand Shoot, Content Planning Blueprint
+- *Planning:* Business Phase Roadmap (.docx), Systems & Ownership Map, Hub Integration Roadmap, Tech Stack & Growth Plan, Software & Insurance Wishlist (.docx)
 
-**Status snapshots — dated, check the status line before acting**
-- *Revital_Business_Operations_Gaps_Plan.pdf*, *Revital_Business_Gap_Punchlist.pdf*, *Revital_Tech_Stack_Future_Proof_Growth_Plan.pdf*, *Revital_Software_Insurance_Wishlist* — QuickBooks Simple Start is purchased and connected (bank + Stripe); the e-signature tool is DocuSign (Dropbox Sign appears only as a rejected alternative). **Still open:** general liability + E&O insurance, cyber liability, HR/payroll (Gusto at first hire), bill-pay (Essentials) only if vendor volume justifies it.
+**Read with care — dated, partly superseded:** Hub Integration Roadmap and Systems & Ownership Map (add HubSpot and alerts@ to their integration lists); Tech Stack & Growth Plan, Software & Insurance Wishlist (QuickBooks Simple Start is purchased and connected; e-signature is DocuSign; still open: general liability + E&O + cyber insurance, HR/payroll at first hire, bill-pay only if vendor volume justifies it).
 
-**Not affected by system changes (checked for references to Zapier, the tracker, ClickUp forms, QuickBooks, HubSpot and the Hub tools — none found; not re-read line by line)** — checklists (Paid/Free client, TSA gear, brand shoot, Google Business Profile), contractor/vendor documents and agreement template, branding packages, service pricing draft, Bitwarden guide and rollout plan, e-signature setup guide, Client Folder Setup & Naming docs, Team Access SOP / role breakdown, content planning blueprint, privacy policy, report archive field guide, data studio setup guide, phase/software roadmaps.
-
-**Updated in place:** *bookkeeping-accounting-workflow-sop.md* (current QuickBooks setup), *System_Flows_Corrections_Oct2026.md* (section-by-section corrections).
+**Archived (`_archive/`):** the July System Flows PDF, Where-to-Log-What PDF, the two Hub Automation addenda, the Gap Punchlist and Gaps Plan, Hub Tool Improvement Backlog, Team Access sync verification, Sales Pipeline Triage, the Mr. Joe's proposal, the AV/travel documents (AV roadmap, TSA checklists, Media Storage & Review Tools) and the Testimonials/Content Cadence notes.
 
 ## Still manual on purpose
 
