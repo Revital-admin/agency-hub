@@ -275,12 +275,90 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // ── One-time content patches (see js/patches.js) ──
+  // The live SOP library is in Firestore, so changes to wording made in git
+  // reach it through this: when an admin opens the wiki and every shard has
+  // loaded, any patch id not yet recorded in agency/sopPatchState is applied
+  // to the loaded library, saved through the normal versioned save, then
+  // recorded. Each patch therefore runs exactly once.
+  let isWikiAdmin = false;
+  let patchRunInFlight = false;
+  let patchRunFailures = 0;
+
+  function allShardsLoaded() {
+    if (lastKnownShardCount === 0) return false;
+    for (let i = 0; i < lastKnownShardCount; i++) {
+      if (!Array.isArray(shardData[i])) return false;
+    }
+    return true;
+  }
+
+  function applySopPatchOps(patch, today) {
+    let changes = 0;
+    (patch.ops || []).forEach(op => {
+      if (op.type === 'add') {
+        if (op.sop && !sops.some(s => s.id === op.sop.id)) {
+          sops.push(Object.assign({ date: today, format: 'html', checklistEnabled: false }, op.sop, { date: today }));
+          changes++;
+        }
+        return;
+      }
+      const sop = sops.find(s => s.id === op.sopId);
+      if (!sop) return; // SOP was renamed/deleted - nothing to patch
+      if (op.type === 'prepend') {
+        sop.content = op.html + sopContentAsHtml(sop);
+        sop.format = 'html';
+        sop.date = today;
+        changes++;
+      } else if (op.type === 'replace') {
+        const html = sopContentAsHtml(sop);
+        if (html.includes(op.find)) {
+          sop.content = html.replace(op.find, op.with);
+          sop.format = 'html';
+          sop.date = today;
+          changes++;
+        }
+      }
+    });
+    return changes;
+  }
+
+  async function maybeApplyPatches() {
+    if (!isWikiAdmin || patchRunInFlight || patchRunFailures >= 3) return;
+    if (typeof SOP_PATCHES === 'undefined' || !Array.isArray(SOP_PATCHES)) return;
+    if (!allShardsLoaded() || !window.parent || !window.parent.firebaseDoc || !window.parent.firebaseGetDoc || !window.parent.firebaseSetDocFromJSON) return;
+
+    patchRunInFlight = true;
+    try {
+      const stateRef = window.parent.firebaseDoc(window.parent.firebaseDb, "agency", "sopPatchState");
+      const stateSnap = await window.parent.firebaseGetDoc(stateRef);
+      const applied = Object.assign({}, (stateSnap.exists && stateSnap.data().applied) || {});
+      const pending = SOP_PATCHES.filter(p => p && p.id && !applied[p.id]);
+      if (pending.length === 0) return;
+
+      const today = new Date().toISOString().slice(0, 10);
+      let total = 0;
+      pending.forEach(p => { total += applySopPatchOps(p, today); });
+      if (total > 0) await saveSopsToFirestore();
+      pending.forEach(p => { applied[p.id] = new Date().toISOString(); });
+      await window.parent.firebaseSetDocFromJSON(stateRef, JSON.stringify({ applied }));
+      if (total > 0) showToast(`SOP library updated (${total} change${total === 1 ? '' : 's'} applied).`);
+    } catch (err) {
+      patchRunFailures++;
+      console.error("SOP patch run failed:", err);
+      showToast("Couldn't apply the latest SOP updates: " + (err && err.message ? err.message : err), 'error');
+    } finally {
+      patchRunInFlight = false;
+    }
+  }
+
   function rebuildSopsFromShards() {
     const merged = [];
     for (let i = 0; i < lastKnownShardCount; i++) {
       if (Array.isArray(shardData[i])) merged.push(...shardData[i]);
     }
     sops = merged;
+    maybeApplyPatches();
 
     const query = searchInput.value.trim().toLowerCase();
     renderSopList(query ? filterSops(query) : sops);
@@ -1296,6 +1374,8 @@ document.addEventListener('DOMContentLoaded', () => {
       newSopBtn.style.display = isRestricted ? 'none' : '';
       editSopBtn.style.display = isRestricted ? 'none' : '';
       deleteSopBtn.style.display = isRestricted ? 'none' : '';
+      isWikiAdmin = !isRestricted && !!currentEmail;
+      maybeApplyPatches();
     }, (err) => {
       console.error("Wiki edit-permission listener error:", err);
     });

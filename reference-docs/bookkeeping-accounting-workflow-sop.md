@@ -31,4 +31,12 @@ It's worth setting a recurring check-in cadence between the two — monthly or q
 | In-house bookkeeper | QuickBooks Online (regular user), Hub Finance role (Financial Center, Contract & Invoice Tracker, Subscription Tracker, Budget Pacing) | Client production/creative/sales sections of the Hub |
 | Outside accountant/CPA | QuickBooks Online (Accountant-invite access) | Any Hub account at all |
 
-*Last updated: August 17, 2026*
+## Current QuickBooks setup (October 2026)
+
+- **Plan:** QuickBooks Online **Simple Start** (upgraded from Free to enable the Stripe sync). Bill Pay is Essentials-only; until contractor/vendor volume justifies Essentials, pay contractors by ACH from the business bank account and log each payment as an expense against the vendor (this also tracks the $600 1099-NEC threshold).
+- **Connected:** the business bank account and the **Stripe Connector** (Apps → Stripe). Stripe charges, fees and payouts appear under Transactions → Integration transactions → Stripe, where the bookkeeper reviews and confirms them. Check that Stripe payouts are mapped to the business checking account.
+- **Clients:** every client should exist as a QuickBooks customer so Stripe payments can be matched to them.
+- **First-payment check:** the first real Stripe payment should show up in Integration transactions within hours; confirm the fee is split out as an expense. (The Hub also emails invoices@ and the account manager when a first payment arrives.)
+- **Payment links:** only links generated in the Hub are tied to the Contract & Invoice Tracker; hand-made Stripe links still reach QuickBooks through the connector but won't update the Tracker.
+
+*Last updated: October 2026*
