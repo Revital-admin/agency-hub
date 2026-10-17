@@ -6996,6 +6996,12 @@ function syncObjectInPlace(target, source) {
 // Greedily bin-packs clientsDb's entries into shard-sized chunks, each
 // kept under CLIENTS_DB_MAX_SHARD_BYTES when serialized the same way
 // it's actually saved.
+// How often the app-level safety-net copies (clientsDbBackup-shard-* and the
+// dormant clientsDb-shard-*) are refreshed - see the comment in
+// commitDatabaseToCloud. lastSafetyNetCheckMs is per tab.
+const SAFETY_NET_MIN_INTERVAL_MS = 4 * 60 * 60 * 1000;
+let lastSafetyNetCheckMs = 0;
+
 function packClientsDbIntoShards(fullDb) {
   const entries = Object.entries(fullDb);
   const shards = [];
@@ -7859,19 +7865,14 @@ function commitDatabaseToCloud() {
     // stretch rather than removed outright in the same change that
     // altered write scope, in case something about that reasoning turns
     // out to be wrong in practice.
-    const cloudKeyCheck = window.firebaseGetDocs(window.firebaseCollection(window.firebaseDb, "clientWorkspaces")).then((cloudDocs) => {
-      const cloudKeys = cloudDocs.map(d => d.id);
-      const localKeys = new Set(Object.keys(cleanDb));
-      // Exclude anything this tab itself deliberately deleted/renamed away
-      // this session (see intentionallyRemovedClientNames above) - those
-      // are legitimate, not a sign of stale data.
-      return cloudKeys.filter(k => !localKeys.has(k) && !intentionallyRemovedClientNames.has(k));
-    });
+    //
+    // Oct 2026: the log-only verification stretch is over, and this check
+    // read EVERY client document on EVERY save (and the save waited on it) -
+    // pure overhead on a path that was timing out. Removed; Stage 3's
+    // scoped writes are what actually prevent the failure it watched for.
+    const cloudKeyCheck = Promise.resolve([]);
 
     return cloudKeyCheck.then((missingLocally) => {
-      if (missingLocally.length > 0) {
-        console.warn("commitDatabaseToCloud: cloud has client(s) this tab doesn't know about (stale-tab signal, no longer blocking - see Stage 3 note):", missingLocally);
-      }
 
       // Safety-net backup: a "last known good" full snapshot, written
       // alongside the real per-client docs now that the check above has
@@ -7888,40 +7889,51 @@ function commitDatabaseToCloud() {
       // for this backup's own bin-packing, not as anything authoritative).
       // Fire-and-forget: a backup failure shouldn't block or alarm the
       // user about the actual save below.
-      const shards = packClientsDbIntoShards(cleanDb);
-      const backupMetaRef = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackupShardMeta");
-      window.firebaseGetDoc(backupMetaRef).then((backupMetaSnap) => {
-        const prevBackupShardCount = (backupMetaSnap.exists && typeof backupMetaSnap.data().count === 'number')
-          ? backupMetaSnap.data().count : 0;
+      //
+      // Oct 2026: THROTTLED. This used to write the whole roster twice
+      // (backup shards + the dormant clientsDb shards below) on EVERY save -
+      // two extra full-database writes per keystroke-debounce, a likely
+      // contributor to the "Cloud Timeout" saves. Now both safety nets are
+      // refreshed at most once per SAFETY_NET_MIN_INTERVAL_MS (also skipped
+      // if the backup meta's savedAt is already that fresh, so reloading
+      // the page doesn't trigger a write). Deeper history comes from
+      // Firestore's own daily/weekly scheduled backups (30/98 days) and the
+      // Export Full Backup button, which don't depend on this code at all.
+      const nowMs = Date.now();
+      if (nowMs - lastSafetyNetCheckMs >= SAFETY_NET_MIN_INTERVAL_MS) {
+        lastSafetyNetCheckMs = nowMs;
+        const backupMetaRef = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackupShardMeta");
+        window.firebaseGetDoc(backupMetaRef).then((backupMetaSnap) => {
+          const meta = backupMetaSnap.exists ? backupMetaSnap.data() : {};
+          const savedAtMs = meta.savedAt ? Date.parse(meta.savedAt) : 0;
+          if (savedAtMs && nowMs - savedAtMs < SAFETY_NET_MIN_INTERVAL_MS) return; // already fresh
+          const prevBackupShardCount = typeof meta.count === 'number' ? meta.count : 0;
+          const shards = packClientsDbIntoShards(cleanDb);
 
-        const backupWrites = shards.map((shardObj, i) => {
-          const ref = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackup-shard-" + i);
-          return window.firebaseSetDoc(ref, shardObj);
+          const backupWrites = shards.map((shardObj, i) => {
+            const ref = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackup-shard-" + i);
+            return window.firebaseSetDoc(ref, shardObj);
+          });
+          // Blank out any trailing backup shards left over from a larger
+          // previous backup, same reasoning as before cutover.
+          for (let i = shards.length; i < prevBackupShardCount; i++) {
+            const ref = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackup-shard-" + i);
+            backupWrites.push(window.firebaseSetDoc(ref, {}));
+          }
+          backupWrites.push(window.firebaseSetDoc(backupMetaRef, { count: shards.length, savedAt: new Date().toISOString() }));
+
+          // Dormant shard safety-net write (cutover, Sep 2026 - see
+          // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md) - no longer
+          // authoritative; clientWorkspaces is the source of truth. Kept as
+          // a rollback source, refreshed on the same throttle as the backup.
+          shards.forEach((shardObj, i) => backupWrites.push(window.firebaseSetDoc(getClientsDbShardDocRef(i), shardObj)));
+
+          return Promise.all(backupWrites);
+        }).catch(err => {
+          lastSafetyNetCheckMs = 0; // let the next save retry
+          console.error("clientsDb safety-net backup write failed:", err);
         });
-        // Blank out any trailing backup shards left over from a larger
-        // previous backup, same reasoning as before cutover.
-        for (let i = shards.length; i < prevBackupShardCount; i++) {
-          const ref = window.firebaseDoc(window.firebaseDb, "agency", "clientsDbBackup-shard-" + i);
-          backupWrites.push(window.firebaseSetDoc(ref, {}));
-        }
-        backupWrites.push(window.firebaseSetDoc(backupMetaRef, { count: shards.length, savedAt: new Date().toISOString() }));
-
-        return Promise.all(backupWrites);
-      }).catch(err => console.error("clientsDb backup write failed:", err));
-
-      // Dormant shard safety-net write (cutover, Sep 2026 - see
-      // CLIENTSDB_PER_DOCUMENT_REFACTOR_PLAN.md's migration path) - no
-      // longer authoritative and no longer version-checked now that
-      // clientWorkspaces (below) is the real source of truth. Still the
-      // FULL cleanDb (unchanged by Stage 3), same reasoning as the backup
-      // write just above. Kept running, cheaply, as an easy rollback
-      // source for a stretch after cutover; purely best-effort, same
-      // fire-and-forget shape as the backup write above. Safe to remove
-      // once clientWorkspaces has a real track record post-cutover - see
-      // startUnrestrictedClientsDbSync, left intact and unused, for what
-      // reading it back would look like.
-      Promise.all(shards.map((shardObj, i) => window.firebaseSetDoc(getClientsDbShardDocRef(i), shardObj)))
-        .catch(err => console.error("Dormant shard safety-net write failed (non-blocking, no longer authoritative):", err));
+      }
 
       // THE REAL, AUTHORITATIVE WRITE (post-cutover, Sep 2026): one
       // Firestore document per client, replacing the bin-packed shards

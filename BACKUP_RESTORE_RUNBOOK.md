@@ -10,7 +10,7 @@ Nobody has run a real test-restore against this project yet - the fixes below ar
 
 1. **The Hub's own Export/Import (self-service, no Firestore console needed).** Sidebar → **Export Full Backup** downloads a single JSON file with every client workspace plus every agency-wide doc (notifications, trackers, activity log, etc.), timestamped in the filename. **Import** (same sidebar area) reads a file in that same format back in - it *merges* client workspaces into the current `clientsDb` rather than wiping it, and asks for explicit confirmation before overwriting any agency-wide doc. This is the fastest recovery path and the easiest one to test yourself without touching Firestore at all.
 
-2. **App-level automatic backup.** Every successful client-database save also writes a full snapshot to `agency/clientsDbBackup-shard-0`, `-1`, etc. (plus `agency/clientsDbBackupShardMeta`, which has a `savedAt` timestamp). This is what saved the two client workspaces during the original incident. As of this session, it's fixed to only fire *after* the version-conflict check passes, so a rejected/stale save can no longer overwrite it with stale data (see the "Fix clientsDb safety-net backup firing before the version-conflict check" commit).
+2. **App-level automatic backup (throttled, Oct 2026).** At most once every 4 hours (and skipped if `clientsDbBackupShardMeta.savedAt` is already that fresh), a client-database save also writes a full snapshot to `agency/clientsDbBackup-shard-0`, `-1`, etc. (plus `agency/clientsDbBackupShardMeta`, which has a `savedAt` timestamp). This is what saved the two client workspaces during the original incident. As of this session, it's fixed to only fire *after* the version-conflict check passes, so a rejected/stale save can no longer overwrite it with stale data (see the "Fix clientsDb safety-net backup firing before the version-conflict check" commit).
 
 3. **Firestore's own scheduled backups (Google-managed, independent of this app's code).** Recommended in the data-loss-prevention doc. **Status: confirmed enabled (Sep 2026).** See Step 1.
 
@@ -29,7 +29,7 @@ Nobody has run a real test-restore against this project yet - the fixes below ar
 
 Monthly is reasonable given how small and low-traffic this database is.
 
-- **App-level backup**: Firestore console → `agency` collection → `clientsDbBackupShardMeta` doc → check `savedAt`. Should be recent (within the last several days, given how often client data gets edited). If it's weeks old while the Hub is in active use, something broke the backup write path - check the browser console during a save for `"clientsDb backup write failed"`.
+- **App-level backup**: Firestore console → `agency` collection → `clientsDbBackupShardMeta` doc → check `savedAt`. Should be recent (within about a day while the Hub is in use; it refreshes at most every 4 hours). If it's weeks old while the Hub is in active use, something broke the backup write path - check the browser console during a save for `"clientsDb backup write failed"`.
 - **Manual export habit**: click **Export Full Backup** in the sidebar and save the JSON somewhere durable (Google Drive, etc.) before any major change to the Hub's code or data model. Costs 10 seconds, and it's a copy that lives outside Firestore entirely - useful if something ever went wrong with Firestore itself, not just the app's data in it.
 
 ## Step 3: Actually test a restore (recommended: quarterly, and after any change touching `commitDatabaseToCloud` in `app.js`)
@@ -56,7 +56,7 @@ Monthly is reasonable given how small and low-traffic this database is.
 ## Recovery priority, if this is ever needed for real
 
 1. **Export Full Backup / Import**, if you have a recent manual export on hand (Step 2's habit) - fastest, no Firestore console needed.
-2. **App-level automatic backup** (`clientsDbBackup-shard-*` + `clientsDbBackupShardMeta`) - always recent as of the last successful save, no manual export required.
+2. **App-level automatic backup** (`clientsDbBackup-shard-*` + `clientsDbBackupShardMeta`) - at most ~4 hours old, no manual export required.
 3. **Firestore's own scheduled backups** (Step 1) - the deepest fallback, independent of anything this app's code does.
 
 ## Checklist
@@ -65,3 +65,8 @@ Monthly is reasonable given how small and low-traffic this database is.
 - [ ] Monthly: `clientsDbBackupShardMeta.savedAt` checked for staleness
 - [ ] Monthly-ish: manual **Export Full Backup** saved somewhere outside Firestore
 - [x] At least once, and quarterly going forward: a real test-restore performed (Step 3) and confirmed working end to end - Export/Import path confirmed Sep 2026; Firestore-native scheduled-backup restore still untested
+
+
+## Oct 2026 simplification
+
+The three heavy things every save used to do were cut down: the log-only full-collection read was removed, and the app-level backup shards plus the dormant `clientsDb-shard-N` copy are now written together at most once per 4 hours instead of on every save. Real history comes from Firestore's scheduled backups (daily 30 days, weekly 98 days) and Export Full Backup. Old shard documents were left in place; nothing was deleted.
