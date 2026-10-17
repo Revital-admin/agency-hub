@@ -11,5 +11,4 @@ Documents that are finished, replaced, or not needed until a later phase. Kept (
 | Hub_Tool_Improvement_Backlog.pdf, Team_Access_Restricted_Sync_Verification.pdf | Completed one-time work |
 | Sales_Pipeline_Triage_Aug2026.md | Dated working note |
 | Mr_Joes_Island_Grill_Marketing_Proposal.docx / .pdf | Client-specific; belongs in that client's Drive folder |
-| av_production_software_roadmap.pdf, TSA_Gear_Checklist(.pdf / _Branded.pdf), Media Storage & Review Tools.pdf | AV/live-production side not restarted yet — pull back out when it does |
 | Revital_Testimonials_Content_Cadence_Growth_Notes.pdf | Draft notes |

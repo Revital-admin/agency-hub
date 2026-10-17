@@ -39,10 +39,11 @@ Cleaned up Oct 2026. Finished or replaced documents moved to `_archive/` (see it
 - *Contracts & pricing:* Contractor/Vendor Information Sheet, Freelancer Contractor Agreement Template, Service Pricing Draft, Website & Branding Packages, E-Signature Setup Guide (.docx — DocuSign)
 - *Marketing & legal:* Privacy Policy, Google Business Profile Checklist (.md), 5 Things Before Your Brand Shoot, Content Planning Blueprint
 - *Planning:* Business Phase Roadmap (.docx), Systems & Ownership Map, Hub Integration Roadmap, Tech Stack & Growth Plan, Software & Insurance Wishlist (.docx)
+- *AV / production (kept for when the AV side restarts):* AV Production Software Roadmap, TSA Gear Checklist (plain and branded), Media Storage & Review Tools
 
 **Read with care — dated, partly superseded:** Hub Integration Roadmap and Systems & Ownership Map (add HubSpot and alerts@ to their integration lists); Tech Stack & Growth Plan, Software & Insurance Wishlist (QuickBooks Simple Start is purchased and connected; e-signature is DocuSign; still open: general liability + E&O + cyber insurance, HR/payroll at first hire, bill-pay only if vendor volume justifies it).
 
-**Archived (`_archive/`):** the July System Flows PDF, Where-to-Log-What PDF, the two Hub Automation addenda, the Gap Punchlist and Gaps Plan, Hub Tool Improvement Backlog, Team Access sync verification, Sales Pipeline Triage, the Mr. Joe's proposal, the AV/travel documents (AV roadmap, TSA checklists, Media Storage & Review Tools) and the Testimonials/Content Cadence notes.
+**Archived (`_archive/`):** the July System Flows PDF, Where-to-Log-What PDF, the two Hub Automation addenda, the Gap Punchlist and Gaps Plan, Hub Tool Improvement Backlog, Team Access sync verification, Sales Pipeline Triage, the Mr. Joe's proposal, and the Testimonials/Content Cadence notes.
 
 ## Still manual on purpose
 
