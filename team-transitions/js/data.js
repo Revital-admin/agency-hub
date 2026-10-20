@@ -20,7 +20,9 @@ const TRANSITION_CHECKLISTS = {
         { id: "on-hub", label: "Revital Hub access granted (Cloudflare Access)" },
         { id: "on-team-access-role", label: "Team Access Manager role assigned (or confirmed default full access is appropriate)" },
         { id: "on-drive", label: "Google Drive access granted to the shared Revital Productions folder" },
-        { id: "on-password-manager", label: "Password manager vault access granted" },
+        { id: "on-password-manager", label: "Bitwarden vault access granted (shared collections only — see Password & Bitwarden Guide)" },
+        { id: "on-2sv", label: "Google 2-Step Verification enrolled (7-day grace from first login — confirm it is done)" },
+        { id: "on-hubspot", label: "HubSpot seat added (only if they work leads/deals)" },
         { id: "on-canva", label: "Canva Pro seat added (if applicable)" },
         { id: "on-adobe", label: "Adobe Creative Cloud seat added (if applicable)" },
         { id: "on-loom", label: "Loom account/seat added" },
@@ -31,7 +33,7 @@ const TRANSITION_CHECKLISTS = {
     {
       category: "Documents & Records",
       items: [
-        { id: "on-agreement", label: "Employment / Contractor Agreement and NDA signed and on file" },
+        { id: "on-agreement", label: "Employment / Contractor Agreement and NDA signed in DocuSign and filed (contractors: W-9 collected, Contractor/Vendor Information Sheet filled in)" },
         { id: "on-roster-entry", label: "Team Roster entry created — role, employment type, capacity" },
         { id: "on-signature", label: "Email signature created (Hub Email Signature Generator)" },
         { id: "on-30day-plan", label: "30-Day Onboarding Plan duplicated, filled in, and role-specific Week 3-4 section completed" }
@@ -52,7 +54,8 @@ const TRANSITION_CHECKLISTS = {
       items: [
         { id: "on-clients-assigned", label: "Clients assigned (Team Roster + Client Portal Manager account manager field, if applicable)" },
         { id: "on-clickup-lists", label: "Added to the relevant ClickUp lists/folders for their role" },
-        { id: "on-30day-checkin", label: "30-day check-in scheduled" }
+        { id: "on-30day-checkin", label: "30-day check-in scheduled" },
+        { id: "on-payment-setup", label: "Payment set up (payroll, or contractor ACH details) and added to the Subscription/Budget tools if they have a paid seat" }
       ]
     }
   ],
@@ -73,10 +76,11 @@ const TRANSITION_CHECKLISTS = {
         { id: "off-clickup-removed", label: "ClickUp seat removed / deactivated" },
         { id: "off-email-deactivated", label: "@revitalproductions.com email deactivated or forwarded" },
         { id: "off-drive-removed", label: "Google Drive access removed" },
-        { id: "off-password-manager-revoked", label: "Password manager vault access revoked" },
+        { id: "off-password-manager-revoked", label: "Bitwarden vault access revoked — and rotate any shared password they could see (Platform Access Recovery SOP)" },
         { id: "off-tools-removed", label: "Canva / Adobe Creative Cloud / Loom seats removed" },
         { id: "off-meta-google-removed", label: "Meta Business Manager / Google Ads MCC access removed" },
-        { id: "off-team-access-removed", label: "Removed from Team Access Manager (if a custom entry existed)" }
+        { id: "off-team-access-removed", label: "Removed from Team Access Manager (if a custom entry existed)" },
+        { id: "off-hubspot-docusign", label: "HubSpot seat removed; DocuSign / QuickBooks / Stripe access removed if they had any" }
       ]
     },
     {

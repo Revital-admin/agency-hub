@@ -5,6 +5,7 @@
 - 🗺️ **How Revital Works — System Map** — what each tool owns, the client journey, what runs automatically, what is still manual
 - 👤 **Account Manager Cheat Sheet — What To Do When** — "this happened → the Hub already did X → you do Y"
 - ✅ **End-to-End Dry Run Checklist** — run after big changes and each quarter
+- 👥 **New Hire / Departure — What To Do When** — order of operations for onboarding and offboarding teammates and contractors (checklist lives in the Hub's Team Onboarding & Offboarding tool)
 - 🔁 **Quarterly Systems Review** — a 90-minute review so systems never drift again
 
 If a document disagrees with the System Map, the System Map wins.
@@ -47,7 +48,7 @@ Cleaned up Oct 2026. Finished or replaced documents moved to `_archive/` (see it
 
 ## Still manual on purpose
 
-Choosing the account manager · typing intake answers into the Hub · archiving the ClickUp folder after offboarding · setting a client's CRM status to Active when onboarding ends · creating payment links in the Hub (never by hand in Stripe).
+Team onboarding/offboarding checklists (ticked by hand in the Hub's Team Onboarding & Offboarding tool) · choosing the account manager · typing intake answers into the Hub · archiving the ClickUp folder after offboarding · setting a client's CRM status to Active when onboarding ends · creating payment links in the Hub (never by hand in Stripe).
 
 ## Keeping it true
 

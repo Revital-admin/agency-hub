@@ -301,5 +301,47 @@ const SOP_PATCHES = [
         }
       }
     ]
-  }
+  },
+  {
+    id: "2026-10-team-lifecycle-v1",
+    ops: [
+      {
+        type: "add",
+        sop: {
+          id: "sop-new-hire-departure-what-to-do-when",
+          title: "\ud83d\udc65 New Hire / Departure \u2014 What To Do When",
+          category: "Agency Process",
+          format: "html",
+          checklistEnabled: true,
+          content: `<p><em>Last updated: October 2026. The Hub tool <strong>Team Onboarding &amp; Offboarding</strong> holds the tickable checklist; this page is the order of operations. Nothing here is automatic yet &mdash; a person ticks each box.</em></p>
+<h2>A new hire or contractor is confirmed</h2>
+<ul>
+<li>Agreement and NDA out for signature in DocuSign (contractors: also collect a W-9 and fill in the Contractor/Vendor Information Sheet)</li>
+<li>Decide Full Account or Alias first (Team Email Account Setup SOP), then create the @revitalproductions.com account; 2-Step Verification is required within 7 days of first login</li>
+<li>Open <strong>Team Onboarding &amp; Offboarding</strong> &rarr; start an Onboarding entry and work down Accounts &amp; Access</li>
+<li>Give access to what the role needs only: Hub role in Team Access Manager, ClickUp spaces, shared Drive folder, Bitwarden shared collections, and HubSpot only if they touch leads</li>
+<li>Add them to Team Roster (role, employment type, capacity); create an email signature</li>
+<li>Duplicate the First Hire 30-Day Onboarding Plan, fill it in, share it on Day 1</li>
+</ul>
+<h2>Week 1&ndash;4</h2>
+<ul>
+<li>Day 1: welcome call, Hub and ClickUp tour, Client Communication Policy, QC Checklist, Client Onboarding SOP</li>
+<li>Week 2: assign clients (Team Roster and the account manager field in Client Portal Manager &mdash; this re-syncs ClickUp and HubSpot)</li>
+<li>Day 30: check-in; set up payment (payroll or contractor ACH)</li>
+</ul>
+<h2>Someone is leaving</h2>
+<ul>
+<li>Open an Offboarding entry. <strong>First</strong> reassign their clients in Client Portal Manager and any in-flight deliverables &mdash; before access is removed</li>
+<li>Collect passwords and knowledge handoff; rotate any shared password they could see</li>
+<li>Remove access: Hub (Cloudflare Access), ClickUp, email, Drive, Bitwarden, Canva/Adobe/Loom, Meta/Google Ads, HubSpot, DocuSign, QuickBooks/Stripe if applicable</li>
+<li>Mark Team Roster inactive; settle final pay or contractor invoice; log the exit</li>
+</ul>
+<h2>Check</h2>
+<ul>
+<li>Quarterly Systems Review: every person in Team Access and Team Roster still works here and has the right role</li>
+</ul>`
+        }
+      }
+    ]
+  },
 ];
