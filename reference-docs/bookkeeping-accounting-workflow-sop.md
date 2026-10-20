@@ -34,8 +34,8 @@ It's worth setting a recurring check-in cadence between the two — monthly or q
 ## Current QuickBooks setup (October 2026)
 
 - **Plan:** QuickBooks Online **Simple Start** (upgraded from Free to enable the Stripe sync). Bill Pay is Essentials-only; until contractor/vendor volume justifies Essentials, pay contractors by ACH from the business bank account and log each payment as an expense against the vendor (this also tracks the $600 1099-NEC threshold).
-- **Connected:** the business bank account and the **Stripe Connector** (Apps → Stripe). Stripe charges, fees and payouts appear under Transactions → Integration transactions → Stripe, where the bookkeeper reviews and confirms them. Check that Stripe payouts are mapped to the business checking account.
-- **Clients:** every client should exist as a QuickBooks customer so Stripe payments can be matched to them.
+- **Connected:** the business bank account and the **Stripe Connector** (Apps → Stripe). Stripe charges, fees and payouts appear under Transactions → Integration transactions → Stripe, where the bookkeeper reviews and confirms them. Stripe payouts go straight to the business checking account (Stripe → Settings → Payouts → Payout destinations: *Transfer all revenue to your payout bank account*, set Oct 2026), not to Stripe's own Business/Treasury account; confirm the bank's last four digits match the real checking account.
+- **Clients:** every client should exist as a QuickBooks customer so Stripe payments can be matched to them. Evry Intention LLC, ImTheThird and TheHighTable were added Oct 20, 2026; add each new client when their profile is created.
 - **First-payment check:** the first real Stripe payment should show up in Integration transactions within hours; confirm the fee is split out as an expense. (The Hub also emails invoices@ and the account manager when a first payment arrives.)
 - **Payment links:** only links generated in the Hub are tied to the Contract & Invoice Tracker; hand-made Stripe links still reach QuickBooks through the connector but won't update the Tracker.
 
