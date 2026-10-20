@@ -38,6 +38,7 @@ export default {
       ctx.waitUntil(runStalePipelineCheck(env));
       ctx.waitUntil(runOverdueSubscriptionCheck(env));
       ctx.waitUntil(runMonthlyReportDueCheck(env));
+      ctx.waitUntil(runStalledOnboardingCheck(env));
     } else {
       ctx.waitUntil(runWeeklyHealthDigest(env));
     }
@@ -6994,6 +6995,56 @@ async function runMonthlyReportDueCheck(env) {
     }
   } catch (e) {
     console.error("Monthly report due check failed:", e);
+  }
+}
+
+// Stalled team onboarding (Oct 2026): a new hire/contractor onboarding entry
+// (Team Onboarding & Offboarding tool, agency/teamTransitions) that is still
+// not complete 7 days after it was created gets ONE email to the digest
+// recipients, so half-finished access setup doesn't go unnoticed. The item
+// total is deliberately not hard-coded here (the checklist lives in
+// team-transitions/js/data.js), so the email reports items done so far and
+// points to the tool for what's left.
+const STALLED_ONBOARDING_STATE_DOC = "agency/stalledOnboardingAlertState";
+const STALLED_ONBOARDING_DAYS = 7;
+
+async function runStalledOnboardingCheck(env) {
+  try {
+    const now = new Date();
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const [doc, stateDoc] = await Promise.all([
+      firestoreGetDoc(accessToken, projectId, "agency/teamTransitions"),
+      firestoreGetDoc(accessToken, projectId, STALLED_ONBOARDING_STATE_DOC)
+    ]);
+    const list = doc && Array.isArray(doc.list) ? doc.list : [];
+    const sent = Object.assign({}, (stateDoc && stateDoc.sent) || {});
+    const recipients = (env.HEALTH_DIGEST_RECIPIENTS || "admin@revitalproductions.com").split(",").map(s => s.trim()).filter(Boolean);
+    let changed = false;
+
+    for (const entry of list) {
+      if (!entry || entry.type !== "onboarding" || entry.completedAt || !entry.id) continue;
+      if (sent[entry.id]) continue;
+      const created = Date.parse(entry.createdDate || "");
+      if (!created || now.getTime() - created < STALLED_ONBOARDING_DAYS * 86400000) continue;
+      const days = Math.floor((now.getTime() - created) / 86400000);
+      const done = entry.checked ? Object.values(entry.checked).filter(Boolean).length : 0;
+      const name = entry.employeeName || "A new team member";
+      const text = `${name}'s onboarding${entry.role ? ` (${entry.role})` : ""} was started ${days} days ago and isn't complete yet (${done} checklist item${done === 1 ? "" : "s"} done so far).\n\nOpen Team Onboarding & Offboarding in the Hub to see what's still unchecked - commonly Bitwarden access, 2-Step Verification, the signed agreement, or client assignment. If they're fully set up, tick the remaining items so this entry closes.\n\nThis reminder is sent once per person.\n\n- Revital Hub`;
+      try {
+        await sendHealthDigestEmail(env, recipients, `Onboarding stalled: ${name} (${days} days)`, null, text);
+        sent[entry.id] = now.toISOString();
+        changed = true;
+      } catch (e) { console.warn("Stalled onboarding alert failed:", e); }
+    }
+
+    if (changed) {
+      // Drop state for entries that no longer exist.
+      const ids = new Set(list.map(e => e && e.id));
+      Object.keys(sent).forEach(k => { if (!ids.has(k)) delete sent[k]; });
+      await firestoreSetDoc(accessToken, projectId, STALLED_ONBOARDING_STATE_DOC, { sent, lastRunAt: now.toISOString() });
+    }
+  } catch (e) {
+    console.error("Stalled onboarding check failed:", e);
   }
 }
 
