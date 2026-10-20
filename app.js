@@ -8445,7 +8445,7 @@ function buildStaleNudgeDraftEmail(client, name, pendingCount) {
 function emailAccountManagerLowPulseAlert(client, name, pulseEntry) {
   const config = client.portalConfig || {};
   if (!config.accountManagerEmail) return;
-  if (!window.firebaseAuthReady) return; // no authenticated admin session to send under
+  if (!firebaseAuthReady) return; // no authenticated admin session to send under
 
   const amFirstName = config.accountManagerName ? config.accountManagerName.split(' ')[0] : "there";
   const subject = `Low satisfaction rating from ${name}`;
@@ -8509,7 +8509,7 @@ async function reportClientActivity(clientName, event, details) {
     : "Activity";
 
   // 1) Account manager email (same /api/send-email path as the handoff email).
-  if (event !== "report_delivered" && event !== "offboarding_complete" && config.accountManagerEmail && window.firebaseAuthReady) {
+  if (event !== "report_delivered" && event !== "offboarding_complete" && config.accountManagerEmail && firebaseAuthReady) {
     const amFirst = config.accountManagerName ? config.accountManagerName.split(" ")[0] : "there";
     const subject = `${clientName}: ${eventLabel}${d.title ? ` - ${d.title}` : ""}`;
     const needsAction = event !== "approval_decision" || d.decision === "revision" || d.decision === "minor";
@@ -8564,7 +8564,7 @@ async function reportClientActivity(clientName, event, details) {
 function emailAccountManagerHandoffNotification(client, notes, clientNameOverride) {
   const config = client.portalConfig || {};
   if (!config.accountManagerEmail) return;
-  if (!window.firebaseAuthReady) return; // no authenticated admin session to send under
+  if (!firebaseAuthReady) return; // no authenticated admin session to send under
 
   const amFirstName = config.accountManagerName ? config.accountManagerName.split(' ')[0] : "there";
   const clientName = clientNameOverride || client.name || "This client";
