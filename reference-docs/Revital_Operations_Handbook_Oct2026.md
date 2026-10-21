@@ -25,6 +25,7 @@ The **Hub is the source of truth**. ClickUp and HubSpot are mirrors fed from it;
 | Shared links | No Master Shared Links Tracker / tracker tasks. Paste the 6 shared views into Client Portal Manager; **Portal Readiness** shows what is blank. |
 | Revisions & requests | Native portal forms (ClickUp form links retired). Every approval decision, revision and request emails the account manager, creates a ClickUp task (revisions/requests) and a HubSpot note. An hourly check catches anything missed. |
 | Reporting | Due by the 5th: reminder to the account manager on the 5th, escalation to leadership on the 8th, for clients whose CRM status is Active. |
+| Contracts | DocuSign envelopes sent from Contract & Invoice Tracker call back when signed: in Live mode the record is marked Signed (with date) and invoices@ is emailed; Test (sandbox) mode only sends a [TEST] email. The send dialog now warns loudly when Live isn't ticked. |
 | Payment | Hub-generated links only. First payment → email to invoices@ + account manager. QuickBooks Simple Start syncs Stripe. |
 | Offboarding | Checklist 100% → portal off, CRM Inactive (HubSpot too), ClickUp folder renamed [Archived] (archive by hand). |
 | Email | Automatic internal email comes from Revital Hub `alerts@revitalproductions.com`. |

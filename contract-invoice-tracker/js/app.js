@@ -1481,6 +1481,17 @@ const sendContractSendBtn = el('sendContractSendBtn');
 const sendContractDocusignBtn = el('sendContractDocusignBtn');
 const sendContractDocusignLiveToggleWrap = el('sendContractDocusignLiveToggleWrap');
 const sendContractDocusignLiveToggle = el('sendContractDocusignLiveToggle');
+const sendContractDocusignModeNote = el('sendContractDocusignModeNote');
+if (sendContractDocusignLiveToggle && sendContractDocusignModeNote) {
+  const syncDocusignModeNote = () => {
+    sendContractDocusignModeNote.textContent = sendContractDocusignLiveToggle.checked
+      ? 'LIVE - legally binding'
+      : 'TEST MODE (sandbox) - tick Live for real contracts';
+    sendContractDocusignModeNote.style.color = sendContractDocusignLiveToggle.checked ? '#1e7e34' : '#c0392b';
+  };
+  sendContractDocusignLiveToggle.addEventListener('change', syncDocusignModeNote);
+  syncDocusignModeNote();
+}
 const sendContractStatus = el('sendContractStatus');
 const sendContractCloseBtn = el('sendContractCloseBtn');
 
@@ -1896,6 +1907,15 @@ if (sendContractDocusignBtn) {
       const confirmed = confirm(`This sends a LIVE, legally-binding Docusign envelope to ${recipientLabel}. Continue?`);
       if (!confirmed) return;
     }
+    else {
+      // Test mode is the default, and a sandbox envelope is NOT a real signed
+      // contract - make it hard to send one to a client by accident.
+      const recipientLabelT = currentContractContext && currentContractContext.record
+        ? (currentContractContext.contactName || currentContractContext.record.clientName)
+        : (sendContractTo.value.trim() || 'this recipient');
+      const okTest = confirm(`TEST MODE: "Live" is NOT ticked, so this is a sandbox Docusign envelope to ${recipientLabelT}. It is NOT a legally binding signature, and the contract will not be marked Signed. Tick "Live" for a real contract.\n\nSend the TEST envelope anyway?`);
+      if (!okTest) return;
+    }
 
     // The combined-documents path (everything except the MSA's solo
     // Docusign-Template send) has fill-in-the-blank fields baked in as
@@ -1983,7 +2003,9 @@ async function performDocusignSend(templates, soloMsa, fieldValues, docusignMode
           signerName: recipientLabel,
           signerEmail: sendContractTo.value,
           emailSubject: sendContractSubject.value,
-          docusignMode: mode
+          docusignMode: mode,
+          recordId: record ? record.id : undefined,
+          clientName: record ? record.clientName : undefined
         })
       });
     } else {
@@ -2003,7 +2025,9 @@ async function performDocusignSend(templates, soloMsa, fieldValues, docusignMode
           signerEmail: sendContractTo.value,
           emailSubject: sendContractSubject.value,
           fieldValues,
-          docusignMode: mode
+          docusignMode: mode,
+          recordId: record ? record.id : undefined,
+          clientName: record ? record.clientName : undefined
         })
       });
     }

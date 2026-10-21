@@ -98,6 +98,16 @@ export default {
       return handleDocusignSendEnvelope(request, env);
     }
 
+    // DocuSign "envelope completed/declined/voided" callback. Public on purpose
+    // (DocuSign's servers call it, so it must be registered as
+    // https://book.revitalproductions.com/api/docusign/webhook - the hub.*
+    // hostname sits behind Cloudflare Access). Trust does NOT come from the
+    // request body: the handler only acts on envelope ids this Worker created
+    // (docusignEnvelopes/{id}) and re-reads the real status from DocuSign.
+    if (url.pathname === "/api/docusign/webhook" && request.method === "POST") {
+      return handleDocusignWebhook(request, env);
+    }
+
     if (url.pathname === "/api/marketing-news") {
       return handleMarketingNews(request, env, ctx);
     }
@@ -1283,7 +1293,7 @@ async function handleDocusignSendEnvelope(request, env) {
     return jsonResponse({ error: `Server missing Docusign ${docusignMode}-mode secrets - set DOCUSIGN_INTEGRATION_KEY${suffix}, DOCUSIGN_USER_ID${suffix}, DOCUSIGN_ACCOUNT_ID${suffix}, and DOCUSIGN_PRIVATE_KEY${suffix}` }, 500);
   }
 
-  const { templateId, templateRoleName, signerName, signerEmail, emailSubject, documents, fieldValues, blankFields, blankCheckboxFields } = payload || {};
+  const { templateId, templateRoleName, signerName, signerEmail, emailSubject, documents, fieldValues, blankFields, blankCheckboxFields, recordId, clientName } = payload || {};
   if (!signerName || !signerEmail) {
     return jsonResponse({ error: "signerName and signerEmail are required" }, 400);
   }
@@ -1434,6 +1444,21 @@ async function handleDocusignSendEnvelope(request, env) {
     };
   }
 
+  // Per-envelope callback (no DocuSign Connect admin setup needed): DocuSign
+  // POSTs here when the envelope completes, is declined or is voided.
+  envelopeBody.eventNotification = {
+    url: "https://book.revitalproductions.com/api/docusign/webhook",
+    loggingEnabled: "true",
+    requireAcknowledgment: "true",
+    deliveryMode: "SIM",
+    eventData: { version: "restv2.1", format: "json", includeData: [] },
+    envelopeEvents: [
+      { envelopeEventStatusCode: "completed" },
+      { envelopeEventStatusCode: "declined" },
+      { envelopeEventStatusCode: "voided" }
+    ]
+  };
+
   try {
     const dsRes = await fetch(`${docusignApiBase}/accounts/${requiredSecrets.accountId}/envelopes`, {
       method: "POST",
@@ -1450,11 +1475,101 @@ async function handleDocusignSendEnvelope(request, env) {
       return jsonResponse({ error: dsData.message || "Docusign API error", details: dsData }, 502);
     }
 
+    // Remember which Tracker record / client this envelope belongs to, so the
+    // webhook can mark the contract Signed. Best-effort - the send already
+    // succeeded, so a failure here must not fail the response.
+    if (dsData.envelopeId) {
+      try {
+        const { accessToken: fsToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+        await firestoreSetDoc(fsToken, projectId, `docusignEnvelopes/${dsData.envelopeId}`, {
+          envelopeId: dsData.envelopeId,
+          mode: docusignMode,
+          recordId: recordId || null,
+          clientName: clientName || null,
+          signerEmail: signerEmail || null,
+          status: "sent",
+          createdAt: new Date().toISOString()
+        });
+      } catch (mapErr) {
+        console.error("Couldn't record Docusign envelope mapping (send itself succeeded):", mapErr);
+      }
+    }
+
     return jsonResponse({ success: true, envelopeId: dsData.envelopeId, status: dsData.status, mode: docusignMode }, 200, { "Cache-Control": "no-store" });
   } catch (e) {
     console.error(`Docusign envelope request failed (${docusignMode} mode):`, e);
     return jsonResponse({ error: "Request to Docusign failed: " + e.message }, 500);
   }
+}
+
+// ── POST /api/docusign/webhook ──
+// Called by DocuSign (see eventNotification in handleDocusignSendEnvelope).
+// Always answers 200 so DocuSign doesn't keep retrying. Safe against forged
+// calls: it only acts on envelope ids we created and confirms the status with
+// DocuSign's API before touching anything. Live-mode completion marks the
+// Contract & Invoice Tracker record Signed (+ signed date) and emails
+// invoices@ and the digest recipients; sandbox (test-mode) completion only
+// sends a [TEST] email and never changes a real record.
+async function handleDocusignWebhook(request, env) {
+  const ok = () => jsonResponse({ ok: true });
+  let body;
+  try { body = await request.json(); } catch (e) { return ok(); }
+  const envelopeId = (body && body.data && body.data.envelopeId) || (body && body.envelopeId);
+  if (!envelopeId || !/^[0-9a-fA-F-]{36}$/.test(envelopeId)) return ok();
+
+  try {
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const mapPath = `docusignEnvelopes/${envelopeId}`;
+    const mapping = await firestoreGetDoc(accessToken, projectId, mapPath);
+    if (!mapping || mapping.status === "completed" || mapping.status === "declined" || mapping.status === "voided") return ok();
+
+    const mode = mapping.mode === "live" ? "live" : "test";
+    const secrets = docusignSecretsFor(env, mode);
+    const { accessToken: dsToken, apiBase } = await getDocusignAccessToken(env, mode);
+    const res = await fetch(`${apiBase}/accounts/${secrets.accountId}/envelopes/${envelopeId}`, {
+      headers: { Authorization: `Bearer ${dsToken}` }
+    });
+    const info = await res.json().catch(() => ({}));
+    if (!res.ok) { console.warn("Docusign webhook: couldn't confirm envelope status", res.status); return ok(); }
+    const status = String(info.status || "").toLowerCase();
+    if (!["completed", "declined", "voided"].includes(status)) return ok();
+
+    const clientName = mapping.clientName || mapping.signerEmail || "a contract";
+    const tag = mode === "live" ? "" : "[TEST] ";
+    const when = (info.completedDateTime || info.declinedDateTime || info.voidedDateTime || new Date().toISOString());
+    const signedDate = String(when).slice(0, 10);
+    let recordNote = "";
+
+    if (status === "completed" && mode === "live" && mapping.recordId) {
+      const recPath = `contractInvoiceRecords/${mapping.recordId}`;
+      const rec = await firestoreGetDoc(accessToken, projectId, recPath);
+      if (rec) {
+        rec.contractStatus = "Signed";
+        rec.contractSignedDate = rec.contractSignedDate || signedDate;
+        await firestoreSetDoc(accessToken, projectId, recPath, rec);
+        recordNote = "\n\nThe Contract & Invoice Tracker record was marked Signed automatically. Set the renewal date there if this contract has one.";
+      } else {
+        recordNote = "\n\nNo matching Tracker record was found - update the contract status by hand.";
+      }
+    } else if (status === "completed" && mode === "live") {
+      recordNote = "\n\nThis envelope wasn't tied to a Tracker record - update the contract status by hand.";
+    } else if (status === "completed") {
+      recordNote = "\n\nSandbox (test) envelope - no real record was changed.";
+    }
+
+    const recipients = Array.from(new Set(["invoices@revitalproductions.com"].concat((env.HEALTH_DIGEST_RECIPIENTS || "admin@revitalproductions.com").split(",").map(x => x.trim()).filter(Boolean))));
+    const label = status === "completed" ? "signed" : status;
+    const subject = `${tag}Contract ${label}: ${clientName}`;
+    const text = `${tag}The contract for ${clientName} was ${label} in DocuSign (${signedDate}).${recordNote}\n\n- Revital Hub`;
+    try { await sendHealthDigestEmail(env, recipients, subject, null, text); } catch (e) { console.warn("Docusign webhook email failed:", e); }
+
+    mapping.status = status;
+    mapping.completedAt = new Date().toISOString();
+    await firestoreSetDoc(accessToken, projectId, mapPath, mapping);
+  } catch (e) {
+    console.error("Docusign webhook failed:", e);
+  }
+  return ok();
 }
 
 function jsonResponse(body, status = 200, extraHeaders = {}) {

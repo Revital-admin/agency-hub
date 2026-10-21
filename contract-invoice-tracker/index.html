@@ -75,7 +75,7 @@
 <!-- Off by default (sandbox). Same test/live pattern as the billing-live-toggle
      above - mirrors DOCUSIGN_INTEGRATION_KEY vs _LIVE in _worker.js. Only
      matters once Docusign Go-Live is approved and the _LIVE secrets exist. -->
-<label class="billing-mode-toggle" id="sendContractDocusignLiveToggleWrap" style="display:none;"><input type="checkbox" id="sendContractDocusignLiveToggle"> Live</label>
+<label class="billing-mode-toggle" id="sendContractDocusignLiveToggleWrap" style="display:none;"><input type="checkbox" id="sendContractDocusignLiveToggle"> Live <span id="sendContractDocusignModeNote" style="font-weight:700;color:#c0392b;margin-left:6px;">TEST MODE (sandbox) - tick Live for real contracts</span></label>
 </div>
 <div id="sendContractStatus" style="font-size: 0.8rem; margin-top: 8px;"></div>
 </div>
@@ -246,6 +246,6 @@ Choose File
 </main>
 
 <script src="../shared-number-format.js?v=1"></script>
-<script src="js/app.js?v=26"></script>
+<script src="js/app.js?v=27"></script>
 </body>
 </html>
