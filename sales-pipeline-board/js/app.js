@@ -452,7 +452,24 @@ el('deleteLeadBtn').addEventListener('click', async () => {
   renderBoard();
 });
 
+// Leads the Worker adds on its own (website discovery-call bookings) arrive
+// flagged needsSync with no ClickUp/HubSpot ids. Create those the first time
+// the board opens, then clear the flag. Only flagged leads are touched, so old
+// leads that never finished syncing are left alone.
+async function syncWorkerCreatedLeads() {
+  const pending = leads.filter(l => l.needsSync && !l.clickupTaskId && !l.hubspotDealId);
+  if (!pending.length) return;
+  for (const lead of pending) {
+    await syncToClickUp(lead);
+    await syncToHubSpot(lead);
+    delete lead.needsSync;
+  }
+  await persist();
+  renderBoard();
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   await loadLeads();
   renderBoard();
+  syncWorkerCreatedLeads().catch(e => console.warn('Auto-sync of booked leads failed:', e));
 });

@@ -1913,6 +1913,44 @@ async function handleBookingAvailability(request, env) {
   });
 }
 
+// Adds (or skips, if already there) a pipeline lead for a website discovery
+// booking. Dedupes by name or contact email. Writes agency/salesPipeline in the
+// same {list, version} shape the Hub uses, bumping version so an open Hub tab
+// sees the change as newer than what it loaded.
+async function addBookingLeadToPipeline(env, { name, email, company, notes, personName, start }) {
+  const leadName = (company || name || "").trim();
+  if (!leadName) return;
+  const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+  const doc = await firestoreGetDoc(accessToken, projectId, "agency/salesPipeline");
+  const list = doc && Array.isArray(doc.list) ? doc.list : [];
+  const version = (doc && typeof doc.version === "number") ? doc.version : 0;
+  const emailLc = (email || "").trim().toLowerCase();
+  const exists = list.some(l => l && (
+    (l.name || "").trim().toLowerCase() === leadName.toLowerCase() ||
+    (emailLc && (l.contactEmail || "").trim().toLowerCase() === emailLc)
+  ));
+  if (exists) return;
+  const humanTime = new Intl.DateTimeFormat("en-US", {
+    timeZone: BOOKING_TIMEZONE, month: "short", day: "numeric", hour: "numeric", minute: "2-digit"
+  }).format(start);
+  const today = new Date().toISOString().slice(0, 10);
+  const lead = {
+    id: "lead_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
+    name: leadName,
+    industry: "",
+    contactEmail: email || "",
+    source: "Website booking",
+    notes: `Booked a discovery call with ${personName} for ${humanTime}. Contact: ${name}.` + (notes ? `\n${notes}` : ""),
+    stage: "discovery call scheduled",
+    clickupTaskId: null,
+    hubspotDealId: null,
+    needsSync: true,
+    createdDate: today,
+    updatedDate: today
+  };
+  await firestoreSetDoc(accessToken, projectId, "agency/salesPipeline", { list: [...list, lead], version: version + 1 });
+}
+
 // ── POST /api/booking/book ──
 // Public. Creates the actual calendar event once a prospect picks a
 // slot. The Calendar invite (sendUpdates=all, prospect added as an
@@ -2025,6 +2063,18 @@ async function handleBookingCreate(request, env) {
       await sendHealthDigestEmail(env, recipients, subject, html, text);
     } catch (notifyErr) {
       console.error("Booking notification email failed (booking itself still succeeded):", notifyErr);
+    }
+
+    // A prospect booking a discovery call is a new pipeline lead - put it on
+    // the Sales Pipeline Board (flagged needsSync so the board creates the
+    // ClickUp task + HubSpot deal the next time it opens). Best-effort and
+    // never fails the booking. Existing-client portal bookings are skipped.
+    if (!isClientBooking) {
+      try {
+        await addBookingLeadToPipeline(env, { name, email, company, notes, personName: person.name, start });
+      } catch (leadErr) {
+        console.error("Couldn't add booking to Sales Pipeline (booking itself still succeeded):", leadErr);
+      }
     }
 
     // Only advance the round-robin pointer for bookings that actually

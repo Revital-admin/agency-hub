@@ -19,6 +19,7 @@ The **Hub is the source of truth**. ClickUp and HubSpot are mirrors fed from it;
 | Area | Now |
 |---|---|
 | Zapier | One Zap only: client uploads → Google Drive. Zaps 1–8 in the July doc were never built. |
+| Booking | A prospect booking a discovery call at book.revitalproductions.com adds a Sales Pipeline lead (stage: discovery call scheduled, source: Website booking). ClickUp task + HubSpot deal are created the next time the Pipeline Board is opened. |
 | Closed Won | From Pipeline Board **or** Follow-Up Tracker, the Hub auto-creates the client profile, portal link, ClickUp folder and Drive folder; then prompts the account-manager handoff. |
 | Intake | Still the Google Form; its own email notification is the alert; answers are typed into the Hub; Intake Request tool has an *Open Responses* shortcut. |
 | Shared links | No Master Shared Links Tracker / tracker tasks. Paste the 6 shared views into Client Portal Manager; **Portal Readiness** shows what is blank. |
