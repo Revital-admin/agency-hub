@@ -39,6 +39,7 @@ export default {
       ctx.waitUntil(runOverdueSubscriptionCheck(env));
       ctx.waitUntil(runMonthlyReportDueCheck(env));
       ctx.waitUntil(runStalledOnboardingCheck(env));
+      ctx.waitUntil(runUnacknowledgedRevisionCheck(env));
     } else {
       ctx.waitUntil(runWeeklyHealthDigest(env));
     }
@@ -3983,6 +3984,25 @@ async function runClientActivity(env, p) {
 
   const out = { ok: true, clickup: null, hubspot: null };
 
+  // Client-facing acknowledgement (Client Communication Policy: revisions
+  // acknowledged within 24 hours, content requests within 2 business days).
+  // Runs once per item - the Hub path and the hourly sweep both guard against
+  // reporting the same item twice. Best-effort; never blocks the rest.
+  const isRevisionLike = event === "revision_request" || (event === "approval_decision" && (decision === "revision" || decision === "minor"));
+  if ((isRevisionLike || event === "content_request") && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.clientEmail || "")) {
+    try {
+      const amName = (p.accountManagerName || "").toString().trim();
+      const amEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.accountManagerEmail || "") ? p.accountManagerEmail : null;
+      const first = (p.clientContactName || "").toString().trim().split(" ")[0] || "there";
+      const sla = isRevisionLike ? "within 24 hours" : "within 2 business days";
+      const kind = isRevisionLike ? "revision request" : "content request";
+      const confirmText = `Hi ${first},\n\nWe received your ${kind}${title && title !== "(untitled)" ? ` for "${title}"` : ""} and it's in the queue. ${amName ? amName.split(" ")[0] : "Your account manager"} will ${isRevisionLike ? "acknowledge it" : "follow up"} ${sla}.\n\nYou don't need to do anything else - you can track everything from your client portal.\n\nThank you,\nRevital Productions`;
+      await sendHealthDigestEmail(env, [p.clientEmail], `We received your ${kind}`, null, confirmText, "Revital Productions <hello@revitalproductions.com>", amEmail || undefined);
+    } catch (e) {
+      console.warn("Client confirmation email failed:", e);
+    }
+  }
+
   const listHint = clientActivityClickUpListHint(event, decision);
   if (listHint && p.clickupFolderId) {
     const apiToken = env.CLICKUP_API_TOKEN;
@@ -4114,6 +4134,10 @@ async function runClientActivitySweep(env) {
       for (const item of items) {
         const lead = leads.find(l => (l.name || "").trim().toLowerCase() === clientName.trim().toLowerCase());
         const result = await runClientActivity(env, Object.assign({}, item, {
+          clientEmail: config.clientContactEmail || "",
+          clientContactName: config.clientContactName || "",
+          accountManagerName: config.accountManagerName || "",
+          accountManagerEmail: config.accountManagerEmail || "",
           clickupFolderId: workspace.clickupFolderId || "",
           hubspotDealId: (lead && lead.hubspotDealId) || ""
         }));
@@ -6717,19 +6741,20 @@ function buildHealthDigestEmail(rows, complianceRows) {
   return { subject, html, text: textLines.join("\n") };
 }
 
-async function sendHealthDigestEmail(env, recipients, subject, html, text) {
+async function sendHealthDigestEmail(env, recipients, subject, html, text, fromOverride, replyTo) {
   const apiKey = env.RESEND_API_KEY;
   if (!apiKey) throw new Error("Server missing RESEND_API_KEY secret");
   const body = {
     // Internal alerts (health digest, compliance, overdue/renewal, activity
     // sweep, Stripe alerts) come from alerts@ so they stay out of
     // hello@'s client-facing mail and are easy to filter.
-    from: INTERNAL_ALERT_FROM,
+    from: fromOverride || INTERNAL_ALERT_FROM,
     to: recipients,
     subject,
     text
   };
   if (html) body.html = html;
+  if (replyTo) body.reply_to = replyTo;
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -7160,6 +7185,68 @@ async function runMonthlyReportDueCheck(env) {
     }
   } catch (e) {
     console.error("Monthly report due check failed:", e);
+  }
+}
+
+// Unacknowledged revisions (Oct 2026): the Client Communication Policy promises
+// revisions are acknowledged within 24 hours. A revision/minor-correction task
+// still sitting in its initial "Brief Received" status after 24 hours means
+// nobody has picked it up, so the account manager (and the digest recipients)
+// get one email per task. "Acknowledging" = moving the task out of Brief
+// Received in ClickUp. Skips weekends so a Friday-night request alerts Monday.
+const UNACK_REVISION_STATE_DOC = "agency/unackedRevisionAlertState";
+const UNACK_REVISION_HOURS = 24;
+
+async function runUnacknowledgedRevisionCheck(env) {
+  try {
+    const now = new Date();
+    const dow = now.getUTCDay();
+    if (dow === 0 || dow === 6) return;
+    const apiToken = env.CLICKUP_API_TOKEN;
+    if (!apiToken) return;
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const [clients, stateDoc] = await Promise.all([
+      fetchAllClientsFromFirestore(accessToken, projectId),
+      firestoreGetDoc(accessToken, projectId, UNACK_REVISION_STATE_DOC)
+    ]);
+    const sent = Object.assign({}, (stateDoc && stateDoc.sent) || {});
+    const digest = (env.HEALTH_DIGEST_RECIPIENTS || "admin@revitalproductions.com").split(",").map(x => x.trim()).filter(Boolean);
+    let changed = false;
+
+    for (const [clientName, workspace] of Object.entries(clients)) {
+      const config = (workspace && workspace.portalConfig) || {};
+      if (config.onboardingStatus !== "Active" || !workspace.clickupFolderId) continue;
+      try {
+        const listsRes = await fetch(`https://api.clickup.com/api/v2/folder/${encodeURIComponent(workspace.clickupFolderId)}/list?archived=false`, { headers: { Authorization: apiToken } });
+        const listsData = await listsRes.json().catch(() => ({}));
+        const list = (listsData.lists || []).find(l => (l.name || "").toLowerCase().includes("client feedback"));
+        if (!list) continue;
+        const tasksRes = await fetch(`https://api.clickup.com/api/v2/list/${list.id}/task?archived=false&include_closed=false`, { headers: { Authorization: apiToken } });
+        const tasksData = await tasksRes.json().catch(() => ({}));
+        for (const t of (tasksData.tasks || [])) {
+          const status = ((t.status && t.status.status) || "").toLowerCase();
+          if (status !== "brief received" || sent[t.id]) continue;
+          const created = Number(t.date_created);
+          if (!created || now.getTime() - created < UNACK_REVISION_HOURS * 3600000) continue;
+          const hours = Math.floor((now.getTime() - created) / 3600000);
+          const to = Array.from(new Set([config.accountManagerEmail].filter(Boolean).concat(digest)));
+          const text = `${clientName}'s revision "${(t.name || "").slice(0, 120)}" has been waiting ${hours} hours without being picked up. Our policy is to acknowledge revisions within 24 hours.\n\nOpen it in ClickUp and move it out of Brief Received once it's acknowledged: ${t.url || ""}\n\nThis reminder is sent once per request.\n\n- Revital Hub`;
+          try {
+            await sendHealthDigestEmail(env, to, `Revision waiting ${hours}h: ${clientName}`, null, text);
+            sent[t.id] = now.toISOString();
+            changed = true;
+          } catch (e) { console.warn("Unacknowledged-revision alert failed:", e); }
+        }
+      } catch (e) { console.warn("Unacknowledged-revision check failed for", clientName, e); }
+    }
+
+    if (changed) {
+      const keys = Object.keys(sent);
+      if (keys.length > 300) keys.slice(0, keys.length - 300).forEach(k => delete sent[k]);
+      await firestoreSetDoc(accessToken, projectId, UNACK_REVISION_STATE_DOC, { sent, lastRunAt: now.toISOString() });
+    }
+  } catch (e) {
+    console.error("Unacknowledged revision check failed:", e);
   }
 }
 

@@ -8526,6 +8526,8 @@ async function reportClientActivity(clientName, event, details) {
         event, clientName,
         title: d.title || "", decision: d.decision || "", notes: d.notes || "",
         previewLink: d.previewLink || "", urgency: d.urgency || "",
+        clientEmail: config.clientContactEmail || "", clientContactName: config.clientContactName || "",
+        accountManagerName: config.accountManagerName || "", accountManagerEmail: config.accountManagerEmail || "",
         clickupFolderId: client.clickupFolderId || "", hubspotDealId
       })
     });
