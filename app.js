@@ -4748,6 +4748,11 @@ async function addLeadToSalesPipeline({ name, source, notes, stage }) {
     stage: stage || "🆕 new lead",
     clickupTaskId: null,
     hubspotDealId: null,
+    // Flagged for Sales Pipeline Board's syncWorkerCreatedLeads: it creates the
+    // ClickUp task + HubSpot deal AND saves their ids onto the lead. The old
+    // fire-and-forget syncs here never stored the ids, so the card stayed on
+    // "Syncing..." and the next edit created duplicate tasks/deals.
+    needsSync: true,
     createdDate: new Date().toISOString().slice(0, 10),
     updatedDate: new Date().toISOString().slice(0, 10)
   };
@@ -4759,25 +4764,8 @@ async function addLeadToSalesPipeline({ name, source, notes, stage }) {
   });
   if (!result.ok) return { ok: false, reason: result.reason, error: result.error };
 
-  // Same fire-and-forget ClickUp sync Sales Pipeline Board's own save
-  // handler kicks off on a new lead - a failure here never blocks the
-  // Hub-side save above (already succeeded); the card just shows
-  // "Syncing..." until the next edit retries it, same as that tool's
-  // own syncToClickUp.
-  fetch("/api/pipeline/sync-clickup", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ taskId: null, name: newLead.name, industry: newLead.industry || "", stage: newLead.stage, contactEmail: "", source: newLead.source, notes: newLead.notes })
-  }).catch(err => console.error("ClickUp sync failed for auto-created pipeline lead:", err));
-
-  // Same fire-and-forget HubSpot sync Sales Pipeline Board's own save
-  // handler kicks off on a new lead - see that tool's own syncToHubSpot.
-  fetch("/api/pipeline/sync-hubspot", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ dealId: null, name: newLead.name, stage: newLead.stage, contactEmail: "", source: newLead.source, notes: newLead.notes })
-  }).catch(err => console.error("HubSpot sync failed for auto-created pipeline lead:", err));
-
+  // ClickUp + HubSpot sync happens when Sales Pipeline Board next opens
+  // (needsSync flag above), so the returned ids are stored on the lead.
   return { ok: true, lead: newLead };
 }
 
