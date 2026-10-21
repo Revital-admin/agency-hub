@@ -2348,6 +2348,14 @@ function submitClientRequest() {
   if (!Array.isArray(clientData.clientRequests)) clientData.clientRequests = [];
   clientData.clientRequests.push(entry);
 
+  // Matches the Client Communication Policy: revisions are acknowledged within
+  // 24 hours, new content requests within 2 business days.
+  const thanksText = document.getElementById("clientRequestThanksText");
+  if (thanksText) {
+    thanksText.textContent = clientRequestType === "revision"
+      ? "Your account manager has been notified and will acknowledge your revision within 24 hours."
+      : "Your account manager has been notified and will follow up within 2 business days.";
+  }
   document.getElementById("clientRequestForm").style.display = "none";
   document.getElementById("clientRequestThanks").style.display = "block";
 
