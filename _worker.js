@@ -3997,7 +3997,7 @@ async function runClientActivity(env, p) {
       const sla = isRevisionLike ? "within 24 hours" : "within 2 business days";
       const kind = isRevisionLike ? "revision request" : "content request";
       const confirmText = `Hi ${first},\n\nWe received your ${kind}${title && title !== "(untitled)" ? ` for "${title}"` : ""} and it's in the queue. ${amName ? amName.split(" ")[0] : "Your account manager"} will ${isRevisionLike ? "acknowledge it" : "follow up"} ${sla}.\n\nYou don't need to do anything else - you can track everything from your client portal.\n\nThank you,\nRevital Productions`;
-      await sendHealthDigestEmail(env, [p.clientEmail], `We received your ${kind}`, null, confirmText, "Revital Productions <hello@revitalproductions.com>", amEmail || undefined);
+      await sendHealthDigestEmail(env, [p.clientEmail], `We received your ${kind}`, null, confirmText, "Revital Productions <clientcare@revitalproductions.com>", amEmail || undefined);
     } catch (e) {
       console.warn("Client confirmation email failed:", e);
     }
