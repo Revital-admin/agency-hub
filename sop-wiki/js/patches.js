@@ -344,4 +344,74 @@ const SOP_PATCHES = [
       }
     ]
   },
+  {
+    id: "2026-10-finance-v1",
+    ops: [
+      {
+        type: "prepend",
+        sopId: "sop-invoice-and-billing-sop",
+        html: SOP_PATCH_NOTE(`
+<ul>
+<li><strong>How clients are billed now:</strong> with a Hub-generated Stripe payment link (Proposal Calculator, or Send Billing Link in Contract &amp; Invoice Tracker). Never create the link by hand in Stripe &mdash; hand-made links don&rsquo;t update the Tracker. Monthly retainers run as Stripe subscriptions.</li>
+<li><strong>The Tracker updates itself:</strong> a successful payment marks the Tracker record paid/active and emails invoices@ and the account manager on the first payment. Failed payments and cancellations alert as before. If every retry fails, the subscription is left <em>past due</em> (not cancelled) so you can chase the client.</li>
+<li><strong>QuickBooks is the books, not the billing tool:</strong> Stripe charges, fees and payouts sync into QuickBooks (Transactions &rarr; Integration transactions &rarr; Stripe). Create a QuickBooks invoice only for something Stripe doesn&rsquo;t cover (formal invoice document, net terms, AV freelance work), and match the deposit when it lands.</li>
+<li>ClickUp and HubSpot are mirrors of the Hub; the Invoices &amp; Payments list there is no longer where payment status is decided.</li>
+<li>The overdue follow-up cadence below (Day 1 / 7 / 15) still applies to anything billed by manual invoice.</li>
+</ul>`)
+      },
+      {
+        type: "prepend",
+        sopId: "sop-expense-tracking-and-tax-categories",
+        html: SOP_PATCH_NOTE(`
+<ul>
+<li><strong>QuickBooks now holds the books.</strong> The business bank account and Stripe are connected, so expenses are categorized in QuickBooks (bank feed) and receipts are attached to the transaction there. Use the category names in this SOP when you categorize.</li>
+<li>If the team still logs expenses in the ClickUp Expenses Tracker, treat that as a convenience copy &mdash; QuickBooks is the one that counts at tax time. Confirm with your bookkeeper or CPA which they want to keep.</li>
+<li>Contractor payments: pay by ACH from the business account and log each one as an expense against the vendor in QuickBooks (this also tracks 1099 totals). See the Monthly Close &amp; Tax Calendar page.</li>
+</ul>`)
+      },
+      {
+        type: "prepend",
+        sopId: "sop-contract-signing-process-sop",
+        html: SOP_PATCH_NOTE(`
+<ul>
+<li><strong>Signed status is now automatic for live DocuSign sends.</strong> When the client signs, the Tracker record is marked Signed (with the date) and invoices@ is emailed. Set the renewal date by hand if the contract has one.</li>
+<li>In the Send Contract panel, make sure the <strong>Live</strong> box is ticked for real contracts. Unticked means TEST MODE (sandbox): not legally binding and the record is not changed. The panel now shows a red warning and a confirmation in test mode.</li>
+</ul>`)
+      },
+      {
+        type: "add",
+        sop: {
+          id: "sop-monthly-close-and-tax-calendar",
+          title: "\ud83d\udcc5 Monthly Close & Tax Calendar",
+          category: "Finance & Reporting",
+          format: "html",
+          checklistEnabled: true,
+          content: `<p><em>Last updated: October 2026. Owner: whoever does the bookkeeping (in-house bookkeeper or Ronald until there is one). This is a routine, not tax advice &mdash; confirm dates, rates and thresholds with your CPA, because tax rules change.</em></p>
+<h2>Monthly close (first week of each month)</h2>
+<ul>
+<li>QuickBooks: categorize every bank-feed transaction; attach receipts to anything over a few dollars</li>
+<li>QuickBooks &rarr; Integration transactions &rarr; Stripe: review and confirm new charges, fees and payouts; confirm each payout matches a deposit in the business checking account</li>
+<li>Reconcile the business checking account and any business credit card to the statement</li>
+<li>Contract &amp; Invoice Tracker vs QuickBooks: every paid client appears in both; anything unpaid is chased (Overdue follow-up in the Invoice &amp; Billing SOP)</li>
+<li>Subscription Tracker: dates and amounts match this month&rsquo;s statements; cancel anything unused</li>
+<li>Contractors: every contractor payment was made by ACH from the business account and logged as an expense against their vendor record</li>
+<li>Financial Center: click Sync Now, then set the manual numbers (tax reserve, owner funding)</li>
+</ul>
+<h2>Quarterly</h2>
+<ul>
+<li>Estimated tax payments &mdash; US federal estimates are generally due around April 15, June 15, September 15 and January 15; confirm the amounts and the Louisiana state dates with your CPA</li>
+<li>Move the agreed percentage of revenue into the tax reserve each month so the quarterly payment is not a surprise</li>
+<li>Review the P&amp;L: revenue by service, software costs, contractor costs, margin; compare with the Service Pricing tool</li>
+<li>Insurance and contractor paperwork: policies current (Business Insurance Tracker); W-9 and agreement on file for every contractor</li>
+</ul>
+<h2>Annual</h2>
+<ul>
+<li>January: 1099-NEC forms for contractors. The reporting threshold was $600 for payments made through 2025 and is $2,000 for payments made in 2026 onward (per current IRS guidance &mdash; confirm with your CPA). Forms are due to contractors and the IRS around January 31.</li>
+<li>Send the year-end QuickBooks reports to your CPA; give the CPA Accountant access in QuickBooks (Manage Users &rarr; Accountants) rather than sharing a login</li>
+<li>Review this page and the bookkeeping SOP with your CPA</li>
+</ul>`
+        }
+      }
+    ]
+  },
 ];
