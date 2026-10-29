@@ -40,6 +40,7 @@ export default {
       ctx.waitUntil(runMonthlyReportDueCheck(env));
       ctx.waitUntil(runStalledOnboardingCheck(env));
       ctx.waitUntil(runUnacknowledgedRevisionCheck(env));
+      ctx.waitUntil(runOverduePhaseCheck(env));
     } else {
       ctx.waitUntil(runWeeklyHealthDigest(env));
     }
@@ -6682,17 +6683,20 @@ function escapeHtmlForDigest(s) {
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-function buildHealthDigestEmail(rows, complianceRows) {
+function buildHealthDigestEmail(rows, complianceRows, overduePhaseRows) {
   const attention = rows.filter(r => r.needsAttention);
   const upsell = rows.filter(r => r.upsellOpportunity);
   const totalClients = rows.length;
   const compliance = complianceRows || [];
+  const overduePhases = overduePhaseRows || [];
 
   const subject = attention.length
     ? `Weekly Agency Health Digest — ${attention.length} client${attention.length === 1 ? "" : "s"} need attention`
     : compliance.length
       ? `Weekly Agency Health Digest — ${compliance.length} contractor compliance item${compliance.length === 1 ? "" : "s"}`
-      : "Weekly Agency Health Digest — all clients on track";
+      : overduePhases.length
+        ? `Weekly Agency Health Digest — ${overduePhases.length} overdue project phase${overduePhases.length === 1 ? "" : "s"}`
+        : "Weekly Agency Health Digest — all clients on track";
 
   const summaryLine = totalClients === 0
     ? "No clients in the Hub yet."
@@ -6711,6 +6715,11 @@ function buildHealthDigestEmail(rows, complianceRows) {
        <ul style="padding-left:20px;">${compliance.map(r => `<li style="margin-bottom:6px;"><strong>${escapeHtmlForDigest(r.name)}</strong> — ${r.issues.map(escapeHtmlForDigest).join("; ")}</li>`).join("")}</ul>`
     : "";
 
+  const overdueHtml = overduePhases.length
+    ? `<h3 style="margin-bottom:4px;">Overdue project phases</h3>
+       <ul style="padding-left:20px;">${overduePhases.map(r => `<li style="margin-bottom:6px;"><strong>${escapeHtmlForDigest(r.clientName)}</strong> — ${escapeHtmlForDigest(r.phase)} (${r.daysLate} day${r.daysLate === 1 ? "" : "s"} late, due ${escapeHtmlForDigest(r.targetDate)})</li>`).join("")}</ul>`
+    : "";
+
   const html = `
     <div style="font-family: Arial, sans-serif; color:#1e293b; max-width:600px;">
       <h2 style="margin-bottom:4px;">Weekly Agency Health Digest</h2>
@@ -6718,6 +6727,7 @@ function buildHealthDigestEmail(rows, complianceRows) {
       <ul style="padding-left:20px;">${listItemsHtml}</ul>
       ${upsellHtml}
       ${complianceHtml}
+      ${overdueHtml}
       <p style="font-size:12px; color:#94a3b8; margin-top:24px;">Generated automatically from the same data as Agency Health Dashboard in the Hub. Open the Hub → Agency Health Dashboard for the full live view and to filter/search. Contractor Compliance is pulled from Team Roster & Capacity.</p>
     </div>
   `;
@@ -6735,6 +6745,10 @@ function buildHealthDigestEmail(rows, complianceRows) {
   if (compliance.length) {
     textLines.push("", "CONTRACTOR COMPLIANCE");
     compliance.forEach(r => textLines.push(`- ${r.name}: ${r.issues.join("; ")}`));
+  }
+  if (overduePhases.length) {
+    textLines.push("", "OVERDUE PROJECT PHASES");
+    overduePhases.forEach(r => textLines.push(`- ${r.clientName}: ${r.phase} (${r.daysLate} day${r.daysLate === 1 ? "" : "s"} late, due ${r.targetDate})`));
   }
   textLines.push("", "Open the Hub -> Agency Health Dashboard for the full live view.");
 
@@ -6790,7 +6804,8 @@ async function runWeeklyHealthDigest(env) {
     ]);
     const rows = buildHealthDigestRows(clients, revisionRecords, contractInvoiceRecords, lastQbrDatesByClient);
     const complianceRows = buildContractorComplianceRows(teamRosterDoc && Array.isArray(teamRosterDoc.list) ? teamRosterDoc.list : []);
-    const { subject, html, text } = buildHealthDigestEmail(rows, complianceRows);
+    const overduePhaseRows = collectOverduePhases(clients).sort((a, b) => b.daysLate - a.daysLate);
+    const { subject, html, text } = buildHealthDigestEmail(rows, complianceRows, overduePhaseRows);
     await sendHealthDigestEmail(env, recipients, subject, html, text);
   } catch (e) {
     console.error("Weekly health digest failed:", e);
@@ -7185,6 +7200,88 @@ async function runMonthlyReportDueCheck(env) {
     }
   } catch (e) {
     console.error("Monthly report due check failed:", e);
+  }
+}
+
+// Overdue project phases (Oct 2026): Timeline Scheduler stores each client's
+// project timelines (client.timelines[].phases[] with targetDate + status).
+// A phase that isn't done and is past its target date emails the account
+// manager once (from the first day late); still late after 3 days emails the
+// digest recipients once. All overdue phases also appear in the weekly digest.
+const OVERDUE_PHASE_STATE_DOC = "agency/overduePhaseAlertState";
+const OVERDUE_PHASE_ESCALATE_DAYS = 3;
+
+function chicagoToday() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date());
+}
+
+function daysBetweenISO(fromISO, toISO) {
+  return Math.round((Date.parse(toISO + "T00:00:00Z") - Date.parse(fromISO + "T00:00:00Z")) / 86400000);
+}
+
+function collectOverduePhases(clients) {
+  const today = chicagoToday();
+  const rows = [];
+  for (const [clientName, workspace] of Object.entries(clients || {})) {
+    const config = (workspace && workspace.portalConfig) || {};
+    if (config.onboardingStatus !== "Active") continue;
+    for (const tl of (Array.isArray(workspace.timelines) ? workspace.timelines : [])) {
+      if (!tl || tl.status === "completed") continue;
+      for (const ph of (Array.isArray(tl.phases) ? tl.phases : [])) {
+        if (!ph || ph.status === "done" || !/^\d{4}-\d{2}-\d{2}$/.test(ph.targetDate || "")) continue;
+        const daysLate = daysBetweenISO(ph.targetDate, today);
+        if (daysLate < 1) continue;
+        rows.push({
+          clientName, timelineId: tl.id || tl.templateName || "timeline", timelineName: tl.templateName || "Project timeline",
+          order: ph.order, phase: ph.name || "(unnamed phase)", targetDate: ph.targetDate, daysLate,
+          amEmail: config.accountManagerEmail || "", amName: config.accountManagerName || ""
+        });
+      }
+    }
+  }
+  return rows;
+}
+
+async function runOverduePhaseCheck(env) {
+  try {
+    const dow = new Date().getUTCDay();
+    if (dow === 0 || dow === 6) return;
+    const { accessToken, projectId } = await getGoogleAccessToken(env, "https://www.googleapis.com/auth/datastore");
+    const [clients, stateDoc] = await Promise.all([
+      fetchAllClientsFromFirestore(accessToken, projectId),
+      firestoreGetDoc(accessToken, projectId, OVERDUE_PHASE_STATE_DOC)
+    ]);
+    const sent = Object.assign({}, (stateDoc && stateDoc.sent) || {});
+    const digest = (env.HEALTH_DIGEST_RECIPIENTS || "admin@revitalproductions.com").split(",").map(x => x.trim()).filter(Boolean);
+    const nowIso = new Date().toISOString();
+    let changed = false;
+
+    for (const r of collectOverduePhases(clients)) {
+      const key = `${r.clientName}|${r.timelineId}|${r.order}`;
+      if (!sent[key + "|am"]) {
+        const first = r.amName ? r.amName.split(" ")[0] : "team";
+        const text = `Hi ${first},\n\n"${r.phase}" on ${r.clientName}'s ${r.timelineName} was due ${r.targetDate} and isn't marked done (${r.daysLate} day${r.daysLate === 1 ? "" : "s"} late).\n\nIf it's finished, mark it done in Timeline Scheduler. If it's blocked, note why and set a new date. Keep the project to its time box: decide today what ships and what gets cut or moved to a Change Order.\n\nThis reminder is sent once per phase.\n\n- Revital Hub`;
+        try {
+          await sendHealthDigestEmail(env, r.amEmail ? [r.amEmail] : digest, `Phase overdue: ${r.clientName} - ${r.phase}`.slice(0, 150), null, text);
+          sent[key + "|am"] = nowIso; changed = true;
+        } catch (e) { console.warn("Overdue-phase email failed:", e); }
+      }
+      if (r.daysLate >= OVERDUE_PHASE_ESCALATE_DAYS && !sent[key + "|esc"]) {
+        const text = `${r.clientName}: "${r.phase}" (${r.timelineName}) is ${r.daysLate} days past its ${r.targetDate} target and still not done.${r.amName ? ` Account manager: ${r.amName}.` : " No account manager assigned."}\n\nThis escalation is sent once per phase.\n\n- Revital Hub`;
+        try {
+          await sendHealthDigestEmail(env, digest, `Phase ${r.daysLate} days late: ${r.clientName} - ${r.phase}`.slice(0, 150), null, text);
+          sent[key + "|esc"] = nowIso; changed = true;
+        } catch (e) { console.warn("Overdue-phase escalation failed:", e); }
+      }
+    }
+
+    if (changed) {
+      const keys = Object.keys(sent);
+      if (keys.length > 600) keys.slice(0, keys.length - 600).forEach(k => delete sent[k]);
+      await firestoreSetDoc(accessToken, projectId, OVERDUE_PHASE_STATE_DOC, { sent, lastRunAt: nowIso });
+    }
+  } catch (e) {
+    console.error("Overdue phase check failed:", e);
   }
 }
 

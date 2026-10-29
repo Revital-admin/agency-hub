@@ -29,6 +29,7 @@ The **Hub is the source of truth**. ClickUp and HubSpot are mirrors fed from it;
 | Contracts | DocuSign envelopes sent from Contract & Invoice Tracker call back when signed: in Live mode the record is marked Signed (with date) and invoices@ is emailed; Test (sandbox) mode only sends a [TEST] email. The send dialog now warns loudly when Live isn't ticked. |
 | Payment | Hub-generated links only. First payment → email to invoices@ + account manager. QuickBooks Simple Start syncs Stripe. |
 | Offboarding | Checklist 100% → portal off, CRM Inactive (HubSpot too), ClickUp folder renamed [Archived] (archive by hand). |
+| Project deadlines | Overdue Timeline Scheduler phases: email to the account manager on day 1 late, one escalation to leadership at 3+ days late, and a section in the weekly digest. See SOP Wiki: Project Deadlines & Time-Box Standards (2 revision rounds included). |
 | Email | Automatic internal email comes from Revital Hub `alerts@revitalproductions.com`. |
 | Subscriptions | Subscription Tracker rolls Monthly/Annual renewal dates forward itself; annual renewals get a 14-day heads-up email. |
 

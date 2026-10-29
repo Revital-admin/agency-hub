@@ -414,4 +414,125 @@ const SOP_PATCHES = [
       }
     ]
   },
+  {
+    id: "2026-10-lifecycle-v1",
+    ops: [
+      {
+        type: "add",
+        category: "Agency Process",
+        page: {
+          id: "sop-client-project-lifecycle-checklist",
+          title: "Client Project Lifecycle Checklist",
+          format: "html",
+          checklistEnabled: true,
+          content: `<p><em>Last updated: October 2026. The one checklist for a client from first conversation to renewal. Each line names the owner and the Hub tool. Tick it per client; if a step isn't done, say who owns it.</em></p>
+<h2>1. Lead &amp; discovery</h2>
+<ul>
+<li>Lead is on the Sales Pipeline Board (bookings and cold-outreach/referral leads land there automatically) &mdash; Owner: sales lead</li>
+<li>Discovery call held; needs, budget and timeline noted on the lead &mdash; Owner: sales lead</li>
+</ul>
+<h2>2. Proposal, contract &amp; first payment</h2>
+<ul>
+<li>Proposal built in the Proposal Calculator &mdash; Owner: sales lead</li>
+<li>Contract sent from Contract &amp; Invoice Tracker (tick <strong>Live</strong> for real contracts) and signed &mdash; Owner: sales lead</li>
+<li>Hub-generated Stripe payment link sent and first payment received &mdash; Owner: sales lead / finance</li>
+</ul>
+<h2>3. Closed Won handoff</h2>
+<ul>
+<li>Lead moved to Closed Won; client profile created; account manager chosen &mdash; Owner: Ronald</li>
+<li>Handoff notes passed to the account manager; internal pre-kickoff held &mdash; Owner: sales lead &rarr; AM</li>
+</ul>
+<h2>4. Onboarding</h2>
+<ul>
+<li>Timeline Scheduler timeline created from the right template &mdash; every phase has a target date &mdash; Owner: account manager</li>
+<li>Welcome package sent; intake questionnaire sent and answered; platform access gathered &mdash; Owner: account manager</li>
+<li>Client portal ready and client invited; CRM status set to Active &mdash; Owner: account manager</li>
+<li>Official kickoff held; success metrics and first deliverables agreed &mdash; Owner: account manager</li>
+</ul>
+<h2>5. Production, QC &amp; approval</h2>
+<ul>
+<li>Work built inside the phase time box (see Project Deadlines &amp; Time-Box Standards) &mdash; Owner: assigned team member</li>
+<li>Internal quality check before anything goes to the client &mdash; Owner: account manager</li>
+<li>Delivered via the portal; revision round count tracked (2 included) &mdash; Owner: account manager</li>
+<li>Written client approval recorded &mdash; Owner: account manager</li>
+</ul>
+<h2>6. Launch</h2>
+<ul>
+<li>Launch checklist done; client notified; invoice/balance paid per contract &mdash; Owner: account manager / finance</li>
+</ul>
+<h2>7. Ongoing: reporting &amp; check-ins</h2>
+<ul>
+<li>Weekly Account Check-In done and logged &mdash; Owner: account manager</li>
+<li>Monthly report delivered by the 5th &mdash; Owner: account manager</li>
+<li>Client activity (requests, revisions) answered inside the response times &mdash; Owner: account manager</li>
+</ul>
+<h2>8. Renewal &amp; offboarding</h2>
+<ul>
+<li>Renewal conversation 30 days before term end &mdash; Owner: account manager</li>
+<li>If leaving: Team Transitions/offboarding checklist to 100%, final invoice settled, portal off, CRM Inactive &mdash; Owner: Ronald</li>
+</ul>`
+        }
+      },
+      {
+        type: "add",
+        category: "Agency Process",
+        page: {
+          id: "sop-project-deadlines-and-time-box-standards",
+          title: "Project Deadlines & Time-Box Standards",
+          format: "html",
+          checklistEnabled: false,
+          content: `<p><em>Last updated: October 2026. <strong>All numbers on this page are starting points &mdash; edit them to match reality.</strong> Goal: every phase has a date, every deliverable has a time box, and nobody works past it without a decision.</em></p>
+<h2>The rules</h2>
+<ul>
+<li><strong>Every phase gets a target date</strong> when the timeline is created in Timeline Scheduler. No dates, no kickoff.</li>
+<li><strong>Time box:</strong> when a phase reaches its target date, finish it, or the account manager decides the same day: cut scope, add a named extra day, or tell the client the new date. Don't let it drift silently.</li>
+<li><strong>2 revision rounds are included.</strong> Consolidated feedback per round. A third round is a Change Order (new quote, signed before work).</li>
+<li><strong>Client delays move the date, not the effort.</strong> If the client hasn't responded in 3 business days, send one reminder; at 7 business days, pause the phase and say so in writing.</li>
+<li><strong>Scope changes</strong> go through a Change Order &mdash; never absorb them quietly.</li>
+</ul>
+<h2>Standard turnaround (from the client portal guide)</h2>
+<table>
+<thead><tr><th>Work</th><th>Our turnaround</th></tr></thead>
+<tbody>
+<tr><td>Social posts and graphics</td><td>2 business days</td></tr>
+<tr><td>Paid ad creative</td><td>2 business days</td></tr>
+<tr><td>Video and Reels</td><td>3&ndash;4 business days</td></tr>
+<tr><td>Email campaigns</td><td>2 business days</td></tr>
+<tr><td>Website pages</td><td>3&ndash;5 business days</td></tr>
+</tbody></table>
+<h2>Project length targets (Timeline Scheduler templates)</h2>
+<p>Last phase target, in days from start. Longer than this needs a reason.</p>
+<table>
+<thead><tr><th>Template</th><th>Target length</th></tr></thead>
+<tbody>
+<tr><td>Blog / Website Content Batch</td><td>14 days</td></tr>
+<tr><td>Content Strategy Overhaul</td><td>21 days</td></tr>
+<tr><td>Case Study / Testimonial Project</td><td>24 days</td></tr>
+<tr><td>Paid Ads Campaign Launch</td><td>25 days</td></tr>
+<tr><td>Email Marketing Campaign</td><td>26 days</td></tr>
+<tr><td>Video Production Project</td><td>30 days</td></tr>
+<tr><td>Rebrand / Brand Refresh</td><td>33 days</td></tr>
+<tr><td>Website Redesign / UX Overhaul</td><td>37 days</td></tr>
+<tr><td>Personal Branding Project</td><td>45 days</td></tr>
+<tr><td>Social Media Management (onboarding)</td><td>48 days</td></tr>
+<tr><td>SEO / Content Campaign (setup)</td><td>53 days</td></tr>
+<tr><td>Website Build</td><td>71 days</td></tr>
+</tbody></table>
+<h2>Weekly focus rhythm</h2>
+<ul>
+<li><strong>Monday:</strong> account manager checks the week's phase dates; the weekly digest email lists anything overdue.</li>
+<li><strong>During the week:</strong> work only on this week's phases; new asks go to the account manager, not straight to the queue.</li>
+<li><strong>Friday:</strong> Weekly Account Check-In per client; move phase statuses so the Hub is accurate.</li>
+</ul>
+<h2>What the Hub does automatically</h2>
+<ul>
+<li>When a phase is past its target date and not done, the account manager gets an email the first day it is late.</li>
+<li>At 3 days late, the leadership/digest recipients get one escalation email.</li>
+<li>Overdue phases also appear in the weekly health digest.</li>
+<li>To stop alerts: mark the phase Done or move its target date (and tell the client).</li>
+</ul>`
+        }
+      }
+    ]
+  },
 ];
