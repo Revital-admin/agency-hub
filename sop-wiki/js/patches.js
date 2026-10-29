@@ -545,6 +545,7 @@ const SOP_PATCHES = [
 <li>At 3 days late, the leadership/digest recipients get one escalation email.</li>
 <li>Overdue phases also appear in the weekly health digest.</li>
 <li>To stop alerts: mark the phase Done or move its target date (and tell the client).</li>
+<li><strong>See it any time:</strong> Agency Health Dashboard &rarr; Overdue &amp; Due-This-Week Phases lists every late phase and everything due in the next 7 days, across all Active clients, worst first.</li>
 </ul>`
         }
       }

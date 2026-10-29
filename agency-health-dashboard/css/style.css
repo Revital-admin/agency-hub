@@ -155,6 +155,11 @@ main.container { min-width: 0; }
   color: var(--color-text-muted);
   background: var(--color-surface-2);
 }
+.signal-badge.signal-amber {
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
 .signal-badge.signal-opportunity {
   border-color: rgba(34, 197, 94, 0.35);
   color: #22c55e;

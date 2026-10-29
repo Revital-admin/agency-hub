@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Agency Health Dashboard</title>
 <link rel="stylesheet" href="../style.css?v=29">
-<link rel="stylesheet" href="css/style.css?v=4">
+<link rel="stylesheet" href="css/style.css?v=5">
   <link rel="stylesheet" href="../shared/mobile-base.css?v=2">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
 </head>
@@ -75,6 +75,41 @@
 <header class="site-header" style="margin-top: 40px;">
 <div class="header-eyebrow">
 <span class="dot"></span>
+<span>Project Deadlines</span>
+</div>
+<h1 class="site-title" style="font-size: 1.8rem;">Overdue &amp; Due-This-Week <em>Phases</em></h1>
+<p class="site-subtitle">Every unfinished Timeline Scheduler phase for Active clients that is past its target date or due in the next 7 days. Same rule the overdue alert emails use. Fix a row by marking the phase done or moving its date in Timeline Scheduler. Standards: SOP Wiki &rarr; Project Deadlines &amp; Time-Box Standards.</p>
+</header>
+
+<div class="summary-bar">
+<div class="summary-stat"><span class="summary-num" id="summaryPhasesOverdue">0</span><span class="summary-label">Phases Overdue</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryPhases3Late">0</span><span class="summary-label">3+ Days Late (Escalated)</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryPhasesDueWeek">0</span><span class="summary-label">Due in Next 7 Days</span></div>
+</div>
+
+<div class="step-card table-card">
+<div class="tracker-table-wrap">
+<table class="tracker-table">
+<thead>
+<tr>
+<th>Client</th>
+<th>Project</th>
+<th>Phase</th>
+<th>Target Date</th>
+<th>Status</th>
+<th>Account Manager</th>
+</tr>
+</thead>
+<tbody id="phaseBoardBody"></tbody>
+</table>
+<p id="phaseBoardEmpty" class="empty-state" style="display:none;">Nothing overdue or due this week. 
+</p>
+</div>
+</div>
+
+<header class="site-header" style="margin-top: 40px;">
+<div class="header-eyebrow">
+<span class="dot"></span>
 <span>Profitability</span>
 </div>
 <h1 class="site-title" style="font-size: 1.8rem;">Month-to-Date <em>Profitability</em></h1>
@@ -106,6 +141,6 @@
 </div>
 
 </main>
-<script src="js/app.js?v=5"></script>
+<script src="js/app.js?v=6"></script>
 </body>
 </html>

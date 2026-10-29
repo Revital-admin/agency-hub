@@ -505,6 +505,7 @@ function renderTable() {
   });
 
   renderProfitabilityTable(rows);
+  renderPhaseBoard();
 }
 
 // Only clients with an active Stripe subscription show up here -
@@ -513,6 +514,66 @@ function renderTable() {
 // Project/one-time clients aren't a gap in this table so much as out of
 // scope for it; Budget Pacing Tracker's per-flight margin card is the
 // right place for cost-vs-budget math on project work.
+// ── Project phase deadlines (Timeline Scheduler data, all clients) ──
+// Mirrors the Worker's collectOverduePhases rule (Active clients,
+// unfinished phases with a target date) so this board and the overdue
+// alert emails never disagree. Also lists phases due within 7 days.
+function collectPhaseBoardRows() {
+  const clients = getClients();
+  const today = todayStr();
+  const rows = [];
+  Object.keys(clients).filter(name => name !== SANDBOX_NAME).forEach(name => {
+    const c = clients[name] || {};
+    const cfg = c.portalConfig || {};
+    if (cfg.onboardingStatus !== 'Active') return;
+    (Array.isArray(c.timelines) ? c.timelines : []).forEach(tl => {
+      if (!tl || tl.status === 'completed') return;
+      (Array.isArray(tl.phases) ? tl.phases : []).forEach(ph => {
+        if (!ph || ph.status === 'done' || !/^\d{4}-\d{2}-\d{2}$/.test(ph.targetDate || '')) return;
+        const daysUntil = daysBetween(today, ph.targetDate);
+        if (daysUntil > 7) return;
+        rows.push({
+          client: name, project: tl.templateName || 'Project timeline',
+          phase: ph.name || '(unnamed phase)', targetDate: ph.targetDate,
+          daysLate: -daysUntil, inProgress: ph.status === 'in-progress',
+          am: cfg.accountManagerName || ''
+        });
+      });
+    });
+  });
+  return rows.sort((a, b) => b.daysLate - a.daysLate);
+}
+
+function escHtml(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+function renderPhaseBoard() {
+  const body = el('phaseBoardBody');
+  if (!body) return;
+  const rows = collectPhaseBoardRows();
+  const overdue = rows.filter(r => r.daysLate >= 1);
+  if (el('summaryPhasesOverdue')) el('summaryPhasesOverdue').textContent = overdue.length;
+  if (el('summaryPhases3Late')) el('summaryPhases3Late').textContent = overdue.filter(r => r.daysLate >= 3).length;
+  if (el('summaryPhasesDueWeek')) el('summaryPhasesDueWeek').textContent = rows.length - overdue.length;
+  if (el('phaseBoardEmpty')) el('phaseBoardEmpty').style.display = rows.length === 0 ? 'block' : 'none';
+  body.innerHTML = rows.map(r => {
+    let badge;
+    if (r.daysLate >= 3) badge = `<span class="signal-badge">${r.daysLate} days late</span>`;
+    else if (r.daysLate >= 1) badge = `<span class="signal-badge signal-amber">${r.daysLate} day${r.daysLate === 1 ? '' : 's'} late</span>`;
+    else if (r.daysLate === 0) badge = `<span class="signal-badge signal-muted">Due today</span>`;
+    else badge = `<span class="signal-badge signal-muted">Due in ${-r.daysLate} day${r.daysLate === -1 ? '' : 's'}</span>`;
+    return `<tr>
+      <td class="client-cell">${escHtml(r.client)}</td>
+      <td>${escHtml(r.project)}</td>
+      <td>${escHtml(r.phase)}${r.inProgress ? ' <span class="signal-badge signal-muted">in progress</span>' : ''}</td>
+      <td class="date-cell">${escHtml(r.targetDate)}</td>
+      <td>${badge}</td>
+      <td>${escHtml(r.am) || '<span class="signal-badge signal-muted">none set</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
 function renderProfitabilityTable(rows) {
   const body = el('profitabilityTableBody');
   const empty = el('profitabilityEmptyState');
