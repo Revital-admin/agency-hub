@@ -526,7 +526,7 @@ const SOP_PATCHES = [
 <tr><td>Paid Ads Campaign Launch</td><td>25 days</td></tr>
 <tr><td>Email Marketing Campaign</td><td>26 days</td></tr>
 <tr><td>Video Production Project</td><td>30 days</td></tr>
-<tr><td>Rebrand / Brand Refresh</td><td>33 days (a brand strategy project is promised 6&ndash;8 weeks, so give it a longer custom timeline)</td></tr>
+<tr><td>Rebrand / Brand Refresh</td><td>49 days (7 weeks, matching the 6&ndash;8 week brand strategy promise)</td></tr>
 <tr><td>Website Redesign / UX Overhaul</td><td>37 days</td></tr>
 <tr><td>Personal Branding Project</td><td>45 days</td></tr>
 <tr><td>Social Media Management (onboarding)</td><td>48 days</td></tr>
