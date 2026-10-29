@@ -510,7 +510,7 @@ const SOP_PATCHES = [
 <tr><td>Website process: Build</td><td>3&ndash;6 weeks</td></tr>
 <tr><td>Website process: Ship</td><td>2 weeks</td></tr>
 <tr><td><strong>Website total</strong></td><td><strong>8&ndash;11 weeks</strong> (56&ndash;77 days)</td></tr>
-<tr><td>Brand strategy (from $1,200)</td><td>4&ndash;6 weeks</td></tr>
+<tr><td>Brand strategy (from $1,200)</td><td>6&ndash;8 weeks (update the website card from 4&ndash;6 weeks)</td></tr>
 <tr><td>Visual identity (from $2,300)</td><td>1 month</td></tr>
 <tr><td>Campaign (from $3,000)</td><td>2&ndash;4 months</td></tr>
 </tbody></table>
@@ -526,7 +526,7 @@ const SOP_PATCHES = [
 <tr><td>Paid Ads Campaign Launch</td><td>25 days</td></tr>
 <tr><td>Email Marketing Campaign</td><td>26 days</td></tr>
 <tr><td>Video Production Project</td><td>30 days</td></tr>
-<tr><td>Rebrand / Brand Refresh</td><td>33 days</td></tr>
+<tr><td>Rebrand / Brand Refresh</td><td>33 days (a brand strategy project is promised 6&ndash;8 weeks, so give it a longer custom timeline)</td></tr>
 <tr><td>Website Redesign / UX Overhaul</td><td>37 days</td></tr>
 <tr><td>Personal Branding Project</td><td>45 days</td></tr>
 <tr><td>Social Media Management (onboarding)</td><td>48 days</td></tr>
