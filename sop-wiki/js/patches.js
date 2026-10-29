@@ -500,6 +500,21 @@ const SOP_PATCHES = [
 <tr><td>Email campaigns</td><td>2 business days</td></tr>
 <tr><td>Website pages</td><td>3&ndash;5 business days</td></tr>
 </tbody></table>
+<h2>What the public website promises (keep our targets inside these)</h2>
+<p>From revitalproductions.com &mdash; the Process section and Pricing cards. If you change a promise there, change it here.</p>
+<table>
+<thead><tr><th>Offer</th><th>Website says</th></tr></thead>
+<tbody>
+<tr><td>Website process: Proposal / strategy</td><td>1 week</td></tr>
+<tr><td>Website process: Define</td><td>2 weeks</td></tr>
+<tr><td>Website process: Build</td><td>3&ndash;6 weeks</td></tr>
+<tr><td>Website process: Ship</td><td>2 weeks</td></tr>
+<tr><td><strong>Website total</strong></td><td><strong>8&ndash;11 weeks</strong> (56&ndash;77 days)</td></tr>
+<tr><td>Brand strategy (from $1,200)</td><td>4&ndash;6 weeks</td></tr>
+<tr><td>Visual identity (from $2,300)</td><td>1 month</td></tr>
+<tr><td>Campaign (from $3,000)</td><td>2&ndash;4 months</td></tr>
+</tbody></table>
+<p>The Website Build template target below (71 days) sits inside the 8&ndash;11 week promise; plan to the low end and treat the high end as the hard stop. The Paid Ads Campaign Launch template covers the launch only &mdash; the ongoing run is what the 2&ndash;4 month Campaign window covers.</p>
 <h2>Project length targets (Timeline Scheduler templates)</h2>
 <p>Last phase target, in days from start. Longer than this needs a reason.</p>
 <table>
