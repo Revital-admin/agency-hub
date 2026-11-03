@@ -377,7 +377,10 @@ function buildRows() {
     const daysSinceReport = lastReportDate ? daysBetween(lastReportDate.slice(0, 10), todayStr()) : null;
     const reportOverdue = reportArchive.length > 0 && daysSinceReport !== null && daysSinceReport >= 35;
 
-    const needsAttention = healthRating === 'Red' || renewalDueSoon || heavyRevisions
+    const phasesLateDays = getWorstPhaseLateDays(client);
+    const phaseLate = phasesLateDays > 0;
+
+    const needsAttention = phaseLate || healthRating === 'Red' || renewalDueSoon || heavyRevisions
       || overspending || staleApproval || heavyOpenActionItems || staleContact || !!overdueInvoice || renewalNeedsQbr || lowPulse || reportOverdue;
 
     // Written by the portal itself on page load (portal/js/app.js's
@@ -408,6 +411,7 @@ function buildRows() {
       lastQbrDate, daysSinceQbr, renewalNeedsQbr,
       latestPulse, lowPulse,
       daysSinceReport, reportOverdue,
+      phasesLateDays, phaseLate,
       mtdHours: laborMTD.totalHours, mtdLaborCost: laborMTD.cost, missingRateHours: laborMTD.missingRateHours,
       monthlyBilling, margin
     };
@@ -460,6 +464,56 @@ function signalBadgesHtml(row) {
   return `<div class="signal-badges">${badges.join('')}</div>`;
 }
 
+// Worst (most days late) unfinished phase across a client's open
+// timelines, 0 if none. Same Active-client rule as the Worker alert and
+// the phase board below; non-Active clients return 0.
+function getWorstPhaseLateDays(client) {
+  const cfg = (client && client.portalConfig) || {};
+  if (cfg.onboardingStatus !== 'Active') return 0;
+  const today = todayStr();
+  let worst = 0;
+  (Array.isArray(client.timelines) ? client.timelines : []).forEach(tl => {
+    if (!tl || tl.status === 'completed') return;
+    (Array.isArray(tl.phases) ? tl.phases : []).forEach(ph => {
+      if (!ph || ph.status === 'done' || !/^\d{4}-\d{2}-\d{2}$/.test(ph.targetDate || '')) return;
+      worst = Math.max(worst, daysBetween(ph.targetDate, today));
+    });
+  });
+  return worst > 0 ? worst : 0;
+}
+
+// Status column: the single most urgent issue as the headline, the rest
+// behind a "+N more" expander (a <details>, so it works on touch too).
+// Replaces the old Open Revisions / Portal Last Visited / Other Signals
+// columns; the same facts are listed, just only when there is something
+// to say. Order below is priority order.
+function statusCellHtml(row) {
+  const issues = [];
+  if (row.overdueInvoice) issues.push({ urgent: true, text: `Invoice ${row.overdueInvoice.days}d overdue ($${Math.round(row.overdueInvoice.amount).toLocaleString()})` });
+  if (row.healthRating === 'Red') issues.push({ urgent: true, text: 'Red health' });
+  if (row.phaseLate) issues.push({ urgent: true, text: `Phase ${row.phasesLateDays}d late` });
+  if (row.lowPulse) issues.push({ urgent: true, text: `Low satisfaction rating (${row.latestPulse.rating}/5)` });
+  if (row.renewalDueSoon) issues.push({ urgent: true, text: row.renewalDays < 0 ? `Renewal ${Math.abs(row.renewalDays)}d overdue` : `Renewal in ${row.renewalDays}d` });
+  if (row.renewalNeedsQbr) issues.push({ urgent: true, text: row.lastQbrDate ? `Renewal soon, last QBR ${row.daysSinceQbr}d ago` : 'Renewal soon, no QBR on record' });
+  if (row.reportOverdue) issues.push({ urgent: true, text: `No monthly report in ${row.daysSinceReport}d` });
+  if (row.staleApproval) issues.push({ urgent: true, text: `Approval waiting ${row.oldestPendingApprovalDays}d` });
+  if (row.heavyRevisions) issues.push({ urgent: true, text: `${row.openRevisions} open revisions` });
+  if (row.overspending) issues.push({ urgent: true, text: 'Overspending budget' });
+  if (row.staleContact) issues.push({ urgent: true, text: `No contact ${row.daysSinceMeeting}d` });
+  if (row.heavyOpenActionItems) issues.push({ urgent: true, text: `${row.openActionItems} open action items` });
+  if (row.upsellOpportunity) issues.push({ urgent: false, good: true, text: 'Upsell opportunity' });
+  if (!row.portalLastVisitedAt) issues.push({ urgent: false, text: 'Portal never visited' });
+  else if (row.daysSinceVisit >= 30) issues.push({ urgent: false, text: `Portal last visited ${row.daysSinceVisit}d ago` });
+
+  const badge = i => `<span class="signal-badge${i.good ? ' signal-opportunity' : i.urgent ? '' : ' signal-muted'}">${escHtml(i.text)}</span>`;
+  if (!issues.length) return '<span class="section-tag status-ok">On Track</span>';
+  const urgentCount = issues.filter(i => i.urgent).length;
+  const head = issues[0];
+  if (issues.length === 1) return badge(head);
+  const rest = issues.slice(1);
+  return `<details class="status-more"><summary>${badge(head)}<span class="more-count">+${rest.length} more</span></summary><div class="signal-badges">${rest.map(badge).join('')}</div></details>`;
+}
+
 function renderTable() {
   const rows = buildRows();
   const filterText = el('filterClientInput').value.trim().toLowerCase();
@@ -492,14 +546,11 @@ function renderTable() {
     const tr = document.createElement('tr');
     tr.className = row.needsAttention ? 'row-attention' : '';
     tr.innerHTML = `
-      <td class="client-cell">${row.name}</td>
+      <td class="client-cell">${escHtml(row.name)}</td>
       <td>${healthBadgeHtml(row.healthRating)}</td>
       <td class="date-cell">${row.lastCheckinDate ? `${row.lastCheckinDate} (${row.daysSinceCheckin}d ago)` : 'Never'}</td>
       <td>${renewalCellHtml(row)}</td>
-      <td>${row.openRevisions}</td>
-      <td>${portalVisitCellHtml(row)}</td>
-      <td>${signalBadgesHtml(row)}</td>
-      <td><span class="section-tag ${row.needsAttention ? 'status-attention' : 'status-ok'}">${row.needsAttention ? 'Needs Attention' : 'On Track'}</span></td>
+      <td>${statusCellHtml(row)}</td>
     `;
     tbody.appendChild(tr);
   });

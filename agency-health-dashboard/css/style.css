@@ -195,3 +195,8 @@ main.container { min-width: 0; }
 .more-signals > summary::before { content: "+ "; }
 .more-signals[open] > summary::before { content: "- "; }
 .more-signals .summary-bar { margin-top: 10px; }
+
+.status-more > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.status-more > summary::-webkit-details-marker { display: none; }
+.status-more .more-count { font-size: 12px; color: var(--color-text-muted); }
+.status-more .signal-badges { margin-top: 6px; }
