@@ -184,3 +184,14 @@ main.container { min-width: 0; }
   .container, .container-wide { width: 100%; padding: 2rem 1rem 3rem; }
   .summary-stat { min-width: 130px; }
 }
+
+/* Simplified layout: secondary tiles tucked away */
+.more-signals { margin: -6px 0 20px; }
+.more-signals > summary {
+  cursor: pointer; width: fit-content; font-size: 12px; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--color-text-muted); padding: 6px 0; list-style: none;
+}
+.more-signals > summary::-webkit-details-marker { display: none; }
+.more-signals > summary::before { content: "+ "; }
+.more-signals[open] > summary::before { content: "- "; }
+.more-signals .summary-bar { margin-top: 10px; }

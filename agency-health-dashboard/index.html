@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Agency Health Dashboard</title>
 <link rel="stylesheet" href="../style.css?v=29">
-<link rel="stylesheet" href="css/style.css?v=5">
+<link rel="stylesheet" href="css/style.css?v=6">
   <link rel="stylesheet" href="../shared/mobile-base.css?v=2">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
 </head>
@@ -23,23 +23,29 @@
 <span>Account Management</span>
 </div>
 <h1 class="site-title">Agency Health <em>Dashboard</em></h1>
-<p class="site-subtitle">One glance across every client: health rating, last check-in, renewal timing (from Renewal Tracker), open revisions, budget pacing, approval response time, payment status, and contact recency — pulled from the Weekly Check-In, Renewal Tracker, Revision &amp; Feedback Tracker, Budget Pacing Tracker, Client Portal Manager, Meeting Notes Logger, Contract &amp; Invoice Tracker, and QBR Generator so you don't have to open seven different tools to see who needs attention (or who's worth an upsell conversation). A month-to-date profitability view (labor cost vs. active billing, from Team Roster + Hours &amp; Time Log + Contract &amp; Invoice Tracker) sits below.</p>
+<p class="site-subtitle">Who needs attention, what is overdue, and how profitable each account is.</p>
 </header>
 
 <div class="summary-bar" id="summaryBar">
-<div class="summary-stat"><span class="summary-num" id="summaryUpsellOpportunities">0</span><span class="summary-label">Upsell Opportunities</span></div>
 <div class="summary-stat"><span class="summary-num" id="summaryRedHealth">0</span><span class="summary-label">Red Health</span></div>
 <div class="summary-stat"><span class="summary-num" id="summaryNoCheckin">0</span><span class="summary-label">No Recent Check-In</span></div>
 <div class="summary-stat"><span class="summary-num" id="summaryRenewalsDue">0</span><span class="summary-label">Renewals Due 30d</span></div>
+<div class="summary-stat"><span class="summary-num" id="summaryOverdueInvoices">0</span><span class="summary-label">Overdue Invoices</span></div>
+</div>
+
+<details class="more-signals">
+<summary>More signals (8)</summary>
+<div class="summary-bar">
+<div class="summary-stat"><span class="summary-num" id="summaryUpsellOpportunities">0</span><span class="summary-label">Upsell Opportunities</span></div>
 <div class="summary-stat"><span class="summary-num" id="summaryOpenRevisions">0</span><span class="summary-label">Clients w/ 3+ Open Revisions</span></div>
 <div class="summary-stat"><span class="summary-num" id="summaryOverspending">0</span><span class="summary-label">Overspending Budgets</span></div>
 <div class="summary-stat"><span class="summary-num" id="summaryStaleApprovals">0</span><span class="summary-label">Approvals Awaiting Response 5d+</span></div>
 <div class="summary-stat"><span class="summary-num" id="summaryNoContact">0</span><span class="summary-label">No Contact Logged 30d+</span></div>
-<div class="summary-stat"><span class="summary-num" id="summaryOverdueInvoices">0</span><span class="summary-label">Overdue Invoices</span></div>
 <div class="summary-stat"><span class="summary-num" id="summaryRenewalsNeedQbr">0</span><span class="summary-label">Renewals w/o Recent QBR</span></div>
 <div class="summary-stat"><span class="summary-num" id="summaryLowPulse">0</span><span class="summary-label">Low Satisfaction Ratings</span></div>
 <div class="summary-stat"><span class="summary-num" id="summaryReportOverdue">0</span><span class="summary-label">Monthly Report Overdue</span></div>
 </div>
+</details>
 
 <div class="step-card table-card">
 <div class="tracker-controls-row" style="flex-wrap: wrap; gap: 14px;">
@@ -51,7 +57,6 @@
 </div>
 
 <div class="step-card table-card">
-<p class="table-scroll-hint">Scroll or swipe right to see all columns (Health, Renewal, Revisions, Portal Visited, Signals, Status) &rarr;</p>
 <div class="tracker-table-wrap">
 <table class="tracker-table">
 <thead>
@@ -78,7 +83,7 @@
 <span>Project Deadlines</span>
 </div>
 <h1 class="site-title" style="font-size: 1.8rem;">Overdue &amp; Due-This-Week <em>Phases</em></h1>
-<p class="site-subtitle">Every unfinished Timeline Scheduler phase for Active clients that is past its target date or due in the next 7 days. Same rule the overdue alert emails use. Fix a row by marking the phase done or moving its date in Timeline Scheduler. Standards: SOP Wiki &rarr; Project Deadlines &amp; Time-Box Standards.</p>
+<p class="site-subtitle">Unfinished phases for Active clients that are late or due in the next 7 days. Mark a phase done or move its date in Timeline Scheduler to clear it.</p>
 </header>
 
 <div class="summary-bar">
@@ -113,7 +118,7 @@
 <span>Profitability</span>
 </div>
 <h1 class="site-title" style="font-size: 1.8rem;">Month-to-Date <em>Profitability</em></h1>
-<p class="site-subtitle">Active monthly retainer billing (Contract &amp; Invoice Tracker's Stripe subscriptions) against labor cost so far this month (Team Roster hourly rates &times; Hours &amp; Time Log entries). Only clients with an active recurring subscription show up here — project/one-time clients aren't tracked this way; use Budget Pacing Tracker's per-flight margin card for those.</p>
+<p class="site-subtitle">Monthly retainer billing vs. labor cost so far this month.</p>
 </header>
 
 <div class="summary-bar">
@@ -122,7 +127,6 @@
 </div>
 
 <div class="step-card table-card">
-<p class="table-scroll-hint">Sorted lowest margin first, so the clients most worth a closer look surface at the top &rarr;</p>
 <div class="tracker-table-wrap">
 <table class="tracker-table">
 <thead>
